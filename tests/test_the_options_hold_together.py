@@ -1,6 +1,6 @@
 """The promises the options make to the page above them, held in place.
 
-`viz_studio/OPTIONS.md` sets out one interface that three viewers implement, so
+`zmart-viewer/OPTIONS.md` sets out one interface that three viewers implement, so
 that they can be compared on the same data by the same page. That is only worth
 anything if the promises are actually kept, and most of them are the sort that
 break quietly: an option that has started counting in voxels while saying
@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 
 _VIZ = Path(__file__).resolve().parents[1]
-_OPTIONS = _VIZ / "options"
+_OPTIONS = _VIZ / "parked"
 if str(_OPTIONS / "measure") not in sys.path:
     sys.path.insert(0, str(_OPTIONS / "measure"))
 
@@ -89,7 +89,7 @@ def test_the_adapter_does_not_work_out_its_own_addresses():
         source = _without_comments((_OPTIONS / option / "viewer.js").read_text())
         assert "window.location" not in source, (
             f"{option}/viewer.js works out an address from the page's own "
-            "address. Addresses are passed in; see options/contract.md."
+            "address. Addresses are passed in; see parked/contract.md."
         )
 
 
@@ -115,12 +115,12 @@ def test_no_option_decides_for_itself_which_plane_to_open_on():
             continue
         assert re.search(r"""from\s+["']\.\./planes\.js["']""", source), (
             f"{option}/viewer.js decides which plane to show without asking "
-            "options/planes.js, so it can open on a different plane from the "
+            "parked/planes.js, so it can open on a different plane from the "
             "other options and the comparison stops meaning anything."
         )
         assert not re.search(r"\bplane:\s*0\b", source), (
             f"{option}/viewer.js opens at a hard-coded first plane. On a stack "
-            "that is its edge; see options/planes.js."
+            "that is its edge; see parked/planes.js."
         )
 
 
@@ -136,14 +136,14 @@ def test_every_option_can_switch_the_picture_off_without_reopening():
     never going off.
 
     An option that leaves this out puts that back, so it is checked here rather
-    than left to whoever writes the next one to read `contract.md` §4b.
+    than left to whoever writes the next one to read `parked/contract.md` §4b.
     """
     for option in EVERY_OPTION:
         source = _without_comments((_OPTIONS / option / "viewer.js").read_text())
         assert re.search(r"\bshowPicture\s*\(", source), (
             f"{option}/viewer.js has no showPicture, so a page can only hide its "
             "run by opening the canvas again with no acquisitions; see "
-            "options/contract.md §4b for what that costs."
+            "parked/contract.md §4b for what that costs."
         )
 
 
@@ -196,8 +196,8 @@ def harness_page(browser, measurement_data, tmp_path_factory):
     if not (drive.HARNESS_DIST / "index.html").exists():
         _give_up_on_the_picture(
             "the options harness has not been built, so there was nothing to "
-            "open (options/harness/dist/index.html is missing). Build it with "
-            "`npm --prefix viz_studio/options/harness run build`"
+            "open (parked/harness/dist/index.html is missing). Build it with "
+            "`npm --prefix zmart-viewer/parked/harness run build`"
         )
     try:
         harness = drive.Harness(
@@ -727,7 +727,7 @@ def _draw_in_the_slots(harness, *, under: str, over: str) -> None:
 def test_an_option_is_honest_about_the_bottom_layer(harness_page, option):
     """What an option says about drawing beneath the picture matches a photograph.
 
-    `viz_studio/THE_CANVAS.md` asks for three layers sharing one coordinate
+    `zmart-viewer/THE_CANVAS.md` asks for three layers sharing one coordinate
     system, and the interface gives an application a slot for the bottom one:
     ``drawUnder(paint)``, written exactly like ``drawOver(paint)``. Whether an
     operator can actually *see* what goes there depends on the engine in the
@@ -748,7 +748,7 @@ def test_an_option_is_honest_about_the_bottom_layer(harness_page, option):
     this test passed, because the colour still filled the window. What gave it
     away was the acquired picture: it went from 2.95% of the window to nothing at
     all, because the colour had covered it. Drawing the bottom slot on top is
-    exactly the fake `contract.md` §4a forbids, so the test now looks for it.
+    exactly the fake `parked/contract.md` §4a forbids, so the test now looks for it.
 
     The same colour is then drawn in the *top* slot, and every option must show it
     filling the window and hiding the picture. That is what makes the reading mean
@@ -816,7 +816,7 @@ def test_an_option_is_honest_about_the_bottom_layer(harness_page, option):
             "covered the picture rather than sitting under it: the acquired "
             f"picture went from {picture_to_begin_with:.4f} of the window to "
             f"{picture_left_beneath:.4f}. A drawing that hides the picture is on "
-            "top of it, whatever slot it was handed to — see contract.md §4a, "
+            "top of it, whatever slot it was handed to — see parked/contract.md §4a, "
             "which forbids exactly this."
         )
     else:
@@ -958,7 +958,7 @@ def _share_of_the_window_showing_picture(picture) -> float:
     """What fraction of the window is showing acquired picture rather than page.
 
     The same reading measurement 5 takes, kept the same on purpose so that a
-    number here and a number in ``options/measurements/`` mean the same thing.
+    number here and a number in ``parked/measurements/`` mean the same thing.
     Acquired picture is bright and the page behind it is dark, so counting the
     pixels that are lit at all answers "how much picture is on screen" well
     enough to see a window go empty.
@@ -1303,5 +1303,5 @@ def test_a_drawing_at_the_wrong_size_is_noticed(harness_page, option):
         "the unevenness moved when the drawing was made too large, which it "
         "should not: this test exists because a disagreement about size leaves "
         "the four margins equal, and if that is no longer true the arrangement "
-        f"has changed and the prose in RESULTS.md needs revisiting: {broken.sides}"
+        f"has changed and the prose in parked/RESULTS.md needs revisiting: {broken.sides}"
     )

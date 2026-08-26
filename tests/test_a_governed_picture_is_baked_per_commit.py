@@ -8,7 +8,7 @@ answer must be indistinguishable at every moment an operator can observe,
 whatever has landed, been replaced, or been withdrawn — and a picture declared
 without the bake behaves exactly as before, because live runs keep BOTH modes.
 
-The design under test is REVIEW_PROMPT_per_commit_bake_for_live.md; the
+The design under test is docs/reviews/REVIEW_PROMPT_per_commit_bake_for_live.md; the
 operator's requirements are quoted there. The central rule, stated once: the
 bake is patched per commit, never rebuilt — and byte-equality with a
 from-scratch bake of the same manifest state is what "patched correctly"
@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 VIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(VIZ / "building"))
+sys.path.insert(0, str(VIZ / "app" / "picture"))
 sys.path.insert(0, str(VIZ.parent))
 
 import served  # noqa: E402
@@ -129,7 +129,7 @@ def test_a_replacement_is_served_new_from_files_with_no_stale_moment(tmp_path):
     try:
         a_only, _, _ = the_columns_of(run)
         import numpy as np
-        from check import decode
+        from check_the_built_picture import decode
         first = served.the_bytes_behind(store, f"0/c/0/0/{a_only}")
         assert first is not None and 700 in decode(
             first, PIECE, "uint16", ("z", "y", "x"))
@@ -243,11 +243,11 @@ def test_the_http_route_consults_the_manifest_before_any_baked_file(tmp_path):
     import threading
     import urllib.request
 
-    backend = str(Path(__file__).resolve().parent.parent / "backend")
+    backend = str(Path(__file__).resolve().parent.parent / "app" / "server")
     if backend not in sys.path:
         sys.path.insert(0, backend)
     import numpy as np
-    from check import decode
+    from check_the_built_picture import decode
     from server import make_server
 
     run = a_governed_run(tmp_path)
@@ -395,7 +395,7 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
                                        name="live", piece=PIECE, bake=True)
     import urllib.request
 
-    backend = str(Path(__file__).resolve().parent.parent / "backend")
+    backend = str(Path(__file__).resolve().parent.parent / "app" / "server")
     if backend not in sys.path:
         sys.path.insert(0, backend)
     from server import make_server
@@ -677,7 +677,7 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
     import threading
     import urllib.request
 
-    backend = str(Path(__file__).resolve().parent.parent / "backend")
+    backend = str(Path(__file__).resolve().parent.parent / "app" / "server")
     if backend not in sys.path:
         sys.path.insert(0, backend)
     from server import make_server

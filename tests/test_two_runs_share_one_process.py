@@ -7,7 +7,7 @@ remembered geometry used to key on exactly that triple -- (run_id, layout
 revision, profile) -- so the second run read the FIRST run's origin and
 extent: a 64-position survey served inside a 16-position frame, its outer
 tiles composing negative windows, its pieces answering 503 for ever and
-the warm thread dead (`FINDING_grown_slab_windows_race_the_warm.md`
+the warm thread dead (`docs/measured/FINDING_grown_slab_windows_race_the_warm.md`
 records the night this was run to ground). The run's folder is the
 identity that actually distinguishes them, so it is part of the key now.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "building"))
+sys.path.insert(0, str(VIZ / "app" / "picture"))
 sys.path.insert(0, str(VIZ.parent))
 
 from governed import GovernedRun  # noqa: E402

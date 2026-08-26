@@ -18,7 +18,7 @@ Three things are checked, and they are separate questions.
    what the canvas was built to save.
 2. **The canvas draws flat**, which is the everyday view.
 3. **The canvas draws in the volume.** Nothing in this suite looked at the volume
-   at all before — ``HANDOVER_3D.md`` says so plainly — so this is a first
+   at all before — ``docs/open/HANDOVER_3D.md`` says so plainly — so this is a first
    photograph of it rather than a defence of a known-good state. What it can
    honestly say is whether a specimen appears when the volume is asked for; it
    deliberately does not test rotation, which that same document records as
@@ -69,7 +69,7 @@ def _a_tile(row: int, column: int) -> np.ndarray:
     to work out, so it is worth writing down.
 
     A volume is shown over a window starting near the **top** of the distribution of
-    values — the 99th percentile, in ``backend/contrast.py`` — because a ray passes
+    values — the 99th percentile, in ``app/server/contrast.py`` — because a ray passes
     through hundreds of voxels and background that merely looks dim on a single
     plane accumulates into solid fog. That is quite right, and it means a fixture
     made of flat blocks of one value is useless here: if a tenth of the voxels all
@@ -311,7 +311,7 @@ def test_the_cropped_canvas_draws_in_the_volume(browser, built_dist, tmp_path):
     a generous threshold. Measuring an empty canvas the same way says what "nothing
     at all" really looks like, and the imaged run has to be plainly above it.
 
-    What this deliberately does not test is rotation. ``HANDOVER_3D.md`` records a
+    What this deliberately does not test is rotation. ``docs/open/HANDOVER_3D.md`` records a
     plain drag in a volume as measuring no change at all, and that is a fault in how
     the engine's own bindings are attached rather than anything to do with how a run
     is written — so testing it here would only add a failure that says nothing about

@@ -459,11 +459,11 @@ class TestStartingTheViewerOnSuchAFolder:
         at the bottom, which is not something anyone should have to read at a
         microscope.
         """
-        if not (_VIZ_ROOT / "frontend" / "dist" / "index.html").exists():
+        if not (_VIZ_ROOT / "app" / "page" / "dist" / "index.html").exists():
             pytest.skip(
-                "frontend/dist is not built, so run_demo.py stops before it gets "
+                "app/page/dist is not built, so run_demo.py stops before it gets "
                 "as far as the folder — build it with "
-                "`npm --prefix frontend install && npm --prefix frontend run build`"
+                "`npm --prefix app/page install && npm --prefix app/page run build`"
             )
         import run_demo
 

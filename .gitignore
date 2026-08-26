@@ -2,29 +2,29 @@
 # slash on the packages: a measurement often links them across from another
 # checkout rather than installing a second copy, and a trailing slash matches
 # only a real directory, so a linked one would show up as something to commit.
-frontend/node_modules
-frontend/dist/
+app/page/node_modules
+app/page/dist/
 
 # The demo volume is generated on first run.
-backend/demo_store/
+testdata/demo_store/
 
-# The store run_live_run_demo.py declares and fills; rebuilt on every run.
-backend/live_run_demo/
+# The store demos/run_live_run_demo.py declares and fills; rebuilt on every run.
+testdata/live_run_demo/
 
 # Python and test scratch.
 **/__pycache__/
-backend/_check/
+tests/_check/
 
-# What measure_cold_open.py writes out for comparing two runs.
+# What measure/measure_cold_open.py writes out for comparing two runs.
 cold_open_*.json
 
 # The options harness borrows the viewer's packages through a link made at build
 # time, and builds into its own dist. Both are generated.
-options/node_modules
-options/harness/dist/
+parked/node_modules
+parked/harness/dist/
 
-# The acquisitions the measurements are taken against. `options/measure/run.py`
+# The acquisitions the measurements are taken against. `parked/measure/run.py`
 # writes them fresh each time it runs, and they are large, so they are not worth
 # keeping in the history -- the readings taken from them are, and those live in
-# options/measurements/.
-options/measurements/acquisitions/
+# parked/measurements/.
+parked/measurements/acquisitions/

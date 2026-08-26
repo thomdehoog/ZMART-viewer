@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
 from declare import declare_a_governed_picture  # noqa: E402
 

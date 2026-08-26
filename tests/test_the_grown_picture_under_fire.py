@@ -17,9 +17,9 @@ from pathlib import Path
 import numpy as np
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
-from check import decode  # noqa: E402
+from check_the_built_picture import decode  # noqa: E402
 from governed import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402

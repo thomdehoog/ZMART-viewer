@@ -28,7 +28,7 @@ import numpy as np
 import zarr
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
 from declare import declare_a_built_picture  # noqa: E402
 from server import make_server  # noqa: E402

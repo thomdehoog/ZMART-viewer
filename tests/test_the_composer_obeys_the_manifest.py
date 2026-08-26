@@ -1,6 +1,6 @@
 """The composer serving a governed run shows the manifest's truth and nothing else.
 
-``viz_studio/building`` was written for transfers: finished folders where every
+``zmart-viewer/building`` was written for transfers: finished folders where every
 tile on disk is real and nothing changes. A live ZMART run breaks both
 assumptions on purpose — positions are written *before* they are published, a
 position can be replaced by a later generation, and the record of what may be
@@ -27,10 +27,10 @@ import numpy as np
 import pytest
 
 VIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(VIZ / "building"))
+sys.path.insert(0, str(VIZ / "app" / "picture"))
 sys.path.insert(0, str(VIZ.parent))
 
-from check import decode  # noqa: E402
+from check_the_built_picture import decode  # noqa: E402
 from governed import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402

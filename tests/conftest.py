@@ -1,6 +1,6 @@
 """Shared fixtures for the viz-studio tests.
 
-The backend is a set of plain modules under ``backend/`` rather than an
+The server is a set of plain modules under ``app/server/`` rather than an
 installed package (the tool is launched by path, not imported by consumers), so
 tests put that directory on ``sys.path`` the same way ``run_demo.py`` does. The
 repository root is included as well because the backend's live-publication gate
@@ -32,7 +32,11 @@ from pathlib import Path
 import pytest
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
-_BACKEND = _VIZ_ROOT / "backend"
+_BACKEND = _VIZ_ROOT / "app" / "server"
+_PICTURE = _VIZ_ROOT / "app" / "picture"
+_MEASURE = _VIZ_ROOT / "measure"
+_DEMOS = _VIZ_ROOT / "demos"
+_TESTDATA = _VIZ_ROOT / "testdata"
 _REPO_ROOT = _VIZ_ROOT.parent
 
 # Set this on any machine that is supposed to be able to draw — a CI runner, the
@@ -48,12 +52,12 @@ _REPO_ROOT = _VIZ_ROOT.parent
 # worse than no run at all, because somebody believes it.
 #
 # It is opt-in rather than the default so that a plain checkout on somebody's
-# laptop still goes green without a browser, which is the promise TESTING.md makes.
+# laptop still goes green without a browser, which is the promise docs/how_it_works/TESTING.md makes.
 REQUIRE_BROWSER = "ZMART_REQUIRE_BROWSER"
 
 # Set this to the Chromium you want the picture tests driven by, if the search
 # below picks the wrong one or finds nothing on a machine you know has a browser.
-# It is the same variable the shipped render check (`backend/browsercheck.py`)
+# It is the same variable the shipped render check (`tests/browsercheck.py`)
 # already honours, so one setting covers both.
 BROWSER_OVERRIDE = "ZMART_CHROMIUM"
 
@@ -106,14 +110,17 @@ def _give_up_on_the_picture(reason: str) -> None:
     pytest.skip(f"{PIXELS_NOT_LOOKED_AT}: {reason}")
 
 
-for source_root in (_REPO_ROOT, _VIZ_ROOT, _BACKEND):
+# Last inserted ends up first, and the server the tests mean is the viewer's
+# own -- app/picture has a small server of its own that must not shadow it.
+for source_root in (_REPO_ROOT, _VIZ_ROOT, _PICTURE, _MEASURE, _DEMOS,
+                    _TESTDATA, _BACKEND):
     if str(source_root) not in sys.path:
         sys.path.insert(0, str(source_root))
 
 from demo_data import write_demo_zarr  # noqa: E402
 from server import make_server  # noqa: E402
 
-_DIST = _VIZ_ROOT / "frontend" / "dist"
+_DIST = _VIZ_ROOT / "app" / "page" / "dist"
 
 
 @pytest.fixture(scope="session")
@@ -124,7 +131,7 @@ def viz_root() -> Path:
 def _newest_source_change() -> float:
     """When the viewer's own source was last edited."""
     newest = 0.0
-    for path in (_VIZ_ROOT / "frontend" / "src").rglob("*"):
+    for path in (_VIZ_ROOT / "app" / "page" / "src").rglob("*"):
         if path.is_file():
             newest = max(newest, path.stat().st_mtime)
     return newest
@@ -152,8 +159,8 @@ def built_dist() -> Path:
     if not (_DIST / "index.html").exists():
         _give_up_on_the_picture(
             "the viewer page has not been built, so there was nothing to open "
-            "(frontend/dist/index.html is missing). Build it with "
-            "`npm --prefix frontend install && npm --prefix frontend run build`"
+            "(app/page/dist/index.html is missing). Build it with "
+            "`npm --prefix app/page install && npm --prefix app/page run build`"
         )
     built = (_DIST / "index.html").stat().st_mtime
     changed = _newest_source_change()
@@ -162,7 +169,7 @@ def built_dist() -> Path:
             "the built viewer page is older than the source it was built from, so "
             "these tests would be measuring a program that is no longer the one in "
             "the repository. Rebuild it first:\n\n"
-            "    npm --prefix frontend run build\n\n"
+            "    npm --prefix app/page run build\n\n"
             f"(built {time.strftime('%H:%M:%S', time.localtime(built))}, "
             f"source last changed "
             f"{time.strftime('%H:%M:%S', time.localtime(changed))})"

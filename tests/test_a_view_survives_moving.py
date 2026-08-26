@@ -27,10 +27,10 @@ import numpy as np
 from numcodecs import Zstd
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "building"))
+sys.path.insert(0, str(VIZ / "app" / "picture"))
 # The backend goes in FRONT of the building folder: both hold a server.py,
 # and the one with make_server is the backend's.
-sys.path.insert(0, str(VIZ / "backend"))
+sys.path.insert(0, str(VIZ / "app" / "server"))
 sys.path.insert(0, str(VIZ.parent))
 
 from declare import declare_a_built_picture  # noqa: E402

@@ -44,7 +44,7 @@ inside the hole: one margin comes out a pixel wider than the one opposite.
 So **a reading of one, on an engine with a hard edge, means "these two agree to
 within half a screen pixel" and not "these two disagree"**. It was demonstrated
 rather than assumed: with the hole moved half a pixel away from where it belongs,
-the same reading came out even. `viz_studio/options/RESULTS.md` tells the story
+the same reading came out even. `zmart-viewer/parked/RESULTS.md` tells the story
 under measurement 1. Readings of two and more are real, which is why the checks
 that use this allow one and no more.
 

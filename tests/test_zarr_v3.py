@@ -296,7 +296,7 @@ _NAMINGS = {
 def _v3_timelapse(path, *, moments=1000, imaged=(0, 1, 2), naming=None, shards=None):
     """A version 3 timelapse with room declared for ``moments`` and images at ``imaged``.
 
-    This is the arrangement `DATA_LAYOUT.md` asks a run to use — declare room for
+    This is the arrangement `docs/how_it_works/DATA_LAYOUT.md` asks a run to use — declare room for
     comfortably more moments than the experiment could record, then fill them in as it
     goes — written to OME-Zarr 0.5 rather than 0.4. A moment nothing has been written
     to takes up no room on disk at all, which is what makes declaring generously free.
@@ -787,7 +787,7 @@ def test_a_sharded_version_3_store_reaches_the_renderer(tmp_path, built_dist, br
         # throughout, because the contrast this store is given does not reach the
         # drawing at all. Measured: the picture comes out one flat white shape
         # whatever brightness range the server is told to use, which is a fault in
-        # its own right and is written down in NEXT_STEPS.md.
+        # its own right and is written down in docs/open/NEXT_STEPS.md.
         #
         # So variety of colour would be the wrong question here. It is the right
         # question for the demo volume, which has three coloured channels, and

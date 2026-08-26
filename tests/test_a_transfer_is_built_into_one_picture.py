@@ -1,6 +1,6 @@
 """A transfer from another microscope, shown as one picture without copying it.
 
-``viz_studio/building`` serves a folder of separately-written tiles as a single
+``zmart-viewer/building`` serves a folder of separately-written tiles as a single
 OME-Zarr that holds no pixels: every piece of it is built out of whichever tiles
 cover that ground, when the browser asks. These are the tests that hold it to
 that, and they are written against a synthetic transfer so they run anywhere --
@@ -37,7 +37,7 @@ import pytest
 import zarr
 
 VIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(VIZ / "building"))
+sys.path.insert(0, str(VIZ / "app" / "picture"))
 
 import served  # noqa: E402
 from composer import Composer  # noqa: E402
@@ -968,7 +968,7 @@ def test_a_built_picture_is_measured_where_the_operator_is_looking(
     it. A thumbnail cannot: three pixels of white averaged into a coarse
     piece are gone.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "server"))
     from contrast import measure_here  # noqa: PLC0415
 
     # Unbaked on purpose: then NOTHING in the folder holds pixels, which is

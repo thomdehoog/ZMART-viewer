@@ -36,7 +36,7 @@ import time
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
 import os  # noqa: E402
 

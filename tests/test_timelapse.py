@@ -361,7 +361,7 @@ def test_a_store_that_lengthens_its_own_array_is_read_again(browser, built_dist,
     `zmart_storage` writes; the slider is then held back by the count the server
     reads off the disk, and the engine never has to change its mind about anything.
     The other **grows**: the array is written with one moment, and its declared
-    length is raised as the run goes. `DATA_LAYOUT.md` records a real instrument
+    length is raised as the run goes. `docs/how_it_works/DATA_LAYOUT.md` records a real instrument
     doing exactly this.
 
     The second shape is the one that needs work from the viewer, and until this test

@@ -99,7 +99,7 @@ def _build_the_pages_the_tests_open() -> None:
         # why it is built after the viewer and never before it.
         print("Building the page the drawing options are compared on …", flush=True)
         subprocess.run(
-            [npm, "--prefix", "options/harness", "run", "build"], cwd=HERE, check=True
+            [npm, "--prefix", "parked/harness", "run", "build"], cwd=HERE, check=True
         )
 
 

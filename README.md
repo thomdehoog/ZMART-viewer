@@ -71,7 +71,7 @@ A few things worth knowing:
   positions stops mattering: a hundred and six thousand four hundred draw at the
   same rate and open in the same second. Nothing is copied; the tiles stay exactly
   as the microscope wrote them and stay readable by anything else. The top-level
-  `README.md` shows how to build one, under "One picture out of many stores".
+  `parked/prototype/README.md` shows how to build one, under "One picture out of many stores".
 - **One folder, one acquisition.** What you open becomes a single heading in the
   panel, named after the folder you chose, and every store in it feeds it — the
   positions of a tiled overview are pieces of one specimen, so they are drawn as
@@ -89,7 +89,7 @@ A few things worth knowing:
 - **Names are used for labels, not for grouping.** `Ch488` in a store's name gives
   a row its name and its false colour, and `Tile0` and the filter block keep the
   labels short and distinct (that is also what `--tiles` and `--filter` select on).
-  `DATA_LAYOUT.md` records how a run is written to disk and why.
+  `docs/how_it_works/DATA_LAYOUT.md` records how a run is written to disk and why.
 
 ## The load window
 
@@ -164,8 +164,8 @@ conda env create -f environment.yml
 conda activate zmart-viz
 
 # 2. Build the viewer page (once)
-npm --prefix frontend install
-npm --prefix frontend run build
+npm --prefix app/page install
+npm --prefix app/page run build
 
 # 3. Launch it
 python run_demo.py
@@ -249,7 +249,7 @@ arrived, not merely that the page loaded. It needs a one-time browser download:
 
 ```bash
 playwright install chromium
-python backend/browsercheck.py     # 0 = rendered, 1 = did not, 2 = could not run
+python app/server/browsercheck.py     # 0 = rendered, 1 = did not, 2 = could not run
 ```
 
 It prints a per-check table and writes a screenshot to `backend/_check/render.png`.
@@ -278,15 +278,15 @@ set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
 
 | Path | What it is |
 |---|---|
-| `frontend/` | The React + neuroglancer app (built into `frontend/dist`). |
-| `backend/demo_data.py` | Makes the demo OME-Zarr volume. |
-| `backend/server.py` | The small local web server (built page + image data + a JSON command endpoint). |
-| `backend/launcher.py` | Opens the studio in a native desktop window (pywebview). |
-| `backend/browsercheck.py` | Automated rendering check in a real headless browser. |
+| `frontend/` | The React + neuroglancer app (built into `app/page/dist`). |
+| `app/server/demo_data.py` | Makes the demo OME-Zarr volume. |
+| `app/server/server.py` | The small local web server (built page + image data + a JSON command endpoint). |
+| `app/server/launcher.py` | Opens the studio in a native desktop window (pywebview). |
+| `app/server/browsercheck.py` | Automated rendering check in a real headless browser. |
 | `run_demo.py` | One command: make the demo volume and open the window. |
-| `DATA_LAYOUT.md` | How a run is written to disk and shown, and why. The design record. |
-| `NEXT_STEPS.md` | What is known to be unfinished or wrong, and what to pick up next. |
-| `TESTING.md` | How to run the tests, and what each group of them is for. |
+| `docs/how_it_works/DATA_LAYOUT.md` | How a run is written to disk and shown, and why. The design record. |
+| `docs/open/NEXT_STEPS.md` | What is known to be unfinished or wrong, and what to pick up next. |
+| `docs/how_it_works/TESTING.md` | How to run the tests, and what each group of them is for. |
 | `INDEX.md` | The map, if you are new: which document answers which question. |
 
 ## How the pieces talk
@@ -295,7 +295,7 @@ set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
   Python (analysis, microscope control, writes OME-Zarr)
       │  serves image chunks over HTTP  +  small JSON commands
       ▼
-  backend/server.py  ──►  one local address (http://127.0.0.1:8848)
+  app/server/server.py  ──►  one local address (http://127.0.0.1:8848)
       ▲
       │  reads image chunks, sends commands
   frontend (React UI + neuroglancer engine)  ──►  shown in a native window
