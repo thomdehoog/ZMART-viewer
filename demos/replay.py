@@ -4,11 +4,19 @@
 
 Then open ``D:/watching`` in the viewer -- or open it first and watch it fill.
 
-**Nothing is copied.** The positions stay exactly where they are; what grows is
-a folder of junctions pointing at them, and the picture declared over that
-folder is re-declared each time one appears. The viewer is told to look again,
-re-reads what is on screen, and draws the new tile. A hundred-gigabyte dataset
+**Nothing is copied, and the picture never changes shape.** Every position goes
+in first as a description alone -- eight kilobytes standing for a seven-gigabyte
+tile -- so the room is declared, not inferred, and has its final shape before a
+single pixel is shown. Then the pixels arrive into it, in the order the stage
+scanned them, each one a rename rather than a copy. A hundred-gigabyte dataset
 costs a few kilobytes of pointers and a description.
+
+The shape matters more than it looks. A picture whose extent grows has to tell
+the page it grew, the page learns a new shape only by re-resolving its source,
+and re-resolving throws the loaded source away before reading the description
+again -- with nothing to draw in between. That is the flicker of 2026-08-23,
+measured at 100-300 ms of black on every landing. A declared room never asks
+the question.
 
 This replaced a version that did the opposite (2026-08-26). It handed every
 position's pixels to the live writer, which wrote them all again with a fresh
@@ -37,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -90,15 +99,10 @@ def in_the_order_they_were_imaged(dataset: Path,
     called. A filename order is whatever the exporter felt like, and watching
     a survey fill in that order tells an operator nothing.
 
-    Row-major from the top-left also settles a problem rather than fighting
-    it. The picture's extent is the bounding box of what is present, and the
-    page's in-place refresh re-reads pixels and never the description -- so a
-    box whose ORIGIN moves redraws everything at coordinates that have
-    shifted. Growing outward from a centre moves the origin on every step,
-    which is why the spiral demo has to put its far corners down first.
-    Growing rightwards and downwards from the top-left never moves it: the
-    first position fixes the corner and every later one only extends away
-    from it.
+    Nothing depends on this order being right -- the room is declared before
+    any of it arrives, so the picture's shape is settled whatever sequence the
+    pixels come in. It is here because an operator watching a survey fill
+    should see it fill the way it was imaged.
     """
     mosaic = read_the_transfer(dataset)
     by_name = {one.name: one for one in positions}
@@ -112,6 +116,29 @@ def in_the_order_they_were_imaged(dataset: Path,
                if name in by_name]
     # Anything whose place could not be read goes last rather than missing.
     return ordered + [one for one in positions if one not in ordered]
+
+
+def reveal(appearing: Path, position: Path) -> None:
+    """Swap a position's description for its pixels, without a gap.
+
+    Deleting the stub and then making the junction leaves a moment when the
+    store is not there at all, and a request landing in it does not get
+    "nothing here" -- it gets an exception. Two renames instead: the junction
+    is built beside its place and moved in, so the path always resolves either
+    to the empty version or to the full one (2026-08-26).
+    """
+    spot = appearing / position.name
+    arriving = appearing / f"{position.name}.arriving"
+    leaving = appearing / f"{position.name}.leaving"
+    for one in (arriving, leaving):
+        if one.exists():
+            shutil.rmtree(one)
+    _junction(arriving, position)
+    os.replace(spot, leaving)
+    os.replace(arriving, spot)
+    shutil.rmtree(leaving)
+
+
 
 
 def declare_the_room(position: Path, into: Path) -> None:
@@ -134,13 +161,30 @@ def declare_the_room(position: Path, into: Path) -> None:
     another holds the smallest x. Declaring all of them costs kilobytes and
     cannot be wrong.
     """
-    described = json.loads((position / "zarr.json").read_text(encoding="utf-8"))
     into.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(position / "zarr.json", into / "zarr.json")
-    for level in described["attributes"]["ome"]["multiscales"][0]["datasets"]:
+    if (position / "zarr.json").exists():
+        # version 3: one zarr.json for the group, one for each level
+        described = json.loads(
+            (position / "zarr.json").read_text(encoding="utf-8"))
+        multiscales = described["attributes"]["ome"]["multiscales"][0]
+        naming = ["zarr.json"]
+    else:
+        # version 2, which older exports still carry: flat .zattrs beside
+        # .zgroup, and a .zarray per level. Refusing these would refuse
+        # datasets the viewer opens without complaint.
+        described = json.loads(
+            (position / ".zattrs").read_text(encoding="utf-8"))
+        multiscales = described["multiscales"][0]
+        naming = [".zattrs", ".zgroup", ".zarray"]
+    for name in naming:
+        if (position / name).exists():
+            shutil.copy2(position / name, into / name)
+    for level in multiscales["datasets"]:
         (into / level["path"]).mkdir(parents=True, exist_ok=True)
-        shutil.copy2(position / level["path"] / "zarr.json",
-                     into / level["path"] / "zarr.json")
+        for name in naming:
+            if (position / level["path"] / name).exists():
+                shutil.copy2(position / level["path"] / name,
+                             into / level["path"] / name)
 
 
 def _say_something_changed(where: str) -> None:
@@ -184,11 +228,23 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
     # nothing: each piece composes empty on first sight and is served from
     # that. See declare_the_room, kept for the day the piece cache can be told
     # a picture changed (2026-08-26).
-    order = in_the_order_they_were_imaged(dataset, positions)
+    # The room is declared from every position's description -- kilobytes,
+    # no pixels -- so the picture has its final shape before anything is
+    # shown and the page never has to be told the shape changed. Learning a
+    # new shape means re-resolving the source, and that is the flicker of
+    # 2026-08-23: the layer has nothing to draw between throwing the old
+    # description away and reading the new one.
+    for position in positions:
+        declare_the_room(position, appearing / position.name)
+    picture = declare_a_built_picture(folder, appearing, name=dataset.name)
+    if announce:
+        announce()
 
-    picture = None
+    # Then the pixels, in the order the stage scanned them. Nothing jumps the
+    # queue, because nothing has to hold the shape up.
+    order = in_the_order_they_were_imaged(dataset, positions)
     for number, position in enumerate(order, start=1):
-        _junction(appearing / position.name, position)
+        reveal(appearing, position)
         picture = declare_a_built_picture(folder, appearing, name=dataset.name)
         if told:
             told(number, len(order))
