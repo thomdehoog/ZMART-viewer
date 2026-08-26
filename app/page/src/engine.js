@@ -1093,17 +1093,6 @@ function startTimeAtTheFirstMoment(viewer) {
   startAxisAtItsFirstStep(viewer, at);
 }
 
-function startDepthAtTheFirstPlane(viewer) {
-  // The first plane is the one depth every acquisition is sure to have, which
-  // is what makes it the safe landing for a view that may be parked deeper
-  // than the picture being moved to reaches.
-  const space = viewer.navigationState.position.coordinateSpace.value;
-  if (!space?.names) return;
-  const at = Array.from(space.names).indexOf("z");
-  if (at < 0) return;
-  startAxisAtItsFirstStep(viewer, at);
-}
-
 /**
  * Wait for the images to say how big they are, then let the engine choose the
  * starting magnification again.
@@ -1581,37 +1570,6 @@ export function chooseScaleWhenTheImagesAreMeasured(viewer, framed = null) {
     // flicker on every first open, 2026-08-23).
     framed?.();
   });
-}
-
-/**
- * Move the view to a replay that just started, once its images have answered.
- *
- * Starting a replay is an explicit ask to WATCH something, so unlike an
- * acquisition appearing on its own, the camera goes to the show: the focal
- * plane steps to the first plane (a depth every acquisition has -- the view
- * may have been parked at a depth the replay does not reach), time steps to
- * the first moment (where the replay begins writing), and the picture is
- * framed whole, exactly as the Overview button would. ``layersExpected`` is
- * how many image rows the fresh config carries; waiting for that many IMAGE
- * layers keeps this from firing on the already-settled sources before the
- * replay's own layers have even been handed to the engine. Image layers
- * only, counted on both sides: the engine also manages the targets
- * annotation layer, and counting it once made the expected number arrive
- * a layer early -- the move then framed the picture as it was BEFORE the
- * replay, deep in whatever the operator had been looking at.
- */
-export function watchTheReplay(viewer, layersExpected = 0) {
-  return whenTheSourcesHaveSettled(
-    viewer,
-    () => viewer.layerManager.managedLayers.filter(
-      (managed) => managed.layer?.type === "image",
-    ).length >= layersExpected,
-    () => {
-      startDepthAtTheFirstPlane(viewer);
-      startTimeAtTheFirstMoment(viewer);
-      showTheWholePicture(viewer);
-    },
-  );
 }
 
 // -- the parts of the view that are not layers --------------------------------
