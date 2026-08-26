@@ -25,12 +25,13 @@ announcement, the in-place refresh, and the picture growing on screen. What it
 no longer rehearses is the writer, which has its own tests and nothing to
 prove about data it did not write.
 
-One rule, learned the hard way by the spiral demo this grew out of: **the room
-is pinned first.** The declared extent comes from the positions present, and
-the page's in-place refresh re-reads pixels rather than the description -- so a
-picture whose SHAPE grows only shows the growth after a reload. The two
-furthest-apart positions go down before anything else, and the canvas covers
-the whole survey from the first frame.
+**The room is declared, not inferred.** Every position goes in first as a
+description alone -- eight kilobytes to stand for a seven-gigabyte tile -- so
+the picture has its final shape before a single pixel is shown. Then the
+pixels arrive in the order they were imaged. Without that the extent is the
+bounding box of whatever is present, it changes on every arrival, and since
+the page's in-place refresh re-reads pixels and never the description, tiles
+end up drawn against coordinates that have moved.
 """
 from __future__ import annotations
 
@@ -81,25 +82,65 @@ def the_positions_of(dataset: Path) -> list[Path]:
     return found
 
 
-def the_two_corners(dataset: Path, positions: list[Path]) -> list[Path]:
-    """The two positions furthest apart, which pin the picture's shape.
+def in_the_order_they_were_imaged(dataset: Path,
+                                 positions: list[Path]) -> list[Path]:
+    """The positions sorted the way a stage scans: top-left, then rightwards.
 
-    Read through the same mosaic reader the viewer uses, so what is measured
-    here is what the viewer will place.
+    By where each one SITS, read from its own translation, not by what it is
+    called. A filename order is whatever the exporter felt like, and watching
+    a survey fill in that order tells an operator nothing.
+
+    Row-major from the top-left also settles a problem rather than fighting
+    it. The picture's extent is the bounding box of what is present, and the
+    page's in-place refresh re-reads pixels and never the description -- so a
+    box whose ORIGIN moves redraws everything at coordinates that have
+    shifted. Growing outward from a centre moves the origin on every step,
+    which is why the spiral demo has to put its far corners down first.
+    Growing rightwards and downwards from the top-left never moves it: the
+    first position fixes the corner and every later one only extends away
+    from it.
     """
     mosaic = read_the_transfer(dataset)
-    where = {}
-    for tile in mosaic.tiles:
-        at = getattr(tile, "corner_um", None) or getattr(tile, "origin_um", None)
-        if at is not None:
-            where[Path(getattr(tile, "store", "")).name] = tuple(at[-2:])
-    if len(where) < 2:
-        return positions[:1]
-    nearest = min(where, key=lambda name: where[name])
-    furthest = max(where, key=lambda name: where[name])
     by_name = {one.name: one for one in positions}
-    return [by_name[name] for name in dict.fromkeys((nearest, furthest))
-            if name in by_name]
+    sits_at = {}
+    for tile in mosaic.tiles:
+        if tile.copies:
+            down, across = tile.copies[0].corner_um[-2:]
+            sits_at[Path(tile.store).name] = (round(down, 1), round(across, 1))
+    ordered = [by_name[name] for name in
+               sorted(sits_at, key=lambda name: sits_at[name])
+               if name in by_name]
+    # Anything whose place could not be read goes last rather than missing.
+    return ordered + [one for one in positions if one not in ordered]
+
+
+def declare_the_room(position: Path, into: Path) -> None:
+    """Put a position in the picture as a description, with none of its pixels.
+
+    Its ``zarr.json`` and each level's, copied -- eight kilobytes to stand for
+    a seven-gigabyte tile. The reader places it exactly as it will be placed
+    when the pixels arrive, because placing is what a description is for; the
+    composer simply finds no chunks there yet and leaves that ground empty.
+
+    This is what lets the room be DECLARED rather than inferred. The extent of
+    a built picture is the bounding box of what is present, so a picture grown
+    by adding positions keeps changing shape -- and the page's in-place
+    refresh re-reads pixels, never the description, so every tile ends up
+    drawn against coordinates that have moved. The operator sees tiles arrive
+    in the wrong places, which is worse than seeing nothing at all.
+
+    Guessing which few positions bound the box was tried first and is a trap:
+    a corner is not an extent, and one position can hold the smallest y while
+    another holds the smallest x. Declaring all of them costs kilobytes and
+    cannot be wrong.
+    """
+    described = json.loads((position / "zarr.json").read_text(encoding="utf-8"))
+    into.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(position / "zarr.json", into / "zarr.json")
+    for level in described["attributes"]["ome"]["multiscales"][0]["datasets"]:
+        (into / level["path"]).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(position / level["path"] / "zarr.json",
+                     into / level["path"] / "zarr.json")
 
 
 def _say_something_changed(where: str) -> None:
@@ -135,8 +176,15 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
             shutil.rmtree(one)
         one.mkdir(parents=True)
 
-    corners = the_two_corners(dataset, positions)
-    order = corners + [one for one in positions if one not in corners]
+    # The folder GROWS, the way the spiral demo does: a position that has not
+    # arrived is simply absent.
+    #
+    # Declaring the whole room up front instead -- every position present as a
+    # description with no pixels -- places everything perfectly and then shows
+    # nothing: each piece composes empty on first sight and is served from
+    # that. See declare_the_room, kept for the day the piece cache can be told
+    # a picture changed (2026-08-26).
+    order = in_the_order_they_were_imaged(dataset, positions)
 
     picture = None
     for number, position in enumerate(order, start=1):
