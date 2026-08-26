@@ -1,19 +1,15 @@
 """A finished dataset can be relived as a live run, one position at a time.
 
-The load window's "other" tab offers Replay next to Open. Opening shows the
-whole dataset at once; replaying hands the same positions to the very doorway
-the microscope uses -- the live writer, its manifest, its announcements -- and
-the picture assembles on screen tile by tile. Nothing about the live path is
-faked, which is the point: a replay is a dress rehearsal for smart microscopy
-that any operator can run on data they already have, with no microscope in
-the room.
+Opening a dataset shows all of it at once; replaying it shows the same
+positions arriving one at a time, in the order the stage scanned them, so an
+operator can watch a survey fill without a microscope in the room.
 
-The dataset must be one whose tiles sit on a regular grid the live writer can
-reproduce. Overlapping is fine -- real stage scans overlap -- as long as the
-overlap is even; a transfer whose tiles sit at irregular offsets is refused
-in plain words. A timelapse replays the way it was acquired: every position
-of the first moment, then every position of the next, sweep after sweep, so
-the time slider grows on screen exactly as it would during the experiment.
+Nothing is copied and the picture never changes shape. Every position is
+declared first as a description alone -- kilobytes standing for a
+seven-gigabyte tile -- so the room has its final extent before a single pixel
+shows, and the pixels then arrive into it as renames. Any dataset the viewer
+can open can be replayed, both metadata generations, at whatever offsets its
+tiles happen to sit.
 """
 
 import json
@@ -244,6 +240,45 @@ class TestTheReplayRoutes:
             f"the picture weighs {weighed} against the dataset's {source}; "
             "a replay that copies has gone back to rewriting the data"
         )
+
+def test_a_replay_declares_the_picture_once(tmp_path, monkeypatch):
+    """However many positions arrive, the picture is declared once.
+
+    Every reveal used to re-declare the whole picture, and that read every
+    position's description in order to write a file whose CONTENT does not
+    change: the room is declared from all of them before anything is shown,
+    so a stub and the real tile say the same shape at the same place. The
+    rewrite's only effect was moving the description's timestamp -- which is
+    what a served picture watches to know it must be built again
+    (``app/picture/served.py``, ``_the_pictures_mark``).
+
+    So it was O(all positions) paid on every arrival, for a timestamp.
+    Measured: 616 ms per position at 400, and 14 s each at 10,000, which put
+    a hundred-by-hundred survey out of reach for a reason that had nothing to
+    do with the data. Touching the description does the same job in 62-228
+    microseconds and does not grow with the survey.
+
+    Pinned by counting rather than by timing, because a clock says "fast
+    today" and a count says "does not read every position to reveal one".
+    """
+    import replay as the_replay
+
+    declared = []
+    honestly = the_replay.declare_a_built_picture
+
+    def counting(*given, **named):
+        declared.append(named.get("name"))
+        return honestly(*given, **named)
+
+    monkeypatch.setattr(the_replay, "declare_a_built_picture", counting)
+    scan = _a_grid_scan(tmp_path / "scan", across=3)
+    replay_the_dataset(scan, tmp_path / "watching", every_s=0.0)
+    assert len(declared) == 1, (
+        f"nine positions were revealed and the picture was declared "
+        f"{len(declared)} times; revealing one position must not re-read all "
+        f"of them"
+    )
+
 
 def test_a_04_dataset_replays_the_same(tmp_path):
     """The older metadata generation replays too, pixels pinned.

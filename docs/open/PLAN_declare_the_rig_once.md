@@ -157,3 +157,43 @@ third row -- the room declared from every description, pixels arriving into it.
 What this plan proposes is therefore no longer about being able to grow a
 picture at all. It is only about the cost: the re-declaration above is still
 O(N^2), and adopting a position that points is still the way to make it O(N).
+
+---
+
+## 2026-08-26, last: the replay did not need any of this
+
+This plan's cost argument is spent. It read the per-arrival re-declaration as
+work that had to be done a cheaper way; it was work that did not have to be
+done at all.
+
+A served picture is remembered until the stat of its own description moves
+(`app/picture/served.py`, `_the_pictures_mark`). The room is declared from
+every position before anything is shown, so a stub and the real tile describe
+the same shape in the same place -- measured, the file that came out of a
+re-declaration was **byte-identical**. Its only effect was moving the
+timestamp. Touching the description says the same thing:
+
+    a reveal, 25 / 100 / 400 positions
+      re-declaring   90 / 220 / 616 ms      grows with the survey
+      touching       20 / 20  / 19  ms      flat (and the touch is 0.2 ms of it)
+
+A 400-position replay went from 246 s of reveal work to 7.8 s, and a hundred
+by hundred stopped being about the tool at all. Pinned by
+`test_a_replay_declares_the_picture_once`, which counts declarations rather
+than timing them.
+
+**What survives of this plan.** `adopt_a_position` -- commit a position that
+points instead of writing -- is still the missing door on the publisher, and
+still the thing that would make normal viewing, a replay and a live run one
+mechanism. But it is no longer load-bearing for anything, and two of its
+arguments are gone: the operator retired "a replay should rehearse the live
+path" (2026-08-26), and the cost it was to fix has been fixed. Anyone picking
+it up should also know it could not have served the replay as written: a live
+position is `(t, c, z, y, x)` on the run's own profile, and an ordinary
+OME-Zarr tile is `(z, y, x)`, so adopting arbitrary data would have meant
+conforming it -- which is the copying that was removed.
+
+**What is still open, and is now the only limit**: an announcement makes the
+whole picture cold, so the page re-composes pieces that did not change. That
+is the ~2/s ceiling, and it is why 0.25 s between positions shows nothing
+until the end. Region granularity is the cure.

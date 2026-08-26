@@ -190,6 +190,29 @@ def declare_the_room(position: Path, into: Path) -> None:
                              into / level["path"] / name)
 
 
+def mark_the_picture_changed(picture: Path) -> None:
+    """Say a position has arrived, without rewriting what the picture is.
+
+    A served picture is remembered until the stat of its own description
+    moves -- see ``_the_pictures_mark`` in ``app/picture/served.py`` -- and
+    that mark is how the server knows to build the picture again and pick up
+    what has landed since.
+
+    Re-declaring moved it, and that is all re-declaring did here: the room is
+    declared from every position before anything is shown, so a stub and the
+    real tile describe the same shape in the same place and the file that
+    came out was byte-identical. What it cost was a read of every position's
+    description, per arrival -- 616 ms each at 400 positions, and about 14 s
+    each at 10,000, which put a large survey out of reach for a reason that
+    had nothing to do with the data.
+
+    Touching it says the same thing in 62-228 microseconds, and says it just
+    as truthfully: the picture really has changed, because a position's
+    pixels are now behind it.
+    """
+    os.utime(picture / "zarr.json", None)
+
+
 def _say_something_changed(where: str) -> None:
     """Tell an open viewer to look again, the way a microscope would.
 
@@ -248,7 +271,7 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
     order = in_the_order_they_were_imaged(dataset, positions)
     for number, position in enumerate(order, start=1):
         reveal(appearing, position)
-        picture = declare_a_built_picture(folder, appearing, name=dataset.name)
+        mark_the_picture_changed(picture)
         if told:
             told(number, len(order))
         if announce:
@@ -258,7 +281,7 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
     return picture
 
 
-def _reveal_them(dataset: Path, folder: Path, appearing: Path,
+def _reveal_them(dataset: Path, picture: Path, appearing: Path,
                  positions: list[Path], address: str, *,
                  every_s: float, settle_s: float) -> None:
     """Wait for the page, then reveal the positions into the room it is showing.
@@ -275,7 +298,7 @@ def _reveal_them(dataset: Path, folder: Path, appearing: Path,
     for number, position in enumerate(order, start=1):
         began = time.perf_counter()
         reveal(appearing, position)
-        declare_a_built_picture(folder, appearing, name=dataset.name)
+        mark_the_picture_changed(picture)
         _say_something_changed(address)
         print(f"  {number}/{len(order)} showing ({labels[position.name]})"
               f" -- {(time.perf_counter() - began) * 1000:.0f} ms", flush=True)
@@ -364,7 +387,7 @@ def main() -> int:
     print("", flush=True)
 
     threading.Thread(
-        target=_reveal_them, args=(dataset, folder, appearing, positions,
+        target=_reveal_them, args=(dataset, picture, appearing, positions,
                                    address),
         kwargs={"every_s": given.every, "settle_s": given.settle},
         daemon=True).start()
