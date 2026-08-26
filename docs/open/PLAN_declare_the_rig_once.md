@@ -102,3 +102,48 @@ tool and becomes the live path with a timer.
   leave two ways of growing a picture. The point of this is to have one.
 - Touching the writer's pixel path. Nothing here changes how a microscope's
   bytes are written.
+
+---
+
+## 2026-08-26, later: why a growing picture needs F5, exactly
+
+Three attempts on the real Thy1 transfer, and one model explains all of them.
+**The page draws what is inside the size it knows, and it only learns that size
+when it re-reads the description.**
+
+| how the picture grew | extent | what an operator saw |
+|---|---|---|
+| spiral: far corners down first | full from the first frame | tiles land inside known ground — **grows** |
+| row-major: top-left first | starts one tile wide | later tiles fall off the edge — **one tile, until F5** |
+| every position as a description, no pixels | full from the first frame | every piece composed empty and served from that — **nothing** |
+
+So the corner-pinning in the spiral is not about the origin, which was my
+reading and was wrong. It is about making the canvas full-size immediately, so
+that nothing ever arrives outside it.
+
+### The line it comes down to
+
+- `forgetOneStableSource` (engine.js) drops memoized **metadata and** decoded
+  holders, so "the existing layer's source re-resolution reads them again" —
+  which is how a page learns a new size. It is called only from the
+  manifest-driven refresh, for governed live runs.
+- `letGoOfDecodedPieces` drops decoded holders **only**. This is what
+  `App.jsx` calls on `imageWrittenInPlace`, the road every built picture grows
+  by.
+
+A built picture that changes shape therefore cannot be seen to change shape.
+F5 works because a fresh page reads the description once.
+
+### What to weigh before changing it
+
+Making the announce forget metadata as well is a small change and it is on the
+most expensive path in this repository. Re-resolving a layer's source is the
+neighbour of rebuilding the layer, and "a landing refreshes pixels, never the
+layers" (`8713483c`) is what cures the flicker; the comment above that code
+says pixels-only is deliberate. So the gate to satisfy is both at once:
+`test_the_spiral_growth_is_visible` stays green, and a picture whose extent
+grows is seen to grow without a reload.
+
+If that cannot be had, the fallback is the third row of the table -- declare
+the room from every description up front -- and then the piece cache is what
+needs the revision stamp, which is the change this plan already proposes.
