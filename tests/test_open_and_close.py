@@ -533,23 +533,23 @@ class TestTheLoadWindow:
     """Without a native chooser, choosing a folder opens a window in the page."""
 
     def test_the_window_starts_on_the_open_door(self, no_chooser):
-        """The window opens ready: the default tab chosen, the folders showing.
+        """The window opens ready: the folders showing, nothing to choose first.
 
-        Opening something and looking at it is the commonest thing anybody
-        does, so it is the tab the window starts on -- no click needed
-        before walking. A click on a row selects and highlights it, the way
-        the operating system's own choosers behave, and the window's one
-        Open button acts on the selection. Switching to "open positions
-        sequentially" withdraws the plain Open offer: that door replays raw
-        positions through the live writer, so its button says what it does
-        instead.
+        Opening something and looking at it is the only thing this window
+        does, so there is nothing to pick before walking -- there were two
+        tabs until 2026-08-26 and the other one did not open anything, it
+        wrote a second copy of your dataset through the microscope's writer.
+        A click on a row selects and highlights it, the way the operating
+        system's own choosers behave, and the window's one Open button acts
+        on the selection.
         """
         page, first, second = no_chooser
         page.get_by_label("open images").click()
         window = page.get_by_role("dialog", name="load data")
         window.wait_for(timeout=10_000)
-        chosen = page.get_by_label("default", exact=True)
-        assert chosen.get_attribute("aria-pressed") == "true"
+        assert page.get_by_label("default", exact=True).count() == 0, (
+            "there is one door now, so there is no tab strip to choose from"
+        )
         assert str(first) in page.get_by_label("folder path").input_value()
         row = window.get_by_label("overview_pos001.ome.zarr", exact=True)
         assert row.count() == 1
@@ -559,9 +559,6 @@ class TestTheLoadWindow:
         )
         assert page.get_by_label(
             "open overview_pos001.ome.zarr", exact=True).count() == 1
-        page.get_by_label("open positions sequentially", exact=True).click()
-        assert page.get_by_label(
-            "open overview_pos001.ome.zarr", exact=True).count() == 0
 
     def test_raw_data_opens_through_the_default_door_leaving_no_trace(
         self, no_chooser
