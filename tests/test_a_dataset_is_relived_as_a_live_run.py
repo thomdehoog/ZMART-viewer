@@ -35,7 +35,7 @@ sys.path.insert(0, str(VIZ / "app" / "picture"))
 sys.path.insert(0, str(VIZ / "app" / "server"))
 sys.path.insert(0, str(VIZ.parent))
 
-from replay import plan_a_replay, replay_the_dataset  # noqa: E402
+from replay import replay_the_dataset  # noqa: E402
 from server import make_server  # noqa: E402
 
 # One replay tile: two planes deep, one camera frame square. 384 is the same
@@ -106,127 +106,6 @@ def _a_grid_scan(folder: Path, *, across: int = 2) -> Path:
     return folder
 
 
-class TestPlanningAReplay:
-    """The plan maps the dataset onto the live writer's grid, or says why not."""
-
-    def test_a_grid_scan_is_placed_where_its_own_grid_puts_it(self, tmp_path):
-        plan = plan_a_replay(_a_grid_scan(tmp_path / "scan"))
-        assert plan.total == 4
-        step = int(STEP_UM)
-        # On the grid it was imaged on -- not because a grid is imposed on it,
-        # nothing is snapped any more, but because that is where its tiles are.
-        assert {(where["y"], where["x"]) for where in plan.positions.values()} == {
-            (0, 0), (0, step), (step, 0), (step, step)
-        }
-        # The plan reproduces the dataset's own spacing, or it is no replay.
-        assert plan.geometry.step_shape == (int(STEP_UM), int(STEP_UM))
-
-    def test_positions_off_any_grid_are_planned_where_they_sit(self, tmp_path):
-        """A run whose positions sit at awkward places still plans.
-
-        The whole worth of a replay is that nothing about the live path is
-        faked: the positions go through the writer a real acquisition uses.
-        A dataset that could only be rehearsed if it happened to sit on a
-        regular grid would leave the awkward runs -- which is most data from
-        anywhere else -- with no way to exercise the live path at all.
-
-        These three sit at places no grid would put them: an extra 17 um
-        along the row, and a third that is off in both directions at once by
-        a fraction of a micrometre.
-        """
-        folder = tmp_path / "awkward"
-        folder.mkdir()
-        _write_a_grid_tile(folder / "pos00.ome.zarr", 0, (0.0, 0.0))
-        _write_a_grid_tile(folder / "pos01.ome.zarr", 1, (0.0, STEP_UM + 17.0))
-        _write_a_grid_tile(folder / "pos02.ome.zarr", 2,
-                           (9.5, STEP_UM * 2 + 3.25))
-        plan = plan_a_replay(folder)
-        assert plan.total == 3, (
-            "every position of an awkward run has to be planned, not just "
-            "the ones that happen to land on a grid")
-
-    def test_a_rectangular_frame_is_replayed_like_a_square_one(self, tmp_path):
-        """A camera whose frame is not square still rehearses.
-
-        Plenty are not -- a light sheet's frame is routinely longer one way
-        than the other -- and the live geometry has always allowed it: a
-        profile keeps a frame_shape of two numbers with its own overlap along
-        each. Only this planner refused, because it asked for ONE number and
-        would rather refuse than guess which.
-
-        So the rectangle is what the gate uses: a frame half as wide as it is
-        tall, stepped by its own width across and its own height down.
-        """
-        folder = tmp_path / "oblong"
-        folder.mkdir()
-        wide = FRAME // 2
-        for number, at in enumerate(((0.0, 0.0), (0.0, wide * 1.0),
-                                     (FRAME * 1.0, 0.0), (FRAME * 1.0, wide * 1.0))):
-            _write_a_grid_tile(folder / f"pos{number:02d}.ome.zarr", number, at,
-                               across=wide)
-        plan = plan_a_replay(folder)
-        assert plan.total == 4
-        assert plan.geometry.frame_shape == (FRAME, wide), (
-            f"the frame must be kept as it was recorded; got "
-            f"{plan.geometry.frame_shape}")
-        assert {(where["y"], where["x"]) for where in plan.positions.values()} == {
-            (0, 0), (0, wide), (FRAME, 0), (FRAME, wide)
-        }
-
-    def test_uneven_spacing_is_replayed_where_it_sits(self, tmp_path):
-        """Positions that are not evenly spaced are no longer refused.
-
-        They used to be, and the refusal said so plainly: a replay could only
-        place tiles on the writer's grid, so a run whose neighbours sat 17
-        micrometres further apart than the rest had nowhere to go. A position
-        now carries its own place, so the run is replayed where it was imaged.
-
-        Kept rather than deleted with the refusal, as the record of the day
-        that limit lifted -- and because "this is not refused" is worth
-        holding in place as firmly as the refusal ever was.
-        """
-        folder = tmp_path / "uneven"
-        folder.mkdir()
-        _write_a_grid_tile(folder / "pos00.ome.zarr", 0, (0.0, 0.0))
-        _write_a_grid_tile(folder / "pos01.ome.zarr", 1, (0.0, STEP_UM))
-        _write_a_grid_tile(folder / "pos02.ome.zarr", 2, (0.0, STEP_UM * 2 + 17.0))
-        plan = plan_a_replay(folder)
-        assert plan.total == 3
-        across = sorted(where["x"] for where in plan.positions.values())
-        assert across == [0, int(STEP_UM), int(STEP_UM * 2 + 17.0)], (
-            f"each position is planned where its own description puts it; got {across}")
-
-    def test_the_replay_publishes_one_position_at_a_time(self, tmp_path):
-        """The library-level heart: every beat lands through the live writer."""
-        scan = _a_grid_scan(tmp_path / "scan")
-        beats = []
-        view = replay_the_dataset(
-            scan, tmp_path / "run", every_s=0.0,
-            told=lambda done, total: beats.append((done, total)),
-        )
-        # The first report is (0, total): it says how far there is to go
-        # before the first position starts writing, so a progress display
-        # has something to show -- and a Stop pressed during that first,
-        # sometimes long, write is honoured (the operator's ask, 2026-08-23).
-        assert beats == [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)]
-        assert view.name.endswith(".ome.zarr") and view.exists(), (
-            "the replay must leave a live view that any viewer can open"
-        )
-        # And the pixels, falsified rather than trusted: every published
-        # position must hold exactly the source tile's own values. A replay
-        # that mapped a position onto the wrong cell, or fed one tile's
-        # pixels to another's name, would pass every count above and still
-        # be showing the operator a lie.
-        survey = tmp_path / "run" / "data" / "survey.ome.zarr"
-        for position in ("pos00", "pos01", "pos02", "pos03"):
-            published = np.asarray(
-                zarr.open_group(str(survey / position), mode="r")["0"]
-            ).squeeze()
-            source = np.asarray(zarr.open_array(
-                str(scan / f"{position}.ome.zarr" / "0"), mode="r")).squeeze()
-            assert np.array_equal(published, source), (
-                f"{position} was published with pixels that are not its own"
-            )
 
 
 MOMENTS = 2
@@ -296,141 +175,6 @@ def _a_timelapse_scan(folder: Path, *, across: int = 2) -> Path:
     return folder
 
 
-class TestReplayingATimelapse:
-    """A timelapse replays sweep by sweep, every frame with its own pixels."""
-
-    def test_the_plan_sweeps_the_grid_once_per_moment(self, tmp_path):
-        plan = plan_a_replay(_a_timelapse_scan(tmp_path / "scan"))
-        assert plan.total == 4 * MOMENTS
-        assert plan.profile.timepoints == MOMENTS
-        moments = [beat[-1] for beat in plan.beats]
-        assert moments == [0] * 4 + [1] * 4, (
-            "a timelapse replays the way it was acquired: every position of "
-            "one moment, then every position of the next"
-        )
-        # Within each sweep the positions land in scan order, and both
-        # sweeps walk the same path -- a stage revisits its grid the same
-        # way each time.
-        names = [beat[0] for beat in plan.beats]
-        assert names[:4] == names[4:]
-
-    def test_every_moment_lands_with_its_own_pixels(self, tmp_path):
-        scan = _a_timelapse_scan(tmp_path / "scan")
-        beats = []
-        view = replay_the_dataset(
-            scan, tmp_path / "run", every_s=0.0,
-            told=lambda done, total: beats.append((done, total)),
-        )
-        assert beats[-1] == (4 * MOMENTS, 4 * MOMENTS)
-        assert view.exists()
-        survey = tmp_path / "run" / "data" / "survey.ome.zarr"
-        for position in ("pos00", "pos01", "pos02", "pos03"):
-            published = np.asarray(
-                zarr.open_group(str(survey / position), mode="r")["0"])
-            source = np.asarray(zarr.open_array(
-                str(scan / f"{position}.ome.zarr" / "0"), mode="r"))
-            assert published.shape == source.shape, (
-                f"{position} was published into a different (t, c) room "
-                f"than the source keeps: {published.shape} against "
-                f"{source.shape}"
-            )
-            assert np.array_equal(published, source), (
-                f"{position} was published with pixels that are not its own "
-                "-- a moment or channel landed in the wrong slot"
-            )
-
-
-    def test_a_watcher_sees_the_slider_grow_and_follow(
-            self, browser, built_dist, tmp_path):
-        """On a held page, each sweep offers its moment and the view follows.
-
-        This is the whole point of replaying a timelapse: the time slider
-        must offer moment 0 alone while the first sweep lands, grow when
-        the second sweep begins, and the view -- left standing on the
-        front -- must move to the new moment on its own, exactly as it
-        would during the experiment.
-        """
-        first = tmp_path / "overview"
-        first.mkdir()
-        from test_open_and_close import _store
-        _store(first / "overview_pos001.ome.zarr", channels=1)
-        _a_timelapse_scan(tmp_path / "sweeps")
-        server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                             store="overview_pos001.ome.zarr")
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        page = browser.new_page(viewport={"width": 1300, "height": 1000})
-        try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
-            # The replay runs beside the viewer, not inside it: a thread
-            # here stands in for the script an operator would run, writing
-            # the sweeps and saying so after each one. The page is opened on
-            # the run WHILE it is being written, which is the case this gate
-            # exists for.
-            run = tmp_path / "sweeps-run"
-            replaying = threading.Thread(
-                target=replay_the_dataset,
-                args=(tmp_path / "sweeps", run),
-                kwargs={"every_s": 0.4,
-                        "announce": _telling(
-                            f"http://127.0.0.1:{server.server_address[1]}")},
-                daemon=True)
-            replaying.start()
-            for _ in range(300):
-                if (run / "views" / "live").is_dir():
-                    break
-                time.sleep(0.1)
-            _open_the_run(page, run)
-            page.wait_for_function(
-                "() => window.zmartConfig.groups.includes('sweeps-run')",
-                timeout=30_000)
-            slider = "document.querySelector('input[aria-label=\"t position\"]')"
-            # While the first sweep lands, only moment 0 is on offer: the
-            # committed ranges stop at 1, and there is nothing to slide yet
-            # (a slider already reaching moment 1 would mean the replay is
-            # being served as a finished folder, whole room and all).
-            page.wait_for_function(f"""() => {{
-                const rows = (window.zmartConfig?.layers || []).filter(
-                    one => one.group === 'sweeps-run');
-                if (!rows.length) return false;
-                const ranges = rows[0].committedTimeRanges || [];
-                const held = {slider};
-                return ranges.length === 1 && ranges[0].start === 0
-                    && ranges[0].stop === 1
-                    && (!held || held.max === '0');
-            }}""", timeout=30_000)
-            # The second sweep begins: the slider grows...
-            page.wait_for_function(f"() => {slider}?.max === '1'",
-                                   timeout=60_000)
-            # ...and the watcher, standing on the front, is carried onto
-            # the moment that just landed.
-            page.wait_for_function("""() => {
-                const p = window.zmartViewer.navigationState.position;
-                const names = p.coordinateSpace.value.names;
-                const i = names.indexOf('t');
-                if (i < 0) return false;
-                const lower = p.coordinateSpace.value.bounds.lowerBounds[i];
-                return Math.abs(p.value[i] - Math.ceil(lower) - 1) <= 0.5;
-            }""", timeout=60_000)
-            replaying.join(timeout=120)
-            assert not replaying.is_alive(), "the replay never finished"
-            # Every sweep of every position landed. Counted from the run's
-            # own record rather than from a progress report -- there is no
-            # longer a door to ask, and the manifest is the better witness:
-            # it is what the viewer itself believes.
-            history = (run / "views" / "live" / "metadata" / "events.jsonl")
-            published = [line for line in
-                         history.read_text(encoding="utf-8").splitlines()
-                         if line.strip()]
-            assert len(published) == 4 * MOMENTS, len(published)
-            page.screenshot(path=str(tmp_path / "a_timelapse_replay.png"))
-        finally:
-            page.close()
-            server.shutdown()
-            thread.join(timeout=5)
 
 
 def _post(address: str, route: str, payload: dict) -> tuple[int, dict]:
@@ -470,33 +214,35 @@ class TestTheReplayRoutes:
     """The server's own rules for the door, asked without a browser."""
 
     def test_a_finished_replay_opens_again_later(self, serving):
-        """The run a replay wrote is a real run, and the plain door opens it.
+        """What a replay leaves behind opens again later, like any folder.
 
-        "Later" is the operator's own case: watch an experiment while it
-        runs, then open it again another day. The run's root holds ``data``
-        beside ``views`` and no image directly inside, so the plain door
-        once answered "no OME-Zarr image was found" (workstation,
-        2026-08-19). It is opened with its served view named, so the live
-        registry binds it and the time slider offers exactly the moments
-        that landed -- and a run still being written opens exactly the same
-        way, which is the whole point of there being one case and not two.
+        "Later" is the operator's own case: watch a dataset assemble, then
+        open it again another day. Since 2026-08-26 what it leaves is a
+        picture declared over the positions where they already lie -- a few
+        kilobytes of description, no second copy of anything -- so opening
+        it later is opening a folder, with nothing special about it at all.
+        That is the point: there is one case, not two.
         """
         address, folder = serving
         scan = _a_grid_scan(folder / "yesterdayscan")
-        # Written by the replay tool, which is where reliving a dataset lives
-        # since 2026-08-26. The viewer never wrote this and does not need to
-        # have: what it is handed is a folder, the same as any other.
-        view = replay_the_dataset(scan, folder / "yesterdayrun", every_s=0.0)
-        kept = Path(view).parents[2]
-        assert kept.is_dir(), "the replay must leave a run behind it"
+        watching = folder / "yesterdaywatching"
+        picture = replay_the_dataset(scan, watching, every_s=0.0)
+        assert picture.is_dir(), "the replay must leave a picture behind it"
         status, answer = _post(address, "/api/stores/open",
-                               {"path": str(kept)})
+                               {"path": str(watching)})
         assert status == 200, answer
         served_rows = [one for one in answer.get("layers", [])
-                       if one.get("kind") == "image"
-                       and one.get("group") == kept.name]
-        assert served_rows, (
-            "the reopened run must serve its live view as its own group"
+                       if one.get("kind") == "image"]
+        assert served_rows, "the picture must open as an image row"
+        # And it is a description, not a copy: everything it weighs is
+        # bookkeeping beside a dataset it never touched.
+        weighed = sum(f.stat().st_size for f in watching.rglob("*")
+                      if f.is_file())
+        source = sum(f.stat().st_size for f in Path(scan).rglob("*")
+                     if f.is_file())
+        assert weighed < source, (
+            f"the picture weighs {weighed} against the dataset's {source}; "
+            "a replay that copies has gone back to rewriting the data"
         )
 
 def test_a_04_dataset_replays_the_same(tmp_path):
@@ -528,15 +274,26 @@ def test_a_04_dataset_replays_the_same(tmp_path):
             ]}],
         }]}), encoding="utf-8")
 
-    view = replay_the_dataset(scan, tmp_path / "run", every_s=0.0)
-    assert view.exists()
-    survey = tmp_path / "run" / "data" / "survey.ome.zarr"
-    for number in range(4):
-        published = np.asarray(zarr.open_group(
-            str(survey / f"pos{number:02d}"), mode="r")["0"]).squeeze()
-        assert published.max() == 1500 + number * 800, (
-            f"pos{number:02d} relived with pixels that are not its own"
-        )
+    picture = replay_the_dataset(scan, tmp_path / "watching", every_s=0.0)
+    assert picture.exists()
+
+    # Nothing is written now, so the pixels cannot be read back out of a
+    # copy -- there is no copy. What this gate is actually about is whether
+    # the older metadata generation is UNDERSTOOD: a 0.4 description read,
+    # its translation believed, the position placed where it says it is. So
+    # ask the composer what it was given, through the same reader the viewer
+    # uses.
+    from mosaic import read_the_transfer
+    placed = read_the_transfer(scan.parent / f"{scan.name}-appearing")
+    assert len(placed.tiles) == 4, (
+        f"{len(placed.tiles)} of 4 positions were placed; a 0.4 description "
+        "that cannot be read is a position that silently goes missing"
+    )
+    # Where each position's finest copy says its first voxel sits.
+    corners = sorted(tuple(round(one, 1) for one in tile.copies[0].corner_um[-2:])
+                     for tile in placed.tiles)
+    assert corners == sorted([(0.0, 0.0), (0.0, STEP_UM), (STEP_UM, 0.0),
+                              (STEP_UM, STEP_UM)]), corners
 
 
 def _relive(page, folder: Path, name: str) -> None:
