@@ -26,7 +26,12 @@ dependencies = [
     "zarr>=3,<4",
     "numpy>=1.24",
     "pywebview>=5",
-    "zmart-microscopy @ git+https://github.com/thomdehoog/ZMART-microscopy",
+    # Pinned to the branch, not to the default one, and that is a debt
+    # rather than a design: the writer and run control this viewer needs
+    # -- including zmart_live.fixtures, which its tests import -- live on
+    # claude/thy1-linked-spiral until that branch reaches main. Drop the
+    # suffix the day it does.
+    "zmart-microscopy @ git+https://github.com/thomdehoog/ZMART-microscopy@claude/thy1-linked-spiral",
 ]
 
 [project.optional-dependencies]

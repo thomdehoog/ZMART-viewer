@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import zarr
 
-sys.path.insert(0, "/home/user/ZMART-microscopy/zmart-viewer/app/server")
+sys.path.insert(0, "/home/user/ZMART-microscopy/app/server")
 from server import make_server  # noqa: E402
 
 # A canvas sized for the stage, not for what we happened to image.
@@ -232,7 +232,7 @@ def main() -> int:
     print(f"  fraction of the declared canvas: {on_disk_kb * 1024 / declared:.1%}")
     print(f"  built in {build_seconds:.0f}s")
 
-    dist = Path("/home/user/ZMART-microscopy/zmart-viewer/app/page/dist")
+    dist = Path("/home/user/ZMART-microscopy/app/page/dist")
     if not (dist / "index.html").exists():
         print("app/page/dist is not built; cannot measure fetches")
         return 1

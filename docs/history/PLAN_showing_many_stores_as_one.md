@@ -70,7 +70,7 @@ rule's own "covers completely" test those tiles own **nothing at all**, and the 
 comes out empty.
 
 The second experiment is kept as a test in
-`zmart-viewer/tests/test_a_drifted_run_is_placed_truthfully.py`.
+`tests/test_a_drifted_run_is_placed_truthfully.py`.
 
 ---
 
@@ -139,7 +139,7 @@ is the difference between designing for the common case and guessing at it.
 
 ### 2. Build the assembling path
 
-**Where:** `zmart-viewer/app/server/linking.py`, beside the pointing path rather than
+**Where:** `app/server/linking.py`, beside the pointing path rather than
 instead of it.
 
 When no single stored piece answers a request, work out which stored pieces overlap
@@ -258,7 +258,7 @@ be read here. It does not: what gets handed over is the whole bundle, and the
 viewer's engine reads the index itself and asks for the piece it wants by byte
 offset, which the server already answers. A sharded 0.5 run is pointed at today —
 measured, and covered by
-`zmart-viewer/tests/test_a_pointed_at_view_of_the_newer_format.py`. The one thing to
+`tests/test_a_pointed_at_view_of_the_newer_format.py`. The one thing to
 know is that the **bundle becomes the unit**: a tile has to begin on a whole bundle
 boundary, and the smallest strip that can be trimmed where two tiles overlap is a
 whole bundle. Larger bundles therefore make the placement rules in task 4 harder to
@@ -267,7 +267,7 @@ file count reasonable rather than as large as possible.
 
 Caution one: use the **Parquet** form of references rather than JSON. References
 are recorded per piece, and this project already learned what that costs — the note
-in `zmart-viewer/app/server/linking.py` works it through: ten thousand tiles of sixteen
+in `app/server/linking.py` works it through: ten thousand tiles of sixteen
 by sixteen pieces, times their planes and colours and moments, turns a few megabytes
 on disk into tens of gigabytes in memory. The Parquet form loads lazily and exists
 for exactly this.
@@ -282,7 +282,7 @@ plain path still works if the dependency proves painful on the instrument.
 
 ### 6. Tell a missing file apart from ground nobody imaged
 
-**Where:** `zmart-viewer/app/server/linking.py`, and wherever the server answers.
+**Where:** `app/server/linking.py`, and wherever the server answers.
 
 Both currently answer 404, which is right for ground nobody imaged and quietly wrong
 for a store that has been deleted, moved, or half-written: the operator sees blank
@@ -296,7 +296,7 @@ progress fills the status with problems that are not problems.
 
 ## Tests
 
-`zmart-viewer/tests/test_a_drifted_run_is_placed_truthfully.py` holds the
+`tests/test_a_drifted_run_is_placed_truthfully.py` holds the
 coordinate-coded approach and four tests already. Add to it:
 
 - **A drifted run of stores we did not write opens, and every voxel is where the
@@ -319,9 +319,9 @@ coordinate-coded approach and four tests already. Add to it:
 
 ```
 python -m pytest zmart_storage/tests/ -q
-python -m pytest zmart-viewer/tests/test_a_drifted_run_is_placed_truthfully.py -q
-python -m pytest zmart-viewer/tests/test_the_linked_view_matches_the_canvas.py -q
-python -m pytest zmart-viewer/tests/test_the_linked_view_draws.py -q
+python -m pytest tests/test_a_drifted_run_is_placed_truthfully.py -q
+python -m pytest tests/test_the_linked_view_matches_the_canvas.py -q
+python -m pytest tests/test_the_linked_view_draws.py -q
 ```
 
 All of `zmart_storage/tests/` passes today (112 tests); it must still.

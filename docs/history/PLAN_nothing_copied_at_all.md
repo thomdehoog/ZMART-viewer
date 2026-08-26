@@ -125,12 +125,12 @@ loudly when they do not rather than rounding.
 
 Write the number of pointed-at levels into `zmart-links.json` and let the reader
 halve, rather than writing a separate list per level. The note in
-`zmart-viewer/app/server/linking.py` about holding the list by tile explains why: a list
+`app/server/linking.py` about holding the list by tile explains why: a list
 that grows per piece does not survive a real run, and the same applies per level.
 
 ### 3. Teach the reader
 
-**Where:** `zmart-viewer/app/server/linking.py`, which today answers only for level `0`
+**Where:** `app/server/linking.py`, which today answers only for level `0`
 and leaves every other level to be found on disk.
 
 It should answer for every pointed-at level, working out the tile's piece by halving
@@ -157,8 +157,8 @@ sharp when zoomed in and blank when zoomed out.
 
 ```
 python -m pytest zmart_storage/tests/ -q
-python -m pytest zmart-viewer/tests/test_the_linked_view_matches_the_canvas.py -q
-python -m pytest zmart-viewer/tests/test_a_growing_view_is_read_as_it_grows.py -q
+python -m pytest tests/test_the_linked_view_matches_the_canvas.py -q
+python -m pytest tests/test_a_growing_view_is_read_as_it_grows.py -q
 ```
 
 ---

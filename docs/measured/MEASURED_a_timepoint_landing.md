@@ -5,7 +5,7 @@
 > process and one browser serve every rung, which is itself the
 > regression gate for the finding below:
 >
->     python zmart-viewer/app/picture/measure_a_timepoint_landing.py
+>     python app/picture/measure_a_timepoint_landing.py
 
 The survey ladders measure a POSITION landing; this measures the other
 growth: a run already showing its positions gains a new MOMENT, committed

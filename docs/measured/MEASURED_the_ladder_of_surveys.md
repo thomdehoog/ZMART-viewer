@@ -6,7 +6,7 @@
 > belong to whichever machine runs the ladder. To repeat it on the
 > microscope machine or a GPU workstation::
 >
->     python zmart-viewer/app/picture/measure_a_ladder_of_surveys.py \
+>     python app/picture/measure_a_ladder_of_surveys.py \
 >         --fixtures D:/zmart-scale-runs
 >
 > The full spread per rung (least / middling / mean / 90th percentile /
@@ -360,11 +360,11 @@ from the container, on a machine with twenty-four cores.
 Everything needed is on this branch. Setup:
 ``pip install -r requirements.txt playwright pillow pytest``, then
 ``python -m playwright install chromium``, then build the viewer once
-(``cd zmart-viewer/app/page && npm install && npm run build``) and the
+(``cd app/page && npm install && npm run build``) and the
 options harness once (``npm --prefix zmart-viewer/parked/harness install``
 then ``... run build``) -- without it the suite's pixel-reading tests
 skip, and say so only in the summary. Run
-``python zmart-viewer/app/picture/measure_a_ladder_of_surveys.py --fixtures
+``python app/picture/measure_a_ladder_of_surveys.py --fixtures
 <somewhere with ~33 GB>`` (add ``--tidy`` for ~17 GB peak; use
 ``--powers 6-12`` for the quick half first — it resumes from its own
 JSON). On a machine with more cores, raise ``_BAKE_PROCESSES`` in

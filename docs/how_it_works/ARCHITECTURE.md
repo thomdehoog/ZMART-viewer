@@ -379,7 +379,7 @@ wants to know which one to open.
                               └────────────────┬────────────────────┘
                                                │ starts
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE FRONT — what you see            zmart-viewer/app/page/src/
+   THE FRONT — what you see            app/page/src/
  ══════════════════════════════════════════════════════════════════════════════
 
      App.jsx ─────────────── holds the whole panel's state
@@ -397,7 +397,7 @@ wants to know which one to open.
  ══════════════════════════════════════════════▲══════════════════════════════
                                   HTTP         │  pieces, descriptions, events
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE MIDDLE — what answers            zmart-viewer/app/server/
+   THE MIDDLE — what answers            app/server/
  ══════════════════════════════════════════════════════════════════════════════
 
      server.py ────── answers every request; guards the opened folder

@@ -129,7 +129,7 @@ tests stay green.
 
 ## Acceptance check (guards against the bug returning)
 
-`zmart-viewer/tests/` is the gate; run it with `pytest zmart-viewer/tests`. It
+`tests/` is the gate; run it with `pytest zmart-viewer/tests`. It
 covers the demo volume's OME-Zarr contract, the server's HTTP contract, the
 build artifacts, the render, and the four navigation gestures. The
 browser-driven tests skip (with a reason) where the page is not built or no

@@ -26,7 +26,7 @@ a millisecond. The cost lands somewhere else entirely, and the shipped code
 says exactly where.
 
 The bake patch runs **inside the derive, before any request is answered**
-(`zmart-viewer/app/picture/governed.py:584-586` calls `_keep_the_bake_true` before
+(`app/picture/governed.py:584-586` calls `_keep_the_bake_true` before
 installation; the docstring at 730-733 says so in words), and every piece
 request must take the same derive lock first (`governed.py:425-428`: `composer()`
 enters `_derive_guard`). So while one derive patches, the entire picture
@@ -274,7 +274,7 @@ decide it. Revise item 3's sentence and the gate's recipe.
    `{"members": sorted(members)}`, no moment counts
    (`coordinator.py:411-434`, the write at 427). The per-member `moments`
    field exists only in the **test** stranger-writer
-   (`zmart-viewer/tests/a_microscope.py:176`) and in the contract as a promise
+   (`tests/a_microscope.py:176`) and in the contract as a promise
    ("which rides beside the list *when time lands*",
    `docs/how_it_works/CONTRACT_the_files_the_viewer_needs.md:296-298`). The arrival signal the
    plan's slider (item 5) reads must first be built into the writer.

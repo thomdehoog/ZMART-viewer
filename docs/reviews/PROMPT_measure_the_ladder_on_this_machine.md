@@ -26,7 +26,7 @@ establish the real numbers, then push on the recorded open threads.
 
 1. Set up: `pip install -r requirements.txt playwright pillow pytest`,
    `python -m playwright install chromium`, then
-   `cd zmart-viewer/app/page && npm install && npm run build`, and the
+   `cd app/page && npm install && npm run build`, and the
    options harness too: `npm --prefix zmart-viewer/parked/harness
    install && npm --prefix zmart-viewer/parked/harness run build` —
    without it the suite's pixel-reading tests skip quietly.
@@ -37,7 +37,7 @@ establish the real numbers, then push on the recorded open threads.
    of skipping).
 3. Run the ladder's quick half and compare shapes with the recorded
    tables:
-   `python zmart-viewer/app/picture/measure_a_ladder_of_surveys.py
+   `python app/picture/measure_a_ladder_of_surveys.py
    --powers 6-12 --fixtures <somewhere with room>`
    (~33 GB keeps every fixture for cheap re-runs; `--tidy` if tight.)
 4. If the shapes hold, run `--powers 6-15` for the full record. The

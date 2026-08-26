@@ -16,7 +16,7 @@ The screening went looking for bloat and found very little of it.
 | what was checked | what was found |
 |---|---|
 | line coverage of `zmart_storage` from its own tests | **96%** — `canvas.py` 90%, `linked.py` 89%, `cropped.py` 99%, `positions.py` 97% |
-| coverage of `zmart-viewer/app/server` | `server.py` 87%, `stores.py` 89%, `announcements.py` 99%, `linking.py` 86% |
+| coverage of `app/server` | `server.py` 87%, `stores.py` 89%, `announcements.py` 99%, `linking.py` 86% |
 | symbols in the whole non-test Python tree that nothing references | **two** |
 | `TODO`, `FIXME` or `deprecated` markers | **none** |
 | exports of `scene.js` and `engine.js` that nothing imports | **none** |
@@ -30,8 +30,8 @@ before anyone sets out to split it. Roughly half of the large files is prose, wh
 
 | file | total | code | comments | docstrings |
 |---|---|---|---|---|
-| `zmart-viewer/app/server/server.py` | 1521 | **629** | 381 | 374 |
-| `zmart-viewer/app/server/stores.py` | 1182 | **317** | 212 | 470 |
+| `app/server/server.py` | 1521 | **629** | 381 | 374 |
+| `app/server/stores.py` | 1182 | **317** | 212 | 470 |
 | `zmart_storage/canvas.py` | 2082 | **648** | 331 | 851 |
 | `zmart_storage/cropped.py` | 965 | **281** | 66 | 483 |
 
@@ -91,7 +91,7 @@ Each of these leaves the tool able to do everything it does today.
 
 | what | lines | risk |
 |---|---|---|
-| Delete the legacy pointer-map locations in `zmart-viewer/app/server/linking.py` — two of the three places it looks are unreachable, so the compatibility they claim does not exist | −60 | very low |
+| Delete the legacy pointer-map locations in `app/server/linking.py` — two of the three places it looks are unreachable, so the compatibility they claim does not exist | −60 | very low |
 | Delete `LINKS_FOLDER`, `LINKS_FILE` and `LINKS_ADDED_FILE` in `zmart_storage/linked.py`, which are declared and used nowhere in either module | included above | none |
 | Move the shared browser-and-server harness out of a measurement script into a module beside `tests/pixels.py` | −150 to −200 | low to medium |
 | Merge `measure_cold_open.py`, `measure_sources.py` and `measure_many_positions.py` into one script, keeping all three distinct columns | −250 of 676 | medium |

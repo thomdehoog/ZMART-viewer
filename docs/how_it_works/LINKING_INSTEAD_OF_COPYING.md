@@ -1,7 +1,7 @@
 # Showing the run without copying it
 
 Written 5 August 2026, and revised since. **This is now built**, in two halves:
-`zmart_storage/linked.py` writes a view, and `zmart-viewer/app/server/linking.py`
+`zmart_storage/linked.py` writes a view, and `app/server/linking.py`
 answers for it while the viewer is open. The older arrangement that copies —
 `zmart_storage/cropped.py`, measured in `docs/open/HANDOVER_overlapping_runs.md` — still
 exists and is still the one that has been measured end to end.
@@ -336,7 +336,7 @@ the file's timestamp changes and reads it afresh, so the rest follows.
 **Prove it against the copy.** *Written, and passing.* The arrangement that copies
 is measured and correct, which makes it the ideal control: the same run, the same
 viewer, the same machine, and the only difference is whether the picture was
-written down or pointed at. `zmart-viewer/tests/test_the_linked_view_matches_the_canvas.py`
+written down or pointed at. `tests/test_the_linked_view_matches_the_canvas.py`
 writes both over the same tiles and compares every voxel, at every zoom, in every
 moment and colour, reading the pointed-at view through the viewer's own server the
 way the browser does. What it does not yet cover is a run that has drifted, because
@@ -401,7 +401,7 @@ view = link_the_tiles(folder, tiles=tiles, name="canvas", levels=3)
 
 **4. What lands on disk** is a normal-looking OME-Zarr that holds no full-size
 picture: the description, the smaller copies **as real pixels**, and the map of
-pointers. `zmart-viewer/app/server/linking.py` answers for it -- a piece is looked up
+pointers. `app/server/linking.py` answers for it -- a piece is looked up
 in the map and the tile's own file is handed over unchanged.
 
 ## Each pyramid level doubles the grid the tiles must land on

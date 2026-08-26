@@ -7,12 +7,12 @@ repository checked out. It carries everything the session needs to know.
 
 You are at the microscope workstation with a real GPU. The branch
 `claude/recent-codex-push-76q08t` closes the Neuroglancer chapter: the file
-structure follows `zmart-viewer/app/picture/CONTRACT_the_files_the_viewer_needs.md`,
+structure follows `app/picture/CONTRACT_the_files_the_viewer_needs.md`,
 every suite is green in-container, and every gate was proven able to fail
 before its green was trusted. Your job is the one thing a container cannot
 do: certify the browser gates on real hardware, and bring back numbers.
 
-The full background lives in `zmart-viewer/app/picture/PLAN_close_the_neuroglancer_chapter.md`
+The full background lives in `app/picture/PLAN_close_the_neuroglancer_chapter.md`
 (what is done, what this pass decides) and
 `MEASURED_ladder_to_4096_in_container.json` (the software-rendering
 baseline: landing ~200 ms median flat to 4,096 positions, landing-to-visible
@@ -21,7 +21,7 @@ under 225 ms, storm held at 20 commits/s). The GPU should beat all of it.
 Work through these in order, and stop to report rather than improvise if a
 step goes red:
 
-1. **Clean build.** `cd zmart-viewer/app/page && npm install && npm run build`.
+1. **Clean build.** `cd app/page && npm install && npm run build`.
    The build must end with the bundle-verification line — that proves the
    patched engine (the no-black refresh pump) is in the bundle.
 
@@ -54,7 +54,7 @@ step goes red:
 
 5. **Review finding C4 — the one open review item.** Twenty minutes reading
    the pinned Neuroglancer eviction path
-   (`zmart-viewer/app/page/node_modules/neuroglancer/lib/chunk_manager/backend.js`,
+   (`app/page/node_modules/neuroglancer/lib/chunk_manager/backend.js`,
    the queue-promotion and eviction routines): can a resident chunk be
    freed while a refresh is downloading into it? The per-key refresh
    flights (`frontend/scripts/patch_neuroglancer.mjs`, marker

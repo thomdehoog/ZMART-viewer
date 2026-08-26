@@ -15,7 +15,7 @@ open, and that scales with positions rather than with moments.
 
 Run it with::
 
-    python zmart-viewer/app/picture/measure_a_timepoint_landing.py
+    python app/picture/measure_a_timepoint_landing.py
 """
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 What this is asking
 -------------------
 
-``zmart-viewer/tests/test_the_drawing_keeps_up.py`` records the fault this measures
+``tests/test_the_drawing_keeps_up.py`` records the fault this measures
 against, and it is the worst one the project has found. With a thousand positions
 open the viewer managed **24 frames in five seconds** where a hundred positions
 managed 302. Three drawing layers are made for every position and each one takes
@@ -45,7 +45,7 @@ Running it
     python zmart-viewer/measure_the_frame_rate_of_a_linked_view.py --budget 900
     python zmart-viewer/measure_the_frame_rate_of_a_linked_view.py --steps 1,5,20,50
 
-It needs the viewer page to have been built (``npm --prefix zmart-viewer/app/page run
+It needs the viewer page to have been built (``npm --prefix app/page run
 build``) and a Chromium it can drive. It writes tiny tiles into a temporary folder
 and removes them afterwards.
 """
@@ -590,8 +590,8 @@ def main() -> int:
         raise SystemExit(
             f"the viewer page has not been built ({built} holds no index.html), so "
             "there is nothing for a browser to open. Build it with:\n"
-            "  npm --prefix zmart-viewer/app/page install\n"
-            "  npm --prefix zmart-viewer/app/page run build"
+            "  npm --prefix app/page install\n"
+            "  npm --prefix app/page run build"
         )
 
     started, browser = a_browser(asked.headed)

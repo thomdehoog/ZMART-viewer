@@ -21,22 +21,22 @@ different clone and is outside this review.
 - Compare `f4056177..HEAD` and inspect the final working tree, which should be
   clean after the campaign commit.
 - Read first:
-  - `zmart-viewer/app/picture/PROMPT_fix_the_storm_bake_catchup.md`
-  - `zmart-viewer/app/picture/HANDOVER_codex_storm_bake_and_client_staleness.md`
+  - `app/picture/PROMPT_fix_the_storm_bake_catchup.md`
+  - `app/picture/HANDOVER_codex_storm_bake_and_client_staleness.md`
   - the last storm/catch-up sections of
-    `zmart-viewer/app/picture/MEASURED_the_ladder_of_surveys.md`
+    `app/picture/MEASURED_the_ladder_of_surveys.md`
 
 The central files are:
 
-- `zmart-viewer/app/picture/declare.py`
-- `zmart-viewer/app/picture/governed.py`
-- `zmart-viewer/app/picture/served.py`
-- `zmart-viewer/app/server/server.py`
-- `zmart-viewer/app/page/scripts/patch_neuroglancer.mjs`
-- `zmart-viewer/app/page/src/engine.js`
-- `zmart-viewer/tests/test_a_commit_storm_under_zooming.py`
-- `zmart-viewer/tests/test_dirty_pieces_reach_their_level.py`
-- `zmart-viewer/app/picture/show_a_run_growing.py`
+- `app/picture/declare.py`
+- `app/picture/governed.py`
+- `app/picture/served.py`
+- `app/server/server.py`
+- `app/page/scripts/patch_neuroglancer.mjs`
+- `app/page/src/engine.js`
+- `tests/test_a_commit_storm_under_zooming.py`
+- `tests/test_dirty_pieces_reach_their_level.py`
+- `app/picture/show_a_run_growing.py`
 
 ## Ground truth the review must preserve
 

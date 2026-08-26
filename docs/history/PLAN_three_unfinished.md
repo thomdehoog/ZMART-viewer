@@ -22,7 +22,7 @@ traps.
 * **Use `zmart-viz`.** It has zarr and Playwright. `zmart-microscopy` has
   neither — it is the env with node, and it is the one the documents still tell
   you to use.
-* `zmart-viewer/tests/conftest.py` reads `PLAYWRIGHT_BROWSERS_PATH` and does **not**
+* `tests/conftest.py` reads `PLAYWRIGHT_BROWSERS_PATH` and does **not**
   default it, unlike the webapp's config which does. Browsers are at
   `C:\ProgramData\MinicondaZMB\home\t.de\ms-playwright`. Unset, the browser tests
   skip silently — set `ZMART_REQUIRE_BROWSER=1` so a skip fails instead.

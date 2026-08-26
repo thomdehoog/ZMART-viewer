@@ -617,7 +617,7 @@ the instrument actually produces.
 | | |
 | --- | --- |
 | `zmart_storage/linked.py` | builds a view. `link_the_tiles` for a finished run, `start_a_growing_view` for one in progress |
-| `zmart-viewer/app/server/linking.py` | answers for a view while the viewer is open |
+| `app/server/linking.py` | answers for a view while the viewer is open |
 | `TileCanvases._write_smaller_copies` in `zmart_storage/canvas.py` | the line everything depends on |
 | `docs/history/PLAN_showing_many_stores_as_one.md` | **the next piece of work** |
 | `docs/history/PLAN_nothing_copied_at_all.md` | why a view writes nothing, and what the acquisition must do |
@@ -628,9 +628,9 @@ the instrument actually produces.
 
 ```
 python -m pytest zmart_storage/tests/ -q                                   # 124 tests
-python -m pytest zmart-viewer/tests/test_the_linked_view_matches_the_canvas.py -q
-python -m pytest zmart-viewer/tests/test_a_growing_view_is_read_as_it_grows.py -q
-python -m pytest zmart-viewer/tests/test_the_linked_view_draws.py -q
+python -m pytest tests/test_the_linked_view_matches_the_canvas.py -q
+python -m pytest tests/test_a_growing_view_is_read_as_it_grows.py -q
+python -m pytest tests/test_the_linked_view_draws.py -q
 ```
 
 And, on a machine with a graphics card:

@@ -228,7 +228,7 @@ swap, never in-place mutation.
 
 ## 7. The built path structurally bypasses the live gateway, and `built_from` is an unaudited, arbitrary filesystem path
 
-In the real serving path, `zmart-viewer/app/server/server.py:352` gates on the
+In the real serving path, `app/server/server.py:352` gates on the
 **request's resolved path**: `live = answer_from_a_live_run(target)`. A
 built picture's request path is the hollow declared store, which is not
 inside the run folder, so the gateway returns `None` and the request falls

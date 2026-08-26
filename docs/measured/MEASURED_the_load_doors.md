@@ -6,7 +6,7 @@
 > absolute milliseconds belong to whichever machine runs it. To repeat it
 > on the workstation::
 >
->     python zmart-viewer/app/picture/measure_the_load_doors.py --fixtures D:/zmart-doors
+>     python app/picture/measure_the_load_doors.py --fixtures D:/zmart-doors
 
 Where the survey ladders measure the live path, this measures the
 OPERATOR's path: every number below went through the same HTTP doors the

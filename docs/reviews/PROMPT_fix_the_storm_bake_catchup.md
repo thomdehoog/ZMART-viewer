@@ -82,7 +82,7 @@ comments.
   `mouse.wheel` and drags over the canvas mid-storm.
 - The pywebview window has no reachable reload (the engine's input
   system eats Ctrl+R and F5); an UNCOMMITTED fix sits in
-  `zmart-viewer/app/server/launcher.py` (a native View → "Reload the
+  `app/server/launcher.py` (a native View → "Reload the
   picture" menu) awaiting behavioural verification.
 - A transient-flicker rate ceiling between 10 and 20 commits/s,
   untouched viewer — measured, unexplained, benign at real rates. The
