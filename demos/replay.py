@@ -268,6 +268,7 @@ def _reveal_them(dataset: Path, folder: Path, appearing: Path,
     point of a replay and cannot be shown by a tool that finishes before the
     viewer opens.
     """
+    labels = _what_tells_them_apart(positions)
     _wait_until_it_answers(address)
     time.sleep(settle_s)
     order = in_the_order_they_were_imaged(dataset, positions)
@@ -276,11 +277,7 @@ def _reveal_them(dataset: Path, folder: Path, appearing: Path,
         reveal(appearing, position)
         declare_a_built_picture(folder, appearing, name=dataset.name)
         _say_something_changed(address)
-        # The store name of a real export runs to eighty characters of
-        # filter wheel and rotation; the part that tells them apart is
-        # the front of it.
-        print(f"  {number}/{len(order)} showing "
-              f"({position.name.split(chr(95))[0] or position.name})"
+        print(f"  {number}/{len(order)} showing ({labels[position.name]})"
               f" -- {(time.perf_counter() - began) * 1000:.0f} ms", flush=True)
         if every_s and number < len(order):
             time.sleep(every_s)
@@ -288,6 +285,27 @@ def _reveal_them(dataset: Path, folder: Path, appearing: Path,
     print(f"  all {len(order)} showing. The dataset was not touched.",
           flush=True)
     print("", flush=True)
+
+
+def _what_tells_them_apart(positions: list[Path]) -> dict[str, str]:
+    """A short label per position: only the parts of the name that differ.
+
+    A real export names a position for everything about it -- magnification,
+    tile, channel, every filter in the wheel, shutter, rotation -- and eighty
+    characters of that, repeated identically down a column, says nothing. What
+    an operator is reading for is which tile landed, and that is whichever
+    underscore-separated part is not the same in all of them. Worked out from
+    the names rather than assumed to be in a particular place, because the
+    next microscope will name things its own way.
+    """
+    parts = [one.name.split(".")[0].split("_") for one in positions]
+    if len(parts) > 1 and len({len(one) for one in parts}) == 1:
+        differs = [at for at in range(len(parts[0]))
+                   if len({one[at] for one in parts}) > 1]
+        if differs:
+            return {one.name: "_".join(part[at] for at in differs)
+                    for one, part in zip(positions, parts)}
+    return {one.name: one.name.split(".")[0] for one in positions}
 
 
 def _wait_until_it_answers(address: str, *, give_up_after_s: float = 30.0) -> None:
