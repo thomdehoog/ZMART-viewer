@@ -167,7 +167,7 @@ plainly:
 
 Emitting `colour × v` *with* alpha `v` attenuates twice: the volume lit 1.0% of
 the window against 15.7% for the same data flat. It looks exactly like an engine
-failing to render and it is arithmetic. `zmart-viewer/app/page/src/scene.js` has had
+failing to render and it is arithmetic. `app/page/src/scene.js` has had
 the correct volumetric shader all along — copy it rather than deriving it again.
 
 ## Transparency, which is the interesting problem

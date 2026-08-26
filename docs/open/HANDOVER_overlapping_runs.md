@@ -21,13 +21,13 @@ that describes what exists:
 **Status.** The reasoning is settled, the code exists, and it has now been run. The
 snapshot in `a9b7b5c` was taken mid-session with nothing yet proven; this document
 has since been brought up to date. Every test in `zmart_storage/tests/test_cropped.py`
-and `zmart-viewer/tests/test_the_cropped_canvas_draws.py` passes on this sandbox, and
+and `tests/test_the_cropped_canvas_draws.py` passes on this sandbox, and
 the sweep in `measure_the_overlapping_run.py` has been taken from one tile to ten
 thousand — the table is under "What the sweep found" below.
 
 Since then a **second** arrangement has been written, which shows the same run
 without copying it at all: `zmart_storage/linked.py` builds the view and
-`zmart-viewer/app/server/linking.py` answers for it. It passes its tests, and it works
+`app/server/linking.py` answers for it. It passes its tests, and it works
 only for runs whose tiles land on an exact grid — a real stage drifts by a voxel or
 two and such a run is currently refused rather than shown. That is the next piece
 of work and `docs/how_it_works/LINKING_INSTEAD_OF_COPYING.md` sets out how to do it. The measurements

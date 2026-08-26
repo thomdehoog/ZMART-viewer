@@ -18,7 +18,7 @@ the browser columns as shapes, not absolutes -- exactly as the ladders do.
 
 Run it with::
 
-    python zmart-viewer/app/picture/measure_the_load_doors.py --fixtures /somewhere
+    python app/picture/measure_the_load_doors.py --fixtures /somewhere
 
 Each rung's fixture is written once and kept, so a re-run measures the doors
 rather than the fixture writer.

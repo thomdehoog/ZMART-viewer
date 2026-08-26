@@ -206,16 +206,16 @@ entitled to refuse independently?
 
 ## How to look for yourself
 
-- The serving door: `zmart-viewer/app/picture/served.py` (`the_bytes_behind`,
-  `_the_serving_behind`); the live snapshot: `zmart-viewer/app/picture/governed.py`
+- The serving door: `app/picture/served.py` (`the_bytes_behind`,
+  `_the_serving_behind`); the live snapshot: `app/picture/governed.py`
   (`composer`, `_compose_the_snapshot`, `_what_changed_dirtied`); the
-  transfer bake: `zmart-viewer/app/picture/declare.py`
+  transfer bake: `app/picture/declare.py`
   (`_bake_the_coarse_ground`); refresh contracts:
-  `zmart-viewer/tests/test_the_composer_obeys_the_manifest.py`,
-  `zmart-viewer/tests/test_frontend_live_refresh_contract.py`.
+  `tests/test_the_composer_obeys_the_manifest.py`,
+  `tests/test_frontend_live_refresh_contract.py`.
 - Suites: `python -m pytest zmart-viewer/tests zmart_live/tests zmart_storage`
   from the repo root (browser tests need the built frontend and free
   ports — do not run demo viewers beside them; 24 photograph/port tests
   fail under a squatted port and it looks exactly like a real regression).
-- The scale harness: `zmart-viewer/app/picture/measure_a_governed_run_at_scale.py`
+- The scale harness: `app/picture/measure_a_governed_run_at_scale.py`
   against `D:\zmart-scale-runs\gov113x113`.

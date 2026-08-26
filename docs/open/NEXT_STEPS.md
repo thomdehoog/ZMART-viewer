@@ -305,7 +305,7 @@ built and tested.
 **The writer now exists too, and what is missing has moved.** `zmart_storage/canvas.py`
 declares a run's images empty at the start, writes each tile straight into its place,
 lengthens the run in time as moments are recorded, and keeps the smaller copies of the
-image up to date as it goes. It has its own tests, and `zmart-viewer/tests/
+image up to date as it goes. It has its own tests, and `tests/
 test_canvas_written_live.py` drives it against a real browser to check that a run written
 this way actually appears on screen while it is being written — which is the claim that
 matters and the one the engine's own account of itself cannot settle.

@@ -65,10 +65,10 @@ instrument that was red before the fix was believed:
 Nothing merges on a software-GL container's word. On the T400:
 
 1. Pull the branch; `npm install && npm run build` from clean.
-2. `python -m pytest zmart-viewer/tests/test_the_screen_never_goes_black.py
-   zmart-viewer/tests/test_one_stuck_refresh_stalls_only_itself.py
-   zmart-viewer/tests/test_a_commit_storm_under_zooming.py
-   zmart-viewer/tests/test_a_survey_grows_in_a_spiral.py -s` — the browser
+2. `python -m pytest tests/test_the_screen_never_goes_black.py
+   tests/test_one_stuck_refresh_stalls_only_itself.py
+   tests/test_a_commit_storm_under_zooming.py
+   tests/test_a_survey_grows_in_a_spiral.py -s` — the browser
    gates on real GPU. The spiral gate runs both invalidation modes by
    itself; raise `ZMART_SPIRAL_ACROSS` / `ZMART_SPIRAL_SEED_RINGS` to
    open on an already-large survey and watch late landings stay prompt.

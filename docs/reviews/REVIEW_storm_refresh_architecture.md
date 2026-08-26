@@ -16,7 +16,7 @@ operator's Windows workstation and was not reachable from here. Every number
 quoted from a run is therefore taken from the handover and the prompt as
 written, not independently re-measured.
 
-More importantly, `zmart-viewer/app/page/node_modules` is not installed in this
+More importantly, `app/page/node_modules` is not installed in this
 checkout, so the pinned Neuroglancer source could not be read. Several questions
 the prompt asks are questions *about Neuroglancer's own behaviour*, and those
 are marked below as inferred rather than established. Finding C4 in particular
@@ -339,7 +339,7 @@ alongside the mean.
 
 ### C9 — The clean-install blocker, with its mechanism. Low. Confirmed from code.
 
-`zmart-viewer/app/page/package.json:8` runs the patcher at `postinstall`, while
+`app/page/package.json:8` runs the patcher at `postinstall`, while
 `build` runs `precompile-workers.mjs` *first* and the patcher second.
 
 The patcher's worker entries carry `also: workerBundle` pointing at

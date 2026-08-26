@@ -12,7 +12,7 @@ written down now because the answer needs deciding before more is built on top.
 view open with `start_a_growing_view` in `zmart_storage/linked.py` and adds tiles as
 they land. Adding one costs the same whether it is the first of the run or the ten
 thousandth, and the viewer answers for it immediately — measured, and covered by
-`zmart-viewer/tests/test_a_growing_view_is_read_as_it_grows.py`, which checks after
+`tests/test_a_growing_view_is_read_as_it_grows.py`, which checks after
 *every* tile rather than once at the end.
 
 The way that works is worth knowing before reading the rest. The list of pointers
@@ -85,6 +85,6 @@ Whichever is chosen, two things have to be settled with it:
 | | |
 | --- | --- |
 | `zmart_storage/linked.py` | `GrowingLinkedView`, and `_put_the_list_where_the_viewer_looks` |
-| `zmart-viewer/app/server/linking.py` | `the_bytes_behind`, which is where "has it changed" is decided today |
-| `zmart-viewer/tests/test_a_growing_view_is_read_as_it_grows.py` | what is already guaranteed about a tile landing |
+| `app/server/linking.py` | `the_bytes_behind`, which is where "has it changed" is decided today |
+| `tests/test_a_growing_view_is_read_as_it_grows.py` | what is already guaranteed about a tile landing |
 | `docs/how_it_works/ARCHITECTURE.md` | the announcements the viewer already has |

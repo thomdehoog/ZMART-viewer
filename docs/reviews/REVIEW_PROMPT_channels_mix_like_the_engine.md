@@ -14,7 +14,7 @@ colour interface is unchanged in this build.
 Ground rules for this review, learned the hard way this week: the
 codebase's comments are HISTORY, not law — verify any constraint you lean
 on against the installed engine's source
-(`zmart-viewer/app/page/node_modules/neuroglancer/lib/`), especially
+(`app/page/node_modules/neuroglancer/lib/`), especially
 `layer/multi_channel_setup.js`, `sliceview/volume/image_renderlayer.js`,
 `sliceview/frontend.js`, `trackable_blend.js` and
 `webgl/shader_ui_controls.js`. Two prior reviews already audited the old

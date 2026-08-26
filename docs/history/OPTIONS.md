@@ -127,7 +127,7 @@ notion of zoom.
 The same suite runs against all three, and an option that will not pass it is not
 ready to be compared.
 
-1. **Registration** — `zmart-viewer/tests/margins.py`. A square of image with a
+1. **Registration** — `tests/margins.py`. A square of image with a
    slightly larger hole cut over it; the four margins stay even while the view is
    panned, zoomed and thrown about. Reported as worst unevenness in any one frame,
    in screen pixels.

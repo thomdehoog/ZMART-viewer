@@ -66,7 +66,7 @@ replacements.
 This page exists so that any *other* writer knows exactly what it must
 match, and so a reader of a run folder knows what they are looking at.
 
-To show a run: declare it once (`zmart-viewer/app/picture/declare.py`) and the
+To show a run: declare it once (`app/picture/declare.py`) and the
 server serves the picture; each commit thereafter appears on screen by
 itself. Announcing the commit to the running server
 (`POST /api/announce`) is what makes it appear immediately rather than on
@@ -297,7 +297,7 @@ the member list, and a new TIMEPOINT moves that member's declared
 moment count, which rides beside the list when time lands. Pixels
 first, declaration second — the viewer's own publication rule, met from
 the microscope's side of the fence. The test writer that proves this
-end works (`zmart-viewer/tests/a_microscope.py`) imports nothing of ours
+end works (`tests/a_microscope.py`) imports nothing of ours
 by design: the viewer depends on this contract, never on our
 publisher's habits.
 

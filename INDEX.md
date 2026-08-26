@@ -151,7 +151,7 @@ missing.
   first run found the interaction bug described in `docs/measured/SPIKE_RESULTS.md`: the
   volume rendered but nothing responded to the mouse, because the default input
   bindings were never installed. Fixed, and now covered by
-  `zmart-viewer/tests/test_interaction.py`.
+  `tests/test_interaction.py`.
 
 ## Branches
 

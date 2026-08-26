@@ -272,7 +272,7 @@ Other focused results:
 
 The shareable smaller test is:
 
-`zmart-viewer/tests/test_a_commit_storm_under_zooming.py::test_every_zoom_shows_the_survey_after_a_storm_of_landings`
+`tests/test_a_commit_storm_under_zooming.py::test_every_zoom_shows_the_survey_after_a_storm_of_landings`
 
 Nickname: **real-wheel commit-storm gate**.
 

@@ -520,7 +520,7 @@ class _Handler(SimpleHTTPRequestHandler):
             # from another microscope has tiles that land nowhere near a whole
             # file, so no piece of it can be handed over as it is; the piece is
             # built out of whichever tiles cover that ground and served as bytes
-            # that never existed until now. See zmart-viewer/app/picture/served.py.
+            # that never existed until now. See app/picture/served.py.
             #
             # "Could not answer just now" is a different thing from "there is
             # nothing here", and the difference matters at the wire: the
@@ -639,7 +639,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         ``rel`` is what came after ``/data/``: the opened folder's number, then
         the store's path inside it, then the piece. A picture declared by
-        ``zmart-viewer/app/picture/declare.py`` records what it was built from — a
+        ``app/picture/declare.py`` records what it was built from — a
         transfer's tiles, or a governed run's manifest — and the piece is made
         from that. The store is found by peeling the piece address off the end
         (a piece is always ``level/c/`` and one number per axis), rather than

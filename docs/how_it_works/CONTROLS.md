@@ -31,7 +31,7 @@ engine or working around it.
 
 This viewer already builds that table by hand rather than accepting whatever the
 engine installs by default. The code is in
-`zmart-viewer/app/page/src/NeuroglancerView.jsx`, around line 99, and the comment
+`app/page/src/NeuroglancerView.jsx`, around line 99, and the comment
 above it explains what was left out and why.
 
 ---
