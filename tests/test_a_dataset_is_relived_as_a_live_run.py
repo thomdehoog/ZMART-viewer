@@ -19,6 +19,7 @@ the time slider grows on screen exactly as it would during the experiment.
 import json
 import sys
 import threading
+import urllib.request
 import time
 from pathlib import Path
 
@@ -34,7 +35,7 @@ sys.path.insert(0, str(VIZ / "app" / "picture"))
 sys.path.insert(0, str(VIZ / "app" / "server"))
 sys.path.insert(0, str(VIZ.parent))
 
-from rehearsal import plan_a_replay, replay_the_dataset  # noqa: E402
+from replay import plan_a_replay, replay_the_dataset  # noqa: E402
 from server import make_server  # noqa: E402
 
 # One replay tile: two planes deep, one camera frame square. 384 is the same
@@ -364,18 +365,27 @@ class TestReplayingATimelapse:
                       wait_until="domcontentloaded")
             page.wait_for_function("() => window.zmartConfig !== undefined",
                                    timeout=30_000)
-            page.get_by_label("open images").click()
-            window = page.get_by_role("dialog", name="load data")
-            window.wait_for(timeout=10_000)
-            page.get_by_label("open positions sequentially", exact=True).click()
-            box = page.get_by_label("folder path")
-            box.fill(str(tmp_path))
-            box.press("Enter")
-            window.get_by_label("sweeps", exact=True).wait_for(timeout=10_000)
-            window.get_by_label("sweeps", exact=True).click()
-            page.get_by_label("open as a live run").click()
+            # The replay runs beside the viewer, not inside it: a thread
+            # here stands in for the script an operator would run, writing
+            # the sweeps and saying so after each one. The page is opened on
+            # the run WHILE it is being written, which is the case this gate
+            # exists for.
+            run = tmp_path / "sweeps-run"
+            replaying = threading.Thread(
+                target=replay_the_dataset,
+                args=(tmp_path / "sweeps", run),
+                kwargs={"every_s": 0.4,
+                        "announce": _telling(
+                            f"http://127.0.0.1:{server.server_address[1]}")},
+                daemon=True)
+            replaying.start()
+            for _ in range(300):
+                if (run / "views" / "live").is_dir():
+                    break
+                time.sleep(0.1)
+            _open_the_run(page, run)
             page.wait_for_function(
-                "() => window.zmartConfig.groups.includes('sweeps replay')",
+                "() => window.zmartConfig.groups.includes('sweeps-run')",
                 timeout=30_000)
             slider = "document.querySelector('input[aria-label=\"t position\"]')"
             # While the first sweep lands, only moment 0 is on offer: the
@@ -384,7 +394,7 @@ class TestReplayingATimelapse:
             # being served as a finished folder, whole room and all).
             page.wait_for_function(f"""() => {{
                 const rows = (window.zmartConfig?.layers || []).filter(
-                    one => one.group === 'sweeps replay');
+                    one => one.group === 'sweeps-run');
                 if (!rows.length) return false;
                 const ranges = rows[0].committedTimeRanges || [];
                 const held = {slider};
@@ -405,187 +415,22 @@ class TestReplayingATimelapse:
                 const lower = p.coordinateSpace.value.bounds.lowerBounds[i];
                 return Math.abs(p.value[i] - Math.ceil(lower) - 1) <= 0.5;
             }""", timeout=60_000)
-            for _ in range(200):
-                answer = page.evaluate("""async () => {
-                    const r = await fetch('/api/stores/replay-status',
-                        {method: 'POST',
-                         headers: {'Content-Type': 'application/json'},
-                         body: '{}'});
-                    return r.json();
-                }""")
-                if answer.get("state") == "done":
-                    break
-                page.wait_for_timeout(150)
-            assert answer.get("state") == "done"
-            assert answer.get("done") == 4 * MOMENTS
+            replaying.join(timeout=120)
+            assert not replaying.is_alive(), "the replay never finished"
+            # Every sweep of every position landed. Counted from the run's
+            # own record rather than from a progress report -- there is no
+            # longer a door to ask, and the manifest is the better witness:
+            # it is what the viewer itself believes.
+            history = (run / "views" / "live" / "metadata" / "events.jsonl")
+            published = [line for line in
+                         history.read_text(encoding="utf-8").splitlines()
+                         if line.strip()]
+            assert len(published) == 4 * MOMENTS, len(published)
             page.screenshot(path=str(tmp_path / "a_timelapse_replay.png"))
         finally:
             page.close()
             server.shutdown()
             thread.join(timeout=5)
-
-
-def test_a_replay_is_watchable_without_any_clicks(browser, built_dist,
-                                                  tmp_path):
-    """Starting a replay must show the landing tiles, hands off the mouse.
-
-    Three separate small things used to leave the canvas black until the
-    operator intervened: the new layers opened on the camera's full
-    brightness range (the pixels sit in its bottom few per cent), the view
-    stayed wherever the operator last looked, and the focal plane could
-    sit at a depth the replay does not have. This gate presses Replay and
-    then touches NOTHING -- no Auto, no Overview, no sliders -- and
-    demands that a healthy share of the canvas lights up with the landing
-    tiles. Any one of the three old failures keeps that share near zero,
-    so one measurement guards all three. The acquisition that was already
-    open is hidden first, so the light being measured can only be the
-    replay's own.
-    """
-    import io
-
-    from PIL import Image
-
-    first = tmp_path / "overview"
-    first.mkdir()
-    from test_open_and_close import _store
-    _store(first / "overview_pos001.ome.zarr", channels=1)
-    _a_grid_scan(tmp_path / "rehearsal")
-    server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    page = browser.new_page(viewport={"width": 1300, "height": 1000})
-    try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=30_000)
-        # Hide what was already on screen, so any light measured below can
-        # only be the replay's own tiles.
-        page.get_by_title("Hide this acquisition").first.click()
-        page.get_by_label("open images").click()
-        window = page.get_by_role("dialog", name="load data")
-        window.wait_for(timeout=10_000)
-        page.get_by_label("open positions sequentially", exact=True).click()
-        box = page.get_by_label("folder path")
-        box.fill(str(tmp_path))
-        box.press("Enter")
-        window.get_by_label("rehearsal", exact=True).wait_for(timeout=10_000)
-        window.get_by_label("rehearsal", exact=True).click()
-        page.get_by_label("open as a live run").click()
-        page.wait_for_function(
-            "() => window.zmartConfig.groups.includes('rehearsal replay')",
-            timeout=30_000)
-        for _ in range(300):
-            answer = page.evaluate("""async () => {
-                const r = await fetch('/api/stores/replay-status',
-                    {method: 'POST',
-                     headers: {'Content-Type': 'application/json'},
-                     body: '{}'});
-                return r.json();
-            }""")
-            if answer.get("state") == "done":
-                break
-            page.wait_for_timeout(150)
-        assert answer.get("state") == "done"
-        # Let the engine finish fetching and drawing what the replay left.
-        page.wait_for_timeout(5_000)
-        page.screenshot(path=str(tmp_path / "a_replay_hands_off.png"))
-        shot = page.locator("canvas").first
-        clipped = shot.bounding_box()
-        photographed = page.screenshot(clip=clipped)
-        pixels = np.array(Image.open(io.BytesIO(photographed)).convert("L"))
-        lit = float((pixels > 80).mean())
-        assert lit > 0.25, (
-            f"after a hands-off replay only {lit:.0%} of the canvas is lit; "
-            "the operator is still looking at blackness -- a dark window, an "
-            "unmoved view, or a focal plane the replay does not have"
-        )
-    finally:
-        page.close()
-        server.shutdown()
-        thread.join(timeout=5)
-
-
-def test_a_replay_can_be_stopped_from_the_window(browser, built_dist,
-                                                 tmp_path):
-    """The other tab offers Stop while a replay runs, and it works.
-
-    The window closes when a replay starts (the operator is watching the
-    tiles land), so the stop lives where they would go looking: reopening
-    the window on the other tab shows that a replay is running, how far it
-    is, and a Stop button. Pressing it ends the landings after the
-    position in flight; what landed stays on screen. The Replay button is
-    held disabled meanwhile, saying why a second replay must wait.
-    """
-    first = tmp_path / "overview"
-    first.mkdir()
-    from test_open_and_close import _store
-    _store(first / "overview_pos001.ome.zarr", channels=1)
-    scan = _a_grid_scan(tmp_path / "rehearsal", across=4)
-    server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    page = browser.new_page(viewport={"width": 1300, "height": 1000})
-    try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=30_000)
-        page.get_by_label("open images").click()
-        window = page.get_by_role("dialog", name="load data")
-        window.wait_for(timeout=10_000)
-        page.get_by_label("open positions sequentially", exact=True).click()
-        box = page.get_by_label("folder path")
-        box.fill(str(tmp_path))
-        box.press("Enter")
-        window.get_by_label("rehearsal", exact=True).wait_for(timeout=10_000)
-        window.get_by_label("rehearsal", exact=True).click()
-        page.get_by_label("open as a live run").click()
-        page.wait_for_function(
-            "() => window.zmartConfig.groups.includes('rehearsal replay')",
-            timeout=30_000)
-        # The window closed itself; the operator goes back for the stop.
-        page.get_by_label("open images").click()
-        window.wait_for(timeout=10_000)
-        page.get_by_label("open positions sequentially", exact=True).click()
-        stop = page.get_by_label("stop the replay")
-        stop.wait_for(timeout=10_000)
-        assert page.get_by_label("open as a live run").is_disabled(), (
-            "while a replay runs, starting another must wait"
-        )
-        stop.click()
-        page.wait_for_function("""async () => {
-            const r = await fetch('/api/stores/replay-status',
-                {method: 'POST',
-                 headers: {'Content-Type': 'application/json'}, body: '{}'});
-            const told = await r.json();
-            return told.state === 'cancelled';
-        }""", timeout=30_000)
-        # The run itself lives in the viewer's own session scratch -- never
-        # beside the dataset (2026-08-23) -- so the status's own count is
-        # what says how far the landings got before the stop took hold.
-        told = page.evaluate("""async () => {
-            const r = await fetch('/api/stores/replay-status',
-                {method: 'POST',
-                 headers: {'Content-Type': 'application/json'}, body: '{}'});
-            return r.json();
-        }""")
-        assert 1 <= told.get("done", 0) < 16, (
-            f"a stopped replay should hold some but not all positions; "
-            f"the status said {told}"
-        )
-        assert not (scan / "replays").exists(), (
-            "a replay must never leave its run beside the dataset"
-        )
-        # And what landed stays on screen, as the window's Stop promises.
-        assert page.evaluate(
-            "() => window.zmartConfig.groups.includes('rehearsal replay')")
-    finally:
-        page.close()
-        server.shutdown()
-        thread.join(timeout=5)
 
 
 def _post(address: str, route: str, payload: dict) -> tuple[int, dict]:
@@ -627,33 +472,23 @@ class TestTheReplayRoutes:
     def test_a_finished_replay_opens_again_later(self, serving):
         """The run a replay wrote is a real run, and the plain door opens it.
 
-        The replay writes a real run into the viewer's own session scratch
-        -- never beside the dataset, since 2026-08-23 -- and the status
-        answer names its view, which is how anybody finds it again. Until
-        this gate, later never came: the run's root holds ``data`` beside
-        ``views`` and no image directly inside, so the plain door answered
-        "no OME-Zarr image was found" (workstation, 2026-08-19). The root
-        is opened the way the replay door itself opens it, served view
-        named, so the live registry binds it and the time slider offers
-        exactly the moments that landed.
+        "Later" is the operator's own case: watch an experiment while it
+        runs, then open it again another day. The run's root holds ``data``
+        beside ``views`` and no image directly inside, so the plain door
+        once answered "no OME-Zarr image was found" (workstation,
+        2026-08-19). It is opened with its served view named, so the live
+        registry binds it and the time slider offers exactly the moments
+        that landed -- and a run still being written opens exactly the same
+        way, which is the whole point of there being one case and not two.
         """
         address, folder = serving
         scan = _a_grid_scan(folder / "yesterdayscan")
-        status, _ = _post(address, "/api/stores/replay",
-                          {"path": str(scan), "every": 0.0})
-        assert status == 200
-        for _ in range(100):
-            _, told = _post(address, "/api/stores/replay-status", {})
-            if told.get("state") != "running":
-                break
-            time.sleep(0.2)
-        assert told.get("state") == "done"
-        # The status names the run's live view; the run root -- the folder
-        # the plain door reopens -- is three levels above it.
-        kept = Path(told["view"]).parents[2]
-        assert not (scan / "replays").exists(), (
-            "a replay must never leave its run beside the dataset"
-        )
+        # Written by the replay tool, which is where reliving a dataset lives
+        # since 2026-08-26. The viewer never wrote this and does not need to
+        # have: what it is handed is a folder, the same as any other.
+        view = replay_the_dataset(scan, folder / "yesterdayrun", every_s=0.0)
+        kept = Path(view).parents[2]
+        assert kept.is_dir(), "the replay must leave a run behind it"
         status, answer = _post(address, "/api/stores/open",
                                {"path": str(kept)})
         assert status == 200, answer
@@ -663,229 +498,6 @@ class TestTheReplayRoutes:
         assert served_rows, (
             "the reopened run must serve its live view as its own group"
         )
-
-    def test_one_replay_at_a_time(self, serving):
-        """A second ask while one runs is refused, not queued.
-
-        The same rule the bake follows, for the same reason: the answer to
-        "how far along?" has to mean one thing.
-        """
-        address, folder = serving
-        scan = _a_grid_scan(folder / "slowscan")
-        status, _ = _post(address, "/api/stores/replay",
-                          {"path": str(scan), "every": 0.8})
-        assert status == 200
-        refused, answer = _post(address, "/api/stores/replay",
-                                {"path": str(scan)})
-        assert refused == 409 and "already" in answer["error"]
-        # Wait the run out, so nothing is still writing when the folder goes.
-        for _ in range(100):
-            _, told = _post(address, "/api/stores/replay-status", {})
-            if told.get("state") != "running":
-                break
-            time.sleep(0.2)
-        assert told.get("state") == "done"
-
-    def test_a_dataset_off_the_grid_is_replayed_like_any_other(self, serving):
-        """A run off the grid crosses the wire and rehearses like any other.
-
-        It used to be refused here, and the refusal was carried whole so the
-        window could show it. A position now carries its own place, so there
-        is nothing to refuse: these three sit 17 micrometres further apart
-        than a grid would put them and are replayed where they were imaged.
-        """
-        address, folder = serving
-        uneven = folder / "uneven"
-        uneven.mkdir()
-        _write_a_grid_tile(uneven / "pos00.ome.zarr", 0, (0.0, 0.0))
-        _write_a_grid_tile(uneven / "pos01.ome.zarr", 1, (0.0, STEP_UM))
-        _write_a_grid_tile(uneven / "pos02.ome.zarr", 2,
-                           (0.0, STEP_UM * 2 + 17.0))
-        status, answer = _post(address, "/api/stores/replay",
-                               {"path": str(uneven), "every": 0.0})
-        assert status == 200, answer
-        # The door answers the moment the run is declared, before the first
-        # position has landed, so the immediate answer cannot carry the
-        # replay's own group yet. Ask for the picture again, the way an
-        # open page would, once positions have landed.
-        #
-        # The rehearsal underway on screen is what is pinned -- not a
-        # finished run. The third position here lands at x = 657 pixels,
-        # which is not a whole number of the writer's 64-pixel chunks, and
-        # the linked live view can only hand over chunks exactly as they
-        # sit on disk -- so the replay errors after the aligned positions
-        # land. That ceiling reproduces identically on the pre-redesign
-        # tree (checked 2026-08-23), so it is a long-standing limit of the
-        # live path, not something today's window changed; this gate keeps
-        # guarding what it always guarded, that the door no longer refuses.
-        import urllib.request
-        groups: list = []
-        for _ in range(150):
-            _, told = _post(address, "/api/stores/replay-status", {})
-            with urllib.request.urlopen(f"{address}/api/config",
-                                        timeout=30) as fetched:
-                groups = json.loads(fetched.read()).get("groups", [])
-            if "uneven replay" in groups or told.get("state") != "running":
-                break
-            time.sleep(0.2)
-        assert "uneven replay" in groups, (groups, told)
-
-    def test_the_replay_routes_obey_the_open_gate(self, built_dist, tmp_path):
-        """With opening switched off, the replay doors are not served.
-
-        The replay exists for the operator's load window, exactly like the
-        listing; a run-mode page where a workflow decides what is shown
-        offers neither.
-        """
-        first = tmp_path / "overview"
-        first.mkdir()
-        from test_open_and_close import _store
-        _store(first / "overview_pos001.ome.zarr", channels=1)
-        server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                             store="overview_pos001.ome.zarr", allow_open=False)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            address = f"http://127.0.0.1:{server.server_address[1]}"
-            for route in ("/api/stores/replay", "/api/stores/replay-status"):
-                status, _ = _post(address, route, {"path": str(tmp_path)})
-                assert status == 404, f"{route} answered {status} with opening off"
-        finally:
-            server.shutdown()
-            thread.join(timeout=5)
-
-
-class TestTheReplayDoor:
-    """From the other tab, Replay relives the dataset in front of the operator."""
-
-    def test_a_refusal_reaches_the_operator_in_the_window(
-        self, browser, built_dist, tmp_path
-    ):
-        """A dataset the replay cannot take fails where the operator is looking.
-
-        The window stays open with the refusal's own words in its error box,
-        rather than closing on a silent nothing. That property is what this
-        gate is for, and it outlives any particular refusal.
-
-        It has outlived two refusals already. An off-grid dataset is no
-        longer refused, because a position carries its own place; nor is a
-        rectangular frame, because the planner now asks per axis. What still
-        stands is a run whose tiles do not reach each other: these two are
-        evenly spaced, so there IS a step, and the step is wider than the
-        frame. A live mosaic lays tiles edge to edge or overlapping, and one
-        with holes in it is not a mosaic.
-        """
-        first = tmp_path / "overview"
-        first.mkdir()
-        from test_open_and_close import _store
-        _store(first / "overview_pos001.ome.zarr", channels=1)
-        apart = tmp_path / "apart"
-        apart.mkdir()
-        _write_a_grid_tile(apart / "pos00.ome.zarr", 0, (0.0, 0.0))
-        _write_a_grid_tile(apart / "pos01.ome.zarr", 1, (0.0, FRAME * 2.0))
-        server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                             store="overview_pos001.ome.zarr")
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        page = browser.new_page(viewport={"width": 1300, "height": 1000})
-        try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
-            page.get_by_label("open images").click()
-            window = page.get_by_role("dialog", name="load data")
-            window.wait_for(timeout=10_000)
-            page.get_by_label("open positions sequentially", exact=True).click()
-            box = page.get_by_label("folder path")
-            box.fill(str(tmp_path))
-            box.press("Enter")
-            window.get_by_label("apart", exact=True).wait_for(timeout=10_000)
-            window.get_by_label("apart", exact=True).click()
-            page.get_by_label("open as a live run").click()
-            told = window.get_by_role("alert")
-            told.wait_for(timeout=30_000)
-            assert "gaps" in told.inner_text(), told.inner_text()
-            assert page.get_by_role("dialog", name="load data").count() == 1, (
-                "the window must stay open so the refusal can be read"
-            )
-        finally:
-            page.close()
-            server.shutdown()
-            thread.join(timeout=5)
-
-    def test_the_other_tab_replays_tile_by_tile(self, browser, built_dist, tmp_path):
-        first = tmp_path / "overview"
-        first.mkdir()
-        # The ordinary starting acquisition, so the viewer has something open.
-        from test_open_and_close import _store
-        _store(first / "overview_pos001.ome.zarr", channels=1)
-        scan = _a_grid_scan(tmp_path / "rehearsal")
-        server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                             store="overview_pos001.ome.zarr")
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        page = browser.new_page(viewport={"width": 1300, "height": 1000})
-        try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
-            page.get_by_label("open images").click()
-            window = page.get_by_role("dialog", name="load data")
-            window.wait_for(timeout=10_000)
-            page.get_by_label("open positions sequentially", exact=True).click()
-            box = page.get_by_label("folder path")
-            box.fill(str(tmp_path))
-            box.press("Enter")
-            window.get_by_label("rehearsal", exact=True).wait_for(timeout=10_000)
-            window.get_by_label("rehearsal", exact=True).click()
-            page.get_by_label("open as a live run").click()
-            # The first position is on screen the moment the door answers; the
-            # rest land one at a time behind it. The heading names the
-            # dataset being relived, not the view's own file.
-            page.wait_for_function(
-                "() => window.zmartConfig.groups.includes('rehearsal replay')",
-                timeout=30_000)
-            status = """async () => {
-                const r = await fetch('/api/stores/replay-status',
-                    {method: 'POST', headers: {'Content-Type': 'application/json'},
-                     body: '{}'});
-                return r.json();
-            }"""
-            seen = []
-            for _ in range(200):
-                answer = page.evaluate(status)
-                seen.append((answer.get("done"), answer.get("state")))
-                if answer.get("state") == "done":
-                    break
-                page.wait_for_timeout(150)
-            assert seen[-1][1] == "done", f"the replay never finished: {seen[-3:]}"
-            counts = [done for done, _ in seen if isinstance(done, int)]
-            assert counts[-1] == 4
-            assert any(1 <= done < 4 for done in counts), (
-                "the replay must be watchable part-way through -- landing "
-                f"everything at once is an open, not a replay (saw {counts})"
-            )
-            # The run on disk is a real live run in the contract layout: the
-            # one collection of positions, and the live view a viewer opens.
-            # It lives in the viewer's own session scratch -- the status
-            # names the view, and the run root is three levels above it --
-            # never beside the dataset (the operator's rule, 2026-08-23).
-            run_folder = Path(answer["view"]).parents[2]
-            assert not (scan / "replays").exists(), (
-                "a replay must never leave its run beside the dataset"
-            )
-            survey = run_folder / "data" / "survey.ome.zarr"
-            assert (run_folder / "views" / "live" / "live.ome.zarr").exists()
-            landed = [one for one in survey.iterdir()
-                      if one.is_dir() and one.name.startswith("pos")]
-            assert len(landed) == 4
-        finally:
-            page.close()
-            server.shutdown()
-            thread.join(timeout=5)
-
 
 def test_a_04_dataset_replays_the_same(tmp_path):
     """The older metadata generation replays too, pixels pinned.
@@ -928,21 +540,60 @@ def test_a_04_dataset_replays_the_same(tmp_path):
 
 
 def _relive(page, folder: Path, name: str) -> None:
-    """Drive the load window the way an operator does: experimental, folder, open."""
-    page.get_by_label("open images").click()
-    window = page.get_by_role("dialog", name="load data")
-    window.wait_for(timeout=10_000)
-    page.get_by_label("open positions sequentially", exact=True).click()
-    box = page.get_by_label("folder path")
-    box.fill(str(folder))
-    box.press("Enter")
-    window.get_by_label(name, exact=True).wait_for(timeout=10_000)
-    window.get_by_label(name, exact=True).click()
-    page.get_by_label("open as a live run").click()
+    """Relive the dataset, then open the run it left, the way an operator does.
+
+    The viewer stopped being able to write on 2026-08-26. A replay is a script
+    run beside it now, not a tab inside it, so this is the two-step an operator
+    actually performs: relive the dataset, then open the run -- which by then
+    is an ordinary folder, opened through the ordinary door.
+    """
+    run = folder / f"{name}-run"
+    # A run can only be lived once -- its record only moves forward -- so
+    # opening the same one a second time reopens what is there rather than
+    # writing it again. That IS the case the callers here are testing.
+    if not run.exists():
+        replay_the_dataset(folder / name, run, every_s=0.0)
+    _open_the_run(page, run)
     page.wait_for_timeout(4000)
     # The way back to the whole picture, pressed the same way both times: what
     # is compared below is what was drawn, not where the camera happened to be.
     page.get_by_role("button", name="Overview", exact=True).click()
+
+
+def _open_the_run(page, run: Path) -> None:
+    """Open a run through the load window, the way an operator opens anything.
+
+    A run still being written and a run that finished open by the same steps
+    and through the same door, which is the point: the viewer is handed a
+    folder and never asks which of the two it is.
+    """
+    page.get_by_label("open images").click()
+    window = page.get_by_role("dialog", name="load data")
+    window.wait_for(timeout=10_000)
+    box = page.get_by_label("folder path")
+    box.fill(str(run.parent))
+    box.press("Enter")
+    window.get_by_label(run.name, exact=True).wait_for(timeout=15_000)
+    window.get_by_label(run.name, exact=True).click()
+    page.get_by_label(f"open {run.name}").click()
+
+
+def _telling(address: str):
+    """A callback that tells the viewer at ``address`` that something landed.
+
+    This is the microscope's half of the bargain, and a replay run beside the
+    viewer keeps it the same way a microscope would: write the files, then say
+    so. Best effort -- a viewer that has closed must not stop the run.
+    """
+    def tell() -> None:
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                address.rstrip("/") + "/api/announce",
+                data=json.dumps({"wrote_image_in_place": True}).encode(),
+                headers={"Content-Type": "application/json"}), timeout=5).close()
+        except OSError:
+            pass
+    return tell
 
 
 def _what_is_shown(page) -> dict:
@@ -1110,7 +761,7 @@ def test_opening_it_again_after_closing_it_shows_the_same_picture(
 
 
 def _a_replay_photographed(browser, built_dist, tmp_path, *, bake):
-    """Replay one scan through the live door and photograph what it draws."""
+    """Relive one scan, open it baked or not, and photograph what it draws."""
     import numpy as np
     from PIL import Image
 
@@ -1129,29 +780,40 @@ def _a_replay_photographed(browser, built_dist, tmp_path, *, bake):
         page.goto(f"http://127.0.0.1:{server.server_address[1]}",
                   wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
-        page.get_by_title("Hide this acquisition").first.click()
-        page.wait_for_timeout(500)
-        # Straight to the door's own request, so the bake can be asked for
-        # exactly as the load window would ask for it.
+        # The run is written beside the viewer, then opened. The bake is an
+        # OPEN-time ask, not a writing one -- it decides whether the picture's
+        # pieces are written now or composed when somebody looks -- so it goes
+        # on the open, exactly where the server reads it.
+        run = tmp_path / "scan-run"
+        replay_the_dataset(tmp_path / "scan", run, every_s=0.0)
+        # The bake is remembered beside the run, so it is asked for once here
+        # and honoured on every later binding. Done before the window opens
+        # the run, because the window has no bake control for a run that
+        # already carries its own picture.
         page.evaluate("""async ([where, bake]) => {
-          await fetch('/api/stores/replay', {method: 'POST',
+          const r = await fetch('/api/stores/open', {method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({path: where, every: 0, bake})});
-        }""", [str(tmp_path / "scan"), bake])
-        for _ in range(300):
-            done = page.evaluate("""async () => {
-              const answer = await fetch('/api/stores/replay-status',
-                {method: 'POST', headers: {'Content-Type': 'application/json'},
-                 body: '{}'});
-              return (await answer.json()).state;
-            }""")
-            if done in ("done", "error"):
-                break
-            page.wait_for_timeout(150)
-        assert done == "done", f"the replay did not finish: {done}"
+            body: JSON.stringify({path: where, bake})});
+          await r.json();
+          await fetch('/api/stores/close', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path: where})});
+        }""", [str(run), bake])
+        # And now opened the way an operator opens it -- through the window,
+        # which is also what puts the camera where the picture is. Opened by
+        # a bare request instead, the view stayed at the depth the previous
+        # acquisition left it at and drew nothing (2026-08-26).
+        _open_the_run(page, run)
         page.wait_for_function(
             "() => (window.zmartConfig.groups || []).some((g) => g.includes('scan'))",
             timeout=30_000)
+        # Only the run is wanted in the photograph, and the hide has to come
+        # after the reload -- a reloaded page starts showing everything again.
+        # By name, not by position: after a reload the run may be listed
+        # first, and hiding "the first one" then hid the very thing being
+        # photographed (2026-08-26).
+        page.get_by_label("toggle group overview").click()
+        page.wait_for_timeout(500)
         page.wait_for_timeout(7000)
         page.get_by_role("button", name="Overview", exact=True).click()
         page.wait_for_timeout(3000)
@@ -1160,6 +822,10 @@ def _a_replay_photographed(browser, built_dist, tmp_path, *, bake):
             "x": canvas["x"] + canvas["width"] * 0.15,
             "y": canvas["y"] + canvas["height"] * 0.15,
             "width": canvas["width"] * 0.7, "height": canvas["height"] * 0.7})
+        # Kept beside the run: when these two disagree, the difference is
+        # something to look at, not a number to argue with.
+        (tmp_path / f"photographed-{'baked' if bake else 'plain'}.png"
+         ).write_bytes(shot)
         import io
         return np.asarray(
             Image.open(io.BytesIO(shot)).convert("L"), dtype=float)

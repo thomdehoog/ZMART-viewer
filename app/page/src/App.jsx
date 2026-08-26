@@ -8,7 +8,6 @@ import {
   putTheViewBack,
   whatIsOnScreen,
   chooseScaleWhenTheImagesAreMeasured,
-  watchTheReplay,
   letGoOfDecodedPieces,
   lettingGo,
   sourceRefreshing,
@@ -166,40 +165,9 @@ async function constructionStatus() {
   return response.json().catch(() => ({ state: "error", error: "unreadable answer" }));
 }
 
-async function startReplay(path, perSecond, bake = false) {
-  const response = await fetch("/api/stores/replay", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // The server counts the pause between positions; the window asks in
-    // positions per second, which is how anybody watching describes it. At
-    // the top of the range there is no pause at all: the replay goes as fast
-    // as the writer can commit, which is the honest meaning of "maximum".
-    // ``bake`` is the same ask the default door's mosaic box makes, carried
-    // through to the live path: the picture's pieces are written as they
-    // land rather than composed when somebody looks.
-    body: JSON.stringify({
-      path,
-      bake,
-      every: perSecond >= AS_FAST_AS_IT_CAN ? 0 : 1 / perSecond,
-    }),
-  });
-  const answer = await response.json().catch(() => null);
-  if (!response.ok) return { error: answer?.error || "the replay could not start" };
-  return { config: answer };
-}
-
-async function replayStatus() {
-  const response = await fetch("/api/stores/replay-status", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  return response.json().catch(() => ({ state: "error", error: "unreadable answer" }));
-}
-
-// Ask the running build or replay to stop at its next step. Cooperative:
-// the step in flight finishes whole, so a stopped replay's landed positions
-// stay a real run, and a stopped build removes its half-made scene.
+// Ask the running build to stop at its next step. Cooperative: the step in
+// flight finishes whole, so a stopped build removes its half-made scene
+// rather than leaving one torn open.
 async function askToStop(what) {
   await fetch(`/api/stores/${what}-cancel`, {
     method: "POST",
@@ -219,38 +187,6 @@ async function listFolders(path) {
   return answer;
 }
 
-/**
- * The load window: pick the thing to look at, and the window says what it is.
- *
- * The path box takes a typed or pasted path (Enter goes there); the rows are
- * the folders at that path, each wearing a tag for what it is — a built view,
- * one image, a plate, or raw positions. Choosing a row says in one line what
- * Open will do with it: a view, image or plate opens directly, and raw
- * positions are shown through a view built over them on the spot (with the
- * two build questions — where to save it, and whether to bake the
- * low-resolution mosaic — laid out beforehand, already answered). The
- * experimental tab replays a raw run through the live writer instead, and
- * accepts nothing else. Errors from the walk, the build or the open all show
- * inside the window, where the operator is looking.
- */
-// How fast the positions of a replay may land, in positions per second, and
-// the mark at which the pace is dropped altogether. Twenty a second is past
-// the point where an eye can follow one landing from the next; asking for
-// more is asking for "no waiting", so that is what the top of the range
-// means.
-const AS_FAST_AS_IT_CAN = 20;
-const REPLAY_PACES = [0.1, 0.5, 1, 2, 5, 10, AS_FAST_AS_IT_CAN];
-
-const LOAD_KINDS = [
-  { key: "open", label: "default",
-    said: "point at what you want to see — a view, an image, a plate, or raw positions. "
-      + "Raw data is shown through a view built over it, nothing copied" },
-  { key: "other", label: "open positions sequentially",
-    said: "replay a finished dataset as though the microscope were running it "
-      + "— its positions land one at a time, through the live path, for "
-      + "testing and troubleshooting" },
-];
-
 // What each kind of row IS — the little tag on the row, and the sentence
 // beneath the list once it is chosen. The kinds come from the server's
 // listing (see _serve_list_folders); a row with no kind is just a place to
@@ -269,6 +205,9 @@ const ROW_KINDS = {
   view: { tag: "zmartview",
           said: "a view — links to the raw data, nothing duplicated; it opens directly" },
   image: { tag: "zarr", said: "one image — it opens directly" },
+  live: { tag: "run",
+          said: "a run the microscope wrote — it opens directly, and keeps up "
+            + "on its own if it is still being written" },
   plate: { tag: "zarr", said: "a plate of wells — it opens directly" },
   run: { tag: "zarr",
          said: "raw positions from the microscope — Open links them together "
@@ -277,50 +216,17 @@ const ROW_KINDS = {
 };
 
 function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
-                     onArriving,
-                      onReplayStarted }) {
+                     onArriving }) {
   const [busy, setBusy] = React.useState(false);
   const [openError, setOpenError] = React.useState(null);
-  // Which tab is chosen. Loading an existing view is the commonest thing
-  // to do, so the window starts there, folders already showing.
-  const [kind, setKind] = React.useState("open");
   // Raw data being constructed into a viewer: which folder, where the
   // viewer's files go, and whether the pieces are prebaked now or made on
   // the fly later. Null while the operator is still walking folders.
   const [constructing, setConstructing] = React.useState(null);
   // The row the operator clicked last: highlighted in the list, and what
-  // the Open button below the list acts on. Cleared when the folder or the
-  // tab changes, because the list under it has changed.
+  // the Open button below the list acts on. Cleared when the folder
+  // changes, because the list under it has changed.
   const [selected, setSelected] = React.useState(null);
-  // What the running replay reports, while the "other" tab is showing: how
-  // far it is and whether it runs at all, so the tab can offer Stop and say
-  // why a second Replay must wait. Polled only while that tab is open.
-  const [replaying, setReplaying] = React.useState(null);
-  // How fast a replay should land its positions. Kept here rather than in the
-  // server's answer because it is a wish about the next replay, not a fact
-  // about the running one.
-  // Always one of the listed choices: a default the list does not hold made
-  // the dropdown SHOW its first entry while this state quietly sent
-  // something else — the pace on screen and the pace replayed disagreed
-  // until the operator's first touch (caught 2026-08-24).
-  const [pace, setPace] = React.useState(1);
-  // Whether the replay bakes the picture's pieces as they land — the same
-  // choice the default door's mosaic box offers, with the same meaning.
-  const [bakeReplay, setBakeReplay] = React.useState(false);
-  React.useEffect(() => {
-    if (kind !== "other") return undefined;
-    let watching = true;
-    const look = async () => {
-      const status = await replayStatus();
-      if (watching) setReplaying(status);
-    };
-    look();
-    const ticking = setInterval(look, 700);
-    return () => {
-      watching = false;
-      clearInterval(ticking);
-    };
-  }, [kind]);
   const polling = React.useRef(null);
 
   const navigate = (path) => {
@@ -553,28 +459,6 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         <div style={styles.loadHead}>
           <span style={styles.loadTitle}>load data</span>
         </div>
-        <div style={styles.loadKinds}>
-          {LOAD_KINDS.map((door) => (
-            <button
-              key={door.key}
-              type="button"
-              onClick={() => {
-                setKind(door.key);
-                setConstructing(null);
-                setSelected(null);
-                setOpenError(null);
-              }}
-              aria-label={door.label}
-              aria-pressed={kind === door.key}
-              title={door.said}
-              style={{ ...styles.loadKind,
-                       ...(kind === door.key ? styles.loadKindChosen : null) }}
-            >
-              {door.label}
-            </button>
-          ))}
-        </div>
-        {kind && (
         <>
         <div style={{ display: "contents" }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -629,18 +513,11 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
           )}
           {/* One click selects a row and highlights it, the way the
               operating system's own choosers behave; a double click steps
-              into a folder or opens an image at once. What the chosen tab
-              is looking for floats to the top; the plain folders to walk
-              into follow. */}
-          {listing.folders.filter(
-            // The sequential door feeds raw positions through the live
-            // writer, and a built view is not raw data — so views are not
-            // offered there at all, rather than listed and refused (the
-            // operator's call, 2026-08-23).
-            (folder) => kind !== "other" || folder.kind !== "view",
-          ).sort((a, b) => {
-            // What the chosen tab can act on floats to the top; the plain
-            // folders to walk into follow.
+              into a folder or opens an image at once. What can be opened
+              floats to the top; the plain folders to walk into follow. */}
+          {listing.folders.slice().sort((a, b) => {
+            // What can be acted on floats to the top; the plain folders to
+            // walk into follow.
             const wanted = (folder) => (Boolean(folder.kind) ? 0 : 1);
             return wanted(a) - wanted(b) || a.name.localeCompare(b.name);
           }).map((folder) => (
@@ -655,7 +532,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                 // its files go, and whether the low-resolution mosaic is
                 // built now — with plain answers already filled in. Open
                 // then does the rest in one press.
-                setConstructing(kind === "open" && folder.kind === "run" ? {
+                setConstructing(folder.kind === "run" ? {
                   data: `${listing.path}/${folder.name}`,
                   name: folder.name,
                   destination: `${listing.path}/${folder.name}/scenes`,
@@ -664,7 +541,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
               }}
               onDoubleClick={() =>
                 ["view", "image", "plate"].includes(folder.kind)
-                  ? kind !== "other" && openStore(`${listing.path}/${folder.name}`)
+                  ? openStore(`${listing.path}/${folder.name}`)
                   : navigate(`${listing.path}/${folder.name}`)
               }
               aria-label={folder.name}
@@ -700,27 +577,10 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         </div>
         {/* What the chosen row IS, said under the list in one line — so a
             row that offers nothing is never a silent mystery. */}
-        {(selected || kind === "other") && (
+        {selected && (
           <div style={styles.loadEmptyNote} role="status">
-            {kind === "other"
-              ? ((selected ? selected.kind : listing.kind) === "run"
-                ? (selected
-                  ? "raw positions — they replay one at a time, through the "
-                    + "same doorway the microscope uses"
-                  : "this folder's positions replay one at a time — Open "
-                    + "starts them landing")
-                : selected?.kind === "image"
-                  ? "one position of this folder — Open replays the whole "
-                    + "folder, its positions landing one at a time"
-                  : selected?.kind === "plate"
-                    ? "a plate — its wells replay one at a time, through the "
-                      + "same doorway the microscope uses"
-                    : selected
-                      ? "nothing here can be replayed — raw positions are "
-                        + "what feeds the live writer"
-                      : "choose a dataset of raw positions, or walk into one")
-              : (ROW_KINDS[selected.kind]?.said
-                ?? "a plain folder — double-click to look inside")}
+            {ROW_KINDS[selected.kind]?.said
+              ?? "a plain folder — double-click to look inside"}
           </div>
         )}
         {/* A chosen run needs no questions answered: Open shows it through a
@@ -728,7 +588,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
             closes — nothing lands on the operator's disk uninvited. The one
             choice on offer is the mosaic; only ticking it asks where the
             kept view should live. */}
-        {kind === "open" && constructing && !constructing.relink && (
+        {constructing && !constructing.relink && (
           <div style={styles.constructPane}>
             <div style={styles.constructRow}>
               <label style={styles.constructChoice}>
@@ -771,57 +631,6 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         )}
         {!constructing?.relink && (
           <div style={styles.loadActions}>
-            {kind === "other" && replaying?.state === "running" && (
-              <>
-                <span style={{ ...styles.loadEmptyNote, marginRight: 8 }}
-                      role="status">
-                  {replaying.stop
-                    ? "stopping — the position now landing finishes first"
-                    : `a replay is running · ${replaying.done ?? 0} of `
-                      + `${replaying.total ?? "…"} positions`}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => askToStop("replay")}
-                  disabled={Boolean(replaying.stop)}
-                  aria-label="stop the replay"
-                  title="Stop the replay after the position now landing. What has landed stays on screen as a real run"
-                  style={{ ...styles.loadCancel, marginRight: 8 }}
-                >
-                  Stop
-                </button>
-              </>
-            )}
-            {kind === "other" && (
-              <label style={styles.paceRow}
-                     title="The same choice the default door offers: the picture's pieces are computed and kept as each position lands, so looking around afterwards reads files instead of composing. Left unticked, pieces are composed when looked at">
-                <input
-                  type="checkbox"
-                  checked={bakeReplay}
-                  onChange={(event) => setBakeReplay(event.target.checked)}
-                  aria-label="bake the picture as it lands"
-                />
-                <span style={styles.paceLabel}>bake as it lands</span>
-              </label>
-            )}
-            {kind === "other" && (
-              <label style={styles.paceRow}
-                     title="How fast the positions land while the replay runs. They land top row first, left to right, the way a stage scans">
-                <span style={styles.paceLabel}>per second</span>
-                <select
-                  value={pace}
-                  onChange={(event) => setPace(Number(event.target.value))}
-                  aria-label="positions per second"
-                  style={styles.paceChoice}
-                >
-                  {REPLAY_PACES.map((rate) => (
-                    <option key={rate} value={rate}>
-                      {rate >= AS_FAST_AS_IT_CAN ? "as fast as it can" : rate}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             <button
               type="button"
               onClick={async () => {
@@ -832,84 +641,31 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                 // a store entered directly showed only the scale arrays
                 // inside it, none of them openable (2026-08-23).
                 const where = selected ? `${listing.path}/${selected.name}` : listing.path;
-                if (kind !== "other") {
-                  // Raw positions are shown through a link file the server
-                  // composes for itself and forgets when it closes — a plain
-                  // Open keeps nothing on the operator's disk. Only the
-                  // ticked mosaic box builds a view that is KEPT, at the
-                  // place the operator chose (the operator's rule,
-                  // 2026-08-23). A view, an image or a plate opens directly.
-                  if (constructing?.bake) {
-                    openRun();
-                    return;
-                  }
-                  openStore(where);
+                // Raw positions are shown through a link file the server
+                // composes for itself and forgets when it closes — a plain
+                // Open keeps nothing on the operator's disk. Only the
+                // ticked mosaic box builds a view that is KEPT, at the
+                // place the operator chose (the operator's rule,
+                // 2026-08-23). A view, an image or a plate opens directly.
+                if (constructing?.bake) {
+                  openRun();
                   return;
                 }
-                // On this tab, opening shows the dataset arriving: it is
-                // opened as one acquisition and its positions appear one at a
-                // time, at the pace beside this button. Nothing is copied --
-                // every position is already on disk and already placed, so
-                // this works for a light-sheet mosaic and a 336-well plate as
-                // readily as for a handful of tiles (the operator's call,
-                // 2026-08-21).
-                //
-                // A single image IS one position of the folder around it, so
-                // choosing one replays that folder — a raw zarr is raw
-                // data, whichever row of its dataset the finger landed on
-                // (the operator's point, 2026-08-23).
-                const dataset = selected?.kind === "image" ? listing.path : where;
-                // The experimental door is a dress rehearsal, and its whole
-                // worth is that nothing about the live path is faked: the
-                // positions go through the live writer, its sealed profile
-                // and its manifest, one commit each, exactly as they would
-                // during an acquisition.
-                //
-                // It briefly did something else (2026-08-21): it opened the
-                // dataset like any other and then REVEALED its positions one
-                // at a time on screen. That looks the same from a chair and
-                // rehearses nothing at all -- the live path is never touched,
-                // so a fault in it cannot show up. Seven gates in
-                // test_a_dataset_is_relived_as_a_live_run.py said so by going
-                // red, which is what they are for.
-                setBusy(true);
-                const result = await startReplay(dataset, pace, bakeReplay);
-                setBusy(false);
-                if (!result.config) {
-                  setOpenError(result.error || "that folder could not be replayed");
-                  return;
-                }
-                onOpened(result.config);
-                onReplayStarted?.(result.config);
+                openStore(where);
               }}
               disabled={busy
                         || constructing?.running
                         // The folder being STOOD IN counts as much as a
                         // chosen row — the window lands inside the dataset,
                         // and a dead button at the landing spot read as the
-                        // whole door being broken (2026-08-23). A chosen
-                        // image counts too: it is one position of the
-                        // folder around it, which is what then replays.
-                        || (kind === "other"
-                          ? (!(selected
-                              ? ["run", "plate", "image"].includes(selected.kind)
-                              : listing.kind === "run")
-                             || replaying?.state === "running")
-                          : !(selected
-                            ? selected.kind
-                            : ["view", "image", "plate"].includes(listing.kind)))}
-              aria-label={kind === "other"
-                ? "open as a live run"
-                : (selected ? `open ${selected.name}`
-                   : listing.kind ? "open this folder"
-                   : "open the selection")}
-              title={kind === "other"
-                ? "Relive this dataset as a live run: its positions land on "
-                  + "screen one at a time, through the same doorway the "
-                  + "microscope uses, at the pace beside this button"
-                : "Open this and show it. A view, an image or a plate opens "
-                  + "directly; raw positions are shown through a view built "
-                  + "over them first"}
+                        // whole door being broken (2026-08-23).
+                        || !(selected
+                          ? selected.kind
+                          : ["view", "image", "plate"].includes(listing.kind))}
+              aria-label={selected ? `open ${selected.name}`
+                : listing.kind ? "open this folder"
+                : "open the selection"}
+              title="Open this and show it. A view, an image or a plate opens directly; raw positions are shown through a view built over them first"
               style={styles.loadOpen}
             >
               {busy || constructing?.running ? "…" : "Open"}
@@ -969,7 +725,6 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
           </div>
         )}
         </>
-        )}
         {(listing.error || openError) && (
           <div style={styles.loadError} role="alert">
             {listing.error || openError}
@@ -1920,10 +1675,10 @@ export default function App() {
 
   // A channel that arrives knowing nothing about its brightness — no
   // declared window, no measured histogram — is asked about as soon as its
-  // pixels exist. A replay's live channels are exactly this: the live view
+  // pixels exist. A live run's channels are exactly this: the live view
   // carries no display window, so they drew on the camera's whole range and
   // the landing positions looked near-black (the operator watched dark
-  // replays, 2026-08-23). Each landing refreshes the config, so a channel
+  // landings, 2026-08-23). Each landing refreshes the config, so a channel
   // whose pixels had not arrived yet is simply asked again on the next one.
   // An answer never lands over an operator's own setting: the moment a
   // window is set by hand the channel is marked touched, synchronously,
@@ -2226,17 +1981,6 @@ export default function App() {
             const group = (loaded.groups || []).at(-1) || "";
             setRevealing({ group, count: 1, perSecond });
           }}
-          onReplayStarted={(config) => {
-            // Starting a replay is an explicit ask to watch something, so the
-            // camera goes to the show once the replay's images have answered
-            // -- first plane, first moment, whole picture. The count says how
-            // many image rows the fresh config carries, which is what keeps
-            // the move from firing before those rows reach the engine.
-            if (viewer) {
-              watchTheReplay(viewer, (config.layers || []).filter(
-                (one) => one.kind !== "segmentation").length);
-            }
-          }}
           onConstructed={async () => {
             const config = await fetchConfig();
             if (config) applyConfig(config);
@@ -2298,22 +2042,6 @@ const styles = {
     font: "600 11px/1 system-ui, sans-serif",
     cursor: "pointer",
   },
-  loadKinds: { display: "flex", gap: 8, paddingBottom: 10 },
-  loadKind: {
-    flex: 1,
-    padding: "8px 10px",
-    border: "1px solid var(--control-border)",
-    borderRadius: 5,
-    background: "var(--control-bg)",
-    color: "var(--text-secondary)",
-    font: "600 11px/1.2 system-ui, sans-serif",
-    cursor: "pointer",
-  },
-  loadKindChosen: {
-    background: "var(--accent-selection)",
-    borderColor: "var(--accent)",
-    color: "var(--accent-selection-text)",
-  },
   loadPath: {
     boxSizing: "border-box",
     width: "100%",
@@ -2360,28 +2088,6 @@ const styles = {
     border: "1px solid var(--subtle-border)",
     borderRadius: 4,
     padding: "2px 6px",
-  },
-  // The pace, beside the Replay button it belongs to.
-  paceRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    marginRight: 10,
-    color: "var(--text-muted)",
-    font: "11px system-ui, sans-serif",
-  },
-  paceLabel: { textTransform: "uppercase", letterSpacing: ".04em", fontSize: 10 },
-  paceChoice: {
-    // Drawn flat, not with the operating system's glossy button face: the
-    // native dress glowed against the rest of the window's plain controls.
-    appearance: "none",
-    WebkitAppearance: "none",
-    background: "var(--input-bg)",
-    border: "1px solid var(--control-border)",
-    borderRadius: 3,
-    color: "var(--text-primary)",
-    font: "11px system-ui, sans-serif",
-    padding: "2px 14px 2px 6px",
   },
   loadOpen: {
     flexShrink: 0,

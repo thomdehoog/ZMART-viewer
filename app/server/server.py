@@ -241,7 +241,7 @@ def the_store_a_live_run_is_opened_by(target: Path, *,
 
 
 class _StoppedByTheOperator(Exception):
-    """Raised inside a build or replay loop when the operator asked to stop.
+    """Raised inside a build when the operator asked it to stop.
 
     Raised from the progress callback -- the one place both loops already
     visit between steps -- so the step in flight always finishes whole and
@@ -284,7 +284,6 @@ class _Handler(SimpleHTTPRequestHandler):
         library=None,
         browse=None,
         bake_job=None,
-        replay_job=None,
         scratch=None,
         allow_open: bool = True,
         live: bool = True,
@@ -305,9 +304,6 @@ class _Handler(SimpleHTTPRequestHandler):
         # One prebake at a time, shared by every request this server answers.
         # See _serve_bake for the shape of what it holds.
         self._bake_job = bake_job if bake_job is not None else {}
-        # One replay at a time, for the same reason: "how far along?" must
-        # mean one thing. See _serve_replay.
-        self._replay_job = replay_job if replay_job is not None else {}
         # Where this viewer puts the pictures it composes for itself, shared
         # by every request it answers. See _the_scene_behind_a_run.
         self._scratch = scratch if scratch is not None else {}
@@ -1164,9 +1160,6 @@ class _Handler(SimpleHTTPRequestHandler):
             "/api/stores/construct",
             "/api/stores/construct-status",
             "/api/stores/construct-cancel",
-            "/api/stores/replay",
-            "/api/stores/replay-status",
-            "/api/stores/replay-cancel",
             "/api/measure",
             "/api/annotations",
             "/api/announce",
@@ -1180,9 +1173,7 @@ class _Handler(SimpleHTTPRequestHandler):
         # workflow uses to say what should be shown, button or no button.
         if route in ("/api/stores/list", "/api/stores/construct",
                      "/api/stores/construct-status",
-                     "/api/stores/construct-cancel", "/api/stores/replay",
-                     "/api/stores/replay-status",
-                     "/api/stores/replay-cancel") and not self._allow_open:
+                     "/api/stores/construct-cancel") and not self._allow_open:
             self._send_json({"error": "opening by hand is switched off here"},
                             HTTPStatus.NOT_FOUND)
             return
@@ -1206,12 +1197,6 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json(dict(self._bake_job) or {"state": "idle"})
         elif route == "/api/stores/construct-cancel":
             self._serve_cancel(self._bake_job)
-        elif route == "/api/stores/replay":
-            self._serve_replay(payload)
-        elif route == "/api/stores/replay-status":
-            self._send_json(dict(self._replay_job) or {"state": "idle"})
-        elif route == "/api/stores/replay-cancel":
-            self._serve_cancel(self._replay_job)
         elif route == "/api/measure":
             self._serve_measurement(payload)
         elif route == "/api/announce":
@@ -1304,6 +1289,18 @@ class _Handler(SimpleHTTPRequestHandler):
                 # (found with a real 6-tile survey, 2026-08-19). Anything
                 # else is just a place to walk into.
                 try:
+                    # A run the microscope wrote is the most specific shape
+                    # there is, and the least like the others: it holds
+                    # ``data`` beside ``views`` and no image directly inside,
+                    # so every test below says no and the row came back with
+                    # no kind at all -- which left the Open button dead on a
+                    # finished experiment. The only way in was the API. Asked
+                    # first because it is the narrowest question, and asked
+                    # with the cheap side-effect-free half: naming the store
+                    # to open declares the picture, which a folder LISTING
+                    # must never do (2026-08-26).
+                    if live_run_holding(folder) == folder.resolve():
+                        return "live"
                     inside = [child.name for child in folder.iterdir()]
                     told = _read_attrs_at(folder)
                     if any(name in described for name in inside):
@@ -1392,11 +1389,11 @@ class _Handler(SimpleHTTPRequestHandler):
                 "baked": bool(ours.get("baked"))}
 
     def _serve_cancel(self, job: dict) -> None:
-        """Ask the running build or replay to stop at its next step.
+        """Ask the running build to stop at its next step.
 
         Cooperative, never forceful: the flag is read between rows of a
-        bake and between positions of a replay, so the step in flight
-        finishes whole and no file is torn mid-write. Stopping when
+        bake, so the step in flight finishes whole and no file is torn
+        mid-write. Stopping when
         nothing runs is not an error -- the operator's wish is already
         true, and the answer says so plainly.
         """
@@ -1492,124 +1489,6 @@ class _Handler(SimpleHTTPRequestHandler):
         threading.Thread(target=work, daemon=True).start()
         self._send_json({"started": True})
 
-    def _serve_replay(self, payload: object) -> None:
-        """Relive a dataset as a live run, one position at a time.
-
-        The positions go through the very doorway the microscope uses -- the
-        live writer, its sealed profile, one commit each -- so what assembles
-        on screen is the smart-microscopy path itself, not an imitation.
-        This answers as soon as the run is DECLARED, before the first pixels
-        are written: the operator's window closes at once and every
-        position, the first included, is watched landing. It used to answer
-        only after the first position, and a deep single-position dataset
-        held the window open, its buttons busy, for the whole first write
-        (the operator sat through it twice, 2026-08-23). The window can poll
-        /api/stores/replay-status to say how far along the rehearsal is.
-        One replay at a time, exactly like the bake.
-        """
-        asked = payload if isinstance(payload, dict) else {}
-        path = asked.get("path")
-        if not isinstance(path, str) or not path.strip():
-            self._send_json({"error": "the folder holding the dataset is needed"},
-                            HTTPStatus.BAD_REQUEST)
-            return
-        if self._replay_job.get("state") == "running":
-            self._send_json({"error": "a replay is already running"},
-                            HTTPStatus.CONFLICT)
-            return
-        data_path = Path(path.strip()).expanduser()
-        if not data_path.is_dir():
-            self._send_json({"error": f"there is no folder at {data_path}"},
-                            HTTPStatus.NOT_FOUND)
-            return
-        from rehearsal import replay_the_dataset
-
-        every = asked.get("every")
-        every_s = float(every) if isinstance(every, (int, float)) else 0.7
-        # A pace below zero is a slip, not a wish: the replay walks on at
-        # full speed rather than dying inside its own thread on the raw
-        # time.sleep refusal (found by the abuse battery of 2026-08-18).
-        every_s = max(0.0, every_s)
-        # A run can only be lived once -- its record only moves forward -- so
-        # every replay gets a fresh, numbered folder. In the viewer's own
-        # session scratch, never beside the dataset: a rehearsal's props
-        # left in the operator's data folder showed up in every folder list
-        # and were opened by the live watch as though a new acquisition had
-        # begun (the operator met both, 2026-08-23).
-        replays = self._a_session_folder("replays")
-        number = 1
-        while (replays / f"replay-{number}").exists():
-            number += 1
-        run_folder = replays / f"replay-{number}"
-        job = self._replay_job
-        job.clear()
-        job.update({"state": "running", "done": 0, "total": None})
-        ready = threading.Event()
-        announcements = self._announcements
-
-        def told(done, total):
-            job["done"], job["total"] = done, total
-            # The run is declared before its first position starts writing
-            # (the ``done == 0`` report), and declared is enough to open:
-            # the operator's window closes at once and position one is
-            # WATCHED landing, instead of the whole first write happening
-            # behind a busy button that looked stuck (their ask,
-            # 2026-08-23).
-            ready.set()
-            if job.get("stop"):
-                raise _StoppedByTheOperator()
-
-        def work():
-            try:
-                view = replay_the_dataset(
-                    data_path, run_folder, every_s=every_s, told=told,
-                    announce=lambda: announcements.say_something_changed(
-                        image_written_in_place=True))
-                job.update({"state": "done", "view": str(view)})
-            except _StoppedByTheOperator:
-                # What landed stays: the replay's run is a real run and its
-                # committed positions are already whole on disk, so stopping
-                # simply ends the landings. The numbered folder is kept, and
-                # a later replay takes the next number.
-                job.update({"state": "cancelled"})
-            except Exception as why:  # noqa: BLE001 -- shown to the operator whole
-                job.update({"state": "error", "error": str(why)})
-            finally:
-                ready.set()
-
-        threading.Thread(target=work, daemon=True).start()
-        ready.wait(timeout=120)
-        if job.get("state") == "error":
-            self._send_json({"error": job["error"]}, HTTPStatus.BAD_REQUEST)
-            return
-        # One rehearsal on screen per dataset: replaying the same dataset
-        # again replaces the previous replay's view rather than piling a
-        # second group beside it — pressing the door three times left three
-        # identical headings and nothing to tell them apart (the operator's
-        # panel filled with them, 2026-08-23).
-        self._library.close_group(f"{data_path.name} replay")
-        try:
-            # Named after the dataset, not after the view's own file -- a
-            # heading saying "live" tells the operator nothing about WHAT is
-            # being relived, and two replays side by side would collide.
-            # Opened at the RUN root so the live registry binds it and the
-            # replay is served exactly as an acquisition would be: the
-            # governed picture, a time slider that offers only the moments
-            # already written, and the view following the front as they
-            # land. Opening the view's own store instead would serve it as
-            # an ordinary folder, and a timelapse replay would offer its
-            # whole declared time room before any of it had landed.
-            self._library.open(
-                str(run_folder),
-                names=the_store_a_live_run_is_opened_by(
-                    run_folder, bake=self._asked_for_the_live_bake(run_folder,
-                                                                  asked)),
-                name=f"{data_path.name} replay")
-        except (FileNotFoundError, ValueError, OSError) as exc:
-            self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
-        self._send_json(self._config())
-
     def _the_scene_behind_a_plate(self, target: Path) -> Path | None:
         """The laid-out scene to open instead, when the target is a plate.
 
@@ -1679,8 +1558,8 @@ class _Handler(SimpleHTTPRequestHandler):
     def _a_session_folder(self, kind: str) -> Path:
         """A folder of the viewer's own for this session, made when wanted.
 
-        One per ``kind`` — "scenes" for composed pictures, "replays" for the
-        rehearsal's output — all inside ``~/.zmart-viewer`` and all removed
+        One per ``kind`` — "scenes" for composed pictures — all inside
+        ``~/.zmart-viewer``, and all removed
         when the viewer closes. What the viewer makes for itself never lands
         in the operator's data folders: put there, it showed up in every
         folder list and the live watch opened it as though it were a new
@@ -1792,14 +1671,13 @@ class _Handler(SimpleHTTPRequestHandler):
                 "relink": homeless,
             }, HTTPStatus.CONFLICT)
             return
-        # A live run's root -- a replay's or the microscope's own, data
-        # beside views and no image directly inside -- is opened with its
-        # served view named, exactly as the replay door opens the run it
-        # starts: the live registry binds it, the time slider offers only
-        # the moments already written, and the view follows the front.
-        # Handed to the library bare it answered "no OME-Zarr image was
-        # found", which cost every finished replay its promised reopening
-        # (found on the workstation, 2026-08-19).
+        # A live run's root -- the microscope's own, or one a replay
+        # wrote, data beside views and no image directly inside -- is
+        # opened with its served view named: the live registry binds it,
+        # the time slider offers only the moments already written, and the
+        # view follows the front. Handed to the library bare it answered
+        # "no OME-Zarr image was found", which cost every finished run its
+        # promised reopening (found on the workstation, 2026-08-19).
         served_view = the_store_a_live_run_is_opened_by(
             target, bake=self._asked_for_the_live_bake(target, payload))
         try:
@@ -2655,14 +2533,13 @@ def make_server(
             told.close()
             for watcher in watchers:
                 watcher.stop()
-            # What this viewer made for itself goes with it: the pictures it
-            # composed (descriptions rather than pixels, a moment to make
-            # again) and any rehearsal's replayed output. What would be
-            # worse is a folder of either growing quietly for ever.
-            for own in ("scenes", "replays"):
-                made = scratch.pop(own, None)
-                if made is not None:
-                    shutil.rmtree(made, ignore_errors=True)
+            # What this viewer made for itself goes with it: the pictures
+            # it composed, which are descriptions rather than pixels and a
+            # moment to make again. What would be worse is a folder of them
+            # growing quietly for ever.
+            made = scratch.pop("scenes", None)
+            if made is not None:
+                shutil.rmtree(made, ignore_errors=True)
             super().shutdown()
 
     handler = functools.partial(
@@ -2674,7 +2551,6 @@ def make_server(
         library=library,
         browse=browse,
         bake_job={},
-        replay_job={},
         open_from=Path(open_from).resolve() if open_from else None,
         allow_open=allow_open,
         live=live,
