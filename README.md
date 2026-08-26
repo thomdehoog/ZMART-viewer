@@ -118,17 +118,16 @@ folder…** button opens the system's chooser where one is available.
   instantly. A progress bar follows the build, and the finished scene waits
   for your own click on Show.
 - **other** — everything else the viewer can read, opened directly: demo
-  data, test runs, a scene from somewhere unusual. A folder of raw grid
-  positions can also be **replayed** here: instead of appearing all at once,
-  its positions land on screen one at a time through the very doorway the
-  microscope uses during smart microscopy — a dress rehearsal for a live
-  run, on data already on disk. A timelapse replays the way it was
-  acquired, every position of one moment and then the next, so the time
-  slider grows on screen and the view follows each new moment as it lands.
-  The replay writes a real run into a `replays` folder beside the dataset,
-  so it can be opened again later. A running build or replay can be
-  stopped from this window: a stopped build keeps nothing, and a stopped
-  replay keeps what landed.
+  data, test runs, a scene from somewhere unusual. A running build can be
+  stopped from this window, and a stopped build keeps nothing.
+
+  A folder of raw grid positions can also be **replayed** — watched
+  assembling itself, one position at a time, in the order the stage
+  scanned them, as a dress rehearsal for a live run on data already on
+  disk. That is `demos/replay.py`, a script run beside the viewer rather
+  than a tab inside it, and it copies nothing: the dataset is left exactly
+  as it was found, and what the replay writes is the picture's
+  description, kilobytes of it.
 - **Put the controls on the left** with `--panel-side left`, if that side is easier
   to reach at your microscope.
 - **Show the selection list** with `--select` if you want to mark places.

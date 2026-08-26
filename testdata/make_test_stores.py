@@ -17,8 +17,8 @@ store for each shape we want to keep working:
 - ``test_grid/`` — a **raw run**: a folder of four position stores laid out
   two by two, each carrying its own stage offset, overlapping their
   neighbours the way a survey's tiles do. This is the shape the build door
-  links into one picture and the sequential door replays position by
-  position.
+  links into one picture, and the shape ``demos/replay.py`` reveals one
+  position at a time.
 
 Every store is deliberately tiny — a few dozen kilobytes, two channels, a
 handful of planes — because these exist to exercise the *opening* of each
@@ -179,8 +179,7 @@ def _write_grid(path: Path, seed: int) -> None:
     translation, in micrometres — and steps 256 of its 320 pixels each way,
     so neighbouring positions overlap by a fifth, the way a survey's tiles
     do. That overlap is what lets the build door link them into one seamless
-    picture, and the sequential door replay them through the live writer's
-    own grid arithmetic. The frame is bigger than the other test stores'
+    picture, and a replay reveal them into it one at a time. The frame is bigger than the other test stores'
     because the live planner needs the frame and the overlap to halve
     cleanly through its zero-copy pyramid with chunks worth reading — 320
     with 64 of overlap is the smallest comfortable pair, and it was chosen

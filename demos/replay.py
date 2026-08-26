@@ -220,14 +220,6 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
             shutil.rmtree(one)
         one.mkdir(parents=True)
 
-    # The folder GROWS, the way the spiral demo does: a position that has not
-    # arrived is simply absent.
-    #
-    # Declaring the whole room up front instead -- every position present as a
-    # description with no pixels -- places everything perfectly and then shows
-    # nothing: each piece composes empty on first sight and is served from
-    # that. See declare_the_room, kept for the day the piece cache can be told
-    # a picture changed (2026-08-26).
     # The room is declared from every position's description -- kilobytes,
     # no pixels -- so the picture has its final shape before anything is
     # shown and the page never has to be told the shape changed. Learning a

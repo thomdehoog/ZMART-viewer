@@ -115,7 +115,7 @@ when it re-reads the description.**
 |---|---|---|
 | spiral: far corners down first | full from the first frame | tiles land inside known ground — **grows** |
 | row-major: top-left first | starts one tile wide | later tiles fall off the edge — **one tile, until F5** |
-| every position as a description, no pixels | full from the first frame | every piece composed empty and served from that — **nothing** |
+| every position as a description, no pixels | full from the first frame | tiles land into declared ground — **grows** |
 
 So the corner-pinning in the spiral is not about the origin, which was my
 reading and was wrong. It is about making the canvas full-size immediately, so
@@ -144,6 +144,16 @@ says pixels-only is deliberate. So the gate to satisfy is both at once:
 `test_the_spiral_growth_is_visible` stays green, and a picture whose extent
 grows is seen to grow without a reload.
 
-If that cannot be had, the fallback is the third row of the table -- declare
-the room from every description up front -- and then the piece cache is what
-needs the revision stamp, which is the change this plan already proposes.
+### 2026-08-26, later still: the third row is what shipped, and it needed nothing
+
+The third row above first read **nothing**, on the reasoning that a piece
+composed while its ground was empty would be served from that for ever. It was
+measured instead of reasoned about, and the reasoning was wrong: at composer
+level a piece went from 0 of 1 tiles to 1 of 1, and through the server the same
+piece went from empty to 17,377 bytes after a reveal and an announcement. So
+the piece cache never needed the revision stamp, and the replay ships as the
+third row -- the room declared from every description, pixels arriving into it.
+
+What this plan proposes is therefore no longer about being able to grow a
+picture at all. It is only about the cost: the re-declaration above is still
+O(N^2), and adopting a position that points is still the way to make it O(N).

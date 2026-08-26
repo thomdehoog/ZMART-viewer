@@ -429,9 +429,9 @@ def test_closing_one_acquisition_does_not_spoil_the_next(
             "() => (window.zmartScene || []).filter("
             "  (s) => s.type === 'image' && (s.name || '').includes('two'))"
             ".map((s) => (s.source || []).length)")
-        # One source, not nine. A replay goes through the live writer, which
-        # publishes into ONE growing picture -- so the row is fed by that one
-        # picture however many positions have landed in it. This used to read
+        # One source, not nine. A replay declares ONE picture and reveals
+        # positions into it -- so the row is fed by that one picture however
+        # many positions have landed in it. This used to read
         # nine, back when a replay handed the engine a source per position;
         # what the gate is really about is the line below, that the second
         # dataset draws at all after the first was closed.

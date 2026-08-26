@@ -84,20 +84,3 @@ def open_through_the_window(page, name: str, *, folder=None) -> None:
     window.get_by_label(name, exact=True).wait_for(timeout=10_000)
     window.get_by_label(name, exact=True).click()
     window.get_by_label(f"open {name}", exact=True).click()
-
-
-def replay_through_the_window(page, name: str, *, folder=None) -> None:
-    """Relive a finished dataset as a live run, from the experimental door.
-
-    The same walk as :func:`open_through_the_window`, but on the tab that
-    exists for testing and troubleshooting rather than for looking at data,
-    and pressing the button that says what it will do.
-    """
-    page.get_by_label("open images").click()
-    window = page.get_by_role("dialog", name="load data")
-    window.wait_for(timeout=10_000)
-    page.get_by_label("open positions sequentially", exact=True).click()
-    _reach_the_listing(page, folder)
-    window.get_by_label(name, exact=True).wait_for(timeout=10_000)
-    window.get_by_label(name, exact=True).click()
-    page.get_by_label("open as a live run").click()
