@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 VIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(VIZ / "building"))
+sys.path.insert(0, str(VIZ / "app" / "picture"))
 sys.path.insert(0, str(VIZ.parent))
 
 from declare import declare_a_governed_picture  # noqa: E402
@@ -136,7 +136,7 @@ def test_a_moment_landing_composes_only_the_frames_it_touched(tmp_path):
 
     The stage-0 instruments projected ~165-190 seconds of frozen picture
     for a synchronous whole-room patch at a 500-moment retake
-    (MEASURED_stage0_c_and_t_instruments.md), and the c-and-t plan made a
+    (docs/measured/MEASURED_stage0_c_and_t_instruments.md), and the c-and-t plan made a
     per-moment bound the build gate. The commit names the moment it
     touched, so the patch composes that moment's frames of the footprint
     -- every channel, since a publication writes all channels -- and

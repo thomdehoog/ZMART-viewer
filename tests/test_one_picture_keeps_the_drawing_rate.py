@@ -7,13 +7,13 @@ in every frame, so the cost is paid on every draw for as long as the acquisition
 open. Loading slowly is finite — the operator waits and it ends. A viewer that has
 finished loading and then moves at one frame a second is *permanently* like that.
 
-`NEXT_STEPS.md` calls the fix architectural: the engine has to be holding fewer
+`docs/open/NEXT_STEPS.md` calls the fix architectural: the engine has to be holding fewer
 positions. A linked view is exactly that. It hands the viewer **one** store however
 many tiles are underneath it, so the per-position cost is paid once instead of ten
 thousand times.
 
 That was a claim about how the viewer builds its layers, and it is now a
-measurement. `viz_studio/measure_the_frame_rate_of_a_linked_view.py` climbs through
+measurement. `zmart-viewer/measure_the_frame_rate_of_a_linked_view.py` climbs through
 the sizes and counted, on this repository's sandbox, frames drawn in three seconds
 of moving through the specimen:
 
@@ -89,7 +89,7 @@ FEW = 20
 # So these guard the effect **existing**, not its size. If one picture ever stops
 # being clearly faster than two hundred stores, or a view's rate ever collapses as
 # tiles are added, they will say so. For the size of the effect, read the tables in
-# ``HANDOVER_a_view_that_writes_nothing.md``, which were taken with the screen
+# ``docs/open/HANDOVER_a_view_that_writes_nothing.md``, which were taken with the screen
 # content held steady rather than growing.
 MUST_BE_FASTER_BY = 1.3
 

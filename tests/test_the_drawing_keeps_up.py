@@ -1,6 +1,6 @@
 """Does the viewer keep up once a lot of the specimen is open?
 
-This guards the finding that `NEXT_STEPS.md` calls decisive, and which nothing in
+This guards the finding that `docs/open/NEXT_STEPS.md` calls decisive, and which nothing in
 the suite could see. With a thousand positions open the viewer managed 24 frames in
 five seconds where a hundred positions managed 302, and a single step of a contrast
 slider cost 191 milliseconds against 16. Three drawing layers are made per position
@@ -13,7 +13,7 @@ has finished loading and then moves at five frames a second is *permanently* lik
 that, and it is what an operator has to work in for the rest of the session.
 
 **It is not fixed, and these tests say so honestly.** The fix recorded in
-`NEXT_STEPS.md` is that the engine has to be holding fewer positions, which is an
+`docs/open/NEXT_STEPS.md` is that the engine has to be holding fewer positions, which is an
 architectural change rather than a small one. So there are two tests here. One
 holds the line where it is today, so that a further slide is noticed. The other
 states the behaviour actually wanted and is marked as expected to fail, so that the
@@ -197,7 +197,7 @@ def test_the_drawing_rate_has_not_slid_further(how_much_it_keeps):
         "Measured on this sandbox: twenty positions manage about 125 frames in three "
         "seconds and two hundred manage about 50, so a tenfold increase in positions "
         "costs roughly two thirds of the rate. It was first found far worse still, at "
-        "24 frames in five seconds against 302. NEXT_STEPS.md records the cause as "
+        "24 frames in five seconds against 302. docs/open/NEXT_STEPS.md records the cause as "
         "three drawing layers being made per position, every one of which takes part "
         "in every frame, and the fix as the engine having to hold fewer positions — "
         "which is an architectural change rather than a small one. When it is done, "

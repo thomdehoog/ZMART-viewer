@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
 import server as server_module  # noqa: E402

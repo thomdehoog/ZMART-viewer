@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "backend"))
+sys.path.insert(0, str(VIZ / "app" / "server"))
 
 from server import make_server  # noqa: E402
 from test_a_dataset_is_relived_as_a_live_run import _post  # noqa: E402

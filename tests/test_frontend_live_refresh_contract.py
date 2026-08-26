@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE = ROOT / "frontend" / "src" / "live-refresh.js"
-ENGINE = ROOT / "frontend" / "src" / "engine.js"
+MODULE = ROOT / "app" / "page" / "src" / "live-refresh.js"
+ENGINE = ROOT / "app" / "page" / "src" / "engine.js"
 
 
 def _javascript(expression: str):

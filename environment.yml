@@ -6,7 +6,7 @@
 # built-in one — so the install stays small and offline-friendly.
 #
 # Node.js is included only to *build* the viewer web page from source. Once the
-# page is built (into frontend/dist) it is plain files, and an end user who is
+# page is built (into app/page/dist) it is plain files, and an end user who is
 # handed a pre-built copy does not need Node at all.
 #
 # Create it with:   conda env create -f environment.yml
@@ -37,7 +37,7 @@ dependencies:
       # `conda env create` fail outright with PackagesNotFoundError.
       - pywebview
       # Optional: drives a real browser for the automated rendering check
-      # (backend/browsercheck.py). Handy for developers, not required to run.
+      # (app/server/browsercheck.py). Handy for developers, not required to run.
       # Also pip, for a subtler reason: conda-forge *does* have a `playwright`,
       # but it is the Node.js package (it installs
       # Library/share/playwright/node_modules and no Python module at all), so

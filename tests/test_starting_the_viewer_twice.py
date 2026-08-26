@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app" / "server"))
 
 from server import make_server  # noqa: E402
 
@@ -91,7 +91,7 @@ def test_run_demo_offers_a_port_and_passes_it_on() -> None:
     try:
         # The demo path needs the built page to exist; where it does not, the
         # command stops before opening anything and there is nothing to check.
-        if not (Path(run_demo._HERE) / "frontend" / "dist" / "index.html").exists():
+        if not (Path(run_demo._HERE) / "app" / "page" / "dist" / "index.html").exists():
             pytest.skip("the viewer page has not been built, so run_demo stops early")
         assert run_demo.main(["--port", "8899"]) == 0
     finally:

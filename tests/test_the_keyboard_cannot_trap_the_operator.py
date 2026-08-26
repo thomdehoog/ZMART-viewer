@@ -24,7 +24,7 @@ box, which this viewer replaces with its own; `s` switched the slices off inside
 the volume; `o` added an orthographic projection.
 
 The panel tables were the second hole, closed later (2026-08-18, the decision
-recorded in CONTROLS.md): the engine's per-panel defaults still bound a whole
+recorded in docs/how_it_works/CONTROLS.md): the engine's per-panel defaults still bound a whole
 keyboard — arrows panned, comma and full stop stepped z, the brackets stepped
 time straight past the written-moments clamp the slider enforces, `r`, `e` and
 Shift with the arrows rotated the slice so the picture silently stopped lining
@@ -218,7 +218,7 @@ def test_no_key_rotates_the_flat_view(viewer_page, key):
     """A rotated slice silently stops lining up with the stage coordinates.
 
     The operator's carrier outline and tile positions are drawn in stage
-    coordinates, straight. CONTROLS.md section 2 removes rotation from the
+    coordinates, straight. docs/how_it_works/CONTROLS.md section 2 removes rotation from the
     flat view entirely for that reason, and asks for exactly this test:
     an unbound gesture looks like a gesture nobody tried, so without it the
     rotation quietly comes back the next time the bindings are edited.
@@ -276,7 +276,7 @@ def test_the_right_button_does_not_recentre(viewer_page):
 def test_navigation_still_works_after_all_of_them(viewer_page):
     """The point of the fix is to remove traps, not to deaden the page.
 
-    The two gestures that remain are the two CONTROLS.md promises: the plain
+    The two gestures that remain are the two docs/how_it_works/CONTROLS.md promises: the plain
     wheel zooms, and a drag pans.
     """
     for key in ["Space", "Digit1", "b", "a", "v", "s", "o", "h", "n",

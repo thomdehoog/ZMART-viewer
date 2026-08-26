@@ -325,7 +325,7 @@ def test_it_says_where_it_sits_beside_every_copy_of_the_picture(tmp_path):
     """The view's place on the stage is written beside each resolution.
 
     OME-Zarr allows the position in two places, and a large part of the Python
-    imaging world reads only the per-copy one — ``viz_studio/INTEROP.md`` §1 measures
+    imaging world reads only the per-copy one — ``zmart-viewer/INTEROP.md`` §1 measures
     what that costs, which is every image drawn on top of every other at the origin.
     So the view says it there, and only there: saying it in both places would move
     the picture twice for any reader that composes them, and the viewer's own engine

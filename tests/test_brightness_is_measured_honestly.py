@@ -36,7 +36,7 @@ import numpy as np
 import pytest
 import zarr
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app" / "server"))
 
 import contrast  # noqa: E402
 

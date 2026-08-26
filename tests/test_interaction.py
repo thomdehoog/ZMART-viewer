@@ -20,7 +20,7 @@ drag in 3-D mode     rotates
 
 **The plain wheel zooms, and that is ours rather than the engine's.**
 Neuroglancer binds the wheel to stepping through z and puts zoom behind Control,
-which is right for reading through a volume and wrong here. `CONTROLS.md` section
+which is right for reading through a volume and wrong here. `docs/how_it_works/CONTROLS.md` section
 1 records the decision and the reasoning: the wheel is the gesture an operator
 makes most often and without thinking, a browser has taught everyone what it
 does, and stepping through the stack already has a slider down the right-hand

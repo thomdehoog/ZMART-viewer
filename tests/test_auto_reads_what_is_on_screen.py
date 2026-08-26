@@ -24,7 +24,7 @@ import pytest
 import zarr
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "backend"))
+sys.path.insert(0, str(VIZ / "app" / "server"))
 
 from contrast import measure_here  # noqa: E402
 

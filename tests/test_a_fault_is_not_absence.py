@@ -28,7 +28,7 @@ import urllib.request
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
 from declare import declare_a_governed_picture  # noqa: E402
@@ -80,7 +80,7 @@ def _serving(tmp_path: Path):
     store = declare_a_governed_picture(shown, run.folder, name="live",
                                        bake=True)
     server = make_server(port=0, data_dir=shown,
-                         site_dir=_VIZ / "frontend" / "dist",
+                         site_dir=_VIZ / "app" / "page" / "dist",
                          store=[store.name], window=harness.BRIGHT, live=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

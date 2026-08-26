@@ -5,7 +5,7 @@ These two things it cannot honestly check on the sandbox used for the other
 tests — that there is a GPU actually drawing the volume, and that a real
 acquisition opens and streams — so they live here and **skip cleanly** where
 those are absent. On the microscope PC (or any workstation with a graphics card
-and a store to point at) they come alive. See ``TESTING.md`` for how to run
+and a store to point at) they come alive. See ``docs/how_it_works/TESTING.md`` for how to run
 them.
 
 - The GPU test skips when WebGL is running in software (no card present).
@@ -89,7 +89,7 @@ def test_webgl_is_hardware_accelerated(gpu_browser):
 
     The second half is what makes this worth running. It used to skip when the
     renderer was missing and then assert that the renderer was present — so it
-    could only skip or pass, whatever the machine did, while ``TESTING.md``
+    could only skip or pass, whatever the machine did, while ``docs/how_it_works/TESTING.md``
     advertised it as the clearest single check that the GPU is in use. Now the
     card is asked to draw and the result is read back, which a card that reports a
     name but cannot render will fail.

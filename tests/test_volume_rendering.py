@@ -55,7 +55,7 @@ def test_the_plane_scrolls_through_z(viewer_page):
     intuitive choice ("xy") steps x instead and looks correct while being wrong.
 
     **On shift and the wheel, since 6 August 2026.** The plain wheel zooms in this
-    viewer; `CONTROLS.md` §1 records the decision and `test_interaction.py` guards
+    viewer; `docs/how_it_works/CONTROLS.md` §1 records the decision and `test_interaction.py` guards
     both halves of it. What is checked here is unchanged in substance -- that the
     gesture bound to stepping z steps z and does not pan -- only which gesture that
     is.

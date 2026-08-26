@@ -118,7 +118,7 @@ class TestVeryLargeImages:
         assert elapsed < PATIENCE, f"describing a huge image took {elapsed:.1f}s"
 
     def test_counting_frames_is_one_glance_when_pieces_are_filed_in_folders(self, tmp_path):
-        """The layout `DATA_LAYOUT.md` asks for makes this independent of size."""
+        """The layout `docs/how_it_works/DATA_LAYOUT.md` asks for makes this independent of size."""
         store = write_store(
             tmp_path / "overview_pos001.ome.zarr",
             shape=(6, 1, 2, 512, 512),

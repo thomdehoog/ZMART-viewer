@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "building"))
+sys.path.insert(0, str(_VIZ / "app" / "picture"))
 
 from zmart_live.coordinator import LivePublisher  # noqa: E402
 from zmart_live.model import AcquisitionProfile, GridCell, LevelGeometry  # noqa: E402

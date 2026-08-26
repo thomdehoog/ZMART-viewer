@@ -140,7 +140,7 @@ def test_a_blank_panel_would_be_noticed(viewer_page):
 def test_the_shipped_check_script_still_passes(viz_root, built_dist):
     """Exit 0 = rendered, 1 = did not, 2 = could not run here."""
     result = subprocess.run(
-        [sys.executable, "backend/browsercheck.py"],
+        [sys.executable, "tests/browsercheck.py"],
         cwd=viz_root,
         capture_output=True,
         text=True,

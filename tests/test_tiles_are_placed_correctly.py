@@ -47,7 +47,7 @@ the picture as a mirror image left to right: the axis the data calls x increased
 towards the *left* of the screen. It applied to the pixels inside a single tile
 exactly as it applied to the placement of tiles, so a mosaic still assembled
 seamlessly and nothing here noticed — but every picture an operator looked at was
-reflected. That has been put right; ``CONTROLS.md`` §1a says what was changed and
+reflected. That has been put right; ``docs/how_it_works/CONTROLS.md`` §1a says what was changed and
 ``test_the_picture_is_not_mirrored.py`` keeps it that way.
 
 The tests below were written before it was, and they are deliberately left as
