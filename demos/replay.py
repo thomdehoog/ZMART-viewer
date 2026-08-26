@@ -49,15 +49,18 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
 
 _VIEWER = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIEWER / "app" / "picture"))
+sys.path.insert(0, str(_VIEWER / "app" / "server"))
 sys.path.insert(0, str(_VIEWER.parent))
 
 from declare import declare_a_built_picture  # noqa: E402
+from launcher import open_window  # noqa: E402
 from mosaic import read_the_transfer  # noqa: E402
 
 
@@ -203,6 +206,23 @@ def _say_something_changed(where: str) -> None:
         pass
 
 
+def _the_room_stands_empty(dataset: Path, folder: Path,
+                          positions: list[Path]) -> Path:
+    """Make the room every position will arrive into, and return where it is.
+
+    The junctions live beside the dataset, not beside the picture, so that
+    every pointer resolves within the same root the pixels are in.
+    """
+    appearing = dataset.parent / f"{dataset.name}-appearing"
+    for one in (appearing, folder):
+        if one.exists():
+            shutil.rmtree(one)
+        one.mkdir(parents=True)
+    for position in positions:
+        declare_the_room(position, appearing / position.name)
+    return appearing
+
+
 def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
                        every_s: float = 0.0, told=None, announce=None) -> Path:
     """Reveal a dataset one position at a time, copying nothing.
@@ -211,14 +231,7 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
     """
     dataset, folder = Path(dataset).resolve(), Path(folder)
     positions = the_positions_of(dataset)
-
-    # The junctions live beside the dataset, not beside the picture, so that
-    # every pointer resolves within the same root the pixels are in.
-    appearing = dataset.parent / f"{dataset.name}-appearing"
-    for one in (appearing, folder):
-        if one.exists():
-            shutil.rmtree(one)
-        one.mkdir(parents=True)
+    appearing = _the_room_stands_empty(dataset, folder, positions)
 
     # The room is declared from every position's description -- kilobytes,
     # no pixels -- so the picture has its final shape before anything is
@@ -226,8 +239,6 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
     # new shape means re-resolving the source, and that is the flicker of
     # 2026-08-23: the layer has nothing to draw between throwing the old
     # description away and reading the new one.
-    for position in positions:
-        declare_the_room(position, appearing / position.name)
     picture = declare_a_built_picture(folder, appearing, name=dataset.name)
     if announce:
         announce()
@@ -247,40 +258,103 @@ def replay_the_dataset(dataset: str | Path, folder: str | Path, *,
     return picture
 
 
+def _reveal_them(dataset: Path, folder: Path, appearing: Path,
+                 positions: list[Path], address: str, *,
+                 every_s: float, settle_s: float) -> None:
+    """Wait for the page, then reveal the positions into the room it is showing.
+
+    Run beside the window rather than before it, so that what an operator sees
+    is the empty room first and then the picture filling -- which is the whole
+    point of a replay and cannot be shown by a tool that finishes before the
+    viewer opens.
+    """
+    _wait_until_it_answers(address)
+    time.sleep(settle_s)
+    order = in_the_order_they_were_imaged(dataset, positions)
+    for number, position in enumerate(order, start=1):
+        began = time.perf_counter()
+        reveal(appearing, position)
+        declare_a_built_picture(folder, appearing, name=dataset.name)
+        _say_something_changed(address)
+        # The store name of a real export runs to eighty characters of
+        # filter wheel and rotation; the part that tells them apart is
+        # the front of it.
+        print(f"  {number}/{len(order)} showing "
+              f"({position.name.split(chr(95))[0] or position.name})"
+              f" -- {(time.perf_counter() - began) * 1000:.0f} ms", flush=True)
+        if every_s and number < len(order):
+            time.sleep(every_s)
+    print("", flush=True)
+    print(f"  all {len(order)} showing. The dataset was not touched.",
+          flush=True)
+    print("", flush=True)
+
+
+def _wait_until_it_answers(address: str, *, give_up_after_s: float = 30.0) -> None:
+    """Block until the viewer is up, or give up and reveal anyway."""
+    until = time.monotonic() + give_up_after_s
+    while time.monotonic() < until:
+        try:
+            urllib.request.urlopen(address, timeout=2).close()
+            return
+        except OSError:
+            time.sleep(0.2)
+
+
 def main() -> int:
     asked = argparse.ArgumentParser(
         description="Watch a finished dataset assemble itself, position by "
                     "position, copying nothing.")
     asked.add_argument("dataset", type=Path,
-                       help="the folder of positions to reveal, one OME-Zarr each")
-    asked.add_argument("folder", type=Path,
-                       help="where the picture's description goes. This is the "
-                            "folder you open in the viewer.")
-    asked.add_argument("--every", type=float, default=0.0, metavar="SECONDS",
-                       help="how long to wait between positions. The first "
-                            "goes immediately.")
-    asked.add_argument("--tell", default=None, metavar="ADDRESS",
-                       help="a running viewer to notify after each position, "
-                            "for example http://127.0.0.1:8848")
+                       help="a folder of position stores (*.ome.zarr)")
+    asked.add_argument("--every", type=float, default=1.0, metavar="SECONDS",
+                       help="how long to wait between positions (default 1). "
+                            "Below about half a second the page cannot keep "
+                            "up: an announcement re-composes the whole screen.")
+    asked.add_argument("--settle", type=float, default=2.0, metavar="SECONDS",
+                       help="how long the empty room is shown before the first "
+                            "position lands (default 2). The room already has "
+                            "its final shape; this is only so it can be seen.")
+    asked.add_argument("--port", type=int, default=8848,
+                       help="which door the viewer answers on (default 8848)")
+    asked.add_argument("--picture", type=Path, default=None, metavar="FOLDER",
+                       help="where the picture's description goes. Beside the "
+                            "dataset by default; it holds kilobytes.")
+    asked.add_argument("--range", default=None, metavar="LOW,HIGH",
+                       help="the brightness range, if the measured one is wrong")
+    asked.add_argument("--chrome", action="store_true",
+                       help="show neuroglancer's own bounding box and axis "
+                            "lines (off by default), the same as run_demo.py")
     given = asked.parse_args()
 
-    positions = the_positions_of(given.dataset.resolve())
+    dataset = given.dataset.resolve()
+    folder = given.picture or dataset.parent / f"{dataset.name}-replay"
+    window = (tuple(float(one) for one in given.range.split(","))
+              if given.range else None)
+
+    positions = the_positions_of(dataset)
+    appearing = _the_room_stands_empty(dataset, folder, positions)
+    picture = declare_a_built_picture(folder, appearing, name=dataset.name)
+
+    address = f"http://127.0.0.1:{given.port}"
     print("")
     print(f"  {len(positions)} positions, revealed one at a time")
-    print(f"  the picture goes in {given.folder}")
+    print(f"  the room is declared and empty; its shape will not change")
+    print(f"  the picture's description goes in {folder}")
     print("")
+    print(f"  === {address} ===")
+    print("", flush=True)
 
-    def told(done: int, total: int) -> None:
-        print(f"\r  {done}/{total} showing", end="", flush=True)
+    threading.Thread(
+        target=_reveal_them, args=(dataset, folder, appearing, positions,
+                                   address),
+        kwargs={"every_s": given.every, "settle_s": given.settle},
+        daemon=True).start()
 
-    picture = replay_the_dataset(
-        given.dataset, given.folder, every_s=given.every, told=told,
-        announce=(lambda: _say_something_changed(given.tell))
-        if given.tell else None)
-    print("")
-    print("")
-    print(f"  all of it is showing: {picture}")
-    print("")
+    # Blocks until the window is closed, which is what keeps the picture
+    # served after the last position has landed.
+    open_window(port=given.port, data_dir=folder, store=[picture.name],
+                window=window, live=True, chrome=given.chrome)
     return 0
 
 
