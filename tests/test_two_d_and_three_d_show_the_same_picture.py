@@ -92,8 +92,6 @@ def _where_the_block_is(page, saved):
     The toggle, the scale bar and the depth slider are drawn over the canvas
     and would otherwise be measured as though they were specimen.
     """
-    import io
-
     page.screenshot(path=str(saved),
                     clip={"x": 0, "y": 0, "width": 1020, "height": 1000})
     shot = np.array(Image.open(saved).convert("RGB")).astype(int)
