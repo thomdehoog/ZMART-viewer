@@ -265,8 +265,9 @@ and every red taught something. In value order:
   drawn in software; the full record below is the first on the card.
 - **Forty-two pixel tests were quietly skipped.** The suite's
   strictest tests -- the ones that read the drawn pixels -- need the
-  options harness built (``npm --prefix zmart-viewer/parked/harness run
-  build``), which the setup instructions did not mention; the suite
+  options harness built (``npm --prefix parked/harness run build``, in
+  the ZMART-microscopy repository, where the harness and those tests
+  live), which the setup instructions did not mention; the suite
   said so in its summary and nothing failed. It is built here and the
   setup list corrected.
 - **The manifest-refresh file still spoke the retired view names.**
@@ -361,8 +362,9 @@ Everything needed is on this branch. Setup:
 ``pip install -r requirements.txt playwright pillow pytest``, then
 ``python -m playwright install chromium``, then build the viewer once
 (``cd app/page && npm install && npm run build``) and the
-options harness once (``npm --prefix zmart-viewer/parked/harness install``
-then ``... run build``) -- without it the suite's pixel-reading tests
+options harness once (``npm --prefix parked/harness install`` then
+``... run build``, in the ZMART-microscopy repository) -- without it
+that repository's pixel-reading tests
 skip, and say so only in the summary. Run
 ``python app/picture/measure_a_ladder_of_surveys.py --fixtures
 <somewhere with ~33 GB>`` (add ``--tidy`` for ~17 GB peak; use

@@ -113,7 +113,8 @@ microscope should be able to sit down and move around without being taught, and
 every extra gesture is one more thing that can be triggered by accident. The
 sections below explain what each removal is protecting.
 
-**Where this now lives.** For the three viewers in `zmart-viewer/parked/`, the two
+**Where this now lives.** For the three viewers in the ZMART-microscopy
+repository's `parked/`, the two
 gestures are in one shared file, `parked/gestures.js`, which each of them
 imports; the viewer puts the listeners on when it opens and takes them off when it
 closes. A page that shows one of those viewers therefore inherits this decision
@@ -213,8 +214,9 @@ axis mapping it draws with, so the picture followed the hand pixel for pixel,
 slope +1.0, both before and after. What tells you which way round a picture is
 must come from something inside the specimen that could not have been reflected
 along with it — here, the order the voxels sit in the file. The original
-measurement in `SANDWICH.md`, section 2 — which is not on this branch; it lives on
-`claude/sandwich-probe`, commit `1277e30` — saw the mirror as a slope of −1 only
+measurement in `SANDWICH.md`, section 2 — which is not in this repository; it
+lives in ZMART-microscopy on `claude/sandwich-probe`, commit `1277e30` — saw the
+mirror as a slope of −1 only
 because it compared the picture with the operator's own drawing laid over it,
 and that drawing was placed from the store's coordinates directly.
 

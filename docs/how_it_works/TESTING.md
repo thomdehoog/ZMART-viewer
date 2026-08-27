@@ -2,16 +2,15 @@
 
 ## The short version
 
-From the `zmart-viewer` folder, one command runs everything:
+From the repository root, one command runs everything:
 
 ```
 python run_tests.py
 ```
 
 That is all you need. It installs the test tools if they are missing, builds the
-two pages the tests open — the viewer itself, and the small page the three
-drawing options are compared on — and then runs every test. The first run takes a
-few minutes (building those pages and, on a real machine, downloading the browser
+viewer page the tests open, and then runs every test. The first run takes a
+few minutes (building the page and, on a real machine, downloading the browser
 the render tests drive); after that it is quick.
 
 To test against a **real acquisition** as well, point it at an OME-Zarr store:
@@ -34,12 +33,14 @@ python run_tests.py -s -k gpu       # print which GPU the renderer found
 The focused non-browser path for the live publication integration is:
 
 ```bash
-../.venv/bin/pytest -q \
+pytest -q \
   tests/test_manifest_driven_refresh.py \
   tests/test_frontend_live_refresh_contract.py \
-  ../zmart_live/tests/test_live_state.py \
   tests/test_live_publication_gateway.py
 ```
+
+(`zmart_live`'s own suite, including `test_live_state.py`, runs in the
+ZMART-microscopy repository, where that package lives.)
 
 The real production page scenarios are in
 `tests/test_manifest_refresh_browser.py`. They open the shipped backend and
@@ -50,7 +51,7 @@ runs, SSE loss, fallback and reconnection. Run them with a browser-required flag
 on a machine intended to qualify the viewer:
 
 ```bash
-ZMART_REQUIRE_BROWSER=1 ../.venv/bin/pytest -q \
+ZMART_REQUIRE_BROWSER=1 pytest -q \
   tests/test_manifest_refresh_browser.py
 ```
 
@@ -63,12 +64,13 @@ gapped time availability, damaged-state handling, source revision comparison,
 stable URLs and selective cache invalidation:
 
 ```bash
-(cd .. && .venv/bin/python -m \
-  zmart_live.tests.check_the_live_refresh_tests_can_fail)
+python -m zmart_live.tests.check_the_live_refresh_tests_can_fail
 ```
 
-It first proves each unmodified target is green, accepts only pytest's ordinary
-assertion-failure status as evidence, and restores every subject byte-for-byte.
+It lives with `zmart_live` in the ZMART-microscopy repository, so it is run
+from a checkout of that repository. It first proves each unmodified target is
+green, accepts only pytest's ordinary assertion-failure status as evidence, and
+restores every subject byte-for-byte.
 
 ## What runs, and what skips
 
@@ -294,8 +296,8 @@ passed. The only skipped tests required an explicit real acquisition through
 Testing aside, to actually look at a real acquisition through the viewer:
 
 ```
-python run_demo.py --data /path/to/acquisition.ome.zarr
+python demos/run_demo.py --data /path/to/acquisition.ome.zarr
 ```
 
 This opens the store through the neuroglancer engine, streaming it out-of-core,
-in a native window (falling back to a browser). See `parked/prototype/README.md` for the details.
+in a native window (falling back to a browser).

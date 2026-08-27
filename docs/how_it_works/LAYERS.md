@@ -29,7 +29,8 @@ else.
 **Why the plan sits above the picture rather than below it.** This was the other
 way round until the layer stack was photographed being built on 2026-07-30, and
 the photographs settled it (`LAYER_STACK.md` §3, which at the time of writing
-lives on the branch `claude/layer-stack-probe`, commit `4960d17`). With the plan
+lives in the ZMART-microscopy repository on the branch
+`claude/layer-stack-probe`, commit `4960d17`). With the plan
 underneath, the acquisition covered the tile outlines exactly where the two
 overlapped — so a tile lost its outline at the very moment it was imaged. That is
 the worst possible moment to lose it, because it is precisely when the operator is
@@ -184,8 +185,8 @@ and does show through**, measured exactly. So the stack above can also be built
 entirely as layers within the engine, which is how the layer-stack probe built
 it — the plate and the plan each written into the store as an image layer of
 their own. Both measurements are written up: the first in `parked/RESULTS.md`,
-the second in `LAYER_STACK.md`, which as noted above is not on this branch — it
-lives on `claude/layer-stack-probe`, commit `4960d17`.
+the second in `LAYER_STACK.md`, which as noted above is not in this repository —
+it lives in ZMART-microscopy on `claude/layer-stack-probe`, commit `4960d17`.
 
 That second route does cut across the line drawn earlier in this document, and it
 is worth seeing the cost before choosing it. Anything written as a layer lives in

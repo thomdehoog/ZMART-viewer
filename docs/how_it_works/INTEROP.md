@@ -29,7 +29,8 @@ all. `originUm` read the outer place only, so every foreign image reported itsel
 as beginning at the stage's zero and a transfer of many tiles drew all of them on
 top of one another. Both are now composed the way the format says.
 
-That second one is the 898 micrometre fault of `parked/contract.md` §1a
+That second one is the 898 micrometre fault of `parked/contract.md` §1a (in the
+ZMART-microscopy repository, as are this document's other `parked/` paths)
 returning in the one form its fix did not cover: the readers had been taught this
 project's convention rather than the format's.
 

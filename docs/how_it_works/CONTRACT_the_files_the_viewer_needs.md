@@ -26,7 +26,8 @@ image any tool can open, with:
   ever ADDS files — nothing already written is rewritten or extended,
   which is what lets published pixels stay immutable while the run keeps
   growing. This is a standing gate
-  (`test_the_files_follow_the_contract.py`), proven able to fail.
+  (`test_the_files_follow_the_contract.py`, kept beside the publisher in
+  the ZMART-microscopy repository), proven able to fail.
 
 **Never overwrite a published position.** A retake is a new member
 beside the old one — `p00.generation-1` — plus a replacement commit in

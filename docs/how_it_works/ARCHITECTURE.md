@@ -373,7 +373,7 @@ wants to know which one to open.
 
 ```
                               ┌─────────────────────────────────────┐
-   WHAT YOU RUN               │  zmart-viewer/run_demo.py             │
+   WHAT YOU RUN               │  demos/run_demo.py                  │
                               │  launcher.py  — opens a window, or  │
                               │                 prints an address   │
                               └────────────────┬────────────────────┘
@@ -407,14 +407,14 @@ wants to know which one to open.
        │                    those exact bytes.  The view is served here.
        ├── contrast.py ──── without this, real acquisitions draw black
        ├── library.py ───── add last week's run beside today's
-       ├── announcements.py ─ tells an open viewer that a position arrived
-       └── demo_data.py ─── a pretend specimen, so it runs with no microscope
+       └── announcements.py ─ tells an open viewer that a position arrived
 
-     browsercheck.py ─ the safety net: serves the page, opens it, reads the
-                       pixels that came out
+     testdata/demo_data.py ── a pretend specimen, so it runs with no microscope
+     tests/browsercheck.py ── the safety net: serves the page, opens it, reads
+                              the pixels that came out
 
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE BACK — what is written            zmart_storage/
+   THE BACK — what is written    zmart_storage/ (in ZMART-microscopy)
  ══════════════════════════════════════════════════════════════════════════════
 
      positions.py ── writes a run, one position at a time          ┐

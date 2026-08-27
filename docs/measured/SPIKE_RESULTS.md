@@ -4,7 +4,7 @@
 > still accurate about the spike itself, including the worker-bundling bug it found,
 > which is worth reading if you ever touch how the page is built. But the viewer has
 > grown a long way past it — the control panel, annotations, live updating and the
-> storage decisions all came later. For what the viewer does now, read `parked/prototype/README.md`;
+> storage decisions all came later. For what the viewer does now, read `README.md`;
 > for what is still unfinished, `docs/open/NEXT_STEPS.md`.
 
 This records what the spike actually established, honestly, so the next person
@@ -16,9 +16,9 @@ This records what the spike actually established, honestly, so the next person
 The hard architectural question — *can we run neuroglancer as the engine inside
 our own React app, reading our OME-Zarr, packaged for Windows?* — is answered
 **yes, end to end**. The demo volume fetches, decodes, and renders — verified by
-an automated headless-browser acceptance test (`app/server/browsercheck.py`, which
+an automated headless-browser acceptance test (`tests/browsercheck.py`, which
 strictly asserts pixels arrived and writes a screenshot to
-`backend/_check/render.png` when you run it). Everything the spike set out to
+`tests/_check/render.png` when you run it). Everything the spike set out to
 prove is proven.
 
 An early version showed flat grey with no pixels; a code review traced it to a
@@ -56,9 +56,9 @@ now **fixed** — see "The render bug and its fix" below.
   (`z, y, x`) and **correct physical scale** — the on-screen scale bar and the
   data bounding box are dimensionally right.
 - **The supporting pieces work:** the 3-D multichannel demo generator
-  (`app/server/demo_data.py`), the stdlib server serving `dist/` + zarr on one
+  (`testdata/demo_data.py`), the stdlib server serving `dist/` + zarr on one
   origin (`app/server/server.py`), and the headless-Chromium harness
-  (`app/server/browsercheck.py`).
+  (`tests/browsercheck.py`).
 
 ## The render bug and its fix
 
@@ -76,7 +76,7 @@ the main thread queues all messages until the worker is ready — the entire
 data-loading half of the viewer silently did nothing. Metadata (fetched on the
 main thread) loaded; pixel chunks (fetched in the worker) never did.
 
-**Fix** (in `frontend/`):
+**Fix** (in `app/page/`):
 
 1. `precompile-workers.mjs` pre-compiles both worker entry points with esbuild into
    real, self-contained bundles (all `#src/...` resolved). Runs before every
@@ -129,7 +129,7 @@ tests stay green.
 
 ## Acceptance check (guards against the bug returning)
 
-`tests/` is the gate; run it with `pytest zmart-viewer/tests`. It
+`tests/` is the gate; run it with `pytest tests`. It
 covers the demo volume's OME-Zarr contract, the server's HTTP contract, the
 build artifacts, the render, and the four navigation gestures. The
 browser-driven tests skip (with a reason) where the page is not built or no

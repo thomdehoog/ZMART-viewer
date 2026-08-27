@@ -3,9 +3,10 @@
 Written 2026-07-30, after measuring whether Viv can read what this project writes.
 
 This records a decision that was made once before, on evidence that has since changed. The
-earlier decision is in `docs/design/web-viewer.md`, which is **not on this branch** — it
-lives on `claude/napaly-neuroglancer-progress-jo0b8h`, commit `810da03`, along with the rest
-of the `docs/` tree. It is still worth reading; nothing in it was wrong. What changed is the
+earlier decision is in `docs/design/web-viewer.md`, which is **not in this
+repository** — it lives in ZMART-microscopy on
+`claude/napaly-neuroglancer-progress-jo0b8h`, commit `810da03`, along with the rest
+of the older `docs/` tree. It is still worth reading; nothing in it was wrong. What changed is the
 question being asked of it.
 
 ---

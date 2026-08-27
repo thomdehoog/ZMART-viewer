@@ -90,6 +90,7 @@ own zoomed-out copies instead of writing its own. Averaging would look smoother 
 would quietly make that impossible.
 
 The catch that goes with it is written up in `zmart_storage/VOXEL_PLACEMENT.md`
+(in the ZMART-microscopy repository, with the rest of the writer)
 §3a: a coarse voxel's value is the fine voxel at the *low corner* of the block it
 covers, not the block's average, so a reader that assumes averaging places it
 `(2^k − 1)/2` fine voxels too far along in y and x. Nothing is out along z, because
