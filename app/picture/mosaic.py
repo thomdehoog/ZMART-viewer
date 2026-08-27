@@ -60,11 +60,6 @@ from pathlib import Path
 import numpy as np
 import zarr
 
-# The name every OME-Zarr image folder ends in. A transfer holds one per tile, and
-# anything else in the container -- a coverage record, a note of somebody's
-# annotations -- is not a tile and is skipped.
-IMAGE_SUFFIX = ".ome.zarr"
-
 # The key, beside the format's own, under which a tile may say how far it is
 # turned. OME-Zarr 0.5 has nowhere to put a rotation, so this is ours; a tile
 # without one is not turned.

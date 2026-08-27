@@ -24,8 +24,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import numpy as np
-
 from make_test_stores import _SCALE, _dress_the_channels, _tiny_volume
 
 _HERE = Path(__file__).resolve().parents[1]

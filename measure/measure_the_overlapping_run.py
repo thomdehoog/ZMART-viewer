@@ -146,42 +146,6 @@ ON_THE_CARD_ARGS = ["--ignore-gpu-blocklist",
 ON_THE_CARD = bool(os.environ.get("ZMART_ON_THE_CARD"))
 BROWSER_ARGS = ON_THE_CARD_ARGS if ON_THE_CARD else SOFTWARE_ARGS
 
-# Renderer names meaning the picture was drawn on the processor after all. Matched
-# loosely and in lower case, because each driver writes its name its own way and
-# buries it in a longer string.
-SOFTWARE_RENDERERS = ("swiftshader", "llvmpipe", "software", "microsoft basic")
-
-WHAT_IS_DRAWING = """() => {
-  const c = document.createElement('canvas');
-  const gl = c.getContext('webgl2') || c.getContext('webgl');
-  if (!gl) return 'no webgl at all';
-  const d = gl.getExtension('WEBGL_debug_renderer_info');
-  return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL)
-           : gl.getParameter(gl.RENDERER);
-}"""
-
-
-def say_what_drew(browser) -> str:
-    """Ask the browser what actually drew, and say so out loud.
-
-    Asking for a card is not the same as getting one, and a silent fallback to
-    software is indistinguishable from a card in every number that follows. So it
-    is read from the browser rather than assumed from the arguments, and printed
-    where whoever reads the table will see it.
-    """
-    page = browser.new_page()
-    try:
-        page.goto("about:blank")
-        drew = str(page.evaluate(WHAT_IS_DRAWING))
-    finally:
-        page.close()
-    software = any(one in drew.lower() for one in SOFTWARE_RENDERERS)
-    print(f"  drawn by: {drew}")
-    if ON_THE_CARD and software:
-        print("  ** asked for the card and got software; these frame counts are "
-              "not the card's **")
-    return drew
-
 # How many different tiles to make up and then reuse. Making a fresh one for every
 # tile of a ten-thousand-tile run would spend more time inventing pictures than
 # measuring anything, and reusing them changes nothing that is being measured: the

@@ -121,16 +121,13 @@ LINKS_FOLDER = "zmart-links"
 # modules have to be changed together.
 LINKS_FILE = "zmart-links.json"
 
-# The shape of that file this reader understands. A file saying anything else is
-# ignored rather than guessed at, because guessing wrongly would draw one tile's
-# picture in another tile's place with nothing on screen to say so.
-LINKS_VERSION = 3
-
-# Shapes this reader still understands from before. Version 1 said nothing about
-# how a tile's pieces are stored because there was only one way they could be —
-# each piece its own file — so it is read as though it had said so. Version 2 is
-# version 3 without the companion file below, and a view written that way simply
-# never has one.
+# The shapes of that file this reader understands. A file saying anything else
+# is ignored rather than guessed at, because guessing wrongly would draw one
+# tile's picture in another tile's place with nothing on screen to say so.
+# Version 1 said nothing about how a tile's pieces are stored because there was
+# only one way they could be — each piece its own file — so it is read as
+# though it had said so. Version 2 is version 3 without the companion file
+# below, and a view written that way simply never has one.
 LINKS_VERSIONS_UNDERSTOOD = (1, 2, 3)
 
 # The companion file a run still being acquired adds its tiles to, one line each.
