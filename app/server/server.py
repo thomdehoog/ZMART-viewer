@@ -1747,13 +1747,13 @@ class _Handler(SimpleHTTPRequestHandler):
             pass
         try:
             return declare_a_built_picture(scenes, target, name=target.name)
-        except Exception:
+        except Exception as why:
             # A folder the mosaic cannot make one picture of still has to
             # open. Before composing was tried here it opened as separate
             # positions and drew correctly, so that is what it falls back
             # to rather than becoming unopenable on the way past.
-            log.exception("could not compose %s; opening its positions instead",
-                          target)
+            print(f"could not compose {target} ({why}); "
+                  "opening its positions instead", file=sys.stderr)
             return None
 
     def _serve_open(self, payload: object) -> None:

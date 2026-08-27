@@ -32,7 +32,6 @@ import zarr
 from mosaic import read_the_transfer, the_front_axes
 
 from zmart_live.coordinator import LivePublisher
-from zmart_live.model import GridCell
 from zmart_live.profiles import DEFAULTS, plan_the_writing
 
 # How much a tile's offset may miss its grid place, in micrometres, before the

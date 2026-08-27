@@ -703,7 +703,6 @@ def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
     server = make_server(port=0, data_dir=data, site_dir=site)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    address = f"http://127.0.0.1:{server.server_address[1]}"
     def headers_for(path: str) -> str:
         connection = http.client.HTTPConnection("127.0.0.1",
                                                 server.server_address[1])
