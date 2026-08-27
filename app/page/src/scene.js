@@ -176,18 +176,6 @@ export function engineName(spec) {
 }
 
 /**
- * Turn the panel's state into the layer list the engine should draw.
- *
- * Two things are decided here. The **order** follows the panel, because the
- * engine composites in list order and so the order is what decides which
- * acquisition type sits on top of which. And **visibility** needs both the
- * group and the channel: hiding a group hides its channels without forgetting
- * which of them were individually switched off. Opacity is the channel's own,
- * from the slider in its display settings -- the per-acquisition opacity that
- * used to multiply in here was removed with its slider (2026-08-18): two
- * opacities acting on one channel read as a control that does nothing.
- */
-/**
  * The brightness window a layer rests at before the operator touches anything.
  *
  * The run's own recorded window comes first: that is what the microscopist
@@ -205,6 +193,18 @@ export function restingWindow(spec, volumetric) {
   return asked || spec.histogram?.autoWindow || null;
 }
 
+/**
+ * Turn the panel's state into the layer list the engine should draw.
+ *
+ * Two things are decided here. The **order** follows the panel, because the
+ * engine composites in list order and so the order is what decides which
+ * acquisition type sits on top of which. And **visibility** needs both the
+ * group and the channel: hiding a group hides its channels without forgetting
+ * which of them were individually switched off. Opacity is the channel's own,
+ * from the slider in its display settings -- the per-acquisition opacity that
+ * used to multiply in here was removed with its slider (2026-08-18): two
+ * opacities acting on one channel read as a control that does nothing.
+ */
 export function layersFor(config, mode, layerState, groupState, groupOrder,
                           volumeMode = "max", volume = {}) {
   const volumetric = mode === "volume";

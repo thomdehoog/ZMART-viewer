@@ -21,7 +21,7 @@ const TARGET_PIXELS = 120;
  * zooming in walks the bar down from millimetres to micrometres to nanometres
  * rather than showing an ever-smaller fraction.
  */
-export function barFor(perPixel, unit) {
+function barFor(perPixel, unit) {
   if (!Number.isFinite(perPixel) || perPixel <= 0) return null;
   const wanted = TARGET_PIXELS * perPixel;
   const exponent = Math.floor(Math.log10(wanted));

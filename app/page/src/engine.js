@@ -63,12 +63,6 @@ import {
 // WeakMap is used so that a layer being thrown away takes its entry with it.
 const sourcesApplied = new WeakMap();
 
-// The last description each layer was given, kept so a refresh can rebuild the
-// same layer from outside a sync pass. Keyed by the managed layer, and weakly,
-// for the same reason as everything else here: a layer thrown away takes its
-// memory with it.
-const specApplied = new WeakMap();
-
 // For each layer, how many frames each of its stores was last known to hold: a map
 // from the store's address to its count. This is what decides which stores are worth
 // reading again, and it has to be per store rather than per layer -- see syncSources
@@ -884,7 +878,6 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
         refreshed,
       );
       applySettings(managed, spec);
-      specApplied.set(managed, spec);
       return;
     }
     // A layer is built with at most one group of stores, and the rest are fed to it
@@ -904,7 +897,6 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
     // Building from the description already applied everything in it, including
     // the images; record them so the next pass does not add them a second time.
     sourcesApplied.set(managed.layer, new Set(stores));
-    specApplied.set(managed, spec);
     if (rest.length) {
       const feed = feedFor(managed.layer);
       for (const url of rest) feed.waiting.push(url);
@@ -1104,84 +1096,6 @@ function startDepthAtTheFirstPlane(viewer) {
   startAxisAtItsFirstStep(viewer, at);
 }
 
-/**
- * Wait for the images to say how big they are, then let the engine choose the
- * starting magnification again.
- *
- * Without this the viewer opens on an empty grey rectangle, with the data
- * present and correct but drawn far too small to see. It is worth explaining
- * why, because the cause is nowhere near the symptom.
- *
- * The engine picks a starting magnification the first moment it believes it
- * knows what space the picture lives in. It expresses that magnification in
- * physical units — so many micrometres to a screen pixel — and it is careful
- * afterwards: if the size of a voxel changes, it adjusts the number so that what
- * is on screen stays the same real size. That is the right thing to do, and it
- * is exactly what hurts us here.
- *
- * The trouble is timing. We hand the engine its layers immediately, while the
- * images themselves are still being read over the network. For a moment there
- * are layers but no axes yet, and in that moment the engine considers the space
- * settled — an empty space, in which it has no voxel size to work from and falls
- * back to treating one voxel as one metre. It picks its ordinary default of one
- * voxel to a pixel, which now means *one metre* to a pixel. A little later the
- * real axes arrive saying a voxel is a third of a micrometre, and the engine
- * dutifully preserves the physical scale it was given. A specimen a tenth of a
- * millimetre across is then drawn about a ten-thousandth of a pixel wide, which
- * is to say invisibly, and the panel shows nothing but its own background.
- *
- * So we wait for the axes to actually arrive and then clear the magnification,
- * which makes the engine choose it once more — this time knowing how big a voxel
- * really is. This happens once, before anything is on screen, so it cannot
- * disturb an operator who has started looking around. Afterwards the engine's
- * careful adjustment is left alone, because from then on it is working from real
- * sizes and is right.
- *
- * Returns a function that stops the waiting, for the caller to use when the
- * viewer goes away.
- */
-/**
- * Bring the picture back: centre what is on screen and choose the magnification
- * afresh, as if the image had just been opened.
- *
- * This exists because there was no way back. The only recentring the engine
- * offers is its right button, which centres on the point clicked -- and once an
- * operator has panned far enough that no part of the specimen is on screen,
- * there is nothing left to click on. The picture is still there, correctly
- * placed, and unreachable. Nothing in the display settings helps: those move
- * the brightness of a picture nobody can see.
- *
- * **Only the axes being drawn are moved.** Where the operator is in depth or in
- * time is theirs, and losing your place in a stack because you asked to see the
- * whole field would be its own small betrayal. So the plane and the moment stay
- * where they were and the view slides back over them.
- *
- * The magnification is cleared rather than computed, for the reason set out at
- * :func:`chooseScaleWhenTheImagesAreMeasured` -- the engine's own default is
- * right once it knows how big a voxel is, and by the time anybody presses this
- * it does.
- *
- * Returns whether anything could be done, which is false only before the image
- * has said how big it is.
- */
-/**
- * One press shows the whole picture: centred, and zoomed so it fits the window.
- *
- * The zoom is computed rather than reset, because the engine's default zoom
- * knows nothing about this picture -- on a survey it left the operator centred
- * but still deep in detail, filling a third of the window with specimen and
- * the rest with ground beyond it. How many pixels an axis of the picture
- * occupies is its voxel extent times the engine's own per-axis factor divided
- * by the zoom (the scale bar reads its size from the same arithmetic), so the
- * fitting zoom is whatever makes the largest axis just fill its side of the
- * window, with a small margin so the edge is visibly an edge.
- *
- * The volume view counts its zoom across the height of the panel rather than
- * per pixel, and its box can be turned, so the box is fitted against the
- * window's smaller side. Where a viewport or a bound is missing, the engine's
- * default zoom is kept -- a wrong guess dressed as a fit would be worse.
- */
-
 // How much window the overview leaves around the picture. The picture's longest
 // side fills the window divided by this, so 1.2 leaves about a sixth of the
 // window as visible ground on that axis -- roughly eight percent a side, which
@@ -1290,7 +1204,7 @@ export function putTheViewBack(viewer) {
  * when the window's furniture is drawn, which is a larger change than the
  * strip is worth on its own.
  */
-export function showTheWholePicture(viewer) {
+function showTheWholePicture(viewer) {
   const { position } = viewer.navigationState;
   const space = position.coordinateSpace.value;
   if (!space?.rank) return false;
@@ -1541,6 +1455,42 @@ function whenTheSourcesHaveSettled(viewer, ready, act) {
   return () => stop();
 }
 
+/**
+ * Wait for the images to say how big they are, then let the engine choose the
+ * starting magnification again.
+ *
+ * Without this the viewer opens on an empty grey rectangle, with the data
+ * present and correct but drawn far too small to see. It is worth explaining
+ * why, because the cause is nowhere near the symptom.
+ *
+ * The engine picks a starting magnification the first moment it believes it
+ * knows what space the picture lives in. It expresses that magnification in
+ * physical units — so many micrometres to a screen pixel — and it is careful
+ * afterwards: if the size of a voxel changes, it adjusts the number so that what
+ * is on screen stays the same real size. That is the right thing to do, and it
+ * is exactly what hurts us here.
+ *
+ * The trouble is timing. We hand the engine its layers immediately, while the
+ * images themselves are still being read over the network. For a moment there
+ * are layers but no axes yet, and in that moment the engine considers the space
+ * settled — an empty space, in which it has no voxel size to work from and falls
+ * back to treating one voxel as one metre. It picks its ordinary default of one
+ * voxel to a pixel, which now means *one metre* to a pixel. A little later the
+ * real axes arrive saying a voxel is a third of a micrometre, and the engine
+ * dutifully preserves the physical scale it was given. A specimen a tenth of a
+ * millimetre across is then drawn about a ten-thousandth of a pixel wide, which
+ * is to say invisibly, and the panel shows nothing but its own background.
+ *
+ * So we wait for the axes to actually arrive and then clear the magnification,
+ * which makes the engine choose it once more — this time knowing how big a voxel
+ * really is. This happens once, before anything is on screen, so it cannot
+ * disturb an operator who has started looking around. Afterwards the engine's
+ * careful adjustment is left alone, because from then on it is working from real
+ * sizes and is right.
+ *
+ * Returns a function that stops the waiting, for the caller to use when the
+ * viewer goes away.
+ */
 export function chooseScaleWhenTheImagesAreMeasured(viewer, framed = null) {
   // The whole-picture fit divides the picture's extent by the panel's size
   // in screen pixels, so it cannot run before the panel has been laid out.

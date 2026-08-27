@@ -276,8 +276,7 @@ const ROW_KINDS = {
            + "nothing is kept unless the mosaic is asked for" },
 };
 
-function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
-                     onArriving,
+function LoadWindow({ listing, onNavigate, onOpened, onCancel,
                       onReplayStarted }) {
   const [busy, setBusy] = React.useState(false);
   const [openError, setOpenError] = React.useState(null);
@@ -1563,11 +1562,6 @@ export default function App() {
   // depend on: the list of drawn targets. Those live in the engine once their
   // layer exists, and the list beside the image is a reflection of them — so
   // drawing one must not send the whole scene back through here.
-  // An acquisition being shown position by position: which group, how many of
-  // its stores are on screen, and how fast the rest should follow. Nothing is
-  // written for this -- every position is already on disk and already placed;
-  // the row is simply drawn from a growing number of them.
-  const [revealing, setRevealing] = React.useState(null);
   // The acquisition the view should be pointed at, once its pieces are on
   // screen. Opening used to leave the camera where it was, which on a machine
   // holding one picture at the stage's coordinates and another at zero means
@@ -1602,30 +1596,12 @@ export default function App() {
     // took the whole page down with "Cannot access 'scene' before
     // initialization" (2026-08-21).
   }, [viewer, lookAt, config]);
-  React.useEffect(() => {
-    if (!revealing || !config) return undefined;
-    // How many pieces this acquisition has to arrive: the stores of its one
-    // row, or its rows, whichever way the dataset opened.
-    const rows = config.layers.filter(
-      (spec) => (spec.group || "") === revealing.group);
-    const all = rows.length > 1
-      ? rows.length
-      : (rows[0]?.sources || []).length;
-    if (!all || revealing.count >= all) return undefined;
-    const wait = revealing.perSecond > 0 ? 1000 / revealing.perSecond : 0;
-    const soon = window.setTimeout(
-      () => setRevealing((now) => (now && now.group === revealing.group
-        ? { ...now, count: now.count + 1 } : now)),
-      wait);
-    return () => window.clearTimeout(soon);
-  }, [revealing, config]);
 
   const scene = React.useMemo(() => {
     if (!config || layerState.length !== config.layers.length) return null;
     const layers = layersFor(config, mode, layerState, groupState, groupOrder, volumeMode,
                               { gain: volumeGain, attenuation: volumeAttenuation,
-                                depthSamples },
-                              revealing);
+                                depthSamples });
     // The layer holding drawn targets is added once the saved ones have been read
     // back, so whatever was saved is present from the moment the layer exists.
     if (targetsLoaded) {
@@ -1636,7 +1612,6 @@ export default function App() {
     config,
     mode,
     layerState,
-    revealing,
     groupState,
     groupOrder,
     volumeMode,
@@ -2140,39 +2115,27 @@ export default function App() {
                 if (spec) touchedWindows.current.add(aboutTheChannel(spec));
                 setLayer(i, { window });
               }}
-              onMeasureHere={async (i, asked = {}) => {
-                // Reading the pixels themselves, for the two things in the
-                // panel that need them. The panel has the picture drawn but
-                // not the numbers behind it -- and what is on the canvas has
-                // already been windowed and coloured -- so the reading is
-                // asked of the server, which has the store.
-                //
-                // Auto asks about the part on screen and takes the window
-                // from it. The two boxes under the histogram ask about the
-                // same pixels over a different stretch of brightness, and
-                // take only the bars: widening the axis has to show what is
-                // out there, not blank space beside a squeezed picture.
+              onMeasureHere={async (i) => {
+                // Reading the pixels themselves, for the panel's Auto button.
+                // The panel has the picture drawn but not the numbers behind
+                // it -- and what is on the canvas has already been windowed
+                // and coloured -- so the reading is asked of the server,
+                // which has the store, about the part on screen.
                 const spec = config?.layers?.[i];
                 if (!spec) return null;
-                const box = asked.whole
-                  ? [[0, 0], [1, 1]]
-                  : viewer && whatIsOnScreen(viewer);
+                const box = viewer && whatIsOnScreen(viewer);
                 if (!box) return null;
                 const answer = await measureHere({
                   source: (spec.sources || [spec.source])[0],
                   channel: spec.channelIndex ?? null,
                   box,
-                  span: asked.span || null,
                 });
                 if (!answer || answer.empty || !answer.window) return null;
                 // The window belongs to the picture, so it goes to the layer;
                 // the histogram belongs to the panel that drew it, so it goes
                 // back as the answer. An empty view moves nothing: a press
-                // that measured no imaged pixels has nothing to say. And a
-                // reading taken only to redraw the bars leaves the window
-                // exactly where the operator put it.
-                if (asked.ifUnset) setWindowIfUnset(i, answer.window);
-                else if (!asked.span) setLayer(i, { window: answer.window });
+                // that measured no imaged pixels has nothing to say.
+                setLayer(i, { window: answer.window });
                 return answer;
               }}
               onLut={(i, lut) => setLayer(i, { lut })}
@@ -2218,14 +2181,6 @@ export default function App() {
             applyConfig(config);
             setLoadListing(null);
           }}
-          onArriving={(loaded, perSecond) => {
-            // The acquisition just opened, shown position by position. Its
-            // group is the one the server has just added, and the first
-            // position is on screen at once -- an empty screen for the first
-            // beat says nothing about anything.
-            const group = (loaded.groups || []).at(-1) || "";
-            setRevealing({ group, count: 1, perSecond });
-          }}
           onReplayStarted={(config) => {
             // Starting a replay is an explicit ask to watch something, so the
             // camera goes to the show once the replay's images have answered
@@ -2236,11 +2191,6 @@ export default function App() {
               watchTheReplay(viewer, (config.layers || []).filter(
                 (one) => one.kind !== "segmentation").length);
             }
-          }}
-          onConstructed={async () => {
-            const config = await fetchConfig();
-            if (config) applyConfig(config);
-            setLoadListing(null);
           }}
           onCancel={() => setLoadListing(null)}
         />
