@@ -146,7 +146,7 @@ export default function AxisSlider({
   // length in time when it is created, long before the run has produced that many
   // frames, so what the file claims and what exists are not the same thing.
   const allowed = committedMoments?.filter(
-    (moment) => axis.min + moment >= axis.min && axis.min + moment <= axis.max,
+    (moment) => axis.min + moment <= axis.max,
   );
   const reachable = limit != null && Number.isFinite(limit)
     ? { ...axis, max: Math.min(axis.max, axis.min + limit - 1) }
