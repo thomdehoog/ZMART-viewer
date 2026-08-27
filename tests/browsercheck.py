@@ -18,7 +18,7 @@ but that was the check that was missing.
 
 Run it after building the frontend::
 
-    python app/server/browsercheck.py
+    python tests/browsercheck.py
 
 Exit codes: 0 = rendered (pass), 1 = did not render (fail), 2 = could not run
 (the page is not built, or no browser is available).
