@@ -23,6 +23,7 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_HERE / "app" / "server"))
+sys.path.insert(0, str(_HERE / "testdata"))
 
 from demo_data import write_demo_zarr  # noqa: E402
 from launcher import open_window  # noqa: E402
