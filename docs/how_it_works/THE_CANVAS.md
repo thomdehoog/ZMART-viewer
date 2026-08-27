@@ -28,7 +28,8 @@ nothing can drift.
 **The middle layer is swappable.** Neuroglancer or Viv sits there behind one
 interface, so choosing differently later means replacing one module rather than
 unpicking an engine from the whole front end. That interface is
-`zmart-viewer/parked/contract.md`, and three implementations of it already exist.
+`parked/contract.md` in the ZMART-microscopy repository, and three
+implementations of it already exist.
 
 The interface this serves: the viewer on the left, the workflow's own controls on
 the right, and nothing else competing for attention.
@@ -114,7 +115,7 @@ the run.
 ## What is already built
 
 Three implementations of the middle layer, behind one interface, each measured on
-the same questions: `zmart-viewer/parked/`, with the table in `parked/RESULTS.md`. All
+the same questions: ZMART-microscopy's `parked/`, with the table in `parked/RESULTS.md`. All
 three hold the same two gestures, the same handedness, the same coordinate system,
 and keep pace over hundreds of tiles arriving live.
 
@@ -205,7 +206,7 @@ options, no for neuroglancer.
 ## The shape of the framework, in one place
 
 For somebody arriving here from the code, this is the whole of what the three
-layers come to. The details are in `zmart-viewer/parked/contract.md`.
+layers come to. The details are in ZMART-microscopy's `parked/contract.md`.
 
 ```js
 viewer.drawUnder(paint)   // the bottom layer: the application's own ground

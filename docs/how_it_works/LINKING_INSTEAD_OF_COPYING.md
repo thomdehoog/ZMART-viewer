@@ -1,7 +1,8 @@
 # Showing the run without copying it
 
 Written 5 August 2026, and revised since. **This is now built**, in two halves:
-`zmart_storage/linked.py` writes a view, and `app/server/linking.py`
+`zmart_storage/linked.py` (in the ZMART-microscopy repository, as is everything
+under `zmart_storage/` named here) writes a view, and `app/server/linking.py`
 answers for it while the viewer is open. The older arrangement that copies —
 `zmart_storage/cropped.py`, measured in `docs/open/HANDOVER_overlapping_runs.md` — still
 exists and is still the one that has been measured end to end.

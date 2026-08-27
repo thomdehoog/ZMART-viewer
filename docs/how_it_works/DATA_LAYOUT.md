@@ -337,7 +337,9 @@ further is deliberate: below that a copy has stopped being an overview of the sp
 become a thumbnail, and the reading it saves is no longer worth the writing it costs on
 every tile.
 
-`copies_for_a_canvas` in `zmart_storage/canvas.py` is the rule. A writer with a reason of
+`copies_for_a_canvas` in `zmart_storage/canvas.py` is the rule (the writer lives
+in the ZMART-microscopy repository, as does every `zmart_storage/` path in this
+document). A writer with a reason of
 its own can still state a number outright, and it is used as asked.
 
 **An `omero` block** naming each channel, giving it a colour, and giving a starting
@@ -741,7 +743,7 @@ planes, with the specimen in the middle of the canvas, which is where a run puts
 Past that point every sampled plane misses the specimen, every value read is zero, and
 the volume window, the histogram and the contrast slider's Auto button all come back as
 `(0, 1)` — which is not a window that is slightly wrong, but no usable range at all. The
-script is `zmart-viewer/measure_declared_room.py`, and it confirms the reassuring half of
+script is `measure/measure_declared_room.py`, and it confirms the reassuring half of
 the story in the same table: the bytes on disk are **identical** across every row of it.
 Declaring generously really is free of everything except this.
 
@@ -805,7 +807,7 @@ Where the imaged depth genuinely is not known, declare the travel and give each 
 a brightness window in its `omero` block. That is honoured for the plane view and costs
 no read at all. Be aware that it is only half a cure today: the volume window and the
 histogram are still worked out from pixels whatever the block says, so they will still
-come back empty. That gap is recorded in `zmart-viewer/NEXT_STEPS.md` and closing it would
+come back empty. That gap is recorded in `docs/open/NEXT_STEPS.md` and closing it would
 make a declared window a complete answer.
 
 The cost of the default is otherwise honest and small: an experiment covering one corner
@@ -1121,7 +1123,7 @@ target scan, no eye to hide the overview and look at it, one brightness taken fr
 whichever arrived first, and closing either one closing both.
 
 The code is `library.py` — `_acquisition_of`, `_same_acquisition`, `_one_acquisition_only`
-and `_place` — and `zmart-viewer/ARCHITECTURE.md` section 3 states the rule this satisfies.
+and `_place` — and `docs/how_it_works/ARCHITECTURE.md` section 3 states the rule this satisfies.
 
 Each channel row is one Neuroglancer layer reading the store and pinned to that
 channel. The channel's **name and colour come from the store's own description**

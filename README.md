@@ -51,7 +51,7 @@ want the whole screen for the specimen. It has up to four parts:
 Point the viewer at a folder of OME-Zarr stores:
 
 ```
-python run_demo.py --data /path/to/your/run
+python demos/run_demo.py --data /path/to/your/run
 ```
 
 That may be a single `.ome.zarr` store or a folder holding many of them — both
@@ -70,8 +70,9 @@ A few things worth knowing:
   piece of which tile — the viewer opens it as one image instead, and the number of
   positions stops mattering: a hundred and six thousand four hundred draw at the
   same rate and open in the same second. Nothing is copied; the tiles stay exactly
-  as the microscope wrote them and stay readable by anything else. The top-level
-  `parked/prototype/README.md` shows how to build one, under "One picture out of many stores".
+  as the microscope wrote them and stay readable by anything else.
+  `docs/how_it_works/LINKING_INSTEAD_OF_COPYING.md` records how such a view works
+  and how the idea was arrived at.
 - **One folder, one acquisition.** What you open becomes a single heading in the
   panel, named after the folder you chose, and every store in it feeds it — the
   positions of a tiled overview are pieces of one specimen, so they are drawn as
@@ -147,7 +148,7 @@ folder…** button opens the system's chooser where one is available.
   other software that has taken 8848, give it another number:
 
   ```
-  python run_demo.py --data /path/to/your/run --port 8849
+  python demos/run_demo.py --data /path/to/your/run --port 8849
   ```
 
   Any free number between 1024 and 65535 will do, and `--port 0` lets the machine
@@ -156,7 +157,9 @@ folder…** button opens the system's chooser where one is available.
 ## Try the demo (no microscope needed)
 
 The demo makes a small pretend 3-D, three-colour volume so you can try
-everything with no hardware.
+everything with no hardware. `python install.py` does the whole setup — the
+virtual environment, the page build, the lot — and says what it did; or do the
+steps yourself:
 
 ```bash
 # 1. Set up the environment (Python + the build tools)
@@ -168,7 +171,7 @@ npm --prefix app/page install
 npm --prefix app/page run build
 
 # 3. Launch it
-python run_demo.py
+python demos/run_demo.py
 ```
 
 A native window opens on the demo volume. On Windows it uses the built-in
@@ -187,7 +190,7 @@ shows just Z, and a flat overview shows neither. Nothing to configure.
 To see it on the demo, ask for a few frames:
 
 ```bash
-python run_demo.py --timepoints 5
+python demos/run_demo.py --timepoints 5
 ```
 
 That writes a second demo store beside the ordinary one (your single-volume demo
@@ -249,10 +252,10 @@ arrived, not merely that the page loaded. It needs a one-time browser download:
 
 ```bash
 playwright install chromium
-python app/server/browsercheck.py     # 0 = rendered, 1 = did not, 2 = could not run
+python tests/browsercheck.py         # 0 = rendered, 1 = did not, 2 = could not run
 ```
 
-It prints a per-check table and writes a screenshot to `backend/_check/render.png`.
+It prints a per-check table and writes a screenshot to `tests/_check/render.png`.
 Read the `RESULT:` line rather than the exit status alone — exit 2 means the
 check could not run (page not built, no browser), which is neither a pass nor a
 regression.
@@ -278,12 +281,12 @@ set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
 
 | Path | What it is |
 |---|---|
-| `frontend/` | The React + neuroglancer app (built into `app/page/dist`). |
-| `app/server/demo_data.py` | Makes the demo OME-Zarr volume. |
+| `app/page/` | The React + neuroglancer app (built into `app/page/dist`). |
+| `testdata/demo_data.py` | Makes the demo OME-Zarr volume. |
 | `app/server/server.py` | The small local web server (built page + image data + a JSON command endpoint). |
 | `app/server/launcher.py` | Opens the studio in a native desktop window (pywebview). |
-| `app/server/browsercheck.py` | Automated rendering check in a real headless browser. |
-| `run_demo.py` | One command: make the demo volume and open the window. |
+| `tests/browsercheck.py` | Automated rendering check in a real headless browser. |
+| `demos/run_demo.py` | One command: make the demo volume and open the window. |
 | `docs/how_it_works/DATA_LAYOUT.md` | How a run is written to disk and shown, and why. The design record. |
 | `docs/open/NEXT_STEPS.md` | What is known to be unfinished or wrong, and what to pick up next. |
 | `docs/how_it_works/TESTING.md` | How to run the tests, and what each group of them is for. |
@@ -298,7 +301,7 @@ set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
   app/server/server.py  ──►  one local address (http://127.0.0.1:8848)
       ▲
       │  reads image chunks, sends commands
-  frontend (React UI + neuroglancer engine)  ──►  shown in a native window
+  app/page (React UI + neuroglancer engine)  ──►  shown in a native window
 ```
 
 Python stays the brain and the hands; the window is the eyes and the controls.
