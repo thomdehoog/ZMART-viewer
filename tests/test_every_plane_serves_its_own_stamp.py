@@ -340,10 +340,11 @@ def test_every_door_parses_the_one_address():
     import served
     from composer import the_piece_address
 
-    # Both server modules are called ``server``; load the building one by
-    # its path so the check cannot silently land on the backend's.
+    # The instrumented transfer server lives inside its one caller now
+    # (demos/serve_a_transfer.py); load it by its path so the check reads
+    # the module that actually serves, not a lookalike on the import path.
     spec = importlib.util.spec_from_file_location(
-        "the_building_server", _VIZ / "app" / "picture" / "server.py")
+        "the_building_server", _VIZ / "demos" / "serve_a_transfer.py")
     building_server = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(building_server)
 
