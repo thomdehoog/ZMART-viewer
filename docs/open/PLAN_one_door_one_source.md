@@ -185,6 +185,40 @@ publisher, the record moves, the registry notices, one message goes
 out. A rehearsal exercises the identical path an acquisition does —
 which was always its point — and adds no machinery.
 
+### Plugged into smart microscopy: the chain, end to end
+
+This is the arrangement the whole plan exists to serve, so it is worth
+writing out as one chain. A run is a folder holding `data/` and
+`views/` side by side, per the contract.
+
+1. **Data lands.** The microscope writes a position or a timepoint into
+   `data/`. It only ever adds; nothing already written changes.
+2. **A trigger fires.** One trigger, with two inputs. The preferred
+   input is the writer saying so — the publisher's atomic commit is
+   itself the completion signal, and `POST /api/announce` is the
+   hurry-up that makes it immediate. The fallback input is the folder
+   watch, kept only for a writer that has never heard of ZMART.
+   Watching can only *infer* that a write finished, and inference has
+   already cost a session once (the description file filled in rather
+   than created); so the watch feeds the same trigger the announcement
+   does, and is never a second pipeline.
+3. **The view is appended.** The builder extends the run's view for
+   exactly the footprint that landed: rows of pointers for a linked
+   view, or — for a baked one — the baked pieces that ground touches
+   and the coarse levels above them. Baked or not was decided once,
+   when the run's view was first made, and is remembered in the view;
+   every append then does the same kind of work. This is the
+   per-commit patching already built and measured on this branch:
+   roughly 150–290 ms per landing, flat with the size of the survey.
+4. **The source moves.** The registry bumps the revision of that run's
+   one source and sends the one message. The browser invalidates that
+   source's cache and the engine refetches only what is on screen.
+
+Nothing in the chain is new machinery: step 3 exists and is gated, step
+4 is the invalidation rule above, and the one door makes step 3's view
+the same view any finished dataset gets. What the chain replaces is the
+live-only copy of each step.
+
 ### Settings come from the view
 
 A view's description carries everything the frontend needs to open it
