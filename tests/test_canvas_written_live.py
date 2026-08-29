@@ -72,7 +72,9 @@ ANNOUNCE_IN_PLACE = """async () => {
 }"""
 
 
-def _a_canvas(folder: Path, name: str) -> TileCanvases:
+def _a_canvas(
+    folder: Path, name: str, *, voxel_um: tuple[float, float, float] = (2.0, 0.35, 0.35)
+) -> TileCanvases:
     """One acquisition type's image, declared empty at the start of a run."""
     return TileCanvases.create(
         folder,
@@ -80,7 +82,7 @@ def _a_canvas(folder: Path, name: str) -> TileCanvases:
         canvas_shape=CANVAS,
         tile_shape=TILE,
         tile_step=TILE,  # butted up, which is the rule
-        voxel_size_um=(2.0, 0.35, 0.35),
+        voxel_size_um=voxel_um,
         channels=[Channel("488", window=(0, 4000))],
         chunk=CHUNK,
         levels=LEVELS,
@@ -543,24 +545,19 @@ def test_a_timepoint_written_later_can_be_reached_and_is_seen(
         thread.join(timeout=5)
 
 
-@pytest.mark.xfail(
-    reason="the viewer still gathers every image in a folder into one row, as "
-           "though they were positions of a single acquisition. Both are drawn "
-           "now that unimaged ground is transparent, but they share one row's "
-           "contrast, colour and visibility -- so an overview and a target scan "
-           "cannot be adjusted apart. Grouping in stores.py assumes a folder of "
-           "positions and has to learn that one image can be an acquisition type.",
-    strict=True,
-)
 def test_each_acquisition_type_gets_a_row_of_its_own(browser, built_dist, tmp_path):
     """An overview and a target scan are different things and want separate controls.
 
-    Being visible is not the same as being separable. This is what the panel has to
-    show before "one image per acquisition type" is really true on screen.
+    What tells them apart is what tells every acquisition apart: the
+    magnification the microscope actually used, read from inside the stores.
+    A target scan at the overview's own voxel size would be indistinguishable
+    by anything but its name, and names are labels, never grouping — one row
+    is the honest answer for that. This gate used to xfail with a fixture
+    that made exactly that mistake.
     """
     run = tmp_path / "run"
     _a_canvas(run, "overview")
-    _a_canvas(run, "targetscan")
+    _a_canvas(run, "targetscan", voxel_um=(2.0, 0.175, 0.175))
     server, thread, page = _open_the_viewer(browser, built_dist, run,
                                             "overview.ome.zarr")
     try:
