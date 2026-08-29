@@ -210,6 +210,9 @@ def served_level(composer: Composer, level: int) -> np.ndarray:
     for row in range(rows):
         for column in range(columns):
             values = composer.values_for(level, 0, row, column)
+
+            if values is None:  # governed ground nobody committed: absent
+                continue
             flat = values if values.ndim == 2 else values[0]
             keep_y = min(piece, height - row * piece)
             keep_x = min(piece, width - column * piece)
@@ -386,3 +389,177 @@ def test_the_real_door_serves_the_scattered_picture(tmp_path):
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+# -- the sequential column: live and replay -------------------------------------
+
+FRAME = 384
+SCATTERED_ORIGINS = {
+    "posA": {"y": 0, "x": 0},
+    "posB": {"y": 190, "x": 117},   # overlaps posA, off the chunk grid
+    "posC": {"y": 40, "x": 1100},   # a far outlier
+    "posD": {"y": 190, "x": 117},   # lands exactly on posB, committed later
+}
+
+
+def _live_profile():
+    from zmart_live.profiles import plan_the_writing
+
+    return plan_the_writing("overview", frame=FRAME, channels=("channel 0",))[0]
+
+
+def _committed_reference(run: Path) -> tuple[np.ndarray, dict[str, tuple[int, int]]]:
+    """The expected level 0 of a live run: manifest origins, commit order wins."""
+    meta = run / "views" / "live" / "metadata"
+    placed = {
+        one["position_id"]: (one["origin"]["y"], one["origin"]["x"])
+        for one in json.loads((meta / "locations.json").read_text())["positions"]
+    }
+    order = []
+
+    for line in (meta / "events.jsonl").read_text().strip().splitlines():
+        event = json.loads(line)
+
+        if event.get("position_id"):
+            order.append((event["position_id"], event.get("position_generation", 0)))
+
+    survey = run / "data" / "survey.ome.zarr"
+    height = max(top + FRAME for top, _ in placed.values())
+    width = max(left + FRAME for _, left in placed.values())
+    pasted = np.zeros((height, width), dtype=np.uint16)
+
+    for name, _generation in order:
+        top, left = placed[name]
+        body = zarr.open_array(str(survey / name / "0"), mode="r")[...]
+        pasted[top : top + FRAME, left : left + FRAME] = body.reshape(body.shape[-2:])
+    return pasted, placed
+
+
+def _publish_scattered(run: Path, *, linked_view: str = "at_run_end"):
+    from zmart_live.coordinator import LivePublisher
+
+    publisher = LivePublisher(
+        run, _live_profile(), run_id="gate-scatter",
+        positions=SCATTERED_ORIGINS, linked_view=linked_view,
+    )
+
+    for index, name in enumerate(sorted(SCATTERED_ORIGINS)):
+        body = _stamped_body((1, FRAME, FRAME), 100 + index, np.uint16)
+        publisher.write_and_publish(name, body)
+    return publisher
+
+
+def test_live_scattered_landings_place_and_overlap_by_commit(tmp_path):
+    """Sequential, unbaked: every landing sits at its manifest origin, later
+    commit winning where landings share ground — checked after every commit."""
+    from zmart_live.coordinator import LivePublisher
+
+    run = tmp_path / "run"
+    publisher = LivePublisher(
+        run, _live_profile(), run_id="gate-scatter",
+        positions=SCATTERED_ORIGINS, linked_view="at_run_end",
+    )
+
+    for index, name in enumerate(sorted(SCATTERED_ORIGINS)):
+        publisher.write_and_publish(name, _stamped_body((1, FRAME, FRAME), 100 + index, np.uint16))
+        expected, placed = _committed_reference(run)
+        governed = GovernedRun(run)
+        composer = governed.composer()
+        composer.stop_warming()
+
+        try:
+            served = served_level(composer, 0)
+            room = tuple(min(side, want) for side, want in zip(served.shape, expected.shape))
+            window = served[: room[0], : room[1]]
+            wanted = expected[: room[0], : room[1]]
+
+            if not np.array_equal(window, wanted):
+                differs = np.argwhere(window != wanted)
+                y, x = differs[0]
+                report = "\n".join(where_the_markers_landed(window, placed))
+                raise AssertionError(
+                    f"after landing {name}: {len(differs)} voxels differ, first at "
+                    f"({y},{x}) served {window[y, x]} expected {wanted[y, x]}.\n{report}"
+                )
+        finally:
+            composer.close()
+
+    # posD landed last on posB's exact spot: the later commit owns the ground.
+    assert window[SCATTERED_ORIGINS["posD"]["y"] + 1, SCATTERED_ORIGINS["posD"]["x"] + 1] == 103
+
+
+def test_live_scattered_bake_writes_the_same_picture(tmp_path):
+    """Sequential, baked: the baked ground equals the committed reference."""
+    from zmart_viewer.live import the_live_picture_declared
+
+    run = tmp_path / "run"
+    _publish_scattered(run)
+    store = the_live_picture_declared(run, bake=True)
+    levels = json.loads((store / "zarr.json").read_text())["attributes"]["zmart"]["baked"]
+    assert levels, "the live bake wrote no levels"
+    expected, _ = _committed_reference(run)
+    governed = GovernedRun(run)
+    composer = governed.composer()
+    composer.stop_warming()
+
+    try:
+        served = served_level(composer, 0)
+    finally:
+        composer.close()
+    assert np.array_equal(served[: expected.shape[0], : expected.shape[1]], expected)
+
+
+def test_the_pointer_map_refuses_off_chunk_landings_in_plain_words(tmp_path):
+    """The one honest refusal: per-publish linking cannot point off the grid."""
+    from zmart_live.model import ZmartLiveError
+
+    with pytest.raises(ZmartLiveError, match="whole number"):
+        _publish_scattered(tmp_path / "run", linked_view="per_publish")
+
+    publisher = _publish_scattered(tmp_path / "deferred")
+
+    with pytest.raises(ZmartLiveError, match="whole number"):
+        publisher.finish_the_run()
+
+
+def test_a_scattered_dataset_replays_where_it_sits(tmp_path):
+    """The replay door takes a scattered, off-chunk dataset end to end."""
+    from zmart_viewer.rehearsal import plan_a_replay, replay_the_dataset
+
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    places = [(0.0, 0.0), (25.0, 41.0), (10.0, 500.0)]
+
+    for index, place in enumerate(places):
+        write_position(dataset / f"pos_{index:02d}.zarr", 100 + index, place, size=FRAME, levels=1)
+
+    plan = plan_a_replay(dataset)
+    assert not plan.on_whole_chunks
+    replay_the_dataset(dataset, tmp_path / "replayed", every_s=0)
+
+    run = tmp_path / "replayed"
+    expected = {
+        f"pos_{index:02d}.zarr": (int(place[0]), int(place[1]))
+        for index, place in enumerate(places)
+    }
+    meta = run / "views" / "live" / "metadata"
+    placed = {
+        one["position_id"]: (one["origin"]["y"], one["origin"]["x"])
+        for one in json.loads((meta / "locations.json").read_text())["positions"]
+    }
+    assert placed == expected, placed
+
+    governed = GovernedRun(run)
+    composer = governed.composer()
+    composer.stop_warming()
+
+    try:
+        served = served_level(composer, 0)
+
+        for name, (top, left) in expected.items():
+            stamp = 100 + int(name.removesuffix(".zarr")[-2:])
+            assert served[top, left] == _marker_floor(np.uint16) + stamp % 40, (
+                f"{name} asked ({top}, {left}); found {served[top, left]}"
+            )
+    finally:
+        composer.close()
