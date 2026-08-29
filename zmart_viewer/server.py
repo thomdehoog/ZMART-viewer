@@ -30,10 +30,7 @@ from zmart_live.gateway import answer_from_a_live_run
 # for, rather than pointed at.
 from . import live, loading, pieces
 from .contrast import (
-    camera_range,
-    coarsest_level_is_written,
-    intensity_histogram,
-    measure,
+    Measurements,
     measure_here,
 )
 from .library import (
@@ -1336,108 +1333,7 @@ def make_server(
         wants_the_bake=lambda run_root: Path(run_root).resolve() in scratch.get("bake_live", ()),
     )
 
-    measured: dict[str, dict] = {}
-    provisional: set[str] = set()
-    measuring = threading.Lock()
-
-    def forget_measurements(closed) -> None:
-        """Drop the measurements taken from stores that have just been closed."""
-        for number, _, name in closed:
-            stem = f"{number}/{name}"
-
-            for key in [k for k in measured if k == stem or k.startswith(f"{stem}/c")]:
-                measured.pop(key, None)
-                provisional.discard(key)
-
-    def describe(
-        root_number: int,
-        root: Path,
-        name: str,
-        label: str,
-        coloured: bool,
-        channel: int | None = None,
-        declared_range: dict | None = None,
-    ) -> dict:
-        key = f"{root_number}/{name}" if channel is None else f"{root_number}/{name}/c{channel}"
-        remembered = measured.get(key)
-
-        if remembered is not None and (
-            key not in provisional or not _worth_measuring_again(root / name)
-        ):
-            return {**remembered, "name": label}
-
-        with measuring:
-            remembered = measured.get(key)
-
-            if remembered is not None and key not in provisional:
-                return {**remembered, "name": label}
-
-            return _measure(key, root_number, root, name, label, coloured, channel, declared_range)
-
-    def _worth_measuring_again(store: Path) -> bool:
-        """Has the store gained the whole-field copy it was missing?"""
-        try:
-            return coarsest_level_is_written(store)
-        except OSError:
-            return False
-
-    def _the_window_this_channel_asked_for(store, channel):
-        """The brightness this channel's run asked for, or ``None`` if it said none."""
-        try:
-            described = channels(store)
-        except Exception:
-            return None
-
-        at = 0 if channel is None else int(channel)
-
-        if at >= len(described):
-            return None
-
-        return described[at].get("window")
-
-    def _measure(
-        key, root_number, root, name, label, coloured, channel=None, declared_range=None
-    ) -> dict:
-        """Read one store's pixels and work out how it should first be shown."""
-        if window is not None:
-            found = {
-                "window": window,
-                "volumeWindow": window,
-                "histogram": intensity_histogram(root / name, channel=channel),
-                "settled": coarsest_level_is_written(root / name),
-            }
-        else:
-            found = measure(root / name, channel=channel)
-
-        flat, volume = found["window"], found["volumeWindow"]
-
-        asked_for = _the_window_this_channel_asked_for(root / name, channel)
-
-        if asked_for is not None:
-            flat = volume = (asked_for["low"], asked_for["high"])
-
-        color = channel_color(name) if coloured else None
-        described = {
-            "sources": [f"/data/{root_number}/{name}/|{zarr_scheme(root / name)}:"],
-            "window": {"low": flat[0], "high": flat[1]},
-            "volumeWindow": {"low": volume[0], "high": volume[1]},
-            "color": list(color) if color else None,
-            "histogram": found["histogram"],
-        }
-        held = camera_range(root / name, declared_range)
-
-        if held is not None:
-            described["range"] = {"low": held[0], "high": held[1]}
-
-        if found["histogram"] is not None:
-            measured[key] = described
-
-            if found.get("settled"):
-                provisional.discard(key)
-            else:
-                provisional.add(key)
-
-        return {**described, "name": label}
+    measurements = Measurements(fixed_window=window)
 
     last_built: dict = {"revision": None, "config": None}
     building_config = threading.Lock()
@@ -1526,7 +1422,7 @@ def make_server(
                 row = merged.get(key)
 
                 if row is None:
-                    base = describe(
+                    base = measurements.describe(
                         root_number,
                         root,
                         name,
@@ -1651,7 +1547,7 @@ def make_server(
         live=live,
         announcements=registry.announcements,
         live_state=registry.state_document,
-        forget_measurements=forget_measurements,
+        forget_measurements=measurements.forget,
     )
 
     try:

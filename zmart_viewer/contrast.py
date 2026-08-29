@@ -7,9 +7,17 @@ engine and what would delete this module.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
-from .library import DESCRIPTION_FILES, _moments_folder, _read_attrs_at
+from .library import (
+    DESCRIPTION_FILES,
+    _moments_folder,
+    _read_attrs_at,
+    channel_color,
+    channels,
+    zarr_scheme,
+)
 
 LOW_PERCENTILE = 1.0
 HIGH_PERCENTILE = 99.0
@@ -563,3 +571,119 @@ def intensity_histogram(
         return None
 
     return _histogram(read[1], bins=bins)
+
+
+class Measurements:
+    """The display description of every open store, measured once and kept.
+
+    A store measured before its whole-field copy existed is remembered as
+    provisional and measured again once the copy is written. ``fixed_window``
+    (the --range flag) skips measuring and pins every window.
+    """
+
+    def __init__(self, fixed_window: tuple[float, float] | None = None):
+        self._fixed = fixed_window
+        self._measured: dict[str, dict] = {}
+        self._provisional: set[str] = set()
+        self._measuring = threading.Lock()
+
+    def forget(self, closed) -> None:
+        """Drop the measurements of stores that have just been closed."""
+        for number, _, name in closed:
+            stem = f"{number}/{name}"
+
+            for key in [k for k in self._measured if k == stem or k.startswith(f"{stem}/c")]:
+                self._measured.pop(key, None)
+                self._provisional.discard(key)
+
+    def describe(
+        self,
+        root_number: int,
+        root: Path,
+        name: str,
+        label: str,
+        coloured: bool,
+        channel: int | None = None,
+        declared_range: dict | None = None,
+    ) -> dict:
+        key = f"{root_number}/{name}" if channel is None else f"{root_number}/{name}/c{channel}"
+        remembered = self._measured.get(key)
+
+        if remembered is not None and (
+            key not in self._provisional or not self._worth_measuring_again(root / name)
+        ):
+            return {**remembered, "name": label}
+
+        with self._measuring:
+            remembered = self._measured.get(key)
+
+            if remembered is not None and key not in self._provisional:
+                return {**remembered, "name": label}
+
+            return self._measure(
+                key, root_number, root, name, label, coloured, channel, declared_range
+            )
+
+    def _worth_measuring_again(self, store: Path) -> bool:
+        """Has the store gained the whole-field copy it was missing?"""
+        try:
+            return coarsest_level_is_written(store)
+        except OSError:
+            return False
+
+    @staticmethod
+    def _window_asked_for(store: Path, channel: int | None) -> dict | None:
+        """The brightness this channel's run asked for, or None if it said none."""
+        try:
+            described = channels(store)
+        except Exception:
+            return None
+
+        at = 0 if channel is None else int(channel)
+
+        if at >= len(described):
+            return None
+        return described[at].get("window")
+
+    def _measure(
+        self, key, root_number, root, name, label, coloured, channel=None, declared_range=None
+    ) -> dict:
+        """Read one store's pixels and work out how it should first be shown."""
+        if self._fixed is not None:
+            found = {
+                "window": self._fixed,
+                "volumeWindow": self._fixed,
+                "histogram": intensity_histogram(root / name, channel=channel),
+                "settled": coarsest_level_is_written(root / name),
+            }
+        else:
+            found = measure(root / name, channel=channel)
+
+        flat, volume = found["window"], found["volumeWindow"]
+        asked_for = self._window_asked_for(root / name, channel)
+
+        if asked_for is not None:
+            flat = volume = (asked_for["low"], asked_for["high"])
+
+        color = channel_color(name) if coloured else None
+        described = {
+            "sources": [f"/data/{root_number}/{name}/|{zarr_scheme(root / name)}:"],
+            "window": {"low": flat[0], "high": flat[1]},
+            "volumeWindow": {"low": volume[0], "high": volume[1]},
+            "color": list(color) if color else None,
+            "histogram": found["histogram"],
+        }
+        held = camera_range(root / name, declared_range)
+
+        if held is not None:
+            described["range"] = {"low": held[0], "high": held[1]}
+
+        if found["histogram"] is not None:
+            self._measured[key] = described
+
+            if found.get("settled"):
+                self._provisional.discard(key)
+            else:
+                self._provisional.add(key)
+
+        return {**described, "name": label}
