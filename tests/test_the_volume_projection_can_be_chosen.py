@@ -47,7 +47,9 @@ def _spread(page) -> float:
     # GPU.
     shot = page.screenshot(clip={"x": 0, "y": 0, "width": 600, "height": 600},
                            timeout=180_000)
-    return statistics.pstdev(list(Image.open(io.BytesIO(shot)).convert("L").getdata()))
+    import numpy as np
+
+    return float(np.asarray(Image.open(io.BytesIO(shot)).convert("L")).std())
 
 
 def test_the_volume_opens_as_a_projection_not_an_accumulation(viewer_page):
