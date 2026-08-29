@@ -3,7 +3,7 @@
 # checkout rather than installing a second copy, and a trailing slash matches
 # only a real directory, so a linked one would show up as something to commit.
 app/page/node_modules
-app/page/dist/
+app/page/dist
 
 # The demo volume is generated on first run.
 testdata/demo_store/
@@ -28,3 +28,6 @@ parked/harness/dist/
 # keeping in the history -- the readings taken from them are, and those live in
 # parked/measurements/.
 parked/measurements/acquisitions/
+
+# The editable install writes its metadata beside the package.
+*.egg-info/
