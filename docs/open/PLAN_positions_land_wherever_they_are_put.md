@@ -61,12 +61,10 @@ whole matrix.
   is asserted once, explicitly, so the rule cannot drift silently.
 - **Absence stays absence.** A far outlier makes the canvas sparse; the
   empty pieces between must answer as absent, never as written zeros.
-- **The refusals of the grid-bound modes.** Free placement is not every
-  mode's promise, and the gate pins the boundary rather than ignoring
-  it: the pointer-linked map must *refuse* to be written over tiles off
-  the whole-chunk grid (a lying map would be worse than none), and the
-  replay planner already refuses off-grid datasets in plain words —
-  asserted here with a scattered input, so the refusal survives.
+- **The one honest refusal.** The pointer-linked map must *refuse* to
+  be written over tiles off the whole-chunk grid — a lying map would be
+  worse than none. It is the only mode allowed to say no: scattered
+  placement is required to work everywhere else, live included.
 
 ## The matrix
 
@@ -92,14 +90,12 @@ placements and once scattered:
 4. **sequential, baked** — the same arrival with the per-commit bake
    patching as each position lands.
 
-Cells that are not placements are still cells: sequential × scattered
-is today a pinned refusal (the replay planner refuses off-grid runs in
-plain words — and this is the cell smart-microscopy targeting will one
-day need open, so the gate pins the refusal until that day flips it to
-a placement check); sequential-baked × foreign stores is marked
-not-a-thing (no re-bake exists for a growing foreign folder); a plate
-growing live is a named gap with no support and no gate. Nothing in
-the matrix is quietly absent.
+Scattered must pass in every column, sequential included — that cell
+is a placement check, not a refusal (the chapter below makes it so).
+Two cells stay marked rather than tested: sequential-baked × foreign
+stores is not-a-thing (no re-bake exists for a growing foreign
+folder), and a plate growing live is a named gap. Nothing in the
+matrix is quietly absent.
 
 Placements — per case, drawn from a seeded generator (three fixed
 seeds, the seed printed on failure): translations uniform over a canvas
@@ -107,6 +103,32 @@ smaller than tiles-times-count so overlap is guaranteed; plus, always,
 the same hand-picked edge set — exact duplicate, full containment,
 fractional offsets at each level's rounding boundary, a negative
 corner, one far outlier.
+
+## The chapter that opens the live cell
+
+Scattered placement already works where the pixels are made: the
+composer places every tile by its own translation, and the governed
+picture resolves overlap by later-commit-wins — the per-commit patch
+neither knows nor cares that landings share ground. What is grid-bound
+is only the two entrances:
+
+- the **replay planner** fits the dataset to a regular grid before
+  writing, and refuses what does not fit. It learns to plan free
+  placements: the plan *is* the list of each position's own
+  translation, and the grid fit becomes one special case of it;
+- the **live writer's location model** (zmart_live, the microscopy
+  checkout) addresses positions as grid cells. It learns to carry an
+  explicit place per position — `locations.json` already fixes every
+  place before the first pixel, so this widens what a place may be,
+  not when it is fixed.
+
+First instrument, then change: feed scattered locations straight
+through the publisher and record exactly what rejects them, so the
+change is as small as the rejection and no smaller. The juicy new
+assertion this opens: a scattered landing that overlaps committed
+ground must patch exactly the union footprint, later commit winning
+where they touch — the live half of the overlap rule, checked with the
+same stamps and markers as the static half.
 
 ## One photographed flagship
 
