@@ -264,6 +264,13 @@ def _read_one_tile(store: Path) -> Tile:
         for transform in dataset.get("coordinateTransformations") or []:
             if transform.get("type") == "scale":
                 scale = [float(n) for n in transform["scale"]]
+
+                if len(scale) < 3:
+                    raise ValueError(
+                        f"{store} is a flat two-axis picture. The composer draws "
+                        "three-axis pictures (z, y, x, with z of one for a single "
+                        "plane); open a flat store on its own instead."
+                    )
                 voxel = (scale[-3], scale[-2], scale[-1])
 
             if transform.get("type") == "translation":
@@ -648,6 +655,16 @@ CODECS = [
     {"name": "zstd", "configuration": {"level": 0, "checksum": False}},
 ]
 
+
+def codecs_for(dtype) -> list[dict]:
+    """The declared codecs; a one-byte dtype has no endianness to declare."""
+    import numpy as np
+
+    if np.dtype(dtype).itemsize == 1:
+        return [{"name": "bytes"}, CODECS[1]]
+    return CODECS
+
+
 PINNED_SHARE = 0.01
 
 
@@ -769,11 +786,12 @@ class Composer:
             overwrite=True,
         )
         written = [dict(one) for one in _.metadata.to_dict()["codecs"]]
+        declared = codecs_for(mosaic.dtype)
 
-        if written != CODECS:
+        if written != declared:
             raise RuntimeError(
                 f"a piece would be encoded as {written} but the picture is declared "
-                f"as {CODECS}. The browser would be handed bytes it cannot read, and "
+                f"as {declared}. The browser would be handed bytes it cannot read, and "
                 "nothing would report it — the window would simply be black."
             )
 
@@ -1476,7 +1494,7 @@ class Composer:
                     "configuration": {"separator": "/"},
                 },
                 "fill_value": 0,
-                "codecs": CODECS,
+                "codecs": codecs_for(self.mosaic.dtype),
                 "attributes": {},
                 "dimension_names": (["t", "c"] if grown else []) + list(self.mosaic.axes),
             }
