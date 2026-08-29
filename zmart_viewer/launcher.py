@@ -17,6 +17,7 @@ def _webview2_present() -> bool:
     """On Windows, check that the WebView2 runtime the window needs is installed."""
     if not sys.platform.startswith("win"):
         return True  # not Windows: not our concern here
+
     try:
         import winreg
 
@@ -60,6 +61,7 @@ def open_window(
 
     def browse():
         show = chooser.get("show")
+
         if show:
             return show()
         from .server import ask_this_machine_for_a_folder
@@ -80,6 +82,7 @@ def open_window(
         # than the data folder itself.
         "open_from": open_from,
     }
+
     if data_dir is not None:
         kwargs["data_dir"] = data_dir
     server = make_server(port, **kwargs)
@@ -115,6 +118,7 @@ def open_window(
     def show_folder_dialog():
         """Show the operating system's own folder chooser and return what was picked."""
         chosen = native.create_file_dialog(webview.FOLDER_DIALOG)
+
         if not chosen:
             return None
         return chosen[0] if isinstance(chosen, (list, tuple)) else str(chosen)
@@ -128,6 +132,7 @@ def _serve_until_interrupt(server, url: str) -> None:
     import time
 
     print(f"Serving at {url} — press Ctrl+C to stop.")
+
     try:
         while True:
             time.sleep(0.5)

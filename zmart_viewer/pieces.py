@@ -17,7 +17,9 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
-from .building import OURS
+from zmart_live.gateway import live_run_holding
+
+from .building import OURS, GovernedRun
 from .compose import (
     Composer,
     Mosaic,
@@ -25,8 +27,6 @@ from .compose import (
     read_the_transfer,
     the_piece_address,
 )
-
-OURS_IN_THE_DESCRIPTION = "zmart"
 
 # The folder a view's list lived in for a while, beside the images rather than
 # inside one. Still read, so a run written that way keeps working.
@@ -80,16 +80,20 @@ class _WhereThePiecesReallyAre:
             ],
         ] = {}
         self._widest = 1
+
         for tile in listed.get("tiles") or []:
             store = str(tile["store"])
             at = tuple(int(n) for n in tile["at"])
             size = tuple(int(n) for n in tile["size"])
             low = tuple(int(n) for n in tile["from"])
+
             if len(at) != 3 or len(size) != 3 or len(low) != 3:
                 raise ValueError("a tile's place in the view needs three numbers")
+
             if any(n < 0 for n in at + low) or any(n <= 0 for n in size):
                 raise ValueError("a tile cannot begin before the view or be empty")
             held_as = str(tile.get("held_as") or HELD_AS_A_FILE)
+
             if held_as != HELD_AS_A_FILE:
                 raise ValueError(
                     f"{store} says its pieces are held as {held_as!r}, which this "
@@ -99,8 +103,10 @@ class _WhereThePiecesReallyAre:
                 )
             held = (at, size, low, store, held_as)
             self._widest = max(self._widest, size[2])
+
             for row in range(at[1], at[1] + size[1]):
                 self._rows.setdefault(row, []).append(held)
+
         for crossing in self._rows.values():
             crossing.sort(key=lambda tile: tile[0][2])
 
@@ -109,13 +115,17 @@ class _WhereThePiecesReallyAre:
     ) -> tuple[str, tuple[int, int, int], str] | None:
         """Which tile supplies the piece at this place, and which of its pieces it is."""
         crossing = self._rows.get(at[1])
+
         if not crossing:
             return None
         nearest = bisect_right(crossing, at[2], key=lambda tile: tile[0][2])
+
         for index in range(nearest - 1, -1, -1):
             begins, size, low, store, held_as = crossing[index]
+
             if at[2] - begins[2] >= self._widest:
                 break
+
             if (
                 begins[2] <= at[2] < begins[2] + size[2]
                 and begins[0] <= at[0] < begins[0] + size[0]
@@ -134,11 +144,13 @@ class _WhereThePiecesReallyAre:
     def the_bytes_behind(self, inside: str) -> Held | None:
         """Where this piece of the view really is: a file, a place in it, a length."""
         named = self._numbers_in(inside)
+
         if named is None:
             return None
         level, frame, channel, z, y, x = named
         shrink = 2**level
         found = self._tile_covering((z, y * shrink, x * shrink))
+
         if found is None:
             return None
         store, (from_z, from_y, from_x), held_as = found
@@ -149,6 +161,7 @@ class _WhereThePiecesReallyAre:
     def _named(self, *numbers: int) -> str:
         """What a piece at this position is called, in the spelling this view uses."""
         parts = [str(n) for n in numbers]
+
         if self.prefix:
             parts.insert(0, self.prefix)
         return self.separator.join(parts)
@@ -156,25 +169,31 @@ class _WhereThePiecesReallyAre:
     def _numbers_in(self, inside: str) -> tuple[int, int, int, int, int, int] | None:
         """Which copy, and the five numbers naming a piece of it, or ``None``."""
         which, _, _ = inside.partition("/")
+
         try:
             level = int(which)
         except ValueError:
             return None
+
         if not 0 <= level < self.pointed_levels:
             return None
         wanted = f"{which}/"
+
         if not inside.startswith(wanted):
             return None
         rest = inside[len(wanted) :]
         parts = rest.split(self.separator) if self.separator else [rest]
+
         if self.prefix:
             # The ``c`` version 3 puts in front is a part of the name of its own,
             # so it is taken off here rather than being read as a number.
             if not parts or parts[0] != self.prefix:
                 return None
             parts = parts[1:]
+
         if len(parts) != 5:
             return None
+
         try:
             frame, channel, z, y, x = (int(part) for part in parts)
         except ValueError:
@@ -192,6 +211,7 @@ def where_the_list_is(store: Path) -> tuple[Path, Path]:
         if description.is_file():
             return description, store.parent / f"{store.name}{LINKS_ADDED_ENDING}"
     beside = store.parent / LINKS_FOLDER / f"{store.name}.json"
+
     if beside.is_file():
         return beside, beside.with_name(f"{store.name}{LINKS_ADDED_ENDING}")
     return store / LINKS_FILE, store / LINKS_ADDED_FILE
@@ -200,6 +220,7 @@ def where_the_list_is(store: Path) -> tuple[Path, Path]:
 def the_map_inside(store: Path) -> dict | None:
     """The map from picture to positions, as this reader finds it."""
     listing, _ = where_the_list_is(store)
+
     try:
         held = json.loads(listing.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
@@ -211,32 +232,39 @@ def rewrite_the_map_inside(store: Path, ours: dict) -> None:
     """Put a different map into a view, leaving the rest of its description alone."""
     listing, _ = where_the_list_is(store)
     held = json.loads(listing.read_text(encoding="utf-8"))
+
     if "version" in held and "tiles" in held:
         listing.write_text(json.dumps(ours, indent=1), encoding="utf-8")
         return
     where = held.setdefault("attributes", {}) if listing.name == "zarr.json" else held
-    where[OURS_IN_THE_DESCRIPTION] = ours
+    where[OURS] = ours
     listing.write_text(json.dumps(held, indent=1), encoding="utf-8")
 
 
 def pointed_bytes_behind(store: Path, inside: str) -> Held | None:
     """Where this piece of a pointed-at picture really is, if it is one."""
     listing, added = where_the_list_is(store)
+
     try:
         written = listing.stat().st_mtime_ns
     except OSError:
         return None
+
     try:
         grown = added.stat().st_size
     except OSError:
         grown = -1
     key = str(listing)
+
     with _known_lock:
         remembered = _known.get(key)
+
     if remembered is None or remembered[0] != (written, grown):
         spread = _read(listing, added)
+
         if spread is None:
             return None
+
         with _known_lock:
             _known[key] = ((written, grown), spread)
     else:
@@ -251,9 +279,11 @@ def _the_tiles_added_since(added: Path) -> list[dict]:
     except (OSError, UnicodeDecodeError):
         return []
     tiles = []
+
     for at, line in enumerate(lines):
         if not line.strip():
             continue
+
         try:
             tiles.append(json.loads(line))
         except json.JSONDecodeError:
@@ -268,7 +298,7 @@ def _the_part_that_is_ours(held: dict) -> dict | None:
     if "version" in held and "tiles" in held:
         return held
     inside = held.get("attributes") if isinstance(held.get("attributes"), dict) else held
-    ours = inside.get(OURS_IN_THE_DESCRIPTION) if isinstance(inside, dict) else None
+    ours = inside.get(OURS) if isinstance(inside, dict) else None
     return ours if isinstance(ours, dict) else None
 
 
@@ -278,11 +308,14 @@ def _read(listing: Path, added: Path) -> _WhereThePiecesReallyAre | None:
         held = json.loads(listing.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
+
     if not isinstance(held, dict):
         return None
     held = _the_part_that_is_ours(held)
+
     if held is None or held.get("version") not in LINKS_VERSIONS_UNDERSTOOD:
         return None
+
     try:
         held = {**held, "tiles": [*(held.get("tiles") or []), *_the_tiles_added_since(added)]}
         return _WhereThePiecesReallyAre(held)
@@ -300,18 +333,7 @@ def forget_pointers(store: Path) -> None:
         _known.pop(str(store / LINKS_FILE), None)
 
 
-try:
-    from zmart_live.gateway import live_run_holding
-
-    from .building import GovernedRun
-except ImportError:  # pragma: no cover - a checkout without zmart_live
-    GovernedRun = None  # type: ignore[assignment, misc]
-
-    def live_run_holding(target):  # type: ignore[misc]
-        return None
-
-
-log = logging.getLogger("zmart-viewer.serving")
+log = logging.getLogger("zmart-viewer.pieces")
 
 
 class TemporarilyUnanswerable(Exception):
@@ -330,10 +352,12 @@ _being_made: dict[Path, threading.Lock] = {}
 def _what_it_was_built_from(store: Path) -> dict | None:
     """What a store records about being built, or ``None`` for an ordinary image."""
     described = store / "zarr.json"
+
     if not described.is_file():
         return None
     held = json.loads(described.read_text(encoding="utf-8"))
     ours = (held.get("attributes") or {}).get(OURS)
+
     if isinstance(ours, dict) and (ours.get("built_from") or ours.get("governed_from")):
         return ours
     return None
@@ -357,6 +381,7 @@ def _the_pictures_mark(store: Path) -> tuple | None:
 def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
     """The picture's geometry, read from its own ledger when it keeps one."""
     ledger = store / "tiles.json"
+
     if ledger.is_file():
         return read_the_mosaic_as_written(json.loads(ledger.read_text(encoding="utf-8")))
     return read_the_transfer(Path(ours["built_from"]))
@@ -367,19 +392,23 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
     store = store.resolve()
     mark = _the_pictures_mark(store)
     stale = None
+
     with _guard:
         if store in _composers:
             kept_mark, kept = _composers[store]
+
             if kept_mark == mark:
                 return kept
             del _composers[store]
             stale = kept
         stumbled = _refused.get(store)
+
         if stumbled is not None:
             if time.monotonic() - stumbled < _REFUSED_FOR_SECONDS:
                 return None
             del _refused[store]
         making = _being_made.setdefault(store, threading.Lock())
+
     if stale is not None:
         try:
             stale.close()
@@ -397,6 +426,7 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
             if store in _composers and _composers[store][0] == mark:
                 return _composers[store][1]
         made = None
+
         try:
             ours = _what_it_was_built_from(store)
             made = _the_serving_behind(store, ours)
@@ -406,9 +436,11 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
                 store,
                 _REFUSED_FOR_SECONDS,
             )
+
             with _guard:
                 _refused[store] = time.monotonic()
             return None
+
         with _guard:
             _composers[store] = (mark, made)
             return made
@@ -419,15 +451,12 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | GovernedRu
     if ours is None:
         return None
     governs = ours.get("governed_from")
+
     if governs:
-        if GovernedRun is None:
-            raise RuntimeError(
-                "this checkout has no zmart_live, so a governed picture "
-                "cannot consult any manifest and will not be served."
-            )
         return GovernedRun(Path(governs), piece=int(ours.get("piece") or 512), store=store)
     transfer = Path(ours["built_from"])
     holding = live_run_holding(transfer)
+
     if holding is not None:
         log.warning(
             "refusing the picture at %s: its transfer %s lies inside the "
@@ -442,6 +471,7 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | GovernedRu
     made = Composer(
         _the_mosaic_behind(store, ours), piece=int(ours.get("piece") or 512), workers=workers
     )
+
     if not ours.get("baked"):
         made.keep_the_coarse_levels_warm()
     return made
@@ -451,8 +481,10 @@ def a_manifest_governs(store: Path) -> bool:
     """Whether this picture's pieces may only be answered through its run."""
     where = Path(store).resolve()
     held = _composer_for(where)
+
     if GovernedRun is not None and isinstance(held, GovernedRun):
         return True
+
     if held is None:
         with _guard:
             return where in _refused
@@ -463,6 +495,7 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
     """The piece of a built picture the browser asked for, made now."""
     where = Path(store)
     held = _composer_for(where)
+
     if held is None:
         with _guard:
             if where.resolve() in _refused:
@@ -471,10 +504,12 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
                 )
         return None
     address = the_piece_address(inside)
+
     if address is None:
         return None
     level, moment, channel, plane, row, column = address
     composer = None
+
     if GovernedRun is not None and isinstance(held, GovernedRun):
         try:
             composer = held.composer()
@@ -486,15 +521,19 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
                 f"the governed run behind {store} could not derive"
             ) from problem
     baked = Path(store).joinpath(*inside.strip("/").split("/"))
+
     if baked.is_file():
         return baked.read_bytes()
+
     try:
         if composer is None:
             composer = held
+
         if not 0 <= level < composer.mosaic.levels:
             return None
         deep, down, across = composer.grid(level)
         moments, channels = composer.mosaic.frame_room
+
         if not (
             0 <= plane < deep
             and 0 <= row < down
@@ -516,8 +555,10 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
 def a_sample_behind(store: Path, channel: int = 0):
     """A built picture's pixels for measuring: the composer's own coarsest ground."""
     held = _composer_for(Path(store))
+
     if held is None:
         return None
+
     try:
         composer = (
             held.composer() if GovernedRun is not None and isinstance(held, GovernedRun) else held
@@ -525,6 +566,7 @@ def a_sample_behind(store: Path, channel: int = 0):
         level = composer.mosaic.levels - 1
         deep, down, across = composer.grid(level)
         moments, channels = composer.mosaic.frame_room
+
         if not 0 <= channel < channels:
             return None
         middle = (down // 2, across // 2)
@@ -532,8 +574,10 @@ def a_sample_behind(store: Path, channel: int = 0):
             ((row, column) for row in range(down) for column in range(across)),
             key=lambda at: abs(at[0] - middle[0]) + abs(at[1] - middle[1]),
         )
+
         for row, column in nearby[:9]:
             piece = composer.values_for(level, deep // 2, row, column, moment=0, channel=channel)
+
             if piece is not None:
                 return piece
     except Exception:
@@ -549,14 +593,17 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
     import numpy as np
 
     held = _composer_for(Path(store))
+
     if held is None:
         return None
+
     try:
         composer = (
             held.composer() if GovernedRun is not None and isinstance(held, GovernedRun) else held
         )
         depth, height, width = composer.mosaic.shape(level)
         moments, channels = composer.mosaic.frame_room
+
         if not 0 <= channel < channels or not height or not width:
             return None
         (top, left), (bottom, right) = box
@@ -576,8 +623,10 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
         wanted.sort(key=lambda at: abs(at[0] - middle[0]) + abs(at[1] - middle[1]))
 
         taken = []
+
         for row, column in wanted[: max(1, pieces)]:
             piece = composer.values_for(level, depth // 2, row, column, moment=0, channel=channel)
+
             if piece is None:
                 continue
             block = np.asarray(piece)
@@ -590,6 +639,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
                 max(1, last_column + 1 - column * composer.piece),
             )
             taken.append(block[..., rows, columns].ravel())
+
         if not taken:
             return None
         return np.concatenate(taken)
@@ -608,16 +658,16 @@ def forget_composer(store: Path) -> None:
         _being_made.pop(where, None)
         _refused.pop(where, None)
     held = remembered[1] if remembered is not None else None
+
     if held is not None:
         held.close()
 
 
 def catch_up_governed_runs() -> None:
     """Nudge every opened governed picture after an acquisition announcement."""
-    if GovernedRun is None:
-        return
     with _guard:
         governed = [held for _mark, held in _composers.values() if isinstance(held, GovernedRun)]
+
     for held in governed:
         held.request_catch_up()
 

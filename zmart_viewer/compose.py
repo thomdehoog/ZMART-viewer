@@ -23,7 +23,7 @@ import zarr
 
 IMAGE_SUFFIX = ".ome.zarr"
 
-OURS_IN_THE_DESCRIPTION = "zmart"
+OURS = "zmart"
 
 
 @dataclass
@@ -62,11 +62,13 @@ class Tile:
     def footprint(self, level: int, at: tuple[int, int, int]) -> tuple[int, int, int, int]:
         """The box this tile occupies across the specimen once it is turned."""
         held = self.copies[level].shape
+
         if not self.turned:
             return at[1], at[1] + held[1], at[2], at[2] + held[2]
         middle = (held[1] / 2, held[2] / 2)
         cos, sin = math.cos(self.turned), math.sin(self.turned)
         corners = []
+
         for down in (-middle[0], middle[0]):
             for across in (-middle[1], middle[1]):
                 corners.append(
@@ -112,6 +114,7 @@ class Mosaic:
         """How many (moments, channels) the tiles' stores keep room for."""
         if self._room is None:
             found = (1, 1)
+
             for tile in self.tiles:
                 for copy in tile.copies:
                     if copy.outer_shape:
@@ -139,6 +142,7 @@ class Mosaic:
     def placements(self, level: int) -> list[tuple[Tile, tuple[int, int, int]]]:
         """Every tile and where it lands at this resolution, worked out once."""
         found = self._placed.get(level)
+
         if found is None:
             found = [(tile, self.lands_at(tile, level)) for tile in self.tiles]
             self._placed[level] = found
@@ -147,6 +151,7 @@ class Mosaic:
     def shape(self, level: int) -> tuple[int, int, int]:
         """How large the built picture is at this resolution, in voxels."""
         found = self._shape.get(level)
+
         if found is None:
             placed = self.placements(level)
             found = tuple(
@@ -174,11 +179,13 @@ class Mosaic:
 def _the_description_of(store: Path) -> tuple[dict, str]:
     """What a store says about itself, and which generation of OME-Zarr wrote it."""
     newer = store / "zarr.json"
+
     if newer.is_file():
         held = json.loads(newer.read_text(encoding="utf-8"))
         attributes = held.get("attributes") or {}
         return (attributes.get("ome") or attributes), "0.5"
     older = store / ".zattrs"
+
     if older.is_file():
         return json.loads(older.read_text(encoding="utf-8")), "0.4"
     raise ValueError(
@@ -192,9 +199,11 @@ def _how_a_resolution_is_stored(held_in: Path) -> tuple[tuple[int, ...], tuple[i
     """How large one resolution is, how it is chunked, and what a voxel holds."""
     for name in ("zarr.json", ".zarray"):
         described = held_in / name
+
         if described.is_file():
             held = json.loads(described.read_text(encoding="utf-8"))
             shape = tuple(int(n) for n in held["shape"])
+
             if held.get("zarr_format") == 2:
                 chunks = tuple(int(n) for n in held["chunks"])
                 # Version 2 spells the kind of number the way numpy does --
@@ -218,6 +227,7 @@ def _read_one_tile(store: Path) -> Tile:
     multiscale = (described.get("multiscales") or [{}])[0]
     datasets = multiscale.get("datasets") or []
     axes = tuple(str(axis.get("name", "")) for axis in multiscale.get("axes") or ())
+
     if not datasets:
         raise ValueError(
             f"{store} says it keeps no copies of its picture, so there is nothing "
@@ -226,21 +236,26 @@ def _read_one_tile(store: Path) -> Tile:
         )
 
     shared = [0.0, 0.0, 0.0]
+
     for transform in multiscale.get("coordinateTransformations") or []:
         if transform.get("type") == "translation":
             moved = [float(n) for n in transform["translation"]]
             shared = [shared[axis] + moved[-3 + axis] for axis in range(3)]
 
     copies = []
+
     for dataset in datasets:
         voxel, corner = None, list(shared)
+
         for transform in dataset.get("coordinateTransformations") or []:
             if transform.get("type") == "scale":
                 scale = [float(n) for n in transform["scale"]]
                 voxel = (scale[-3], scale[-2], scale[-1])
+
             if transform.get("type") == "translation":
                 moved = [float(n) for n in transform["translation"]]
                 corner = [corner[axis] + moved[-3 + axis] for axis in range(3)]
+
         if voxel is None:
             raise ValueError(
                 f"{store} does not say how large a voxel of its {dataset['path']!r} "
@@ -259,7 +274,7 @@ def _read_one_tile(store: Path) -> Tile:
                 outer_shape=tuple(shape[:-3]),
             )
         )
-    ours = described.get(OURS_IN_THE_DESCRIPTION)
+    ours = described.get(OURS)
     turned = float((ours or {}).get("turned_radians") or 0.0)
     return Tile(name=store.name, store=store, copies=copies, axes=axes, turned=turned)
 
@@ -271,6 +286,7 @@ def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
 
     for tile in tiles[1:]:
         theirs = tile.copies[0].dtype
+
         if theirs != kind:
             raise ValueError(
                 f"{first.store.name} holds {kind} and {tile.store.name} holds "
@@ -281,6 +297,7 @@ def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
                 "This usually means two acquisitions have been gathered into one "
                 "folder. Build a picture over each of them separately."
             )
+
         for level, (ours, other) in enumerate(zip(first.copies, tile.copies, strict=True)):
             if ours.voxel_um != other.voxel_um:
                 raise ValueError(
@@ -315,27 +332,33 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
         described, _ = _the_description_of(folder)
     except ValueError:
         described = {}
+
     if isinstance(described.get("plate"), dict):
         return folder, described["plate"]
     stores = sorted(one for one in folder.glob("*.zarr") if one.is_dir())
     plates, plain = [], []
+
     for store in stores:
         try:
             described, _ = _the_description_of(store)
         except ValueError:
             continue
+
         if isinstance(described.get("plate"), dict):
             plates.append((store, described["plate"]))
         else:
             plain.append(store)
+
     if not plates:
         return None
+
     if len(plates) > 1:
         raise ValueError(
             f"{folder} holds {len(plates)} plates, and one picture lays out "
             "one plate. Put each plate in its own folder and open them one "
             "at a time."
         )
+
     if plain:
         raise ValueError(
             f"{folder} holds a plate and {len(plain)} loose image(s) beside "
@@ -348,14 +371,17 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
 def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
     """Every field of every well, laid out from the plate's own indices."""
     wells = plate.get("wells") or []
+
     if not wells:
         raise ValueError(f"the plate at {store} declares no wells, so there is nothing to lay out.")
     row_names = [row.get("name") for row in plate.get("rows") or []]
     column_names = [column.get("name") for column in plate.get("columns") or []]
     read = []
+
     for well in wells:
         path = well["path"]
         row, column = well.get("rowIndex"), well.get("columnIndex")
+
         if row is None or column is None:
             # Some writers name only the well's path; the plate's own rows
             # and columns lists still say where "B/1" belongs.
@@ -382,6 +408,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
 
     def _the_well_laid_out(fields):
         corners = [tuple(float(one) for one in tile.copies[0].corner_um[-2:]) for tile in fields]
+
         if len(set(corners)) > 1:
             base_y = min(y for y, _ in corners)
             base_x = min(x for _, x in corners)
@@ -411,11 +438,13 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
     pitch_x = max(width for *_, width in laid) * PLATE_WELL_GAP
 
     tiles = []
+
     for row, column, well_name, fields, offsets, _, _ in laid:
         for number, (tile, (off_y, off_x)) in enumerate(zip(fields, offsets, strict=True)):
             tile.name = f"{well_name}-{number}"
             move_y = row * pitch_y + off_y - tile.copies[0].corner_um[-2]
             move_x = column * pitch_x + off_x - tile.copies[0].corner_um[-1]
+
             for copy in tile.copies:
                 z, y, x = copy.corner_um
                 copy.corner_um = (z, y + move_y, x + move_x)
@@ -427,6 +456,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
     """Open a transfer and work out how its tiles fit together."""
     folder = Path(folder)
     plate = _the_plate_in(folder)
+
     if plate is not None:
         tiles = _read_the_plate(*plate)
     else:
@@ -435,6 +465,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
             for one in folder.glob("*.zarr")
             if one.is_dir() and not one.name.endswith(".zmartview.zarr")
         )
+
         if not stores:
             raise ValueError(
                 f"{folder} holds no OME-Zarr images, so there is nothing to "
@@ -447,6 +478,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
             tiles = list(pool.map(_read_one_tile, stores))
 
     keeps = {tile.keeps for tile in tiles}
+
     if len(keeps) != 1:
         raise ValueError(
             f"the tiles in {folder} disagree about how many copies of their picture "
@@ -456,8 +488,10 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
         )
 
     axes = tiles[0].axes
+
     for tile in tiles[1:]:
         others = tile.axes
+
         if others != axes:
             raise ValueError(
                 f"{tiles[0].store.name} stores its picture as {', '.join(axes)} "
@@ -467,6 +501,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
                 "rather than drawn."
             )
     front = tuple(axes[:-3])
+
     if tuple(axes[-3:]) != ("z", "y", "x") or front != ("t", "c")[2 - len(front) :]:
         raise ValueError(
             f"{tiles[0].store} stores its picture as {', '.join(axes)}. This "
@@ -475,6 +510,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
             "Anything else has no agreed meaning to draw."
         )
     rooms = {the_frame_room_of(tile.copies[0].outer_shape) for tile in tiles}
+
     if len(rooms) > 1:
         raise ValueError(
             f"the tiles of {folder} keep different (t, c) room: "
@@ -487,11 +523,13 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
 
     corner = tuple(min(tile.copies[0].corner_um[axis] for tile in tiles) for axis in range(3))
     said = None
+
     for tile in tiles:
         try:
             described, _ = _the_description_of(tile.store)
         except ValueError:
             continue
+
         if isinstance(described.get("omero"), dict):
             said = described["omero"]
             break
@@ -589,12 +627,15 @@ PINNED_SHARE = 0.01
 def the_piece_address(inside: str) -> tuple[int, int, int, int, int, int] | None:
     """Read one piece address, or ``None`` when the path does not name one."""
     parts = inside.strip("/").split("/")
+
     if len(parts) not in (5, 7) or parts[1] != "c":
         return None
+
     if not all(one.isdecimal() for one in (parts[0], *parts[2:])):
         return None
     level = int(parts[0])
     tail = [int(one) for one in parts[2:]]
+
     if len(tail) == 3:
         return (level, 0, 0, *tail)
     return (level, *tail)
@@ -698,6 +739,7 @@ class Composer:
             overwrite=True,
         )
         written = [dict(one) for one in _.metadata.to_dict()["codecs"]]
+
         if written != CODECS:
             raise RuntimeError(
                 f"a piece would be encoded as {written} but the picture is declared "
@@ -714,12 +756,14 @@ class Composer:
         """Carry a predecessor's warmth forward, minus what a commit touched."""
         with donor._block_guard:
             held_blocks = list(donor._blocks.items())
+
         with self._block_guard:
             for key, block in held_blocks:
                 if key[0] in stale or key in self._blocks:
                     continue
                 self._blocks[key] = block
                 self._blocks_weigh += block.nbytes
+
             while len(self._blocks) > 1 and self._blocks_weigh > self._blocks_weighing_at_most:
                 _, dropped = self._blocks.popitem(last=False)
                 self._blocks_weigh -= dropped.nbytes
@@ -727,18 +771,23 @@ class Composer:
         with donor._guard:
             held_slabs = list(donor._slabs.items())
             held_pinned = list(donor._pinned.items())
+
         with self._guard:
             for key, slab in held_slabs:
                 level, row, column = key[2], key[4], key[5]
+
                 if (row, column) in dirty.get(level, ()) or key in self._slabs:
                     continue
                 self._slabs[key] = slab
                 self._weighs += slab.nbytes
+
             while self._slabs and self._weighs > self._weighing_at_most:
                 _, dropped = self._slabs.popitem(last=False)
                 self._weighs -= dropped.nbytes
+
             for key, slab in held_pinned:
                 level, row, column = key[2], key[4], key[5]
+
                 if (row, column) in dirty.get(level, ()):
                     continue
                 self._pinned.setdefault(key, slab)
@@ -753,8 +802,10 @@ class Composer:
         """Carry the piece index forward, rebuilding only the dirtied pieces."""
         with donor._indexing:
             copied = {level: dict(index) for level, index in donor._indexed.items()}
+
         for level, index in copied.items():
             fresh = []
+
             for name, tile in now_drawn:
                 at = self.mosaic.lands_at(tile, level)
                 held = tile.copies[level].shape
@@ -766,26 +817,33 @@ class Composer:
                     )
                 }
                 fresh.append((name, tile, at, covered))
+
             for target in dirty.get(level, ()):
                 rebuilt = []
                 swapped: set[str] = set()
+
                 for tile, at in index.get(target, ()):
                     name = tile.name.split(".")[0]
+
                     if name not in changed:
                         rebuilt.append((tile, at))
                         continue
+
                     for fresh_name, fresh_tile, fresh_at, covered in fresh:
                         if fresh_name == name and target in covered:
                             rebuilt.append((fresh_tile, fresh_at))
                             swapped.add(name)
                             break
+
                 for fresh_name, fresh_tile, fresh_at, covered in fresh:
                     if fresh_name not in swapped and target in covered:
                         rebuilt.append((fresh_tile, fresh_at))
+
                 if rebuilt:
                     index[target] = rebuilt
                 else:
                     index.pop(target, None)
+
         with self._indexing:
             for level, index in copied.items():
                 self._indexed.setdefault(level, index)
@@ -800,6 +858,7 @@ class Composer:
     def slab_depth(self, level: int) -> int:
         """How many planes one of the tiles' files holds at this resolution."""
         declared = getattr(self.mosaic, "slab_depths", None)
+
         if declared is not None:
             return int(declared[level])
         return int(self.mosaic.tiles[0].copies[level].chunks[0])
@@ -809,15 +868,20 @@ class Composer:
     def _tiles_in_each_piece(self, level: int) -> dict[tuple[int, int], list]:
         """Which tiles fall in each piece of the picture, worked out once."""
         found = self._indexed.get(level)
+
         if found is not None:
             return found
+
         with self._indexing:
             found = self._indexed.get(level)
+
             if found is not None:
                 return found
             index: dict[tuple[int, int], list] = {}
+
             for tile, at in self.mosaic.placements(level):
                 held = tile.copies[level].shape
+
                 for row in range(at[1] // self.piece, (at[1] + held[1] - 1) // self.piece + 1):
                     for column in range(
                         at[2] // self.piece, (at[2] + held[2] - 1) // self.piece + 1
@@ -829,13 +893,16 @@ class Composer:
     def _a_block_of(self, copy, at: tuple[int, int, int], outer: tuple[int, ...]) -> np.ndarray:
         """One whole stored block of a tile, decoded, kept for whoever needs it next."""
         key = (copy.held_in, outer, at)
+
         with self._block_guard:
             found = self._blocks.get(key)
+
             if found is not None:
                 self._blocks.move_to_end(key)
                 return found
 
         size = copy.chunks
+
         if copy.presence is not None and not copy.presence(outer + at):
             raise MissingCommittedGround(
                 f"{copy.held_in} was published, but its block {outer + at} is "
@@ -859,6 +926,7 @@ class Composer:
                 self._blocks_weigh += held.nbytes
             self._blocks[key] = held
             self._blocks.move_to_end(key)
+
             while len(self._blocks) > 1 and self._blocks_weigh > self._blocks_weighing_at_most:
                 _, dropped = self._blocks.popitem(last=False)
                 self._blocks_weigh -= dropped.nbytes
@@ -872,6 +940,7 @@ class Composer:
         reading_began = time.perf_counter()
         size = copy.chunks
         out = np.empty(tuple(high[axis] - low[axis] for axis in range(3)), copy.dtype)
+
         for bz in range(low[0] // size[0], (high[0] - 1) // size[0] + 1):
             for by in range(low[1] // size[1], (high[1] - 1) // size[1] + 1):
                 for bx in range(low[2] // size[2], (high[2] - 1) // size[2] + 1):
@@ -881,6 +950,7 @@ class Composer:
                     to = tuple(
                         min(high[axis], began[axis] + block.shape[axis]) for axis in range(3)
                     )
+
                     if any(from_[axis] >= to[axis] for axis in range(3)):
                         continue
                     out[
@@ -910,6 +980,7 @@ class Composer:
         right = min(left + self.piece, width)
 
         slab = np.zeros((high_z - low_z, self.piece, self.piece), self.mosaic.dtype)
+
         for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
             if not _tile_has_the_frame(tile, level, moment, channel):
                 continue
@@ -918,6 +989,7 @@ class Composer:
                 moment if name == "t" else channel for name in the_front_axes(copy.outer_shape)
             )
             held = copy.shape
+
             if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
                 continue
             from_z, to_z = max(low_z, at[0]), min(high_z, at[0] + held[0])
@@ -944,25 +1016,31 @@ class Composer:
         depth = self.slab_depth(level)
         key = (moment, channel, level, (plane // depth) * depth, row, column)
         pinned = self._pinning and level in self.pinned_levels
+
         with self._guard:
             found = self._pinned.get(key)
+
             if found is not None:
                 self.costs["slabs_warm"] += 1
                 return found
             found = self._slabs.get(key)
+
             if found is not None:
                 self._slabs.move_to_end(key)
                 self.costs["slabs_warm"] += 1
                 return found
         built = self._built_wherever(level, plane, row, column, moment, channel)
+
         with self._guard:
             if pinned:
                 self._pinned.setdefault(key, built)
                 return self._pinned[key]
+
             if key not in self._slabs:
                 self._weighs += built.nbytes
             self._slabs[key] = built
             self._slabs.move_to_end(key)
+
             while len(self._slabs) > 1 and self._weighs > self._weighing_at_most:
                 _, dropped = self._slabs.popitem(last=False)
                 self._weighs -= dropped.nbytes
@@ -974,13 +1052,17 @@ class Composer:
         if self._pinned_levels is not None:
             return self._pinned_levels
         full = 1
+
         for side in self.mosaic.shape(0):
             full *= side
         pinned = {self.mosaic.levels - 1}
+
         for level in range(self.mosaic.levels):
             voxels = 1
+
             for side in self.mosaic.shape(level):
                 voxels *= side
+
             if voxels <= PINNED_SHARE * full:
                 pinned.add(level)
         self._pinned_levels = frozenset(pinned)
@@ -992,10 +1074,12 @@ class Composer:
         if self._warm_store is not None and not self._blocks_prefilled:
             return False
         wanted = 0
+
         for level in self.pinned_levels:
             deep, down, across = self.grid(level)
             slabs_deep = -(-self.mosaic.shape(level)[0] // self.slab_depth(level))
             wanted += slabs_deep * down * across
+
         with self._guard:
             return len(self._pinned) >= wanted
 
@@ -1006,17 +1090,21 @@ class Composer:
             depth = self.slab_depth(level)
             deep, down, across = self.grid(level)
             planes = self.mosaic.shape(level)[0]
+
             for low_z in range(0, planes, depth):
                 for row in range(down):
                     for column in range(across):
                         if stop is not None and stop.is_set():
                             return
+
                         while self._answering:
                             time.sleep(0.005)
+
                         if baked is None:
                             self._slab_for(level, low_z, row, column)
                         else:
                             self._a_slab_read_back(baked, level, low_z, row, column)
+
         if self._warm_store is not None:
             for level in sorted(self.pinned_levels, reverse=True):
                 for tile, _ in self.mosaic.placements(level):
@@ -1025,13 +1113,16 @@ class Composer:
                         -(-size // chunk)
                         for size, chunk in zip(copy.shape[-3:], copy.chunks, strict=True)
                     ]
+
                     for z in range(blocks[0]):
                         for y in range(blocks[1]):
                             for x in range(blocks[2]):
                                 if stop is not None and stop.is_set():
                                     return
+
                                 while self._answering:
                                     time.sleep(0.005)
+
                                 try:
                                     self._a_block_of(copy, (z, y, x))
                                 except Exception:
@@ -1046,6 +1137,7 @@ class Composer:
         """The baked array for one level, opened once per warm, or ``None``."""
         if self._warm_store is None or level not in self._warm_store[1]:
             return None
+
         try:
             return zarr.open_array(str(self._warm_store[0] / str(level)), mode="r")
         except Exception:
@@ -1057,6 +1149,7 @@ class Composer:
         """One slab lifted from the baked files, installed as if built."""
         depth = self.slab_depth(level)
         key = (0, 0, level, low_z, row, column)
+
         with self._guard:
             if key in self._pinned or key in self._slabs:
                 return
@@ -1075,6 +1168,7 @@ class Composer:
         )
         slab = np.zeros((high_z - low_z, self.piece, self.piece), self.mosaic.dtype)
         slab[:, : lifted.shape[1], : lifted.shape[2]] = lifted
+
         with self._guard:
             if self._pinning and level in self.pinned_levels:
                 self._pinned.setdefault(key, slab)
@@ -1093,6 +1187,7 @@ class Composer:
         """Build a slab here, or hand it to a worker process when they exist."""
         if self._workers == 1:
             return self._build_slab(level, plane, row, column, moment, channel)
+
         with self._pool_guard:
             if self._pool is None:
                 budget = SLABS_WEIGH_AT_MOST // self._workers
@@ -1111,8 +1206,10 @@ class Composer:
     def close(self) -> None:
         """Stop the warmer and let the worker processes go."""
         self.stop_warming()
+
         with self._pool_guard:
             pool, self._pool = self._pool, None
+
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
 
@@ -1136,6 +1233,7 @@ class Composer:
     def _my_encoder(self):
         """This thread's own little array to encode a piece through."""
         held = getattr(self._encoders, "array", None)
+
         if held is None:
             held = zarr.create_array(
                 store=zarr.storage.MemoryStore(),
@@ -1155,8 +1253,10 @@ class Composer:
         """One piece of the picture as its numbers, for measuring, not serving."""
         with self._guard:
             self._answering += 1
+
         try:
             covering = self._tiles_in_each_piece(level).get((row, column), ())
+
             if not any(_tile_has_the_frame(tile, level, moment, channel) for tile, _ in covering):
                 return None
             slab = self._slab_for(level, plane, row, column, moment, channel)
@@ -1173,13 +1273,16 @@ class Composer:
         """One piece of the picture, encoded exactly as its description promises."""
         with self._guard:
             self._answering += 1
+
         try:
             covering = self._tiles_in_each_piece(level).get((row, column), ())
+
             if not any(_tile_has_the_frame(tile, level, moment, channel) for tile, _ in covering):
                 return None
             slab = self._slab_for(level, plane, row, column, moment, channel)
             depth = self.slab_depth(level)
             piece = slab[plane - (plane // depth) * depth]
+
             if not piece.any():
                 return None
             encoding_began = time.perf_counter()
@@ -1200,9 +1303,11 @@ class Composer:
         base = self.mosaic.voxel_um(0)
         grown = self.mosaic.frame_room != (1, 1)
         datasets = []
+
         for level in range(self.mosaic.levels):
             voxel = self.mosaic.voxel_um(level)
             at = list(self.mosaic.corner_um)
+
             if self.mosaic.averaged:
                 at = [at[axis] + (voxel[axis] - base[axis]) / 2 for axis in range(3)]
             datasets.append(

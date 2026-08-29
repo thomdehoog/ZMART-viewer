@@ -55,6 +55,7 @@ class Announcements:
     def listen(self) -> queue.SimpleQueue:
         """Start listening. Returns the queue to read messages from."""
         waiting: queue.SimpleQueue = queue.SimpleQueue()
+
         with self._lock:
             if self._closed:
                 # The server is shutting down, so hand back something that ends
@@ -76,15 +77,18 @@ class Announcements:
     ) -> int:
         """Tell every open page to ask again. Returns how many were told."""
         message = IMAGE_WRITTEN_IN_PLACE if image_written_in_place else SOMETHING_CHANGED
+
         with self._lock:
             if covering is not None:
                 self._already_told = covering
             listeners = list(self._listeners)
+
         if self._when_changed is not None:
             try:
                 self._when_changed()
             except Exception:
                 log.exception("server-side announcement work failed")
+
         for waiting in listeners:
             waiting.put(message)
         return len(listeners)
@@ -100,6 +104,7 @@ class Announcements:
             self._closed = True
             listeners = list(self._listeners)
             self._listeners.clear()
+
         for waiting in listeners:
             waiting.put(None)
 
@@ -136,12 +141,14 @@ class FolderWatcher:
 
     def stop(self) -> None:
         self._stop.set()
+
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
 
     def _watch(self) -> None:
         last = None
+
         while not self._stop.is_set():
             try:
                 now = (
@@ -153,6 +160,7 @@ class FolderWatcher:
                 # A folder that cannot be read this moment -- a share hiccuping --
                 # is not a reason to stop watching for the rest of the session.
                 now = last
+
             if last is not None and now != last:
                 if now != self._announcements.already_told_about():
                     self._announcements.say_something_changed()
@@ -186,14 +194,17 @@ class ManifestWatcher:
         self._announced = {
             tracker: revision for tracker, revision in self._announced.items() if tracker in alive
         }
+
         for tracker in trackers:
             tracker.observe()
+
             if tracker not in self._announced:
                 self._announced[tracker] = tracker.revision
                 self._announcements.say_something_changed()
                 announced += 1
                 continue
             previous = self._announced[tracker]
+
             if tracker.error is not None or tracker.revision <= previous:
                 continue
             self._announced[tracker] = tracker.revision
@@ -213,6 +224,7 @@ class ManifestWatcher:
 
     def stop(self) -> None:
         self._stop.set()
+
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
@@ -236,6 +248,7 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
     """The governed picture this run is served by, declared if needed."""
     store = run_root / LIVE_PICTURE
     grown = _the_run_is_grown(run_root)
+
     if _already_this_runs_picture(store, run_root, grown, bake):
         return store
     began = time.perf_counter()
@@ -256,14 +269,17 @@ def _the_run_is_grown(run_root: Path) -> bool:
     from zmart_live.gateway import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
+
     if profile.timepoints > 1 or len(profile.channels) > 1:
         return True
     collection = run_root / "data" / "survey.ome.zarr"
+
     for member in sorted(collection.glob("*/0/zarr.json")):
         try:
             shape = json.loads(member.read_text(encoding="utf-8")).get("shape")
         except (OSError, ValueError):
             continue
+
         if shape and len(shape) == 5:
             return shape[0] > 1 or shape[1] > 1
     return False
@@ -277,8 +293,10 @@ def _already_this_runs_picture(store: Path, run_root: Path, grown: bool, bake: b
         return False
     ours = (described.get("attributes") or {}).get("zmart") or {}
     governs = ours.get("governed_from")
+
     if not governs:
         return False
+
     try:
         if Path(governs).resolve() != run_root.resolve():
             return False
@@ -313,6 +331,7 @@ class LiveBinding:
     def source_url(self, relative_url: str) -> str:
         """A stable browser URL, relative to the opened library root."""
         store = self._source_store(relative_url)
+
         try:
             inside = store.relative_to(self.dataset_root)
         except ValueError as why:
@@ -325,6 +344,7 @@ class LiveBinding:
     def state_json(self, snapshot: LiveStateSnapshot | None = None) -> dict:
         """The run's frontend state, naming the source actually served."""
         answer = (snapshot or self.tracker.snapshot()).to_json()
+
         for source in answer.get("sources", ()):
             if source.get("role") == "linked":
                 source["url"] = LIVE_PICTURE
@@ -353,17 +373,21 @@ class LiveRegistry:
             bindings: list[LiveBinding] = []
             used_roots: set[Path] = set()
             errors: dict[Path, str] = {}
+
             for dataset in datasets:
                 run_root = live_run_holding(dataset.root)
+
                 if run_root is None:
                     continue
                 picture = (run_root / LIVE_PICTURE).resolve()
                 opened = Path(dataset.root).resolve()
+
                 if not (opened == picture or opened in picture.parents):
                     continue
                 governed.add(dataset.number)
                 dataset.watch = False
                 tracker = self._trackers_by_root.get(run_root)
+
                 if tracker is None:
                     try:
                         tracker = LiveStateTracker(run_root)
@@ -375,6 +399,7 @@ class LiveRegistry:
                     self._trackers_by_root[run_root] = tracker
                 used_roots.add(run_root)
                 refused = self._without_a_picture(run_root)
+
                 if refused is not None:
                     errors[run_root] = refused
                     continue
@@ -406,10 +431,12 @@ class LiveRegistry:
         if run_root in self._pictures:
             return None
         stumbled = self._picture_refused.get(run_root)
+
         if stumbled is not None:
             if time.monotonic() - stumbled[0] < _DECLARE_RETRY_S:
                 return stumbled[1]
             del self._picture_refused[run_root]
+
         try:
             made = the_live_picture_declared(run_root, bake=self._wants_the_bake(run_root))
         except Exception as why:  # noqa: BLE001 - reported and retried, never hidden
@@ -440,8 +467,10 @@ def capture_live_state(
     """Observe and pin one immutable state/scene pair for every binding."""
     snapshots: dict[int, LiveStateSnapshot] = {}
     by_tracker: dict[LiveStateTracker, LiveStateSnapshot] = {}
+
     for binding in bindings:
         snapshot = by_tracker.get(binding.tracker)
+
         if snapshot is None:
             binding.tracker.observe()
             snapshot = by_tracker[binding.tracker] = binding.tracker.snapshot()
@@ -458,8 +487,10 @@ def live_state_document(
     if snapshots is None:
         snapshots = {}
         by_tracker: dict[LiveStateTracker, LiveStateSnapshot] = {}
+
         for binding in bindings:
             snapshot = by_tracker.get(binding.tracker)
+
             if snapshot is None:
                 binding.tracker.observe()
                 snapshot = by_tracker[binding.tracker] = binding.tracker.snapshot()
@@ -511,12 +542,14 @@ def live_rows(
     """Rows for one compiled scene, bounded by views and channels."""
     snapshot = snapshot or binding.tracker.snapshot()
     scene = snapshot.scene
+
     if scene is None:
         return []
     frontend_sources = {source.source_id: source for source in snapshot.state.sources}
     compiled_sources = {source.source_id: source for source in scene.sources}
     described = the_runs_channels(binding.run_root)
     rows = []
+
     for layer in scene.layers:
         source_states = [frontend_sources[source_id] for source_id in layer.source_ids]
         sources = [compiled_sources[source_id] for source_id in layer.source_ids]

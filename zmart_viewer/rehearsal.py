@@ -41,6 +41,7 @@ class ReplayPlan:
 def _evenly_spaced(offsets: list[float]) -> bool:
     """Do these offsets sit a single fixed step apart?"""
     distinct = sorted(set(offsets))
+
     if len(distinct) < 2:
         return True
     steps = [b - a for a, b in zip(distinct, distinct[1:], strict=False)]
@@ -50,6 +51,7 @@ def _evenly_spaced(offsets: list[float]) -> bool:
 def _the_one_step(offsets: list[float]) -> float | None:
     """The single step these offsets sit at, or None when there is not one."""
     distinct = sorted(set(offsets))
+
     if len(distinct) < 2 or not _evenly_spaced(offsets):
         return None
     return distinct[1] - distinct[0]
@@ -82,9 +84,11 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
     )
 
     shares = []
+
     for step, side, axis in zip(steps_px, frame, ("down", "across"), strict=True):
         if step is None:
             continue
+
         if step > side:
             raise ValueError(
                 f"these positions sit {step * voxel['y']:.1f} micrometres apart "
@@ -123,6 +127,7 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
         defaults=defaults,
     )
     wanted = tuple(None if step is None else round(step) for step in steps_px)
+
     if any(
         step is not None and step != planned
         for step, planned in zip(wanted, geometry.step_shape, strict=True)
@@ -139,6 +144,7 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
         min(corner[1] for corner in corners.values()),
     )
     ordered, positions = [], {}
+
     for tile in sorted(mosaic.tiles, key=lambda t: corners[t.name]):
         name = tile.name.removesuffix(".ome.zarr")
         corner = corners[tile.name]
@@ -169,19 +175,24 @@ def replay_the_dataset(
     publisher = LivePublisher(
         Path(folder), plan.profile, run_id=Path(transfer).name, positions=plan.positions
     )
+
     if told:
         told(0, plan.total)
+
     try:
         for number, (name, held_in, front, moment) in enumerate(plan.beats):
             if number and every_s:
                 time.sleep(every_s)
             held = zarr.open_array(str(held_in), mode="r")
             pixels = held[moment] if "t" in front else held[:]
+
             if "c" not in front:
                 pixels = pixels[None]
             publisher.write_and_publish(name, pixels, timepoint=moment)
+
             if told:
                 told(number + 1, plan.total)
+
             if announce:
                 announce()
     finally:
