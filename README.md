@@ -249,7 +249,7 @@ arrived, not merely that the page loaded. It needs a one-time browser download:
 
 ```bash
 playwright install chromium
-python app/server/browsercheck.py     # 0 = rendered, 1 = did not, 2 = could not run
+python tests/browsercheck.py     # 0 = rendered, 1 = did not, 2 = could not run
 ```
 
 It prints a per-check table and writes a screenshot to `backend/_check/render.png`.
@@ -278,12 +278,11 @@ set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
 
 | Path | What it is |
 |---|---|
-| `frontend/` | The React + neuroglancer app (built into `app/page/dist`). |
-| `app/server/demo_data.py` | Makes the demo OME-Zarr volume. |
-| `app/server/server.py` | The small local web server (built page + image data + a JSON command endpoint). |
-| `app/server/launcher.py` | Opens the studio in a native desktop window (pywebview). |
-| `app/server/browsercheck.py` | Automated rendering check in a real headless browser. |
-| `run_demo.py` | One command: make the demo volume and open the window. |
+| `app/page/` | The React + neuroglancer app (built into `app/page/dist`). |
+| `zmart_viewer/` | The backend package: the server, the one loading door, the picture builders. |
+| `testdata/demo_data.py` | Makes the demo OME-Zarr volume. |
+| `tests/browsercheck.py` | Automated rendering check in a real headless browser. |
+| `demos/run_demo.py` | One command: make the demo volume and open the window. |
 | `docs/how_it_works/DATA_LAYOUT.md` | How a run is written to disk and shown, and why. The design record. |
 | `docs/open/NEXT_STEPS.md` | What is known to be unfinished or wrong, and what to pick up next. |
 | `docs/how_it_works/TESTING.md` | How to run the tests, and what each group of them is for. |
@@ -295,7 +294,7 @@ set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
   Python (analysis, microscope control, writes OME-Zarr)
       │  serves image chunks over HTTP  +  small JSON commands
       ▼
-  app/server/server.py  ──►  one local address (http://127.0.0.1:8848)
+  zmart_viewer/server.py  ──►  one local address (http://127.0.0.1:8848)
       ▲
       │  reads image chunks, sends commands
   frontend (React UI + neuroglancer engine)  ──►  shown in a native window
