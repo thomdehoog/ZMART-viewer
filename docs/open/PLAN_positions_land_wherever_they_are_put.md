@@ -195,7 +195,10 @@ the dtype), and a flat two-axis store crashed the tile reader instead
 of being refused in words. It also settled two contract points the plan
 had left open: the composer rounds halves up (floor of value plus one
 half — the oracle's first random sweep caught the difference from
-banker's rounding immediately), and a scattered run cannot yet FINISH
-(the deferred link map refuses at run end before any sealing is
-recorded) — the graceful answer belongs to zmart_live and is the one
-piece of this chapter that lives in the microscopy checkout.
+banker's rounding immediately), and a scattered run could not FINISH
+(the deferred link map refused at run end). That last piece is now
+designed, validated against this gate, and handed over:
+`HANDOVER_the_pointer_map_decides_on_day_zero.md` beside this plan
+carries the patch for the microscopy checkout — linkability decided at
+construction, `per_publish` refused before the first pixel, finish
+clean without the map.
