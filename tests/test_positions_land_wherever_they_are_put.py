@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import json
 import random
-import shutil
-import sys
 import urllib.request
 from pathlib import Path
 
@@ -55,17 +53,17 @@ def _multiscales(names: tuple[str, ...], levels: int, place: tuple[float, ...], 
     datasets = []
 
     for level in range(levels):
-        scale = [
-            float(LEVEL_SCALES[level]) if name in ("y", "x") else 1.0 for name in names
-        ]
+        scale = [float(LEVEL_SCALES[level]) if name in ("y", "x") else 1.0 for name in names]
         translation = [0.0] * (len(names) - len(place)) + list(place)
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale", "scale": scale},
-                {"type": "translation", "translation": translation},
-            ],
-        })
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": scale},
+                    {"type": "translation", "translation": translation},
+                ],
+            }
+        )
     return [{"version": version, "axes": _axes(names), "datasets": datasets}]
 
 
@@ -89,7 +87,10 @@ def write_position(
         side = size // LEVEL_SCALES[level]
         shape = front + (side, side)
         made = group.create_array(
-            str(level), shape=shape, chunks=shape, dtype=dtype,
+            str(level),
+            shape=shape,
+            chunks=shape,
+            dtype=dtype,
             **({"dimension_names": names} if v3 else {}),
         )
         made[:] = _stamped_body(shape, stamp + level, dtype)
@@ -97,10 +98,16 @@ def write_position(
     described = _multiscales(names, levels, place, version)
 
     if v3:
-        (path / "zarr.json").write_text(json.dumps({
-            "attributes": {"ome": {"version": "0.5", "multiscales": described}},
-            "zarr_format": 3, "node_type": "group",
-        }), encoding="utf-8")
+        (path / "zarr.json").write_text(
+            json.dumps(
+                {
+                    "attributes": {"ome": {"version": "0.5", "multiscales": described}},
+                    "zarr_format": 3,
+                    "node_type": "group",
+                }
+            ),
+            encoding="utf-8",
+        )
     else:
         (path / ".zattrs").write_text(json.dumps({"multiscales": described}), encoding="utf-8")
 
@@ -115,20 +122,19 @@ def scattered_places(count: int, size: int, seed: int) -> list[tuple[float, floa
     ]
     places[:0] = [
         (0.0, 0.0),
-        (0.0, 0.0),                       # an exact duplicate
-        (10.3, 17.8),                     # fractional
-        (-float(size // 2), -8.5),        # a negative corner
-        (5.0, room + 6 * size + 0.4),     # a far outlier
+        (0.0, 0.0),  # an exact duplicate
+        (10.3, 17.8),  # fractional
+        (-float(size // 2), -8.5),  # a negative corner
+        (5.0, room + 6 * size + 0.4),  # a far outlier
     ]
     return [place for place in places if abs(place[0] * 10 % 10 - 5) > 0.01]
 
 
 def nominal_places(count: int, size: int) -> list[tuple[float, float]]:
     step = size - size // 8
-    across = max(2, int(count ** 0.5))
+    across = max(2, int(count**0.5))
     return [
-        (float(step * (index // across)), float(step * (index % across)))
-        for index in range(count)
+        (float(step * (index // across)), float(step * (index % across))) for index in range(count)
     ]
 
 
@@ -183,7 +189,9 @@ def reference_paste(folder: Path, level: int) -> tuple[np.ndarray, dict[str, tup
     return pasted, placements
 
 
-def where_the_markers_landed(picture: np.ndarray, expected: dict[str, tuple[int, int]]) -> list[str]:
+def where_the_markers_landed(
+    picture: np.ndarray, expected: dict[str, tuple[int, int]]
+) -> list[str]:
     """Every marker's asked-for corner against where it actually is."""
     report = []
 
@@ -234,8 +242,7 @@ def assert_placed(folder: Path, composer: Composer, *, levels: int = 2) -> None:
         if not np.array_equal(served, expected):
             differs = np.argwhere(served != expected)
             cells = ", ".join(
-                f"({y},{x}) served {served[y, x]} expected {expected[y, x]}"
-                for y, x in differs[:6]
+                f"({y},{x}) served {served[y, x]} expected {expected[y, x]}" for y, x in differs[:6]
             )
             report = "\n".join(where_the_markers_landed(served, placements))
             raise AssertionError(
@@ -258,10 +265,10 @@ def test_the_reference_is_pinned_by_hand(tmp_path):
     write_position(folder / "pos_c.zarr", 300, (10.0, 20.0), size=8)
     _, placements = reference_paste(folder, 0)
     assert placements["pos_a.zarr"] == (0, 0)
-    assert placements["pos_b.zarr"] == (0, 0)      # 3.6 - 3.4 = 0.2 rounds away
-    assert placements["pos_c.zarr"] == (10, 17)    # 20 - 3.4 = 16.6 rounds to 17
+    assert placements["pos_b.zarr"] == (0, 0)  # 3.6 - 3.4 = 0.2 rounds away
+    assert placements["pos_c.zarr"] == (10, 17)  # 20 - 3.4 = 16.6 rounds to 17
     _, placements = reference_paste(folder, 1)
-    assert placements["pos_c.zarr"] == (5, 8)      # 16.6 / 2 = 8.3 rounds to 8
+    assert placements["pos_c.zarr"] == (5, 8)  # 16.6 / 2 = 8.3 rounds to 8
 
     served = Composer(read_the_transfer(folder))
     try:
@@ -300,7 +307,6 @@ def test_a_flat_store_is_refused_from_composing_in_plain_words(tmp_path):
         read_the_transfer(folder)
 
 
-
 SHAPES = [
     ("v04", {"version": "0.4"}),
     ("v05", {"version": "0.5"}),
@@ -322,9 +328,7 @@ def a_scattered_run(folder: Path, spelling: dict, places) -> None:
 @pytest.mark.parametrize("name,spelling", SHAPES, ids=[name for name, _ in SHAPES])
 @pytest.mark.parametrize("arrangement", ["nominal", "scattered"])
 def test_static_positions_land_where_put(tmp_path, name, spelling, arrangement):
-    places = (
-        nominal_places(6, 64) if arrangement == "nominal" else scattered_places(6, 64, seed=41)
-    )
+    places = nominal_places(6, 64) if arrangement == "nominal" else scattered_places(6, 64, seed=41)
     folder = tmp_path / "run"
     a_scattered_run(folder, spelling, places)
     composer = Composer(read_the_transfer(folder))
@@ -338,9 +342,7 @@ def test_static_positions_land_where_put(tmp_path, name, spelling, arrangement):
 @pytest.mark.parametrize("arrangement", ["nominal", "scattered"])
 def test_baked_equals_unbaked_where_put(tmp_path, arrangement):
     """The bake writes exactly what composing would have served."""
-    places = (
-        nominal_places(5, 64) if arrangement == "nominal" else scattered_places(5, 64, seed=42)
-    )
+    places = nominal_places(5, 64) if arrangement == "nominal" else scattered_places(5, 64, seed=42)
     folder = tmp_path / "run"
     a_scattered_run(folder, {"version": "0.5"}, places)
 
@@ -356,9 +358,11 @@ def test_baked_equals_unbaked_where_put(tmp_path, arrangement):
         for level in [int(one) for one in levels]:
             expected, _ = reference_paste(folder, level)
             written = zarr.open_array(str(baked / str(level)), mode="r")[...]
-            flat = written.reshape(written.shape[-2:]) if written.ndim == 2 else written[
-                (0,) * (written.ndim - 2)
-            ]
+            flat = (
+                written.reshape(written.shape[-2:])
+                if written.ndim == 2
+                else written[(0,) * (written.ndim - 2)]
+            )
             assert np.array_equal(flat, expected), f"baked level {level} differs from composed"
     finally:
         composer.close()
@@ -367,8 +371,9 @@ def test_baked_equals_unbaked_where_put(tmp_path, arrangement):
 
 def test_the_real_door_serves_the_scattered_picture(tmp_path):
     """One scattered case through HTTP: the ladder answers what the composer would."""
-    from zmart_viewer.server import make_server
     import threading
+
+    from zmart_viewer.server import make_server
 
     places = scattered_places(4, 64, seed=43)
     folder = tmp_path / "run"
@@ -396,9 +401,9 @@ def test_the_real_door_serves_the_scattered_picture(tmp_path):
 FRAME = 384
 SCATTERED_ORIGINS = {
     "posA": {"y": 0, "x": 0},
-    "posB": {"y": 190, "x": 117},   # overlaps posA, off the chunk grid
-    "posC": {"y": 40, "x": 1100},   # a far outlier
-    "posD": {"y": 190, "x": 117},   # lands exactly on posB, committed later
+    "posB": {"y": 190, "x": 117},  # overlaps posA, off the chunk grid
+    "posC": {"y": 40, "x": 1100},  # a far outlier
+    "posD": {"y": 190, "x": 117},  # lands exactly on posB, committed later
 }
 
 
@@ -439,8 +444,11 @@ def _publish_scattered(run: Path, *, linked_view: str = "at_run_end"):
     from zmart_live.coordinator import LivePublisher
 
     publisher = LivePublisher(
-        run, _live_profile(), run_id="gate-scatter",
-        positions=SCATTERED_ORIGINS, linked_view=linked_view,
+        run,
+        _live_profile(),
+        run_id="gate-scatter",
+        positions=SCATTERED_ORIGINS,
+        linked_view=linked_view,
     )
 
     for index, name in enumerate(sorted(SCATTERED_ORIGINS)):
@@ -456,8 +464,11 @@ def test_live_scattered_landings_place_and_overlap_by_commit(tmp_path):
 
     run = tmp_path / "run"
     publisher = LivePublisher(
-        run, _live_profile(), run_id="gate-scatter",
-        positions=SCATTERED_ORIGINS, linked_view="at_run_end",
+        run,
+        _live_profile(),
+        run_id="gate-scatter",
+        positions=SCATTERED_ORIGINS,
+        linked_view="at_run_end",
     )
 
     for index, name in enumerate(sorted(SCATTERED_ORIGINS)):
@@ -563,3 +574,94 @@ def test_a_scattered_dataset_replays_where_it_sits(tmp_path):
             )
     finally:
         composer.close()
+
+
+# -- the plate row --------------------------------------------------------------
+
+
+def test_a_plates_fields_may_overlap_where_recorded(tmp_path):
+    """Overlapping recorded field places are honoured, later-sorted field on top."""
+    from test_a_plate_lays_itself_out import a_plate_of_placed_fields
+
+    plate = a_plate_of_placed_fields(tmp_path) / "plate.ome.zarr"
+    overlapping = [(5.0, 3.0), (12.4, 9.0), (12.4, 9.0)]
+
+    for field, place in enumerate(overlapping):
+        described_file = plate / "A" / "1" / str(field) / "zarr.json"
+        described = json.loads(described_file.read_text())
+        transforms = described["attributes"]["ome"]["multiscales"][0]["datasets"][0][
+            "coordinateTransformations"
+        ]
+        transforms[-1]["translation"] = [0.0, place[0], place[1]]
+        described_file.write_text(json.dumps(described), encoding="utf-8")
+
+    mosaic = read_the_transfer(plate)
+    corners = {tile.name: tile.copies[0].corner_um[1:] for tile in mosaic.tiles}
+    base = corners["A1-0"]
+
+    for field, place in enumerate(overlapping):
+        delta = (
+            corners[f"A1-{field}"][0] - base[0],
+            corners[f"A1-{field}"][1] - base[1],
+        )
+        recorded = (place[0] - overlapping[0][0], place[1] - overlapping[0][1])
+        assert delta == recorded, (
+            f"field {field} asked to sit {recorded} micrometres from field 0 "
+            f"but was placed {delta} away"
+        )
+
+    composer = Composer(mosaic)
+
+    try:
+        voxel = mosaic.voxel_um(0)
+        inside = (
+            int((corners["A1-2"][0] - mosaic.corner_um[1]) / voxel[1]) + 2,
+            int((corners["A1-2"][1] - mosaic.corner_um[2]) / voxel[2]) + 2,
+        )
+        served = served_level(composer, 0)
+        assert served[inside] == 1200, (
+            f"the ground both overlapping fields cover shows {served[inside]}; "
+            "the later-sorted field (A1-2, stamped 1200) must be on top"
+        )
+    finally:
+        composer.close()
+
+
+# -- the photographed flagship --------------------------------------------------
+
+
+def test_scattered_markers_survive_the_engine(browser, built_dist, tmp_path):
+    """One scattered, baked, multi-channel 0.5 case through the real page.
+
+    Array equality cannot say whether the translations survive the engine's
+    own transform; a photograph can. The picture is four scattered stamped
+    tiles; the gate is that bright ground appears, and appears inside the
+    scattered bounding box rather than a grid's.
+    """
+    import threading
+
+    from zmart_viewer.server import make_server
+
+    places = [(0.0, 0.0), (40.6, 71.3), (13.0, 300.0), (40.6, 71.3)]
+    folder = tmp_path / "run"
+    a_scattered_run(folder, {"version": "0.5", "names": ("c", "z", "y", "x")}, places)
+    store = declare_a_built_picture(tmp_path / "views", folder, name="flagship", bake=True)
+
+    server = make_server(port=0, data_dir=store.parent, store=[store.name], live=False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    page = browser.new_page(viewport={"width": 800, "height": 600})
+
+    try:
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
+        page.wait_for_timeout(2_000)
+        from pixels import fraction_lit
+
+        lit = fraction_lit(page)
+        assert lit > 0.02, f"the scattered picture drew nothing ({lit:.1%} lit)"
+    finally:
+        page.close()
+        server.shutdown()
+        thread.join(timeout=5)

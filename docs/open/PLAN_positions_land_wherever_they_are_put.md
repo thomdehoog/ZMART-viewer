@@ -1,6 +1,8 @@
 # Positions land wherever they are put: the free-placement gate
 
-> Written 2026-08-29. A plan, not yet built. It designs one new test
+> Written 2026-08-29, built the same day:
+> `tests/test_positions_land_wherever_they_are_put.py`, 26 gates, all
+> green. Two findings on the way in are recorded at the end. It designs one new test
 > file that pins a property the suite only grazes today: a position's
 > pixels appear exactly where that position's own translation says, for
 > translations chosen adversarially — random, fractional, overlapping,
@@ -176,3 +178,24 @@ writers are imported from where they already live. Budget: the whole
 non-browser matrix in a few minutes, the flagship under the usual
 browser-test minute — small enough to run on every change, which is the
 point of a gate about a property everything else stands on.
+
+## Built, and what building found
+
+The gate exists and is green: the static matrix (both generations,
+multichannel, timelapse, the awkward dtypes, nominal and scattered),
+bake-equals-unbaked, one case through the real HTTP door, the plate
+with overlapping recorded places, every live landing checked as it
+commits, the scattered off-chunk replay end to end, the pointer map's
+refusal pinned at both moments, and the photographed flagship.
+
+Building it found and fixed two real faults: an eight-bit store could
+not be composed at all (the codec honesty guard tripped over the
+endianness a one-byte dtype does not have — the declaration now follows
+the dtype), and a flat two-axis store crashed the tile reader instead
+of being refused in words. It also settled two contract points the plan
+had left open: the composer rounds halves up (floor of value plus one
+half — the oracle's first random sweep caught the difference from
+banker's rounding immediately), and a scattered run cannot yet FINISH
+(the deferred link map refuses at run end before any sealing is
+recorded) — the graceful answer belongs to zmart_live and is the one
+piece of this chapter that lives in the microscopy checkout.
