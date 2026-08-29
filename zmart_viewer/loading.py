@@ -15,8 +15,8 @@ from pathlib import Path
 
 from zmart_live.gateway import live_run_holding
 
-from .live_config import LIVE_PICTURE, the_live_picture_declared
-from .stores import DESCRIPTION_FILES, is_store
+from .library import DESCRIPTION_FILES, is_store
+from .live import LIVE_PICTURE, the_live_picture_declared
 
 
 class CannotOpen(Exception):
@@ -68,7 +68,7 @@ def scene_behind_a_plate(target: Path) -> Path | None:
     """The laid-out scene to open instead, when the target is an HCS plate."""
     if not target.is_dir():
         return None
-    from .mosaic import _the_description_of  # deferred: pulls numpy and zarr
+    from .compose import _the_description_of  # deferred: pulls numpy and zarr
 
     try:
         described, _ = _the_description_of(target)
@@ -76,7 +76,7 @@ def scene_behind_a_plate(target: Path) -> Path | None:
         return None
     if not isinstance(described.get("plate"), dict):
         return None
-    from .declare import declare_a_built_picture, the_scene_folder_name  # deferred
+    from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     scenes = target.parent / "scenes"
     existing = _scene_built_from(scenes / the_scene_folder_name(target.name), target)
@@ -100,7 +100,7 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
         return None
     if len(inside) < 2:
         return None
-    from .declare import declare_a_built_picture, the_scene_folder_name  # deferred
+    from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     existing = _scene_built_from(scenes / the_scene_folder_name(target.name), target)
     if existing is not None:

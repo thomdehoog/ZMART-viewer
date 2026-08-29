@@ -22,7 +22,7 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.declare import the_scene_folder_name  # noqa: E402
+from zmart_viewer.building import the_scene_folder_name  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 from test_a_dataset_is_relived_as_a_live_run import (  # noqa: E402
     _a_grid_scan,

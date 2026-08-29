@@ -59,8 +59,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.composer import Composer  # noqa: E402
-from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer.compose import Composer  # noqa: E402
+from zmart_viewer.compose import read_the_transfer  # noqa: E402
 
 # How large a patch to compare, in voxels of the coarse copy. Large enough to hold
 # structure a shift would spoil, small enough to read quickly.

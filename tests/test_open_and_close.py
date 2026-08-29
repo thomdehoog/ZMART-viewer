@@ -21,7 +21,7 @@ from zmart_viewer.server import make_server
 # Importing the server put the building folder on ``sys.path``; the naming
 # rule below is the one every built view follows, so no test spells the
 # ``.zmartview.zarr`` suffix by hand.
-from zmart_viewer.declare import the_scene_folder_name  # noqa: E402
+from zmart_viewer.building import the_scene_folder_name  # noqa: E402
 
 
 def _store(path, *, value=4000, channels=2):

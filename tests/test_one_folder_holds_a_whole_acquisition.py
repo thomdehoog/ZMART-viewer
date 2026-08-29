@@ -44,10 +44,10 @@ import shutil
 import sys
 from pathlib import Path
 
-from zmart_viewer import linking
+from zmart_viewer import pieces as linking
 import numpy as np
 import pytest
-from zmart_viewer.stores import discover
+from zmart_viewer.library import discover
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -218,7 +218,7 @@ def test_the_view_holds_no_picture_and_hands_over_the_position_s_own_bytes(tmp_p
     """
     placed, view = _a_plate_in_one_folder(tmp_path / "run")
 
-    found = linking.the_bytes_behind(view.path, "0/0/0/0/0/0")
+    found = linking.pointed_bytes_behind(view.path, "0/0/0/0/0/0")
     assert found is not None, (
         "with no pointer the view would answer 'nothing here' and draw blank at "
         "full size"
@@ -391,7 +391,7 @@ def test_a_run_still_arriving_can_be_built_this_way_too(tmp_path):
         assert view.tiles == len(placed)
     assert (run / "plate.ome.zarr" / POSITIONS).is_dir()
 
-    found = linking.the_bytes_behind(run / "plate.ome.zarr", "0/0/0/0/0/0")
+    found = linking.pointed_bytes_behind(run / "plate.ome.zarr", "0/0/0/0/0/0")
     assert found is not None
     served = (run / found.path).resolve()
     assert served.read_bytes() == (
@@ -437,7 +437,7 @@ def test_the_newer_format_works_in_one_folder_too(tmp_path):
     )
 
     asked_for = f"0/{listed['prefix']}/0/0/0/0/0"
-    found = linking.the_bytes_behind(view.path, asked_for)
+    found = linking.pointed_bytes_behind(view.path, asked_for)
     assert found is not None, f"no pointer for {asked_for}"
     served = (root / found.path).resolve()
     assert served.exists()
@@ -507,6 +507,6 @@ def test_the_view_beside_its_positions_still_works_exactly_as_before(tmp_path):
 
     assert view.path == run / "plate.ome.zarr"
     assert not (view.path / POSITIONS).exists()
-    found = linking.the_bytes_behind(view.path, "0/0/0/0/0/0")
+    found = linking.pointed_bytes_behind(view.path, "0/0/0/0/0/0")
     assert found is not None
     assert (run / found.path).resolve().exists()

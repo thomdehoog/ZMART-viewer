@@ -30,9 +30,9 @@ VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer import served  # noqa: E402
-from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.governed import GovernedRun  # noqa: E402
+from zmart_viewer import pieces as served  # noqa: E402
+from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.building import GovernedRun  # noqa: E402
 from test_the_composer_obeys_the_manifest import PIECE, a_governed_run, the_columns_of  # noqa: E402
 
 from zmart_live.fixtures import some_specimen  # noqa: E402
@@ -76,7 +76,7 @@ def test_declaring_with_bake_writes_the_coarse_ground_as_files(tmp_path):
             level, _, plane, row, column = Path(inside).parts
             if int(level) >= declared:
                 continue  # the picture's own levels exist only as baked files
-            computed = served.the_bytes_behind(
+            computed = served.built_bytes_behind(
                 plain, f"{level}/c/{plane}/{row}/{column}")
             assert computed == held, (
                 f"baked piece {inside} differs from the computed answer — "
@@ -105,7 +105,7 @@ def test_a_landing_patches_the_bake_to_match_a_fresh_one(tmp_path):
     run.write_and_publish("posB", some_specimen(4242))
     try:
         _, _, b_only = the_columns_of(run)
-        appeared = served.the_bytes_behind(store, f"0/c/0/0/{b_only}")
+        appeared = served.built_bytes_behind(store, f"0/c/0/0/{b_only}")
         assert appeared is not None, (
             "the landing must be served the moment its commit is visible"
         )
@@ -130,12 +130,12 @@ def test_a_replacement_is_served_new_from_files_with_no_stale_moment(tmp_path):
         a_only, _, _ = the_columns_of(run)
         import numpy as np
         from check_the_built_picture import decode
-        first = served.the_bytes_behind(store, f"0/c/0/0/{a_only}")
+        first = served.built_bytes_behind(store, f"0/c/0/0/{a_only}")
         assert first is not None and 700 in decode(
             first, PIECE, "uint16", ("z", "y", "x"))
 
         run.replace_a_position("posA", some_specimen(2200))
-        second = served.the_bytes_behind(store, f"0/c/0/0/{a_only}")
+        second = served.built_bytes_behind(store, f"0/c/0/0/{a_only}")
         seen = set(np.unique(decode(second, PIECE, "uint16",
                                     ("z", "y", "x"))))
         assert 2200 in seen and 700 not in seen, (
@@ -173,7 +173,7 @@ def test_the_writer_can_replace_a_baked_piece_while_it_is_served(tmp_path):
                                        name="live", piece=PIECE, bake=True)
     try:
         a_only, _, _ = the_columns_of(run)
-        assert served.the_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
+        assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
         for inside in every_baked_file(store):
             baked = store / Path(inside)
             newcomer = baked.with_suffix(".arriving")
@@ -200,7 +200,7 @@ def test_the_bake_retries_a_transient_windows_sharing_violation(
                                        name="live", piece=PIECE, bake=True)
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     governed.composer()
-    from zmart_viewer import governed as governed_module
+    from zmart_viewer import building as governed_module
 
     real_replace = governed_module.os.replace
     refused = {"left": 1}
@@ -316,10 +316,10 @@ def test_a_rollback_withdraws_ground_from_the_baked_files_too(tmp_path):
                                        name="live", piece=PIECE, bake=True)
     try:
         _, _, b_only = the_columns_of(run)
-        assert served.the_bytes_behind(store, f"0/c/0/0/{b_only}") is not None
+        assert served.built_bytes_behind(store, f"0/c/0/0/{b_only}") is not None
 
         truth.write_text(remembered, encoding="utf-8")
-        assert served.the_bytes_behind(store, f"0/c/0/0/{b_only}") is None, (
+        assert served.built_bytes_behind(store, f"0/c/0/0/{b_only}") is None, (
             "the gate itself must withdraw the rolled-back ground"
         )
         after = every_baked_file(store)
@@ -344,7 +344,7 @@ def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path,
     generation from files forever. The stamp must say what the bake actually
     absorbed — the fold count of the snapshot it baked.
     """
-    from zmart_viewer import declare as declaring
+    from zmart_viewer import building as declaring
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -365,7 +365,7 @@ def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path,
                                        name="live", piece=PIECE, bake=True)
     try:
         _, _, b_only = the_columns_of(run)
-        appeared = served.the_bytes_behind(store, f"0/c/0/0/{b_only}")
+        appeared = served.built_bytes_behind(store, f"0/c/0/0/{b_only}")
         assert appeared is not None, (
             "the commit that landed mid-bake must be served"
         )
@@ -403,7 +403,7 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
     # One piece ask opens and remembers the governed run.  It is deliberately
     # the final image request in this test.
     inside = next(iter(every_baked_file(store)))
-    assert served.the_bytes_behind(store, inside.replace("\\", "/")) is not None
+    assert served.built_bytes_behind(store, inside.replace("\\", "/")) is not None
     server = make_server(port=0, data_dir=run.folder / "views" / "shown",
                          store=[store.name])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -603,14 +603,14 @@ def test_redeclaring_under_a_running_server_is_noticed(tmp_path):
                                        name="live", piece=PIECE)
     try:
         a_only, _, _ = the_columns_of(run)
-        assert served.the_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
+        assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
 
         again = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
                                            name="live", piece=PIECE,
                                            bake=True)
         assert again == store
         run.replace_a_position("posA", some_specimen(2200))
-        assert served.the_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
+        assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
         after = every_baked_file(store)
     finally:
         served.forget(store)
@@ -656,7 +656,7 @@ def test_an_unreadable_picture_description_fails_closed(tmp_path,
         )
         monkeypatch.setattr(served, "_REFUSED_FOR_SECONDS", 0.0)
         a_only, _, _ = the_columns_of(run)
-        assert served.the_bytes_behind(store, f"0/c/0/0/{a_only}") is not None, (
+        assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None, (
             "one transient stumble must not be remembered as 'ordinary "
             "image' forever"
         )
@@ -729,7 +729,7 @@ def test_a_baked_picture_still_warms_the_composer_for_its_patcher(tmp_path):
     """
     import time
 
-    from zmart_viewer.governed import GovernedRun
+    from zmart_viewer.building import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -773,7 +773,7 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
     padding included.
     """
     import numpy as np
-    from zmart_viewer.governed import GovernedRun
+    from zmart_viewer.building import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -804,5 +804,5 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
                 "warm's shortcut changed what the operator would be shown"
             )
     finally:
-        from zmart_viewer import served
+        from zmart_viewer import pieces as served
         served.forget(store)

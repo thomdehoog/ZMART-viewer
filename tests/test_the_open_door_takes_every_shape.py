@@ -490,7 +490,7 @@ def test_a_bake_changes_how_fast_the_picture_arrives_and_nothing_else(
     a tidy grid is the easy case; these three sit at fractional offsets, at
     three different sizes, with unimaged ground between them.
     """
-    from zmart_viewer.declare import declare_a_built_picture
+    from zmart_viewer.building import declare_a_built_picture
 
     plain = declare_a_built_picture(tmp_path / "unbaked", shapes / "odd",
                                     name="odd", bake=False)

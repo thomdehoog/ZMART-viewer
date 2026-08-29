@@ -20,7 +20,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from check_the_built_picture import decode  # noqa: E402
-from zmart_viewer.governed import GovernedRun  # noqa: E402
+from zmart_viewer.building import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402
 from zmart_live.profiles import plan_the_writing  # noqa: E402
@@ -156,11 +156,11 @@ def test_concurrent_fire_across_every_axis_stays_frame_pure(tmp_path):
 
 def test_malformed_and_boundary_addresses_answer_absent_never_crash(tmp_path):
     """The wire door under abuse: junk in, ``None`` out, no exceptions."""
-    from zmart_viewer import served
+    from zmart_viewer import pieces as served
 
     run = a_grown_run(tmp_path)
     run.write_and_publish("p00", a_stack(0), timepoint=0)
-    from zmart_viewer.declare import declare_a_governed_picture
+    from zmart_viewer.building import declare_a_governed_picture
 
     store = declare_a_governed_picture(run.folder / "views" / "shown",
                                        run.folder, name="live")
@@ -177,7 +177,7 @@ def test_malformed_and_boundary_addresses_answer_absent_never_crash(tmp_path):
         "0/c/0/0/0/0/../0",       # a path escape dressed as a piece
     ]
     for inside in hostile:
-        assert served.the_bytes_behind(store, inside) is None, (
+        assert served.built_bytes_behind(store, inside) is None, (
             f"the hostile address {inside!r} was answered"
         )
 

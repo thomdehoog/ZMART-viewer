@@ -40,7 +40,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from check_the_built_picture import decode  # noqa: E402
-from zmart_viewer.governed import GovernedRun  # noqa: E402
+from zmart_viewer.building import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402
 from zmart_live.profiles import plan_the_writing  # noqa: E402
@@ -107,8 +107,8 @@ def test_the_governed_door_serves_the_stamp_one_plane_per_block(tmp_path):
 
 def test_the_built_door_serves_the_stamp_several_planes_per_block(tmp_path):
     """Thy1's packing: 8-plane blocks over 13 planes, the final block partial."""
-    from zmart_viewer import served
-    from zmart_viewer.declare import declare_a_built_picture
+    from zmart_viewer import pieces as served
+    from zmart_viewer.building import declare_a_built_picture
 
     side = 256
     store = tmp_path / "stores" / "stamped.ome.zarr"
@@ -190,8 +190,8 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
     takes — so a shift anywhere between the address and the pixels decodes
     to another frame's stamp and fails loudly.
     """
-    from zmart_viewer import served
-    from zmart_viewer.declare import declare_a_built_picture
+    from zmart_viewer import pieces as served
+    from zmart_viewer.building import declare_a_built_picture
 
     side = 128
     store = tmp_path / "stores" / "combined.ome.zarr"
@@ -239,7 +239,7 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
         for moment in range(MOMENTS):
             for channel in range(COLOURS):
                 for plane in range(PLANES):
-                    body = served.the_bytes_behind(
+                    body = served.built_bytes_behind(
                         declared, f"0/c/{moment}/{channel}/{plane}/0/0")
                     decoded = decode(body, piece,
                                      str(composer.mosaic.dtype),
@@ -252,9 +252,9 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
                         f"{the_stamp(moment, channel, plane)}"
                     )
         # One frame past every room answers absent, never a neighbour's.
-        assert served.the_bytes_behind(
+        assert served.built_bytes_behind(
             declared, f"0/c/{MOMENTS}/0/0/0/0") is None
-        assert served.the_bytes_behind(
+        assert served.built_bytes_behind(
             declared, f"0/c/0/{COLOURS}/0/0/0") is None
     finally:
         composer.close()
@@ -271,7 +271,7 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
     everything), and a moment published later starts serving the moment
     it is published.
     """
-    from zmart_viewer.governed import GovernedRun
+    from zmart_viewer.building import GovernedRun
 
     from zmart_live.coordinator import LivePublisher
 
@@ -337,8 +337,8 @@ def test_every_door_parses_the_one_address():
     """The one-definition rule for the piece address, checked by identity."""
     import importlib.util
 
-    from zmart_viewer import served
-    from zmart_viewer.composer import the_piece_address
+    from zmart_viewer import pieces as served
+    from zmart_viewer.compose import the_piece_address
 
     # Both server modules are called ``server``; load the building one by
     # its path so the check cannot silently land on the backend's.

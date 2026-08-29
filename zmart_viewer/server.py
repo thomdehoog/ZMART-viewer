@@ -27,13 +27,9 @@ from pathlib import Path
 
 from zmart_live.gateway import answer_from_a_live_run
 
-from . import announcements as announcements_mod
-from . import linking, loading
-
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
-from . import served as building
-from .announcements import Announcements, FolderWatcher, ManifestWatcher
+from . import live, loading, pieces
 from .contrast import (
     camera_range,
     coarsest_level_is_written,
@@ -41,14 +37,9 @@ from .contrast import (
     measure,
     measure_here,
 )
-from .library import Library
-from .live_config import (
-    LiveRegistry,
-    capture_live_state,
-    live_rows,
-)
-from .stores import (
+from .library import (
     DESCRIPTION_FILES,
+    Library,
     _read_attrs_at,
     axis_names,
     channel_color,
@@ -60,6 +51,14 @@ from .stores import (
     normalise_units,
     written_timepoints,
     zarr_scheme,
+)
+from .live import (
+    Announcements,
+    FolderWatcher,
+    LiveRegistry,
+    ManifestWatcher,
+    capture_live_state,
+    live_rows,
 )
 
 _HERE = Path(__file__).resolve().parent
@@ -186,7 +185,7 @@ class _Handler(SimpleHTTPRequestHandler):
         self._site_dir = site_dir  # the built page, served as the base directory
         self._live = live  # is the data still being written? decides what may be kept
         # How open pages are told that something has changed. See announcements.py.
-        self._announcements = announcements or announcements_mod.Announcements()
+        self._announcements = announcements or live.Announcements()
         # A cheap authoritative answer used for conditional catch-up after a
         # missed SSE hint.  It returns ``(document, etag)`` and touches no image.
         self._live_state = live_state
@@ -310,7 +309,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 return
             try:
                 made = self._built(rel)
-            except building.TemporarilyUnanswerable:
+            except pieces.TemporarilyUnanswerable:
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
                 return
             if made is not None:
@@ -321,8 +320,8 @@ class _Handler(SimpleHTTPRequestHandler):
         governed = self._a_governed_piece_behind(target)
         if governed is not None:
             try:
-                made = building.the_bytes_behind(*governed)
-            except building.TemporarilyUnanswerable:
+                made = pieces.built_bytes_behind(*governed)
+            except pieces.TemporarilyUnanswerable:
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
                 return
             if made is not None:
@@ -345,7 +344,7 @@ class _Handler(SimpleHTTPRequestHandler):
             return None
         if not (store / "zarr.json").is_file():
             return None
-        if not building.a_manifest_governs(store):
+        if not pieces.a_manifest_governs(store):
             return None
         return store, "/".join(parts)
 
@@ -358,7 +357,7 @@ class _Handler(SimpleHTTPRequestHandler):
         store = self._library.resolve(f"{number}/{image}")
         if store is None:
             return None
-        found = linking.the_bytes_behind(store, inside)
+        found = pieces.pointed_bytes_behind(store, inside)
         if found is None:
             return None
         where = self._library.resolve(f"{number}/{found.path}")
@@ -373,12 +372,12 @@ class _Handler(SimpleHTTPRequestHandler):
             if len(parts) < arity + 2:
                 continue
             suffix = "/".join(parts[-arity:])
-            if building.the_piece_address(suffix) is None:
+            if pieces.the_piece_address(suffix) is None:
                 continue
             store = self._library.resolve("/".join(parts[:-arity]))
             if store is None:
                 return None
-            return building.the_bytes_behind(store, suffix)
+            return pieces.built_bytes_behind(store, suffix)
         return None
 
     def _send_bytes(self, body: bytes) -> None:
@@ -553,9 +552,9 @@ class _Handler(SimpleHTTPRequestHandler):
             self.wfile.flush()
             while True:
                 try:
-                    message = waiting.get(timeout=announcements_mod.QUIET_HEARTBEAT_S)
+                    message = waiting.get(timeout=live.QUIET_HEARTBEAT_S)
                 except queue.Empty:
-                    message = announcements_mod.HEARTBEAT
+                    message = live.HEARTBEAT
                 if message is None:
                     return  # the server is shutting down
                 self.wfile.write(message)
@@ -834,7 +833,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if not data_path.is_dir():
             self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
             return
-        from .declare import declare_a_built_picture, the_scene_folder_name
+        from .building import declare_a_built_picture, the_scene_folder_name
 
         bake = bool(asked.get("bake"))
         name = asked.get("name") if isinstance(asked.get("name"), str) else None
@@ -1017,7 +1016,7 @@ class _Handler(SimpleHTTPRequestHandler):
             closed += self._library.close_group(group)
         for _, root, name in closed:
             forget(root / name)
-            linking.forget(root / name)
+            pieces.forget(root / name)
             self.forget_described(root / name)
         self._forget_measurements(closed)
         self._send_json(self._config())
@@ -1138,7 +1137,7 @@ def make_server(
             name=spec.get("name"),
         )
 
-    told = Announcements(when_changed=building.catch_up_governed_runs)
+    told = Announcements(when_changed=pieces.catch_up_governed_runs)
     scratch: dict = {}
 
     live_registry = LiveRegistry(

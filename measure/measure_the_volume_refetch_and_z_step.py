@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import measure_a_governed_run_at_scale as harness  # noqa: E402,F401
 import numpy as np  # noqa: E402
 import zarr  # noqa: E402
-from zmart_viewer.declare import declare_a_built_picture  # noqa: E402
+from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
 DEPTH = 13          # ragged on purpose

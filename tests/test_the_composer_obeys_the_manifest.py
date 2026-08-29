@@ -31,7 +31,7 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
 from check_the_built_picture import decode  # noqa: E402
-from zmart_viewer.governed import GovernedRun  # noqa: E402
+from zmart_viewer.building import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402
 from zmart_live.profiles import plan_the_writing  # noqa: E402
@@ -205,7 +205,7 @@ def test_an_absent_chunk_of_committed_ground_is_refused_not_invented(tmp_path):
     any published neighbour beneath it. The gateway's rule is quoted in the
     review: "a gap in it is damage to fail closed on."
     """
-    from zmart_viewer.composer import MissingCommittedGround
+    from zmart_viewer.compose import MissingCommittedGround
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -353,8 +353,8 @@ def test_a_transfers_decimated_levels_keep_their_own_registration(tmp_path):
 
     import numpy as np
     import zarr
-    from zmart_viewer.composer import Composer
-    from zmart_viewer.mosaic import read_the_transfer
+    from zmart_viewer.compose import Composer
+    from zmart_viewer.compose import read_the_transfer
 
     transfer = tmp_path / "transfer"
     store = transfer / "tile.ome.zarr"
@@ -406,8 +406,8 @@ def test_a_governed_picture_is_served_with_the_gate_on(tmp_path):
     request — uncommitted ground absent, then present the moment its commit
     lands, with no forget call and no restart between the two answers.
     """
-    from zmart_viewer import served
-    from zmart_viewer.declare import declare_a_governed_picture
+    from zmart_viewer import pieces as served
+    from zmart_viewer.building import declare_a_governed_picture
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -417,13 +417,13 @@ def test_a_governed_picture_is_served_with_the_gate_on(tmp_path):
                                        name="live", piece=PIECE)
     try:
         a_only, _, b_only = the_columns_of(run)
-        held = served.the_bytes_behind(store, f"0/c/0/0/{a_only}")
+        held = served.built_bytes_behind(store, f"0/c/0/0/{a_only}")
         assert held is not None and 700 in decode(held, PIECE, "uint16",
                                                   ("z", "y", "x"))
-        assert served.the_bytes_behind(store, f"0/c/0/0/{b_only}") is None
+        assert served.built_bytes_behind(store, f"0/c/0/0/{b_only}") is None
 
         run.publish("posB")
-        appeared = served.the_bytes_behind(store, f"0/c/0/0/{b_only}")
+        appeared = served.built_bytes_behind(store, f"0/c/0/0/{b_only}")
         assert appeared is not None and 4242 in decode(
             appeared, PIECE, "uint16", ("z", "y", "x"))
     finally:
@@ -444,7 +444,7 @@ def test_a_picture_declared_over_a_runs_positions_is_refused(tmp_path):
     """
     import json
 
-    from zmart_viewer import served
+    from zmart_viewer import pieces as served
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -460,7 +460,7 @@ def test_a_picture_declared_over_a_runs_positions_is_refused(tmp_path):
         }},
     }), encoding="utf-8")
     try:
-        assert served.the_bytes_behind(store, "0/c/0/0/0") is None, (
+        assert served.built_bytes_behind(store, "0/c/0/0/0") is None, (
             "a picture built over a governed run's positions folder must not "
             "serve a single piece — it reads past the manifest"
         )
@@ -483,8 +483,8 @@ def test_a_governed_picture_that_cannot_be_made_says_try_again(tmp_path):
     retries -- and test_a_fault_is_not_absence.py holds the wire end of the
     same promise.
     """
-    from zmart_viewer import served
-    from zmart_viewer.declare import declare_a_governed_picture
+    from zmart_viewer import pieces as served
+    from zmart_viewer.building import declare_a_governed_picture
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -495,9 +495,9 @@ def test_a_governed_picture_that_cannot_be_made_says_try_again(tmp_path):
 
     try:
         with pytest.raises(served.TemporarilyUnanswerable):
-            served.the_bytes_behind(store, "0/c/0/0/0")
+            served.built_bytes_behind(store, "0/c/0/0/0")
         with pytest.raises(served.TemporarilyUnanswerable):
-            served.the_bytes_behind(store, "0/c/0/0/0")
+            served.built_bytes_behind(store, "0/c/0/0/0")
     finally:
         served.forget(store)
 
@@ -513,7 +513,7 @@ def test_a_run_of_several_channels_declares_with_its_colour_axis(tmp_path):
     """
     import json
 
-    from zmart_viewer.declare import declare_a_governed_picture
+    from zmart_viewer.building import declare_a_governed_picture
 
     from zmart_live.coordinator import LivePublisher
 
@@ -584,7 +584,7 @@ def test_a_stamped_tile_says_exactly_what_the_walked_tile_would(tmp_path):
     later generation. A single voxel of disagreement here is a tile drawn in
     the wrong place with nothing on screen to say so.
     """
-    from zmart_viewer.governed import _a_committed_tile
+    from zmart_viewer.building import _a_committed_tile
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))

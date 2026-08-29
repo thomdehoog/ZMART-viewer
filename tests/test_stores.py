@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from zmart_viewer.stores import (
+from zmart_viewer.library import (
     channel_color,
     channel_of,
     discover,
@@ -186,7 +186,7 @@ def test_channels_with_no_declared_colours_open_distinct(tmp_path):
     alone keeps its honest greyscale: with nothing to distinguish it from,
     a colour would be an invention.
     """
-    from zmart_viewer.stores import channels
+    from zmart_viewer.library import channels
 
     store = tmp_path / "plate_field.ome.zarr"
     store.mkdir()
@@ -240,7 +240,7 @@ def test_a_run_that_declares_its_display_settings_is_believed(tmp_path):
     operator who has already answered -- so where the run says, the run wins,
     and the measurement is only for what it left unsaid.
     """
-    from zmart_viewer.stores import channels
+    from zmart_viewer.library import channels
 
     store = tmp_path / "declared_pos001.ome.zarr"
     store.mkdir()
@@ -284,7 +284,7 @@ def test_a_run_that_declares_its_display_settings_is_believed(tmp_path):
 
 def test_a_channel_that_says_nothing_keeps_its_own_answers(tmp_path):
     """Silence is not a setting: what a run leaves unsaid is still measured."""
-    from zmart_viewer.stores import channels
+    from zmart_viewer.library import channels
 
     store = tmp_path / "quiet_pos001.ome.zarr"
     store.mkdir()
