@@ -44,6 +44,7 @@ def _evenly_spaced(offsets: list[float]) -> bool:
 
     if len(distinct) < 2:
         return True
+
     steps = [b - a for a, b in zip(distinct, distinct[1:], strict=False)]
     return all(abs(step - steps[0]) <= GRID_TOLERANCE_UM for step in steps)
 
@@ -54,6 +55,7 @@ def _the_one_step(offsets: list[float]) -> float | None:
 
     if len(distinct) < 2 or not _evenly_spaced(offsets):
         return None
+
     return distinct[1] - distinct[0]
 
 
@@ -96,6 +98,7 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
                 "way, leaving gaps between tiles. The live grid lays tiles edge "
                 "to edge or overlapping, so this dataset cannot be replayed."
             )
+
         shares.append((side - step) / side)
 
     if shares and max(shares) - min(shares) > 0.01:
@@ -168,7 +171,12 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
 
 
 def replay_the_dataset(
-    transfer: str | Path, folder: str | Path, *, every_s: float = 0.7, told=None, announce=None
+    transfer: str | Path,
+    folder: str | Path,
+    *,
+    every_s: float = 0.7,
+    told=None,
+    announce=None,
 ) -> Path:
     """Publish every position of the dataset through the live writer, paced."""
     plan = plan_a_replay(transfer)
@@ -183,11 +191,13 @@ def replay_the_dataset(
         for number, (name, held_in, front, moment) in enumerate(plan.beats):
             if number and every_s:
                 time.sleep(every_s)
+
             held = zarr.open_array(str(held_in), mode="r")
             pixels = held[moment] if "t" in front else held[:]
 
             if "c" not in front:
                 pixels = pixels[None]
+
             publisher.write_and_publish(name, pixels, timepoint=moment)
 
             if told:
@@ -197,4 +207,5 @@ def replay_the_dataset(
                 announce()
     finally:
         publisher.finish_the_run()
+
     return publisher.folder / "views" / "live" / "live.ome.zarr"

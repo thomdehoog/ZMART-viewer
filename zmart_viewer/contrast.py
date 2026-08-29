@@ -38,6 +38,7 @@ def _omero_window(attrs: dict, channel: int | None = None) -> tuple[float, float
 
             if end > start:
                 return start, end
+
     return None
 
 
@@ -136,6 +137,7 @@ def _sample(array, held: dict[int, int] | None = None) -> object:
 
     if not pieces:
         return np.asarray([])
+
     return np.concatenate(pieces)
 
 
@@ -150,6 +152,7 @@ def _samples(store: Path, *, channel: int | None = None):
 
         if not levels:
             return None
+
         held = _hold_the_channel(attrs, channel)
         group = zarr.open_group(str(store), mode="r")
     except (OSError, KeyError, ValueError, MemoryError):
@@ -164,6 +167,7 @@ def _samples(store: Path, *, channel: int | None = None):
             data = _sample(array, held)
         except (OSError, KeyError, ValueError, IndexError, MemoryError):
             continue
+
         values = np.asarray(data, dtype=np.float64).ravel()
         values = values[np.isfinite(values)]
         fill = getattr(array, "fill_value", None)
@@ -176,6 +180,7 @@ def _samples(store: Path, *, channel: int | None = None):
 
         if values.size == 0:
             continue
+
         return attrs, values, position == 0
 
     for member in _the_members_behind(store):
@@ -196,6 +201,7 @@ def _samples(store: Path, *, channel: int | None = None):
 
         if values.size:
             return attrs, values, False
+
     return None
 
 
@@ -224,6 +230,7 @@ def _the_members_behind(store: str | Path) -> list[Path]:
         members = described["attributes"]["zmart"]["members"]
     except (OSError, KeyError, ValueError):
         return []
+
     return [collection / member for member in members]
 
 
@@ -235,6 +242,7 @@ def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float
 
     if declared:
         return float(declared["low"]), float(declared["high"])
+
     store = Path(store)
 
     try:
@@ -252,6 +260,7 @@ def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float
             said = json.loads(described.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
+
         declared = said.get("dtype") or said.get("data_type")
 
         if not declared:
@@ -267,7 +276,9 @@ def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float
 
         if kind.kind == "i":
             return float(np.iinfo(kind).min), float(np.iinfo(kind).max)
+
         return None
+
     return None
 
 
@@ -279,6 +290,7 @@ def coarsest_level_is_written(store: str | Path) -> bool:
         level = _coarsest_level_path(_read_attrs_at(store))
     except (OSError, KeyError, ValueError):
         return False
+
     return False if level is None else _level_holds_pixels(store / level)
 
 
@@ -286,6 +298,7 @@ def _hold_the_channel(attrs: dict, channel: int | None) -> dict[int, int]:
     """Which axis to pin, and where, so that only one channel is looked at."""
     if channel is None:
         return {}
+
     axes = [
         axis.get("name", "") for axis in (attrs.get("multiscales") or [{}])[0].get("axes") or []
     ]
@@ -304,6 +317,7 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
             "histogram": None,
             "settled": False,
         }
+
     attrs, values, settled = read
     declared = _omero_window(attrs, channel)
     return {
@@ -333,6 +347,7 @@ def _the_box_on(array, axes: list[str], box, channel: int | None):
     for name, low, high in (("y", top, bottom), ("x", left, right)):
         if name not in axes:
             continue
+
         at = axes.index(name)
         length = shape[at]
         first = max(0, min(length, int(np.floor(low * length))))
@@ -340,10 +355,12 @@ def _the_box_on(array, axes: list[str], box, channel: int | None):
 
         if last <= first:
             return None
+
         taken[at] = slice(first, last)
 
     if channel is not None and "c" in axes:
         taken[axes.index("c")] = slice(channel, channel + 1)
+
     return taken
 
 
@@ -353,6 +370,7 @@ def _how_many(shape, taken) -> int:
 
     for length, part in zip(shape, taken):
         total *= len(range(*part.indices(int(length))))
+
     return total
 
 
@@ -362,6 +380,7 @@ def _thinned(shape, taken, most: int):
 
     if held <= most:
         return taken
+
     spread = (
         sum(1 for length, part in zip(shape, taken) if len(range(*part.indices(int(length)))) > 1)
         or 1
@@ -392,6 +411,7 @@ def measure_here(
 
     if not levels:
         return None
+
     axes = [
         axis.get("name", "") for axis in (attrs.get("multiscales") or [{}])[0].get("axes") or []
     ]
@@ -408,6 +428,7 @@ def measure_here(
             array = group[level]
         except (OSError, KeyError, ValueError):
             continue
+
         held = _the_box_on(array, axes, box, channel)
 
         if held is None:
@@ -418,6 +439,7 @@ def measure_here(
 
             if made is None:
                 continue
+
             chosen = (None, made)
         else:
             chosen = (array, held)
@@ -427,6 +449,7 @@ def measure_here(
 
     if chosen is None:
         return None
+
     array, taken = chosen
 
     if array is None:
@@ -438,6 +461,7 @@ def measure_here(
             values = np.asarray(array[tuple(taken)], dtype=np.float64).ravel()
         except (OSError, ValueError, IndexError, MemoryError):
             return None
+
     values = values[np.isfinite(values)]
     # Ground nobody imaged reads back as the fill value, and it is not part of
     # the specimen. Counted in, it wins the vote wherever a picture has gaps.
@@ -448,6 +472,7 @@ def measure_here(
 
     if values.size == 0:
         return None
+
     return {
         "window": _window(values, volumetric=False),
         "volumeWindow": _window(values, volumetric=True),
@@ -465,6 +490,7 @@ def _window(values, *, volumetric: bool) -> tuple[float, float]:
 
     if high <= low:
         return low, low + 1.0
+
     return low, high
 
 
@@ -492,6 +518,7 @@ def _histogram(values, *, bins: int) -> dict:
 
     if auto_high <= auto_low:
         auto_high = auto_low + 1.0
+
     counts, _ = np.histogram(
         np.clip(values, plot_low, plot_high), bins=bins, range=(plot_low, plot_high)
     )
@@ -519,6 +546,7 @@ def display_window(
 
     if read is None:
         return 0.0, 65535.0
+
     return _window(read[1], volumetric=volumetric)
 
 
@@ -528,8 +556,10 @@ def intensity_histogram(
     """Return a compact histogram measured from the smallest copy of the image."""
     if bins < 2:
         raise ValueError("a histogram needs at least two bins")
+
     read = _samples(Path(store), channel=channel)
 
     if read is None:
         return None
+
     return _histogram(read[1], bins=bins)

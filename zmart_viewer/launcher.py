@@ -37,6 +37,7 @@ def _webview2_present() -> bool:
                     continue
     except Exception:
         return False
+
     return False
 
 
@@ -64,6 +65,7 @@ def open_window(
 
         if show:
             return show()
+
         from .server import ask_this_machine_for_a_folder
 
         return ask_this_machine_for_a_folder()
@@ -85,6 +87,7 @@ def open_window(
 
     if data_dir is not None:
         kwargs["data_dir"] = data_dir
+
     server = make_server(port, **kwargs)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{server.server_address[1]}"
@@ -121,6 +124,7 @@ def open_window(
 
         if not chosen:
             return None
+
         return chosen[0] if isinstance(chosen, (list, tuple)) else str(chosen)
 
     chooser["show"] = show_folder_dialog

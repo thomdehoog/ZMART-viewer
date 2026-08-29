@@ -45,6 +45,7 @@ class Copy:
         """The pixels, opened the first time anything asks for them."""
         if self._opened is None:
             self._opened = zarr.open_array(str(self.held_in), mode="r")
+
         return self._opened
 
 
@@ -65,6 +66,7 @@ class Tile:
 
         if not self.turned:
             return at[1], at[1] + held[1], at[2], at[2] + held[2]
+
         middle = (held[1] / 2, held[2] / 2)
         cos, sin = math.cos(self.turned), math.sin(self.turned)
         corners = []
@@ -77,6 +79,7 @@ class Tile:
                         down * sin + across * cos + middle[1] + at[2],
                     )
                 )
+
         return (
             math.floor(min(one[0] for one in corners)),
             math.ceil(max(one[0] for one in corners)),
@@ -122,8 +125,11 @@ class Mosaic:
                         break
                 else:
                     continue
+
                 break
+
             self._room = found
+
         return self._room
 
     def voxel_um(self, level: int) -> tuple[float, float, float]:
@@ -146,6 +152,7 @@ class Mosaic:
         if found is None:
             found = [(tile, self.lands_at(tile, level)) for tile in self.tiles]
             self._placed[level] = found
+
         return found
 
     def shape(self, level: int) -> tuple[int, int, int]:
@@ -159,6 +166,7 @@ class Mosaic:
                 for axis in range(3)
             )
             self._shape[level] = found  # type: ignore[assignment]
+
         return found  # type: ignore[return-value]
 
     def reaching_into(
@@ -184,10 +192,12 @@ def _the_description_of(store: Path) -> tuple[dict, str]:
         held = json.loads(newer.read_text(encoding="utf-8"))
         attributes = held.get("attributes") or {}
         return (attributes.get("ome") or attributes), "0.5"
+
     older = store / ".zattrs"
 
     if older.is_file():
         return json.loads(older.read_text(encoding="utf-8")), "0.4"
+
     raise ValueError(
         f"{store} does not look like an OME-Zarr image: it holds neither a "
         "zarr.json nor a .zattrs. A picture can only be built over images, so "
@@ -195,7 +205,9 @@ def _the_description_of(store: Path) -> tuple[dict, str]:
     )
 
 
-def _how_a_resolution_is_stored(held_in: Path) -> tuple[tuple[int, ...], tuple[int, ...], str]:
+def _how_a_resolution_is_stored(
+    held_in: Path,
+) -> tuple[tuple[int, ...], tuple[int, ...], str]:
     """How large one resolution is, how it is chunked, and what a voxel holds."""
     for name in ("zarr.json", ".zarray"):
         described = held_in / name
@@ -213,7 +225,9 @@ def _how_a_resolution_is_stored(held_in: Path) -> tuple[tuple[int, ...], tuple[i
                 grid = (held.get("chunk_grid") or {}).get("configuration") or {}
                 chunks = tuple(int(n) for n in grid["chunk_shape"])
                 kind = str(held["data_type"])
+
             return shape, chunks, kind
+
     raise ValueError(
         f"{held_in} holds no array description, so how its picture is stored "
         "cannot be read. That resolution was probably never finished being "
@@ -261,6 +275,7 @@ def _read_one_tile(store: Path) -> Tile:
                 f"{store} does not say how large a voxel of its {dataset['path']!r} "
                 "copy is, so a picture built over it could not be drawn to scale."
             )
+
         held_in = store / str(dataset["path"])
         shape, chunks, kind = _how_a_resolution_is_stored(held_in)
         copies.append(
@@ -274,6 +289,7 @@ def _read_one_tile(store: Path) -> Tile:
                 outer_shape=tuple(shape[:-3]),
             )
         )
+
     ours = described.get(OURS)
     turned = float((ours or {}).get("turned_radians") or 0.0)
     return Tile(name=store.name, store=store, copies=copies, axes=axes, turned=turned)
@@ -309,6 +325,7 @@ def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
                     "worked out by dividing micrometres by this, so the rest of "
                     "the run would be drawn in the wrong place."
                 )
+
     return kind
 
 
@@ -335,6 +352,7 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
 
     if isinstance(described.get("plate"), dict):
         return folder, described["plate"]
+
     stores = sorted(one for one in folder.glob("*.zarr") if one.is_dir())
     plates, plain = [], []
 
@@ -365,6 +383,7 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
             "it, and there is no declared way to lay the two out together. "
             "Put the plate in its own folder."
         )
+
     return plates[0]
 
 
@@ -374,6 +393,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
 
     if not wells:
         raise ValueError(f"the plate at {store} declares no wells, so there is nothing to lay out.")
+
     row_names = [row.get("name") for row in plate.get("rows") or []]
     column_names = [column.get("name") for column in plate.get("columns") or []]
     read = []
@@ -396,6 +416,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
                     "the plate's declared rows and columns -- there is no "
                     "way to know where it belongs."
                 ) from None
+
         described, _ = _the_description_of(store / path)
         images = (described.get("well") or {}).get("images") or []
         fields = [_read_one_tile(store / path / image["path"]) for image in images]
@@ -418,6 +439,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
                 (down * field_h, along * field_w)
                 for down, along in (divmod(number, across) for number in range(len(fields)))
             ]
+
         height = max(
             off_y + tile.copies[0].shape[-2] * tile.copies[0].voxel_um[-2]
             for (off_y, _), tile in zip(offsets, fields, strict=True)
@@ -448,7 +470,9 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
             for copy in tile.copies:
                 z, y, x = copy.corner_um
                 copy.corner_um = (z, y + move_y, x + move_x)
+
             tiles.append(tile)
+
     return tiles
 
 
@@ -500,6 +524,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
                 "strange for no reason anybody can point at, so this is refused "
                 "rather than drawn."
             )
+
     front = tuple(axes[:-3])
 
     if tuple(axes[-3:]) != ("z", "y", "x") or front != ("t", "c")[2 - len(front) :]:
@@ -509,6 +534,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
             "width — optionally behind a channel axis or a (t, c) pair. "
             "Anything else has no agreed meaning to draw."
         )
+
     rooms = {the_frame_room_of(tile.copies[0].outer_shape) for tile in tiles}
 
     if len(rooms) > 1:
@@ -533,6 +559,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
         if isinstance(described.get("omero"), dict):
             said = described["omero"]
             break
+
     return Mosaic(
         tiles=tiles,
         levels=tiles[0].keeps,
@@ -633,11 +660,13 @@ def the_piece_address(inside: str) -> tuple[int, int, int, int, int, int] | None
 
     if not all(one.isdecimal() for one in (parts[0], *parts[2:])):
         return None
+
     level = int(parts[0])
     tail = [int(one) for one in parts[2:]]
 
     if len(tail) == 3:
         return (level, 0, 0, *tail)
+
     return (level, *tail)
 
 
@@ -645,6 +674,7 @@ def _tile_has_the_frame(tile, level: int, moment: int, channel: int) -> bool:
     """Whether one tile holds anything at all for this (moment, channel)."""
     if tile.moments is not None and moment not in tile.moments:
         return False
+
     moments, channels = the_frame_room_of(tile.copies[level].outer_shape)
     return moment < moments and channel < channels
 
@@ -761,6 +791,7 @@ class Composer:
             for key, block in held_blocks:
                 if key[0] in stale or key in self._blocks:
                     continue
+
                 self._blocks[key] = block
                 self._blocks_weigh += block.nbytes
 
@@ -778,6 +809,7 @@ class Composer:
 
                 if (row, column) in dirty.get(level, ()) or key in self._slabs:
                     continue
+
                 self._slabs[key] = slab
                 self._weighs += slab.nbytes
 
@@ -790,6 +822,7 @@ class Composer:
 
                 if (row, column) in dirty.get(level, ()):
                     continue
+
                 self._pinned.setdefault(key, slab)
 
     def inherit_the_index(
@@ -861,6 +894,7 @@ class Composer:
 
         if declared is not None:
             return int(declared[level])
+
         return int(self.mosaic.tiles[0].copies[level].chunks[0])
 
     # -- building ------------------------------------------------------------
@@ -877,6 +911,7 @@ class Composer:
 
             if found is not None:
                 return found
+
             index: dict[tuple[int, int], list] = {}
 
             for tile, at in self.mosaic.placements(level):
@@ -887,6 +922,7 @@ class Composer:
                         at[2] // self.piece, (at[2] + held[2] - 1) // self.piece + 1
                     ):
                         index.setdefault((row, column), []).append((tile, at))
+
             self._indexed[level] = index
             return index
 
@@ -924,16 +960,22 @@ class Composer:
         with self._block_guard:
             if key not in self._blocks:
                 self._blocks_weigh += held.nbytes
+
             self._blocks[key] = held
             self._blocks.move_to_end(key)
 
             while len(self._blocks) > 1 and self._blocks_weigh > self._blocks_weighing_at_most:
                 _, dropped = self._blocks.popitem(last=False)
                 self._blocks_weigh -= dropped.nbytes
+
         return held
 
     def _read_from(
-        self, copy, low: tuple[int, int, int], high: tuple[int, int, int], outer: tuple[int, ...]
+        self,
+        copy,
+        low: tuple[int, int, int],
+        high: tuple[int, int, int],
+        outer: tuple[int, ...],
     ) -> np.ndarray:
         """A rectangle of one tile, assembled out of whichever blocks hold it."""
         self.tile_reads += 1
@@ -953,6 +995,7 @@ class Composer:
 
                     if any(from_[axis] >= to[axis] for axis in range(3)):
                         continue
+
                     out[
                         from_[0] - low[0] : to[0] - low[0],
                         from_[1] - low[1] : to[1] - low[1],
@@ -962,11 +1005,18 @@ class Composer:
                         from_[1] - began[1] : to[1] - began[1],
                         from_[2] - began[2] : to[2] - began[2],
                     ]
+
         self.costs["read_ms"] += (time.perf_counter() - reading_began) * 1000
         return out
 
     def _build_slab(
-        self, level: int, plane: int, row: int, column: int, moment: int = 0, channel: int = 0
+        self,
+        level: int,
+        plane: int,
+        row: int,
+        column: int,
+        moment: int = 0,
+        channel: int = 0,
     ) -> np.ndarray:
         """Lay the tiles into one column of ground, for every plane of one file."""
         building_began = time.perf_counter()
@@ -984,6 +1034,7 @@ class Composer:
         for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
             if not _tile_has_the_frame(tile, level, moment, channel):
                 continue
+
             copy = tile.copies[level]
             outer = tuple(
                 moment if name == "t" else channel for name in the_front_axes(copy.outer_shape)
@@ -992,6 +1043,7 @@ class Composer:
 
             if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
                 continue
+
             from_z, to_z = max(low_z, at[0]), min(high_z, at[0] + held[0])
             from_y, to_y = max(top, at[1]), min(bottom, at[1] + held[1])
             from_x, to_x = max(left, at[2]), min(right, at[2] + held[2])
@@ -1005,12 +1057,19 @@ class Composer:
                 (to_z - at[0], to_y - at[1], to_x - at[2]),
                 outer,
             )
+
         self.costs["build_ms"] += (time.perf_counter() - building_began) * 1000
         self.costs["slabs_built"] += 1
         return slab
 
     def _slab_for(
-        self, level: int, plane: int, row: int, column: int, moment: int = 0, channel: int = 0
+        self,
+        level: int,
+        plane: int,
+        row: int,
+        column: int,
+        moment: int = 0,
+        channel: int = 0,
     ) -> np.ndarray:
         """The slab holding this plane, built if it is not already to hand."""
         depth = self.slab_depth(level)
@@ -1023,12 +1082,14 @@ class Composer:
             if found is not None:
                 self.costs["slabs_warm"] += 1
                 return found
+
             found = self._slabs.get(key)
 
             if found is not None:
                 self._slabs.move_to_end(key)
                 self.costs["slabs_warm"] += 1
                 return found
+
         built = self._built_wherever(level, plane, row, column, moment, channel)
 
         with self._guard:
@@ -1038,12 +1099,14 @@ class Composer:
 
             if key not in self._slabs:
                 self._weighs += built.nbytes
+
             self._slabs[key] = built
             self._slabs.move_to_end(key)
 
             while len(self._slabs) > 1 and self._weighs > self._weighing_at_most:
                 _, dropped = self._slabs.popitem(last=False)
                 self._weighs -= dropped.nbytes
+
         return built
 
     @property
@@ -1051,10 +1114,12 @@ class Composer:
         """The levels warmed ahead of asking and never let go."""
         if self._pinned_levels is not None:
             return self._pinned_levels
+
         full = 1
 
         for side in self.mosaic.shape(0):
             full *= side
+
         pinned = {self.mosaic.levels - 1}
 
         for level in range(self.mosaic.levels):
@@ -1065,6 +1130,7 @@ class Composer:
 
             if voxels <= PINNED_SHARE * full:
                 pinned.add(level)
+
         self._pinned_levels = frozenset(pinned)
         return self._pinned_levels
 
@@ -1073,6 +1139,7 @@ class Composer:
         """Whether every slab of every pinned level has been built and kept."""
         if self._warm_store is not None and not self._blocks_prefilled:
             return False
+
         wanted = 0
 
         for level in self.pinned_levels:
@@ -1127,6 +1194,7 @@ class Composer:
                                     self._a_block_of(copy, (z, y, x))
                                 except Exception:
                                     continue
+
         self._blocks_prefilled = True
 
     def warm_from_the_baked(self, store: Path, levels: frozenset[int]) -> None:
@@ -1153,6 +1221,7 @@ class Composer:
         with self._guard:
             if key in self._pinned or key in self._slabs:
                 return
+
         deep, height, width = self.mosaic.shape(level)
         high_z = min(low_z + depth, deep)
         top, left = row * self.piece, column * self.piece
@@ -1182,7 +1251,13 @@ class Composer:
         return self._workers == 1
 
     def _built_wherever(
-        self, level: int, plane: int, row: int, column: int, moment: int = 0, channel: int = 0
+        self,
+        level: int,
+        plane: int,
+        row: int,
+        column: int,
+        moment: int = 0,
+        channel: int = 0,
     ):
         """Build a slab here, or hand it to a worker process when they exist."""
         if self._workers == 1:
@@ -1200,7 +1275,9 @@ class Composer:
                         max(budget, 64 * 1024 * 1024),
                     ),
                 )
+
             pool = self._pool
+
         return pool.submit(_build_in_worker, level, plane, row, column, moment, channel).result()
 
     def close(self) -> None:
@@ -1217,6 +1294,7 @@ class Composer:
         """Run the warm pass in the background, once, letting requests through."""
         if self._warmer is not None and self._warmer.is_alive():
             return
+
         self._stop_warming.clear()
         self._warmer = threading.Thread(
             target=self.warm_the_coarse_levels,
@@ -1245,10 +1323,17 @@ class Composer:
                 overwrite=True,
             )
             self._encoders.array = held
+
         return held
 
     def values_for(
-        self, level: int, plane: int, row: int, column: int, moment: int = 0, channel: int = 0
+        self,
+        level: int,
+        plane: int,
+        row: int,
+        column: int,
+        moment: int = 0,
+        channel: int = 0,
     ):
         """One piece of the picture as its numbers, for measuring, not serving."""
         with self._guard:
@@ -1259,6 +1344,7 @@ class Composer:
 
             if not any(_tile_has_the_frame(tile, level, moment, channel) for tile, _ in covering):
                 return None
+
             slab = self._slab_for(level, plane, row, column, moment, channel)
             depth = self.slab_depth(level)
             piece = slab[plane - (plane // depth) * depth]
@@ -1268,7 +1354,13 @@ class Composer:
                 self._answering -= 1
 
     def bytes_for(
-        self, level: int, plane: int, row: int, column: int, moment: int = 0, channel: int = 0
+        self,
+        level: int,
+        plane: int,
+        row: int,
+        column: int,
+        moment: int = 0,
+        channel: int = 0,
     ) -> bytes | None:
         """One piece of the picture, encoded exactly as its description promises."""
         with self._guard:
@@ -1279,12 +1371,14 @@ class Composer:
 
             if not any(_tile_has_the_frame(tile, level, moment, channel) for tile, _ in covering):
                 return None
+
             slab = self._slab_for(level, plane, row, column, moment, channel)
             depth = self.slab_depth(level)
             piece = slab[plane - (plane // depth) * depth]
 
             if not piece.any():
                 return None
+
             encoding_began = time.perf_counter()
             encoder = self._my_encoder()
             encoder[0] = piece
@@ -1310,15 +1404,23 @@ class Composer:
 
             if self.mosaic.averaged:
                 at = [at[axis] + (voxel[axis] - base[axis]) / 2 for axis in range(3)]
+
             datasets.append(
                 {
                     "path": str(level),
                     "coordinateTransformations": [
-                        {"type": "scale", "scale": ([1.0, 1.0] if grown else []) + list(voxel)},
-                        {"type": "translation", "translation": ([0.0, 0.0] if grown else []) + at},
+                        {
+                            "type": "scale",
+                            "scale": ([1.0, 1.0] if grown else []) + list(voxel),
+                        },
+                        {
+                            "type": "translation",
+                            "translation": ([0.0, 0.0] if grown else []) + at,
+                        },
                     ],
                 }
             )
+
         axes = (
             [
                 {"name": "t", "type": "time", "unit": "second"},
@@ -1369,7 +1471,10 @@ class Composer:
                         "chunk_shape": ([1, 1] if grown else []) + [1, self.piece, self.piece]
                     },
                 },
-                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+                "chunk_key_encoding": {
+                    "name": "default",
+                    "configuration": {"separator": "/"},
+                },
                 "fill_value": 0,
                 "codecs": CODECS,
                 "attributes": {},
