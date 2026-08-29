@@ -340,15 +340,15 @@ def test_every_door_parses_the_one_address():
     from zmart_viewer import pieces as served
     from zmart_viewer.compose import the_piece_address
 
-    # Both server modules are called ``server``; load the building one by
-    # its path so the check cannot silently land on the backend's.
+    # The transfer demo carries its own serving door; it must use the one
+    # parser too. Loaded by path, because demos are scripts, not a package.
     spec = importlib.util.spec_from_file_location(
-        "the_building_server", _VIZ / "server.py")
-    building_server = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(building_server)
+        "the_transfer_door", _VIZ / "demos" / "serve_a_transfer.py")
+    transfer_door = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(transfer_door)
 
     assert served.the_piece_address is the_piece_address
-    assert building_server.the_piece_address is the_piece_address
+    assert transfer_door.the_piece_address is the_piece_address
     # And the parser itself: a flat address is frame (0, 0); a grown one
     # carries all six numbers; anything else is not a piece.
     assert the_piece_address("3/c/1/2/4") == (3, 0, 0, 1, 2, 4)
