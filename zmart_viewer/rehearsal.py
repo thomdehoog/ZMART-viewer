@@ -8,15 +8,19 @@ microscopy on data already on disk.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import zarr
 from zmart_live.coordinator import LivePublisher
+from zmart_live.model import ZmartLiveError
 from zmart_live.profiles import DEFAULTS, plan_the_writing
 
 from .compose import read_the_transfer, the_front_axes
+
+log = logging.getLogger("zmart-viewer.rehearsal")
 
 GRID_TOLERANCE_UM = 0.1
 
@@ -32,6 +36,15 @@ class ReplayPlan:
     beats: list
     z_planes: int
     channel_count: int
+
+    @property
+    def on_whole_chunks(self) -> bool:
+        """Do all placements land on the chunk grid the linked view needs?"""
+        chunk = self.geometry.level_chunk_shapes[0]
+        return all(
+            place["y"] % chunk[0] == 0 and place["x"] % chunk[1] == 0
+            for place in self.positions.values()
+        )
 
     @property
     def total(self) -> int:
@@ -180,8 +193,16 @@ def replay_the_dataset(
 ) -> Path:
     """Publish every position of the dataset through the live writer, paced."""
     plan = plan_a_replay(transfer)
+    # Placements off the chunk grid cannot be answered by handing over chunks
+    # as they are on disk, so the linked view moves to run end for them; the
+    # governed picture serves the run either way.
+    linked_view = "per_publish" if plan.on_whole_chunks else "at_run_end"
     publisher = LivePublisher(
-        Path(folder), plan.profile, run_id=Path(transfer).name, positions=plan.positions
+        Path(folder),
+        plan.profile,
+        run_id=Path(transfer).name,
+        positions=plan.positions,
+        linked_view=linked_view,
     )
 
     if told:
@@ -206,6 +227,13 @@ def replay_the_dataset(
             if announce:
                 announce()
     finally:
-        publisher.finish_the_run()
+        try:
+            publisher.finish_the_run()
+        except ZmartLiveError as why:
+            if plan.on_whole_chunks or "whole number" not in str(why):
+                raise
+            # Free placements cannot be pointer-linked; the run keeps serving
+            # through its governed picture, and says so instead of failing.
+            log.info("the linked view was not written for this replay: %s", why)
 
     return publisher.folder / "views" / "live" / "live.ome.zarr"
