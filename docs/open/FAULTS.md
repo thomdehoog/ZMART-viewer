@@ -431,3 +431,13 @@ The instrument that decides it is the 3-D variant of
 hands-off discipline with the volume view toggled on, comparing not just lit
 fraction but mean brightness, warm against fresh. Until that exists and has
 been seen red, this entry is an observation, not a fault.
+
+## The storm tests wedge at page.close() in a software-GL container
+
+Measured 2026-08-29, in a headless Linux container drawing through
+SwiftShader: `test_a_commit_storm_under_zooming` runs every assertion to
+completion and then hangs forever inside its teardown `page.close()`
+(stack captured with py-spy: the hang sits at the close call, after the
+last assert). On the lab machines the close returns. Until the cause is
+found, suite runs in such containers deselect the three storm tests, and
+pytest-timeout (now a dev dependency) guards the rest.
