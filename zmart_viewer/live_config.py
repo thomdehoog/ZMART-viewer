@@ -1,13 +1,9 @@
-"""Adapt manifest-driven aggregate scenes to the studio's frontend vocabulary.
+"""Adapt a live run to the frontend's vocabulary.
 
-This module is also where the migration to one live path is finished: the live
-source a browser is handed is the run's **governed baked picture**, declared at
-``views/live/picture.ome.zarr`` when the run is first bound, not the zero-copy linked
-view the scene still compiles. The substitution lives here, in the adapter,
-because the two packages must stay one-directional: ``zmart-viewer`` may import
-``building``, while ``zmart_live`` — whose scene compiler names the linked
-view — must know nothing about either. The linked view keeps being written per
-publish and keeps its gateway route; only what the frontend draws live moves.
+The browser is handed the run's governed baked picture as the one live
+source — the linked view stays an end-of-run product — with state
+documents naming each source's URL and revisions. Imports go one way:
+this package may import zmart_live, never the reverse.
 """
 
 from __future__ import annotations
@@ -29,44 +25,15 @@ from .stores import described_channels, zarr_scheme
 
 LIVE_STATE_SET_SCHEMA = "zmart-live-frontend-state-set/1"
 
-# Where a live run's served picture lives, relative to the run root: inside
-# the live view's own folder, beside the linked store and the view's
-# metadata -- the picture is part of that one view, exactly as the contract
-# draws it. The store's NAME comes from the same one rule the declarer
-# uses (the_scene_folder_name), never written out by hand: a hand-written
-# copy fell out of step the day the rule changed to ``.zmartview.zarr``,
-# and every replay was served from a path that no longer existed -- black
-# positions, unmeasurable channels (2026-08-23).
 LIVE_PICTURE = "views/live/" + (
     the_scene_folder_name("picture") if the_scene_folder_name else "picture.zmartview.zarr"
 )
 
-# How long a failed declaration is remembered before it is tried again. Long
-# enough that a refusal does not re-derive the run on every config poll, short
-# enough that a transient failure -- endpoint protection holding a fresh file,
-# the site's known trouble -- heals without restarting the viewer.
 _DECLARE_RETRY_S = 2.0
 
 
 def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
-    """The governed picture this run is served by, declared if needed.
-
-    ``bake`` decides how much is written now. Without it -- which is what an
-    ordinary open asks for -- only the declaration is written, and every
-    piece of the picture is composed on the fly when somebody looks at it.
-    With it, the pieces themselves are computed and kept, which is what lets
-    a real smart-microscopy run scale: the cold open then reads files, and
-    every commit patches its own footprint rather than the whole picture
-    being made again. That costs real time up front on real data, so it is
-    asked for rather than assumed -- the same bargain, and the same word, as
-    on the door that builds a view over raw positions.
-
-    Declaring can take seconds to minutes at scale, so it happens once, on
-    the binding's first creation: a store already declared FROM THIS RUN in
-    the shape the run needs today is recognised and left alone. A store
-    declared from some other run, or in yesterday's shape (a run that grew
-    axes since), is re-declared rather than trusted.
-    """
+    """The governed picture this run is served by, declared if needed."""
     store = run_root / LIVE_PICTURE
     grown = _the_run_is_grown(run_root)
     if _already_this_runs_picture(store, run_root, grown, bake):
@@ -85,15 +52,7 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
 
 
 def _the_run_is_grown(run_root: Path) -> bool:
-    """Whether this run's picture carries the (t, c) axes.
-
-    The sealed profile is the declaration for every run written since the
-    time room entered it. Runs sealed BEFORE then declared their room only
-    in the arrays, so the first member's array gets a say too -- the same
-    whichever-declares-more rule the world frame applies -- or exactly
-    those runs would be declared flat and silently truncate every moment
-    after the first.
-    """
+    """Whether this run's picture carries the (t, c) axes."""
     from zmart_live.gateway import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
@@ -111,21 +70,7 @@ def _the_run_is_grown(run_root: Path) -> bool:
 
 
 def _already_this_runs_picture(store: Path, run_root: Path, grown: bool, bake: bool) -> bool:
-    """Whether the store already is this run's picture, in the shape asked for.
-
-    The shape has to match what the run needs TODAY: a picture declared flat
-    before its run grew axes would silently truncate every later moment, so
-    it is re-declared instead.
-
-    A bake that was asked for has to be there as well, and ``baked.json`` --
-    written only by a finished bake -- is what says it is. Asking for no bake
-    accepts a picture either way rather than declaring again to take the
-    baked files away: an operator who paid for them once should not lose them
-    by reopening the run.
-
-    Anything unreadable answers ``False`` -- the re-declaration overwrites
-    cleanly, which is the fail-closed direction.
-    """
+    """Whether the store already is this run's picture, in the shape asked for."""
     try:
         described = json.loads((store / "zarr.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -178,14 +123,7 @@ class LiveBinding:
         return f"/data/{self.dataset_number}/{inside.as_posix()}/|{zarr_scheme(store)}:"
 
     def state_json(self, snapshot: LiveStateSnapshot | None = None) -> dict:
-        """The run's frontend state, naming the source actually served.
-
-        The tracker's compiled state names the linked view, because the scene
-        compiler in ``zmart_live`` knows nothing of the governed picture. The
-        substitution happens here so the state document and the config rows
-        agree on the live source's address -- the frontend refuses a source
-        whose URL moves between the two.
-        """
+        """The run's frontend state, naming the source actually served."""
         answer = (snapshot or self.tracker.snapshot()).to_json()
         for source in answer.get("sources", ()):
             if source.get("role") == "linked":
@@ -195,19 +133,10 @@ class LiveBinding:
 
 
 class LiveRegistry:
-    """Track manifest-governed datasets as the ordinary library opens/closes.
-
-    Recognition is deliberately based only on the publication marker. A broken
-    marker still governs (and therefore excludes) its dataset from generic folder
-    inference, but it does not become a binding until strict state can be opened.
-    One tracker is shared if the same run is intentionally opened twice.
-    """
+    """Track manifest-governed datasets as the ordinary library opens/closes."""
 
     def __init__(self, library, wants_the_bake=None) -> None:
         self._library = library
-        # Whether a given run was opened with a bake asked for. A live run
-        # is served unbaked unless somebody said otherwise, so the default
-        # answer is no.
         self._wants_the_bake = wants_the_bake or (lambda run_root: False)
         self._lock = threading.RLock()
         self._trackers_by_root: dict[Path, LiveStateTracker] = {}
@@ -228,17 +157,6 @@ class LiveRegistry:
                 run_root = live_run_holding(dataset.root)
                 if run_root is None:
                     continue
-                # A live binding is only made where the live view can actually
-                # be served: the run root, or a folder holding the live view.
-                # Any OTHER opened folder inside the run -- one specific
-                # derived view, a gate's declared picture, a sealed export --
-                # is an ordinary dataset: its rows are built from the stores
-                # it holds, exactly as if it lay outside the run. Substituting
-                # the run's live picture into it is impossible by construction
-                # (the picture is not under the opened folder), and declaring
-                # one on its behalf would bake a second picture nobody asked
-                # for. Its pixel requests still pass the manifest gate, which
-                # keys off the files, not off this registry.
                 picture = (run_root / LIVE_PICTURE).resolve()
                 opened = Path(dataset.root).resolve()
                 if not (opened == picture or opened in picture.parents):
@@ -258,10 +176,6 @@ class LiveRegistry:
                 used_roots.add(run_root)
                 refused = self._without_a_picture(run_root)
                 if refused is not None:
-                    # No picture, no binding. Falling back to the linked view
-                    # here would be the silent straddle this migration ends;
-                    # the run stays governed (and excluded from inference)
-                    # while the reason is reported and retried.
                     errors[run_root] = refused
                     continue
                 bindings.append(
@@ -288,15 +202,7 @@ class LiveRegistry:
             return self._bindings, self._dataset_numbers
 
     def _without_a_picture(self, run_root: Path) -> str | None:
-        """Why this run has no served picture right now, or ``None`` once it has.
-
-        The declaration is synchronous and happens under the registry lock on
-        the binding's first creation -- the operator asked for the run, and
-        seconds to minutes of declaring is the honest price stated by the
-        migration decision. A failure is remembered briefly and retried, so a
-        refusal never re-derives the run on every config poll and a transient
-        failure never outlives its cause by more than the pause.
-        """
+        """Why this run has no served picture right now, or ``None`` once it has."""
         if run_root in self._pictures:
             return None
         stumbled = self._picture_refused.get(run_root)
@@ -365,18 +271,7 @@ def live_state_document(
 
 
 def the_runs_channels(run_root: Path) -> list[dict]:
-    """What this run says about its colours: their names, tints and windows.
-
-    A run settles all of that when its profile is sealed, before the first
-    position is imaged, and writes the same description into every position
-    it saves. The panel reads it from the profile rather than from a store,
-    for two reasons. It is there from the run's first moment, before any
-    picture exists to read. And the picture built over a run of one colour
-    carries no colour axis at all -- there being nothing to tell apart -- so
-    a reader that went looking for the description there found nothing, and
-    the run's one channel arrived on screen with no tint and no brightness
-    window, which is to say invisible (measured 2026-08-22).
-    """
+    """What this run says about its colours: their names, tints and windows."""
     from zmart_live.gateway import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
@@ -397,25 +292,12 @@ def _display_for(described: list[dict], store: Path, channel_index: int, chosen_
         "color": list(channel["color"]) if channel.get("color") else None,
         "window": window,
         "volumeWindow": window,
-        # A virtual view owns no pixels of its own, but the measurement knows
-        # where the real ones live -- it follows the view to a member of the
-        # run's data collection (see contrast._the_members_behind). The
-        # run-provided display window above stays authoritative either way;
-        # the histogram is what the panel draws beside it and what the Auto
-        # button offers as an alternative.
         "histogram": intensity_histogram(store, channel=channel_index),
     }
 
 
 def _the_url_served_for(source) -> str:
-    """The run-relative store a compiled source is actually served from.
-
-    The scene compiles the linked view, but the live source the frontend draws
-    is the governed baked picture -- the registry refused the binding outright
-    if that picture could not be declared, so by the time a row is built the
-    substitution is unconditional. Everything else about the source -- its
-    identity, role, revision, transform -- stays the compiler's.
-    """
+    """The run-relative store a compiled source is actually served from."""
     return LIVE_PICTURE if source.role == "linked" else source.url
 
 
@@ -426,13 +308,7 @@ def live_rows(
     group: str | None = None,
     snapshot: LiveStateSnapshot | None = None,
 ) -> list[dict]:
-    """Rows for one compiled scene, bounded by views and channels.
-
-    The row's addresses name the governed picture (see
-    :func:`_the_url_served_for`). Its colours and brightness window come from
-    the run's own sealed description (see :func:`the_runs_channels`), and the
-    histogram beside them is measured from the picture actually served.
-    """
+    """Rows for one compiled scene, bounded by views and channels."""
     snapshot = snapshot or binding.tracker.snapshot()
     scene = snapshot.scene
     if scene is None:
@@ -450,12 +326,6 @@ def live_rows(
         available = [
             {"start": start, "stop": stop} for start, stop in source_states[0].committed_time_ranges
         ]
-        # Keep the legacy `frames` field useful without allowing a gap to look
-        # like a transition from "no image" to "first image". New frontends use
-        # committedTimeRanges as the authority. A gapped manifest therefore gets
-        # a zero legacy count, which is still an honest contiguous prefix and is
-        # non-null so the old first-image cache heuristic cannot fire when the gap
-        # is later filled. The authoritative half-open ranges remain unchanged.
         contiguous_frames = (
             available[0]["stop"] if len(available) == 1 and available[0]["start"] == 0 else 0
         )

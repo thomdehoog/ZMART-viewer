@@ -30,7 +30,8 @@ class CannotOpen(Exception):
 @dataclass
 class Opened:
     """What the library should open: the target, and — for a live run —
-    the name of its served picture."""
+    the name of its served picture.
+    """
 
     target: Path
     names: list[str] | None = None
@@ -39,7 +40,8 @@ class Opened:
 def load(path: str | Path, *, bake: bool = False, scenes: Path | None = None) -> Opened:
     """The one door. ``bake`` writes a live run's coarse pyramid as files;
     ``scenes`` is where a composed description may be written for a run of
-    positions opened directly (left None, such a run is refused)."""
+    positions opened directly (left None, such a run is refused).
+    """
     asked = Path(path).expanduser()
     target = scene_behind_a_plate(asked) or scene_behind_a_run(asked, scenes) or asked
     relink = relink_needed(target)
@@ -54,7 +56,8 @@ def load(path: str | Path, *, bake: bool = False, scenes: Path | None = None) ->
 
 def live_run_view(target: Path, *, bake: bool = False) -> list[str] | None:
     """The one store a live run's folder is opened by: its governed picture,
-    declared on first sight. None means the target is not a live run."""
+    declared on first sight. None means the target is not a live run.
+    """
     if live_run_holding(target) != target.resolve():
         return None
     the_live_picture_declared(target, bake=bake)
@@ -62,14 +65,7 @@ def live_run_view(target: Path, *, bake: bool = False) -> list[str] | None:
 
 
 def scene_behind_a_plate(target: Path) -> Path | None:
-    """The laid-out scene to open instead, when the target is an HCS plate.
-
-    Handed straight to the library a plate draws every well at the origin;
-    only the plate layout knows the row-and-column arithmetic, so the plain
-    door builds the same scene the build tab would — beside the plate, in
-    ``scenes/`` — and opens that. A scene already built from this plate is
-    reused as it stands, baked ground and all. None means not a plate.
-    """
+    """The laid-out scene to open instead, when the target is an HCS plate."""
     if not target.is_dir():
         return None
     from .mosaic import _the_description_of  # deferred: pulls numpy and zarr
@@ -95,12 +91,6 @@ def scene_behind_a_plate(target: Path) -> Path | None:
 def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
     """The composed picture to open instead, when the target is a folder of
     position stores.
-
-    One composed source draws far faster than one source per store, and its
-    channels mix inside one program. The description goes into ``scenes``
-    (the viewer's own session folder — nothing lands in the operator's
-    data). None means there is nothing to compose: a single image, or a
-    folder the mosaic reads as something other than one picture.
     """
     if not target.is_dir() or scenes is None:
         return None
@@ -124,12 +114,7 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
 
 
 def relink_needed(store: Path) -> dict | None:
-    """Whether this is a built scene whose raw data is no longer there.
-
-    A built scene records what it was built from; when that folder is gone
-    or emptied, the answer names it — and whether ground was baked, so a
-    relink can offer to rebake. None means it opens the ordinary way.
-    """
+    """Whether this is a built scene whose raw data is no longer there."""
     described = store / "zarr.json"
     if not described.is_file():
         return None
