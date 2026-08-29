@@ -15,7 +15,6 @@ from pathlib import Path
 
 import zarr
 from zmart_live.coordinator import LivePublisher
-from zmart_live.model import ZmartLiveError
 from zmart_live.profiles import DEFAULTS, plan_the_writing
 
 from .compose import read_the_transfer, the_front_axes
@@ -227,13 +226,6 @@ def replay_the_dataset(
             if announce:
                 announce()
     finally:
-        try:
-            publisher.finish_the_run()
-        except ZmartLiveError as why:
-            if plan.on_whole_chunks or "whole number" not in str(why):
-                raise
-            # Free placements cannot be pointer-linked; the run keeps serving
-            # through its governed picture, and says so instead of failing.
-            log.info("the linked view was not written for this replay: %s", why)
+        publisher.finish_the_run()
 
     return publisher.folder / "views" / "live" / "live.ome.zarr"

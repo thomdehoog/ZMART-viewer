@@ -398,6 +398,20 @@ def test_the_real_door_serves_the_scattered_picture(tmp_path):
 
 # -- the sequential column: live and replay -------------------------------------
 
+
+def _writer_decides_on_day_zero() -> bool:
+    """Does the installed zmart_live carry the day-zero pointer-map decision?"""
+    import zmart_live.coordinator as coordinator
+
+    return "pointer_linkable" in Path(coordinator.__file__).read_text(encoding="utf-8")
+
+
+needs_day_zero_writer = pytest.mark.skipif(
+    not _writer_decides_on_day_zero(),
+    reason="the installed zmart_live does not yet decide the pointer map at "
+    "construction -- apply docs/open/HANDOVER_the_pointer_map_decides_on_day_zero.md",
+)
+
 FRAME = 384
 SCATTERED_ORIGINS = {
     "posA": {"y": 0, "x": 0},
@@ -520,19 +534,41 @@ def test_live_scattered_bake_writes_the_same_picture(tmp_path):
     assert np.array_equal(served[: expected.shape[0], : expected.shape[1]], expected)
 
 
-def test_the_pointer_map_refuses_off_chunk_landings_in_plain_words(tmp_path):
-    """The one honest refusal: per-publish linking cannot point off the grid."""
+@needs_day_zero_writer
+def test_the_pointer_map_refuses_off_chunk_placements_on_day_zero(tmp_path):
+    """The one honest refusal, said at construction: the places are known
+    before the first pixel, so a per-publish run that can never be linked
+    is refused before anything is written."""
+    from zmart_live.coordinator import LivePublisher
     from zmart_live.model import ZmartLiveError
 
-    with pytest.raises(ZmartLiveError, match="whole number"):
-        _publish_scattered(tmp_path / "run", linked_view="per_publish")
+    with pytest.raises(ZmartLiveError, match="whole chunks"):
+        LivePublisher(
+            tmp_path / "run",
+            _live_profile(),
+            run_id="gate-scatter",
+            positions=SCATTERED_ORIGINS,
+            linked_view="per_publish",
+        )
+    # The refusal lands before the first pixel and before any record: at
+    # most the empty container scaffold exists.
+    written = [one for one in (tmp_path / "run").rglob("*") if one.is_file()]
+    assert all(one.name == "zarr.json" for one in written), written
 
-    publisher = _publish_scattered(tmp_path / "deferred")
 
-    with pytest.raises(ZmartLiveError, match="whole number"):
-        publisher.finish_the_run()
+@needs_day_zero_writer
+def test_a_scattered_run_finishes_cleanly_without_the_pointer_map(tmp_path):
+    """A run that cannot be pointer-linked still finishes: layout recorded,
+    map and view deliberately absent, the governed picture serving it."""
+    publisher = _publish_scattered(tmp_path / "run")
+    assert publisher.pointer_linkable is False
+    publisher.finish_the_run()
+    meta = tmp_path / "run" / "views" / "live" / "metadata"
+    assert (meta / "locations.json").is_file()
+    assert not any((tmp_path / "run").rglob("links.json"))
 
 
+@needs_day_zero_writer
 def test_a_scattered_dataset_replays_where_it_sits(tmp_path):
     """The replay door takes a scattered, off-chunk dataset end to end."""
     from zmart_viewer.rehearsal import plan_a_replay, replay_the_dataset
