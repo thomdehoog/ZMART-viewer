@@ -45,10 +45,18 @@ downsampling its own level-0 paste — the two differ by design, and the
 composer's rule is the contract.
 
 **The second oracle, nearly free.** A baked view must equal the unbaked
-view bit for bit — the bake writes what the composer would have served.
-Every case below is served once unbaked, then baked and compared piece
-for piece. This one check carries "with and without baking" for the
-whole matrix.
+view — decoded pixels identical, piece for piece; byte equality is
+noted where it holds but is not the contract, which keeps the gate out
+of the encoder's business. Every case is served once unbaked, then
+baked and compared. This one check carries "with and without baking"
+for the whole matrix.
+
+**The oracle is anchored before it is trusted.** A reference written by
+reading compose.py would share its bugs. So the reference is pinned
+first against hand-computed micro-cases — one tile at offset 3.4 and
+one at 3.6, expected voxel indices written out by hand at level 0 and
+at a coarser level — and only then is it allowed to judge the random
+sweep.
 
 ## What is pinned besides pixels
 
@@ -84,18 +92,24 @@ placements and once scattered:
 
 1. **static, unbaked** — everything on disk, opened at once;
 2. **static, baked** — equality with 1 is the assertion;
-3. **sequential, unbaked** — positions appear one at a time: the
-   replay door for contract-shaped runs, the watched folder for
-   foreign stores;
+3. **sequential, unbaked** — positions appear one at a time through
+   the contract path (the replay door and the live registry). The
+   watched-foreign-folder arrival is deliberately not a column here:
+   a foreign store joins as its own engine source, so overlap there is
+   the engine's compositing, which no array oracle can judge — and the
+   arrival itself is already gated elsewhere;
 4. **sequential, baked** — the same arrival with the per-commit bake
    patching as each position lands.
 
 Scattered must pass in every column, sequential included — that cell
 is a placement check, not a refusal (the chapter below makes it so).
-Two cells stay marked rather than tested: sequential-baked × foreign
-stores is not-a-thing (no re-bake exists for a growing foreign
-folder), and a plate growing live is a named gap. Nothing in the
-matrix is quietly absent.
+A plate growing live stays a named gap. And the matrix is pruned
+where breadth would buy nothing: the awkward stores run the static
+columns only (their difficulty is being read, not arriving), the broad
+sweep uses one seed with three reserved for the flagship shape, and
+at least one case per column is served through the real HTTP door —
+the four-answer serving ladder is precisely where a stale baked file
+could lie, and composer-level calls would never see it.
 
 Placements — per case, drawn from a seeded generator (three fixed
 seeds, the seed printed on failure): translations uniform over a canvas
@@ -124,7 +138,11 @@ is only the two entrances:
 
 First instrument, then change: feed scattered locations straight
 through the publisher and record exactly what rejects them, so the
-change is as small as the rejection and no smaller. The juicy new
+change is as small as the rejection and no smaller. The location model
+lives in the microscopy checkout, not this one; if the rejection is
+there, the change is made there on its own branch, and until it lands
+the sequential-scattered cell is an xfail carrying the recorded
+rejection word for word — the viewer side never blocks on it. The juicy new
 assertion this opens: a scattered landing that overlaps committed
 ground must patch exactly the union footprint, later commit winning
 where they touch — the live half of the overlap rule, checked with the
@@ -155,6 +173,6 @@ assertions are written, and the plan is wrong wherever they disagree:
 One new file, `tests/test_positions_land_wherever_they_are_put.py`,
 with one scatter helper and one marker-scanning diagnostic; fixture
 writers are imported from where they already live. Budget: the whole
-non-browser matrix inside a minute, the flagship under the usual
+non-browser matrix in a few minutes, the flagship under the usual
 browser-test minute — small enough to run on every change, which is the
 point of a gate about a property everything else stands on.
