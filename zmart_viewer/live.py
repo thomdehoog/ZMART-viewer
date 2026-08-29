@@ -11,6 +11,7 @@ may import zmart_live, never the reverse.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import queue
@@ -28,6 +29,7 @@ from zmart_live.omezarr import the_channels_described
 from .building import declare_a_governed_picture, the_scene_folder_name
 from .contrast import intensity_histogram
 from .library import described_channels, zarr_scheme
+from .pieces import catch_up_governed_runs
 
 log = logging.getLogger("zmart-viewer.announcements")
 
@@ -615,3 +617,50 @@ def live_rows(
         )
 
     return rows
+
+
+class SourceRegistry:
+    """One object that follows change for a whole server.
+
+    It owns the announcements channel the pages listen to, the trackers of
+    every governed run, and — while the data may still be written — the two
+    watchers feeding that channel. The server wires this up once and starts
+    it; how change is noticed lives here.
+    """
+
+    def __init__(self, library, *, watching: bool, wants_the_bake: Callable | None = None):
+        self.announcements = Announcements(when_changed=catch_up_governed_runs)
+        self.runs = LiveRegistry(library, wants_the_bake=wants_the_bake)
+        self.runs.refresh()
+        self._watchers = []
+
+        if watching:
+            self._watchers = [
+                FolderWatcher(library, self.announcements, excluding=self.runs.dataset_numbers),
+                ManifestWatcher(self.runs.trackers, self.announcements),
+            ]
+
+    def start(self) -> None:
+        for watcher in self._watchers:
+            watcher.start()
+
+    def stop(self) -> None:
+        # Listeners go first, or each would sit through its own quiet
+        # heartbeat before noticing the server had gone.
+        self.announcements.close()
+
+        for watcher in self._watchers:
+            watcher.stop()
+
+    def state(self) -> tuple:
+        """(bindings, governed, document, snapshots, etag): the captured live truth."""
+        bindings, governed = self.runs.refresh()
+        document, snapshots = capture_live_state(bindings)
+        settled = json.dumps(document, sort_keys=True, separators=(",", ":"))
+        etag = '"' + hashlib.sha256(settled.encode("utf-8")).hexdigest() + '"'
+        return bindings, governed, document, snapshots, etag
+
+    def state_document(self) -> tuple[dict, str]:
+        """The live-state answer and its conditional-request identity."""
+        _bindings, _governed, document, _snapshots, etag = self.state()
+        return document, etag

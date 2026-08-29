@@ -9,7 +9,6 @@ no route that talks to a microscope.
 from __future__ import annotations
 
 import functools
-import hashlib
 import json
 import math
 import os
@@ -52,14 +51,7 @@ from .library import (
     written_timepoints,
     zarr_scheme,
 )
-from .live import (
-    Announcements,
-    FolderWatcher,
-    LiveRegistry,
-    ManifestWatcher,
-    capture_live_state,
-    live_rows,
-)
+from .live import SourceRegistry, live_rows
 
 _HERE = Path(__file__).resolve().parent
 _FRONTEND_DIST = (_HERE.parent / "page" / "dist").resolve()
@@ -1337,39 +1329,12 @@ def make_server(
             name=spec.get("name"),
         )
 
-    told = Announcements(when_changed=pieces.catch_up_governed_runs)
     scratch: dict = {}
-
-    live_registry = LiveRegistry(
+    registry = SourceRegistry(
         library,
+        watching=live,
         wants_the_bake=lambda run_root: Path(run_root).resolve() in scratch.get("bake_live", ()),
     )
-    live_registry.refresh()
-    watchers = []
-
-    if live:
-        # Both providers are dynamic: the existing open/close API may add or
-        # remove a manifest run after the server has begun serving.
-        watchers.append(
-            FolderWatcher(
-                library,
-                told,
-                excluding=live_registry.dataset_numbers,
-            )
-        )
-        watchers.append(ManifestWatcher(live_registry.trackers, told))
-
-    def captured_live_state():
-        bindings, governed = live_registry.refresh()
-        document, snapshots = capture_live_state(bindings)
-        settled = json.dumps(document, sort_keys=True, separators=(",", ":"))
-        etag = '"' + hashlib.sha256(settled.encode("utf-8")).hexdigest() + '"'
-        return bindings, governed, document, snapshots, etag
-
-    def live_state_now() -> tuple[dict, str]:
-        """Bounded truth and its conditional-request identity."""
-        _bindings, _governed, document, _snapshots, etag = captured_live_state()
-        return document, etag
 
     measured: dict[str, dict] = {}
     provisional: set[str] = set()
@@ -1484,7 +1449,7 @@ def make_server(
             live_document,
             live_snapshots,
             live_etag,
-        ) = captured_live_state()
+        ) = registry.state()
         revision = (
             library.revision(excluding=live_numbers),
             live_etag,
@@ -1656,20 +1621,12 @@ def make_server(
             super().server_bind()
 
         def serve_forever(self, *args, **kwargs):
-            # The disk is watched only while the server is actually running, and
-            # only for data that is still being written -- see FolderWatcher.
-            for watcher in watchers:
-                watcher.start()
-
+            # The disk is watched only while the server is actually running.
+            registry.start()
             super().serve_forever(*args, **kwargs)
 
         def shutdown(self):
-            # Let the listeners go before stopping, or each would sit through its
-            # own quiet heartbeat before noticing the server had gone.
-            told.close()
-
-            for watcher in watchers:
-                watcher.stop()
+            registry.stop()
 
             for own in ("scenes", "replays"):
                 made = scratch.pop(own, None)
@@ -1692,15 +1649,15 @@ def make_server(
         open_from=Path(open_from).resolve() if open_from else None,
         allow_open=allow_open,
         live=live,
-        announcements=told,
-        live_state=live_state_now,
+        announcements=registry.announcements,
+        live_state=registry.state_document,
         forget_measurements=forget_measurements,
     )
 
     try:
         return _Server(("127.0.0.1", port), handler)
     except OSError as why:
-        told.close()
+        registry.stop()
         raise OSError(
             f"the viewer could not start on port {port}: {why}\n\n"
             "That usually means something else on this machine is already using "
