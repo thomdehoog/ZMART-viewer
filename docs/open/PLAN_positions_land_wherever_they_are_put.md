@@ -81,14 +81,25 @@ new scatter helper:
 | a plate whose fields carry random recorded places, overlapping | the plate writer in `test_a_plate_lays_itself_out` |
 | every awkward store: t-of-one, no pyramid, one channel with the axis kept, one plane, flat 2-D, 8-bit, float | `testdata/make_awkward_stores` — each in both generations |
 
-Columns — the modes:
+Columns — the four ways of showing, each run once with nominal
+placements and once scattered:
 
-1. composed, unbaked (the default door);
-2. composed, baked (equality with 1 is the assertion);
-3. opened through `loading.load` as a folder, and through the build
-   door — one view either way, already gated elsewhere, spot-checked
-   here once;
-4. the grid-bound modes, as refusals (above), not as placements.
+1. **static, unbaked** — everything on disk, opened at once;
+2. **static, baked** — equality with 1 is the assertion;
+3. **sequential, unbaked** — positions appear one at a time: the
+   replay door for contract-shaped runs, the watched folder for
+   foreign stores;
+4. **sequential, baked** — the same arrival with the per-commit bake
+   patching as each position lands.
+
+Cells that are not placements are still cells: sequential × scattered
+is today a pinned refusal (the replay planner refuses off-grid runs in
+plain words — and this is the cell smart-microscopy targeting will one
+day need open, so the gate pins the refusal until that day flips it to
+a placement check); sequential-baked × foreign stores is marked
+not-a-thing (no re-bake exists for a growing foreign folder); a plate
+growing live is a named gap with no support and no gate. Nothing in
+the matrix is quietly absent.
 
 Placements — per case, drawn from a seeded generator (three fixed
 seeds, the seed printed on failure): translations uniform over a canvas
