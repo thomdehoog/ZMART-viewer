@@ -43,12 +43,11 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from zmart_live.gateway import answer_from_a_live_run, live_run_holding
+from zmart_live.gateway import answer_from_a_live_run
 
 # These are the viewer's own modules, and none of them pulls in anything heavy
 # when imported -- numpy and zarr are only reached for inside the functions that
@@ -56,7 +55,7 @@ from zmart_live.gateway import answer_from_a_live_run, live_run_holding
 # inside the function that uses them, which keeps import errors surfacing at
 # startup instead of on the first request an operator makes.
 from . import announcements as announcements_mod
-from . import linking
+from . import linking, loading
 
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
@@ -71,11 +70,9 @@ from .contrast import (
 )
 from .library import Library
 from .live_config import (
-    LIVE_PICTURE,
     LiveRegistry,
     capture_live_state,
     live_rows,
-    the_live_picture_declared,
 )
 from .stores import (
     DESCRIPTION_FILES,
@@ -85,7 +82,6 @@ from .stores import (
     channel_of,
     channels,
     forget,
-    is_store,
     label_images,
     layer_names,
     normalise_units,
@@ -205,38 +201,6 @@ def group_labels(datasets) -> dict[int, str]:
 # is which.
 
 
-def the_store_a_live_run_is_opened_by(target: Path, *, bake: bool = False) -> list[str] | None:
-    """The one store inside a live run's folder that the viewer should open.
-
-    A live run's folder is not an ordinary folder of images. Beside the raw
-    positions the microscope wrote, it holds the picture those positions are
-    laid out into -- the whole specimen as one image, at
-    ``views/live/picture.ome.zarr`` -- and that picture is what the operator
-    watches assemble. So when the run's folder is opened, that picture is
-    what gets named.
-
-    Naming it also settles a question of timing. The run's other view, the
-    map of pointers an outside tool can read, is written when the run
-    finishes, because keeping it current after every position costs most of
-    the time a large acquisition spends publishing. Opening the picture
-    instead means a run still being imaged opens exactly as a finished one
-    does, and nothing reaches for a file the microscope has not written yet.
-
-    The picture is declared here if this run has not been watched before;
-    that takes a moment on a large run, and it has to happen before the
-    library reads the store. ``bake`` decides how much of it is written now
-    rather than composed when looked at -- off unless it was asked for, the
-    same as on the door that builds a view over raw positions.
-
-    ``None`` means the target is not a live run's folder, and the caller
-    carries on opening it in the ordinary way.
-    """
-    if live_run_holding(target) != Path(target).resolve():
-        return None
-    the_live_picture_declared(Path(target), bake=bake)
-    return [LIVE_PICTURE]
-
-
 class _StoppedByTheOperator(Exception):
     """Raised inside a build or replay loop when the operator asked to stop.
 
@@ -306,7 +270,7 @@ class _Handler(SimpleHTTPRequestHandler):
         # mean one thing. See _serve_replay.
         self._replay_job = replay_job if replay_job is not None else {}
         # Where this viewer puts the pictures it composes for itself, shared
-        # by every request it answers. See _the_scene_behind_a_run.
+        # by every request it answers. See loading.scene_behind_a_run.
         self._scratch = scratch if scratch is not None else {}
         self._site_dir = site_dir  # the built page, served as the base directory
         self._live = live  # is the data still being written? decides what may be kept
@@ -1359,48 +1323,6 @@ class _Handler(SimpleHTTPRequestHandler):
             }
         )
 
-    @staticmethod
-    def _a_relink_needed(store: Path) -> dict | None:
-        """Is this a constructed viewer whose raw data is no longer there?
-
-        A constructed picture records what it was built from; when that
-        folder has moved, the answer names it, plus whether the picture had
-        prebaked ground -- so the relink can offer to rebake what was baked.
-        Anything that is not a constructed picture answers None and opens
-        the ordinary way.
-        """
-        described = store / "zarr.json"
-        if not described.is_file():
-            return None
-        try:
-            attrs = json.loads(described.read_text()).get("attributes", {})
-            ours = attrs.get("zmart") or {}
-            built_from = ours.get("built_from")
-        except (OSError, ValueError):
-            return None
-        if not built_from:
-            return None
-        # "Not there any more" is judged the way the transfer reader judges
-        # presence: the folder is still a data source if it is itself a
-        # store (a plate's scene is built from the plate, whose own
-        # description sits directly inside) or if it still holds tile
-        # stores -- matched on the wider ``*.zarr``, because real tiles are
-        # not all named ``*.ome.zarr``. A folder that exists but has been
-        # emptied -- the tiles moved elsewhere, the views left behind -- is
-        # just as disconnected as one that is gone.
-        was = Path(built_from)
-        if was.is_dir() and (
-            any((was / name).is_file() for name in DESCRIPTION_FILES)
-            or any(one.is_dir() for one in was.glob("*.zarr"))
-        ):
-            return None
-        return {
-            "store": str(store),
-            "was": str(built_from),
-            "name": store.name.removesuffix(".zmartview.zarr").removesuffix(".ome.zarr"),
-            "baked": bool(ours.get("baked")),
-        }
-
     def _serve_cancel(self, job: dict) -> None:
         """Ask the running build or replay to stop at its next step.
 
@@ -1614,7 +1536,7 @@ class _Handler(SimpleHTTPRequestHandler):
             # whole declared time room before any of it had landed.
             self._library.open(
                 str(run_folder),
-                names=the_store_a_live_run_is_opened_by(
+                names=loading.live_run_view(
                     run_folder, bake=self._asked_for_the_live_bake(run_folder, asked)
                 ),
                 name=f"{data_path.name} replay",
@@ -1623,56 +1545,6 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         self._send_json(self._config())
-
-    def _the_scene_behind_a_plate(self, target: Path) -> Path | None:
-        """The laid-out scene to open instead, when the target is a plate.
-
-        A plate store handed straight to the library draws every well at
-        the origin, stacked on one another: the wells' places live in the
-        plate's own row and column indices, and only the plate layout in
-        mosaic.py knows that arithmetic. So the plain door builds the very
-        scene the build tab would, beside the plate, and opens THAT -- the
-        laid-out plate reaches the screen whichever tab opened it. A scene
-        already built from this plate is reused exactly as it stands,
-        baked ground and all, because declaring again without the bake
-        deliberately removes baked files the operator paid for once.
-
-        The scene is declared over the PLATE, never over the folder around
-        it: a real plate lives beside the rest of the day's work -- other
-        plates, a survey, loose images -- and a layout that went looking
-        in the parent refused a real 336-well plate outright (2026-08-19).
-
-        ``None`` means the target is not a plate, and the door carries on
-        exactly as it always has. The description reader is the mosaic's
-        own -- the one reader of both metadata generations -- for the same
-        one-truth reason the governed module imports the gateway's.
-        """
-        if not target.is_dir():
-            return None
-        from .mosaic import _the_description_of
-
-        try:
-            described, _ = _the_description_of(target)
-        except ValueError:
-            return None
-        if not isinstance(described.get("plate"), dict):
-            return None
-        from .declare import declare_a_built_picture, the_scene_folder_name
-
-        scenes = target.parent / "scenes"
-        scene = scenes / the_scene_folder_name(target.name)
-        try:
-            built_from = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))[
-                "attributes"
-            ]["zmart"]["built_from"]
-            if Path(built_from).resolve() == target.resolve():
-                return scene
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
-        # Declared without the bake, synchronously: the description is a
-        # few kilobytes and the operator just asked to look. The hard copy
-        # stays a deliberate choice on the build tab.
-        return declare_a_built_picture(scenes, target, name=target.name)
 
     def _scenes_of_this_session(self) -> Path:
         """The folder this viewer composes into, made the first time it is wanted.
@@ -1708,70 +1580,6 @@ class _Handler(SimpleHTTPRequestHandler):
             self._scratch[kind] = folder
         return folder
 
-    def _the_scene_behind_a_run(self, target: Path) -> Path | None:
-        """The composed picture to open instead, when the target is a run of positions.
-
-        A folder of positions handed to the engine as one source per position
-        costs twice over. It draws far more slowly than a single picture --
-        which is why raw data has always been opened through a composed one --
-        and, less obviously, its channels stop working: adding is a property of
-        a LAYER, so a row fed by several positions cannot be added to the rows
-        beneath it, and an operator sees only the topmost channel of a run they
-        imaged in four.
-
-        Composing settles both at once. One picture, whose positions paste over
-        one another with the last one opened on top -- never blended, so no
-        seam is drawn where two meet -- and whose channels then mix inside one
-        program, exactly as they do for a single image.
-
-        Nothing on the operator's disk is touched. The description goes in this
-        viewer's own folder and is thrown away when it closes, because nobody
-        was asked where to put it. A smart-microscopy run is different and never
-        reaches here: it sets its own view folder beside its data. And a bake,
-        which writes real pixels, is asked for on the build tab, where the
-        operator says where they should live.
-
-        ``None`` means there is nothing to compose -- a single image, or a
-        folder the mosaic cannot read as a run -- and the door then carries on
-        exactly as it did before.
-        """
-        if not target.is_dir():
-            return None
-        try:
-            inside = [one for one in sorted(target.iterdir()) if one.is_dir() and is_store(one)]
-        except OSError:
-            return None
-        if len(inside) < 2:
-            # One image is already one picture. Composing it would add a
-            # description and a layer of indirection and change nothing.
-            return None
-
-        from .declare import declare_a_built_picture, the_scene_folder_name
-
-        scenes = self._scenes_of_this_session()
-        scene = scenes / the_scene_folder_name(target.name)
-        try:
-            built_from = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))[
-                "attributes"
-            ]["zmart"]["built_from"]
-            if Path(built_from).resolve() == target.resolve():
-                return scene
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
-        try:
-            return declare_a_built_picture(scenes, target, name=target.name)
-        except Exception:
-            # A folder the mosaic cannot make one picture of still has to
-            # open. Before composing was tried here it opened as separate
-            # positions and drew correctly, so that is what it falls back
-            # to rather than becoming unopenable on the way past.
-            print(
-                f"could not compose {target}; opening its positions instead:\n"
-                f"{traceback.format_exc()}",
-                file=sys.stderr,
-            )
-            return None
-
     def _serve_open(self, payload: object) -> None:
         """Open a folder of images and answer with the viewer's new contents."""
         path = payload.get("path") if isinstance(payload, dict) else None
@@ -1780,53 +1588,18 @@ class _Handler(SimpleHTTPRequestHandler):
             return
         target = Path(path.strip()).expanduser()
         try:
-            scene = self._the_scene_behind_a_plate(target)
-        except ValueError as why:
-            # A plate the layout must refuse -- two plates in one folder,
-            # a plate beside loose images -- refuses here in the same
-            # plain words.
-            self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
-            return
-        if scene is None:
-            # Not a plate. A folder of positions is composed instead, for the
-            # reasons in _the_scene_behind_a_run; anything else is unchanged.
-            scene = self._the_scene_behind_a_run(target)
-        if scene is not None:
-            target = scene
-        homeless = self._a_relink_needed(target)
-        if homeless is not None:
-            # Opening would succeed and every piece would then fail one
-            # request at a time, drawing nothing but black with no reason on
-            # screen. Refusing at the door, with where the data WAS, lets the
-            # load window ask where it is now.
-            self._send_json(
-                {
-                    "error": (
-                        f"this viewer was built from {homeless['was']}, and "
-                        "nothing is there any more -- point it at the raw data "
-                        "again"
-                    ),
-                    "relink": homeless,
-                },
-                HTTPStatus.CONFLICT,
+            opened = loading.load(
+                target,
+                bake=self._asked_for_the_live_bake(target, payload),
+                scenes=self._scenes_of_this_session(),
             )
+        except loading.CannotOpen as why:
+            refused = {"error": str(why), **why.detail}
+            status = HTTPStatus.CONFLICT if "relink" in why.detail else HTTPStatus.BAD_REQUEST
+            self._send_json(refused, status)
             return
-        # A live run's root -- a replay's or the microscope's own, data
-        # beside views and no image directly inside -- is opened with its
-        # served view named, exactly as the replay door opens the run it
-        # starts: the live registry binds it, the time slider offers only
-        # the moments already written, and the view follows the front.
-        # Handed to the library bare it answered "no OME-Zarr image was
-        # found", which cost every finished replay its promised reopening
-        # (found on the workstation, 2026-08-19).
-        served_view = the_store_a_live_run_is_opened_by(
-            target, bake=self._asked_for_the_live_bake(target, payload)
-        )
         try:
-            if served_view is not None:
-                self._library.open(str(target), names=served_view)
-            else:
-                self._library.open(str(target))
+            self._library.open(str(opened.target), names=opened.names)
         except FileNotFoundError as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             return
