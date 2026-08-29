@@ -44,10 +44,10 @@ import shutil
 import sys
 from pathlib import Path
 
-import linking
+from zmart_viewer import linking
 import numpy as np
 import pytest
-from stores import discover
+from zmart_viewer.stores import discover
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 

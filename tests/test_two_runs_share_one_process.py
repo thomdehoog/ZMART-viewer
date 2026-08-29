@@ -18,10 +18,10 @@ from pathlib import Path
 import numpy as np
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "picture"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from governed import GovernedRun  # noqa: E402
+from zmart_viewer.governed import GovernedRun  # noqa: E402
 
 from zmart_live.coordinator import LivePublisher  # noqa: E402
 from zmart_live.model import GridCell  # noqa: E402

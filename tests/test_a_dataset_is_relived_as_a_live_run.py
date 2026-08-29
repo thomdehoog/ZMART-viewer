@@ -30,12 +30,12 @@ VIZ = Path(__file__).resolve().parents[1]
 # The backend goes in FRONT of the building folder: both hold a server.py,
 # and the one with make_server -- the one every other browser test uses --
 # is the backend's.
-sys.path.insert(0, str(VIZ / "app" / "picture"))
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from rehearsal import plan_a_replay, replay_the_dataset  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.rehearsal import plan_a_replay, replay_the_dataset  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # One replay tile: two planes deep, one camera frame square. 384 is the same
 # frame the live fixtures elsewhere use -- small enough to write quickly, large

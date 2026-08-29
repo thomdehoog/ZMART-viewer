@@ -52,9 +52,9 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(HERE / "app" / "server"))
+sys.path.insert(0, str(HERE))
 
-from launcher import open_window  # noqa: E402
+from zmart_viewer.launcher import open_window  # noqa: E402
 
 # One position is one chunk of this many pixels at full resolution, and the run
 # lays them out in a grid. Small enough to write in a moment, large enough to see.

@@ -65,10 +65,10 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from contrast import measure
+from zmart_viewer.contrast import measure
 from demo_data import write_demo_zarr
 from pixels import colour_spread, image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 
 # Two brightness windows that could not be more different, and what each should do
 # to this particular specimen.

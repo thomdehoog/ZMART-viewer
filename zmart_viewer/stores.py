@@ -128,8 +128,9 @@ def without_format_suffix(store_name: str) -> str:
     happened to agree, which is luck rather than design, and teaching the viewer
     about a third suffix would have meant finding both.
     """
-    return (store_name.removesuffix(".zmartview.zarr")
-            .removesuffix(".ome.zarr").removesuffix(".zarr"))
+    return (
+        store_name.removesuffix(".zmartview.zarr").removesuffix(".ome.zarr").removesuffix(".zarr")
+    )
 
 
 def channel_color(name: str) -> tuple[float, float, float] | None:
@@ -335,7 +336,8 @@ def voxel_size(store: Path) -> tuple[float, ...]:
             names = axis_names(store)
             if len(names) == len(found):
                 found = [
-                    value for name, value in zip(names, found, strict=True)
+                    value
+                    for name, value in zip(names, found, strict=True)
                     if name in ("z", "y", "x")
                 ]
             return tuple(round(float(value), 6) for value in found)
@@ -636,22 +638,24 @@ def described_channels(described: list[dict], count: int) -> list[dict]:
         entry = described[index] if index < len(described) else {}
         entry = entry if isinstance(entry, dict) else {}
         label = entry.get("label") or entry.get("name") or f"channel {index + 1}"
-        out.append({
-            "name": str(label),
-            "color": _hex_to_rgb(entry.get("color")),
-            "window": _the_window_asked_for(entry),
-            # The range those numbers live in, as the run states it. A camera
-            # is often read out at fewer bits than the file can hold -- twelve
-            # into sixteen is the ordinary case -- so believing the file's
-            # number type puts the specimen in the first sixteenth of the
-            # brightness axis and leaves the rest as headroom that does not
-            # exist. Where the run says nothing this stays None and the axis
-            # falls back to what the number type can hold.
-            "range": _the_range_declared_by(entry),
-            # Which channels the run had switched on. Absent means on: a run
-            # that never mentioned a channel has not switched it off.
-            "active": entry.get("active") is not False,
-        })
+        out.append(
+            {
+                "name": str(label),
+                "color": _hex_to_rgb(entry.get("color")),
+                "window": _the_window_asked_for(entry),
+                # The range those numbers live in, as the run states it. A camera
+                # is often read out at fewer bits than the file can hold -- twelve
+                # into sixteen is the ordinary case -- so believing the file's
+                # number type puts the specimen in the first sixteenth of the
+                # brightness axis and leaves the rest as headroom that does not
+                # exist. Where the run says nothing this stays None and the axis
+                # falls back to what the number type can hold.
+                "range": _the_range_declared_by(entry),
+                # Which channels the run had switched on. Absent means on: a run
+                # that never mentioned a channel has not switched it off.
+                "active": entry.get("active") is not False,
+            }
+        )
     # Channels of one picture sum like light on screen, and several channels
     # all opening white summed a real plate to pure clipping -- every well
     # white, no structure, no colour. Where the run declared nothing, the
@@ -671,8 +675,7 @@ def described_channels(described: list[dict], count: int) -> list[dict]:
         turn = 0
         for channel in out:
             if channel["color"] is None:
-                channel["color"] = _DEFAULT_CHANNEL_TURNS[
-                    turn % len(_DEFAULT_CHANNEL_TURNS)]
+                channel["color"] = _DEFAULT_CHANNEL_TURNS[turn % len(_DEFAULT_CHANNEL_TURNS)]
                 turn += 1
     return out
 

@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import zarr
 from demo_data import write_demo_zarr
-from server import make_server
+from zmart_viewer.server import make_server
 
 FRAMES = 4
 

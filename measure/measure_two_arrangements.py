@@ -43,7 +43,7 @@ from pathlib import Path
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ.parent))
 sys.path.insert(0, str(_VIZ))
-sys.path.insert(0, str(_VIZ / "app" / "server"))
+sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
 from measure_a_run_of_positions import (  # noqa: E402

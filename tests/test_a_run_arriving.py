@@ -22,7 +22,7 @@ import threading
 
 import numpy as np
 import zarr
-from server import make_server
+from zmart_viewer.server import make_server
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 4, 128, 64, 2
 

@@ -28,7 +28,7 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from server import make_server
+from zmart_viewer.server import make_server
 
 # Well below the window's top, so four channels can be added without any of
 # them reaching the ceiling: these gates are about whether a channel arrives

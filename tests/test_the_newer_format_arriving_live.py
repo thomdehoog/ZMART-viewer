@@ -35,7 +35,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from pixels import image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 
 from zmart_storage.canvas import Channel, TileCanvases
 
@@ -170,7 +170,7 @@ def test_the_two_formats_describe_the_same_run(tmp_path):
     Everything an operator sees comes through these five answers, so if they agree
     then choosing a format is genuinely a matter of what else can read the folder.
     """
-    from stores import axis_names, channels, voxel_size, written_timepoints, zarr_scheme
+    from zmart_viewer.stores import axis_names, channels, voxel_size, written_timepoints, zarr_scheme
 
     seen = {}
     for version in ("0.4", "0.5"):

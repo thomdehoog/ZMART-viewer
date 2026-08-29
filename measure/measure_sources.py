@@ -52,10 +52,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(HERE / "app" / "server"))
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "tests"))
 
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # How many positions to try. The interesting question is the shape of the curve
 # rather than any single number, so these span from "an ordinary run" to "more

@@ -25,9 +25,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app" / "server"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 
 def test_a_port_already_in_use_is_explained(tmp_path: Path) -> None:

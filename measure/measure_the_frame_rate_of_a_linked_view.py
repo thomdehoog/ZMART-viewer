@@ -64,11 +64,11 @@ from pathlib import Path
 import numpy as np
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "server"))
+sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 sys.path.insert(0, str(_VIZ.parent))
 
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 from zmart_storage.canvas import Channel, _declare_one  # noqa: E402
 from zmart_storage.linked import PlacedTile, link_the_tiles  # noqa: E402

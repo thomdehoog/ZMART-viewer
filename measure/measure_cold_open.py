@@ -52,7 +52,7 @@ import numpy as np
 import zarr
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 
 # One pyramid level of two channels, sixteen planes, 256 x 256. That is the
 # coarsest level docs/how_it_works/DATA_LAYOUT.md asks for, and the coarsest level is what the
@@ -125,8 +125,8 @@ def measure(positions: int, folder: Path) -> dict:
 
     # Count how many stores have their pixels read, by wrapping the function that
     # does it. This is the number that should stay small however large the folder.
-    import contrast
-    import server as server_module
+    from zmart_viewer import contrast
+    from zmart_viewer import server as server_module
 
     real, counted = contrast.measure, {"stores": 0}
 

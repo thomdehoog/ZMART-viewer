@@ -31,10 +31,10 @@ import numpy as np
 import zarr
 from zarr.core.buffer import cpu
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "picture"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from composer import Composer  # noqa: E402
-from mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer.composer import Composer  # noqa: E402
+from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
 
 # Which plane to check. Middle of the stack, so it is specimen rather than the
 # empty ground at either end of a light-sheet acquisition.

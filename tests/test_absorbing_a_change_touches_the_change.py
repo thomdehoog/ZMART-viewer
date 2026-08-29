@@ -34,11 +34,11 @@ import time
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "picture"))
+sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from declare import declare_a_governed_picture  # noqa: E402
-from governed import GovernedRun  # noqa: E402
+from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.governed import GovernedRun  # noqa: E402
 
 # The scaling comparison's two sizes. Sixteen times the positions: a
 # bookkeeping cost that followed the survey would show as many times the

@@ -25,7 +25,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import sys
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from multiprocessing import get_context
@@ -33,8 +32,9 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from composer import PIECE, Composer
-from mosaic import read_the_transfer, the_mosaic_written_down
+
+from .composer import PIECE, Composer
+from .mosaic import read_the_transfer, the_mosaic_written_down
 
 # The key inside the picture's description under which we record what it was built
 # from. Namespaced under one word of ours, the same courtesy OME-Zarr 0.5 pays by
@@ -65,11 +65,7 @@ def _start_baking(run: Path, piece: int) -> None:
     at once; a bake worker builds exactly the pieces it is told to.
     """
     global _BAKING
-    here = Path(__file__).resolve().parent
-    for one in (here, here.parent, here.parent.parent):
-        if str(one) not in sys.path:
-            sys.path.insert(0, str(one))
-    from governed import GovernedRun
+    from .governed import GovernedRun
 
     governed = GovernedRun(run, piece=piece)
     composer = governed.composer()
@@ -100,14 +96,13 @@ def _bake_one_stripe(store: Path, level: int, rows: tuple[int, ...]) -> int:
     for row in rows:
         for moment in range(moments):
             for channel in range(channels):
-                frame = ((str(moment), str(channel)) if grown else ())
+                frame = (str(moment), str(channel)) if grown else ()
                 for plane in range(deep):
-                    inside = store.joinpath(str(level), "c", *frame,
-                                            str(plane), str(row))
+                    inside = store.joinpath(str(level), "c", *frame, str(plane), str(row))
                     for column in range(across):
-                        body = composer.bytes_for(level, plane, row, column,
-                                                  moment=moment,
-                                                  channel=channel)
+                        body = composer.bytes_for(
+                            level, plane, row, column, moment=moment, channel=channel
+                        )
                         if body is None:
                             continue
                         inside.mkdir(parents=True, exist_ok=True)
@@ -128,15 +123,20 @@ def the_scene_folder_name(name: str) -> str:
     looks up a scene folder goes through this one rule, so a scene built and
     a scene looked for can never disagree about the name.
     """
-    bare = (name.removesuffix(".zarr").removesuffix(".ome")
-            .removesuffix(".zmartview"))
+    bare = name.removesuffix(".zarr").removesuffix(".ome").removesuffix(".zmartview")
     return f"{bare}.zmartview.zarr"
 
 
-def declare_a_built_picture(where: str | Path, transfer: str | Path, *,
-                            name: str = "built", piece: int = PIECE,
-                            bake: bool = False, workers: int = 1,
-                            told=None) -> Path:
+def declare_a_built_picture(
+    where: str | Path,
+    transfer: str | Path,
+    *,
+    name: str = "built",
+    piece: int = PIECE,
+    bake: bool = False,
+    workers: int = 1,
+    told=None,
+) -> Path:
     """Write the description of a picture built from a transfer.
 
     Args:
@@ -171,23 +171,21 @@ def declare_a_built_picture(where: str | Path, transfer: str | Path, *,
     # leave yesterday's baked ground quietly being served, and the switch
     # would only ever turn on.
     for kept in sorted(store.glob("[0-9]*")):
-        if kept.is_dir() and (int(kept.name) >= mosaic.levels
-                              or (kept / "c").exists()):
+        if kept.is_dir() and (int(kept.name) >= mosaic.levels or (kept / "c").exists()):
             shutil.rmtree(kept)
 
     for level in range(mosaic.levels):
         inside = store / str(level)
         inside.mkdir(exist_ok=True)
         (inside / "zarr.json").write_text(
-            json.dumps(json.loads(composer.array_json(level)), indent=1),
-            encoding="utf-8")
+            json.dumps(json.loads(composer.array_json(level)), indent=1), encoding="utf-8"
+        )
 
     described = json.loads(composer.group_json())
     baked: list[int] = []
     if bake:
         try:
-            baked = _bake_the_coarse_ground(store, composer, described,
-                                            told=told)
+            baked = _bake_the_coarse_ground(store, composer, described, told=told)
         finally:
             composer.close()
 
@@ -203,21 +201,24 @@ def declare_a_built_picture(where: str | Path, transfer: str | Path, *,
         "tiles": len(mosaic.tiles),
         "baked": baked,
     }
-    (store / "zarr.json").write_text(json.dumps(described, indent=1),
-                                     encoding="utf-8")
+    (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
 
     # The tiles' whole geometry, written down so opening never walks the
     # transfer again. Declaring read every tile just above; keeping what was
     # learned is what makes opening immediate at any position count.
-    (store / "tiles.json").write_text(
-        json.dumps(the_mosaic_written_down(mosaic)), encoding="utf-8")
+    (store / "tiles.json").write_text(json.dumps(the_mosaic_written_down(mosaic)), encoding="utf-8")
 
     return store
 
 
-def declare_a_governed_picture(where: str | Path, run: str | Path, *,
-                               name: str = "live", piece: int = PIECE,
-                               bake: bool = False) -> Path:
+def declare_a_governed_picture(
+    where: str | Path,
+    run: str | Path,
+    *,
+    name: str = "live",
+    piece: int = PIECE,
+    bake: bool = False,
+) -> Path:
     """Write the description of a picture built from a manifest-governed run.
 
     The counterpart of :func:`declare_a_built_picture` for a live run: the
@@ -257,7 +258,7 @@ def declare_a_governed_picture(where: str | Path, run: str | Path, *,
     Returns:
         The picture's own folder, which is what the viewer opens.
     """
-    from governed import GovernedRun
+    from .governed import GovernedRun
 
     where, run = Path(where), Path(run).resolve()
     governed = GovernedRun(run, piece=piece)
@@ -278,24 +279,24 @@ def declare_a_governed_picture(where: str | Path, run: str | Path, *,
             # An earlier declaration's baked ground goes first, or declaring
             # without the bake would leave yesterday's files quietly being
             # served -- the transfer's rule, for the same reason.
-            if kept.is_dir() and (int(kept.name) >= composer.mosaic.levels
-                                  or (kept / "c").exists()):
+            if kept.is_dir() and (
+                int(kept.name) >= composer.mosaic.levels or (kept / "c").exists()
+            ):
                 shutil.rmtree(kept)
         for level in range(composer.mosaic.levels):
             inside = store / str(level)
             inside.mkdir(exist_ok=True)
             (inside / "zarr.json").write_text(
-                json.dumps(json.loads(composer.array_json(level)), indent=1),
-                encoding="utf-8")
+                json.dumps(json.loads(composer.array_json(level)), indent=1), encoding="utf-8"
+            )
 
         described = json.loads(composer.group_json())
         baked: list[int] = []
         if bake:
-            from governed import _holding_the_bake_lock
+            from .governed import _holding_the_bake_lock
 
             with _holding_the_bake_lock(store):
-                baked = _bake_the_coarse_ground(store, composer, described,
-                                                governed_run=run)
+                baked = _bake_the_coarse_ground(store, composer, described, governed_run=run)
         described["attributes"][OURS] = {
             "what": (
                 "A picture of a live, manifest-governed run. It holds no "
@@ -308,20 +309,17 @@ def declare_a_governed_picture(where: str | Path, run: str | Path, *,
             "piece": composer.piece,
             "baked": baked,
         }
-        (store / "zarr.json").write_text(json.dumps(described, indent=1),
-                                         encoding="utf-8")
+        (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
         if bake:
-            governed.stamp_the_bake(store, events=folded, tail=tail,
-                                    layout=revision)
+            governed.stamp_the_bake(store, events=folded, tail=tail, layout=revision)
         return store
     finally:
         governed.close()
 
 
-def _bake_the_coarse_ground(store: Path, composer: Composer,
-                            described: dict, *,
-                            governed_run: Path | None = None,
-                            told=None) -> list[int]:
+def _bake_the_coarse_ground(
+    store: Path, composer: Composer, described: dict, *, governed_run: Path | None = None, told=None
+) -> list[int]:
     """Build the coarse ground once, into real files, and extend the pyramid.
 
     Two kinds of level come out of this. The composer's pinned levels are
@@ -356,7 +354,8 @@ def _bake_the_coarse_ground(store: Path, composer: Composer,
         composer.stop_warming()
         try:
             working = ProcessPoolExecutor(
-                max_workers=_BAKE_PROCESSES, mp_context=get_context("spawn"),
+                max_workers=_BAKE_PROCESSES,
+                mp_context=get_context("spawn"),
                 initializer=_start_baking,
                 initargs=(governed_run, composer.piece),
             )
@@ -367,8 +366,7 @@ def _bake_the_coarse_ground(store: Path, composer: Composer,
                     for worker in range(min(_BAKE_PROCESSES, down)):
                         rows = tuple(range(worker, down, _BAKE_PROCESSES))
                         if rows:
-                            stripes.append(working.submit(
-                                _bake_one_stripe, store, level, rows))
+                            stripes.append(working.submit(_bake_one_stripe, store, level, rows))
                 # Consumed in order; a stripe that cannot be built stops the
                 # bake, exactly as the serial loop's first failure would.
                 for stripe in stripes:
@@ -384,11 +382,13 @@ def _bake_the_coarse_ground(store: Path, composer: Composer,
             # piece written twice is written identically. The fix on the
             # caller's side is one line: put the script's work under
             # ``if __name__ == "__main__":``.
-            print("The bake's worker processes could not start (usually: "
-                  "the calling script runs its work at import time, and a "
-                  "worker re-imports it -- guard the script with "
-                  "'if __name__ == \"__main__\":'). Baking serially "
-                  "instead, which is slower and otherwise identical.")
+            print(
+                "The bake's worker processes could not start (usually: "
+                "the calling script runs its work at import time, and a "
+                "worker re-imports it -- guard the script with "
+                "'if __name__ == \"__main__\":'). Baking serially "
+                "instead, which is slower and otherwise identical."
+            )
     if not built_by_workers:
         # A grown picture declares the full (t, c, z, y, x) axes, so its
         # chunk files carry the frame in their path and every frame is baked
@@ -398,22 +398,23 @@ def _bake_the_coarse_ground(store: Path, composer: Composer,
         grown = (moments, channels) != (1, 1)
         # One unit of progress per row of pieces per frame, counted up front
         # so the ratio is honest from the first report.
-        total = moments * channels * sum(
-            composer.grid(level)[0] * composer.grid(level)[1]
-            for level in pinned)
+        total = (
+            moments
+            * channels
+            * sum(composer.grid(level)[0] * composer.grid(level)[1] for level in pinned)
+        )
         done = 0
         for level in pinned:
             deep, down, across = composer.grid(level)
             for moment in range(moments):
                 for channel in range(channels):
-                    frame = ((str(moment), str(channel)) if grown else ())
+                    frame = (str(moment), str(channel)) if grown else ()
                     for plane in range(deep):
                         for row in range(down):
                             done += 1
                             if told is not None:
                                 told(done, total)
-                            inside = store.joinpath(str(level), "c", *frame,
-                                                    str(plane), str(row))
+                            inside = store.joinpath(str(level), "c", *frame, str(plane), str(row))
                             for column in range(across):
                                 # The very bytes the composer would put on
                                 # the wire, kept as the chunk file the
@@ -422,8 +423,8 @@ def _bake_the_coarse_ground(store: Path, composer: Composer,
                                 # ground stays unwritten: absent means
                                 # fill, here as everywhere.
                                 body = composer.bytes_for(
-                                    level, plane, row, column,
-                                    moment=moment, channel=channel)
+                                    level, plane, row, column, moment=moment, channel=channel
+                                )
                                 if body is None:
                                     continue
                                 inside.mkdir(parents=True, exist_ok=True)
@@ -442,32 +443,40 @@ def _bake_the_coarse_ground(store: Path, composer: Composer,
         level += 1
         height, width = -(-height // 2), -(-width // 2)
         voxel = [voxel[0], voxel[1] * 2, voxel[2] * 2]
-        evened = np.pad(whole, [(0, 0)] * (len(room) + 1)
-                        + [(0, height * 2 - whole.shape[-2]),
-                           (0, width * 2 - whole.shape[-1])], mode="edge")
-        whole = (evened.reshape(*room, depth, height, 2, width, 2)
-                 .mean(axis=(-3, -1)).round()
-                 .astype(composer.mosaic.dtype))
+        evened = np.pad(
+            whole,
+            [(0, 0)] * (len(room) + 1)
+            + [(0, height * 2 - whole.shape[-2]), (0, width * 2 - whole.shape[-1])],
+            mode="edge",
+        )
+        whole = (
+            evened.reshape(*room, depth, height, 2, width, 2)
+            .mean(axis=(-3, -1))
+            .round()
+            .astype(composer.mosaic.dtype)
+        )
         made = zarr.create_array(
             store=str(store / str(level)),
             shape=(*room, depth, height, width),
             chunks=(1,) * len(room) + (1, composer.piece, composer.piece),
-            dtype=composer.mosaic.dtype, zarr_format=3,
-            dimension_names=(["t", "c"] if room else [])
-            + list(composer.mosaic.axes),
+            dtype=composer.mosaic.dtype,
+            zarr_format=3,
+            dimension_names=(["t", "c"] if room else []) + list(composer.mosaic.axes),
             overwrite=True,
         )
         made[:] = whole
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale",
-                 "scale": [1.0] * len(room) + list(voxel)},
-                {"type": "translation",
-                 "translation": [0.0] * len(room)
-                 + list(composer.mosaic.corner_um)},
-            ],
-        })
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0] * len(room) + list(voxel)},
+                    {
+                        "type": "translation",
+                        "translation": [0.0] * len(room) + list(composer.mosaic.corner_um),
+                    },
+                ],
+            }
+        )
 
     return pinned + list(range(coarsest + 1, level + 1))
 
@@ -480,24 +489,32 @@ def main() -> None:
     parsed.add_argument("where", type=Path)
     parsed.add_argument("--name", default="built")
     parsed.add_argument("--piece", type=int, default=PIECE)
-    parsed.add_argument("--bake", action="store_true",
-                        help="also build the coarse ground now, once, into "
-                        "real files, so opening never builds it again. "
-                        "Declaring without this removes any earlier bake.")
-    parsed.add_argument("--workers", type=int, default=1,
-                        help="how many processes build while baking; "
-                        "one builds in place")
+    parsed.add_argument(
+        "--bake",
+        action="store_true",
+        help="also build the coarse ground now, once, into "
+        "real files, so opening never builds it again. "
+        "Declaring without this removes any earlier bake.",
+    )
+    parsed.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="how many processes build while baking; one builds in place",
+    )
     given = parsed.parse_args()
 
-    store = declare_a_built_picture(given.where, given.transfer,
-                                    name=given.name, piece=given.piece,
-                                    bake=given.bake, workers=given.workers)
+    store = declare_a_built_picture(
+        given.where,
+        given.transfer,
+        name=given.name,
+        piece=given.piece,
+        bake=given.bake,
+        workers=given.workers,
+    )
     print(f"\n  declared {store}")
     print("  it holds no pixels; open the folder above it in the viewer.\n")
 
 
 if __name__ == "__main__":
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     main()

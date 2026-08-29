@@ -5,7 +5,7 @@ from __future__ import annotations
 import http.client
 import threading
 
-from server import make_server
+from zmart_viewer.server import make_server
 
 from zmart_live.coordinator import LivePublisher
 from zmart_live.gateway import answer_from_a_live_run

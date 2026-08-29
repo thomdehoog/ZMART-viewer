@@ -44,7 +44,7 @@ import threading
 
 import numpy as np
 from pixels import colour_spread, fraction_lit, image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 
 # A specimen a few tiles across, declared up front the way a run would declare a mosaic
 # whose bounding box it knows before it starts. Small enough to write in a moment, and

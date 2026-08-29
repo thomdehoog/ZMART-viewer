@@ -41,7 +41,7 @@ import pytest
 from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-from server import make_server
+from zmart_viewer.server import make_server
 from test_many_positions_arrive import HELD, write_folder
 
 # How many positions to compare. Ten times as many is the same shape of comparison

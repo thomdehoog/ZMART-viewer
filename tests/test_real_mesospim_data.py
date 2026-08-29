@@ -35,9 +35,9 @@ import time
 from pathlib import Path
 
 import pytest
-from contrast import display_window
+from zmart_viewer.contrast import display_window
 from pixels import assert_something_was_drawn
-from server import make_server
+from zmart_viewer.server import make_server
 
 _STORE_ENV = "ZMART_MESOSPIM_STORE"
 

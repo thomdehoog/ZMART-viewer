@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "picture"))
+sys.path.insert(0, str(_VIZ))
 
 from pixels import fraction_lit  # noqa: E402
 from test_manifest_refresh_browser import (  # noqa: E402

@@ -54,12 +54,12 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from composer import PIECE, Composer
-from mosaic import Copy, Mosaic, Tile, _read_one_tile
-
 from zmart_live.gateway import _LiveRun
 from zmart_live.model import rounded_up
 from zmart_live.shardlink import how_the_array_is_stored
+
+from .composer import PIECE, Composer
+from .mosaic import Copy, Mosaic, Tile, _read_one_tile
 
 log = logging.getLogger("zmart-viewer.governed")
 
@@ -165,17 +165,21 @@ def _after_a_windows_reader(operation, *paths):
         try:
             return operation(*paths)
         except PermissionError as problem:
-            sharing = (getattr(problem, "winerror", None) in (5, 32, 33)
-                       or getattr(problem, "errno", None) in (5, 13))
+            sharing = getattr(problem, "winerror", None) in (5, 32, 33) or getattr(
+                problem, "errno", None
+            ) in (5, 13)
             if os.name != "nt" or not sharing or time.monotonic() >= deadline:
                 raise
             time.sleep(pause)
             pause = min(pause * 2, 0.05)
 
 
-def _a_tile_stamped(pattern: Tile, store: Path,
-                    corner_um: tuple[float, float, float],
-                    moments: frozenset[int] | None = None) -> Tile:
+def _a_tile_stamped(
+    pattern: Tile,
+    store: Path,
+    corner_um: tuple[float, float, float],
+    moments: frozenset[int] | None = None,
+) -> Tile:
     """One published position's tile, stamped from the pattern instead of read.
 
     Every position of a governed run is written by the same writer from the
@@ -196,19 +200,27 @@ def _a_tile_stamped(pattern: Tile, store: Path,
     at the read, exactly where a damaged committed position always has.
     """
     copies = [
-        _promising_its_blocks(Copy(
-            held_in=store / one.held_in.name,
-            shape=one.shape,
-            chunks=one.chunks,
-            dtype=one.dtype,
-            voxel_um=one.voxel_um,
-            corner_um=corner_um,
-            outer_shape=one.outer_shape,
-        ))
+        _promising_its_blocks(
+            Copy(
+                held_in=store / one.held_in.name,
+                shape=one.shape,
+                chunks=one.chunks,
+                dtype=one.dtype,
+                voxel_um=one.voxel_um,
+                corner_um=corner_um,
+                outer_shape=one.outer_shape,
+            )
+        )
         for one in pattern.copies
     ]
-    return Tile(name=store.name, store=store, copies=copies,
-                axes=pattern.axes, turned=pattern.turned, moments=moments)
+    return Tile(
+        name=store.name,
+        store=store,
+        copies=copies,
+        axes=pattern.axes,
+        turned=pattern.turned,
+        moments=moments,
+    )
 
 
 class TheWorldFrame(Mosaic):
@@ -249,10 +261,14 @@ class TheWorldFrame(Mosaic):
         remembered = TheWorldFrame._origins.get(named)
         if remembered is None:
             remembered = tuple(
-                min((float(placement.origin.get(axis, 0))
-                     * float(profile.voxel_size.get(axis, 1.0))
-                     for placement in layout.positions),
-                    default=0.0)
+                min(
+                    (
+                        float(placement.origin.get(axis, 0))
+                        * float(profile.voxel_size.get(axis, 1.0))
+                        for placement in layout.positions
+                    ),
+                    default=0.0,
+                )
                 for axis in ("z", "y", "x")
             )
             TheWorldFrame._origins[named] = remembered
@@ -277,8 +293,7 @@ class TheWorldFrame(Mosaic):
         """From the profile, so it exists before any position does."""
         rung = self._profile.level(level)
         return tuple(
-            float(self._profile.voxel_size.get(axis, 1.0))
-            * float(rung.downsampling.get(axis, 1))
+            float(self._profile.voxel_size.get(axis, 1.0)) * float(rung.downsampling.get(axis, 1))
             for axis in ("z", "y", "x")
         )  # type: ignore[return-value]
 
@@ -286,8 +301,13 @@ class TheWorldFrame(Mosaic):
         """The layout's extent: every planned position, arrived or not."""
         found = self._shape.get(level)
         if found is None:
-            named = (self._run_folder, self._layout.run_id,
-                     self._layout.revision, self._profile.profile_id, level)
+            named = (
+                self._run_folder,
+                self._layout.run_id,
+                self._layout.revision,
+                self._profile.profile_id,
+                level,
+            )
             found = TheWorldFrame._shapes.get(named)
             if found is None:
                 rung = self._profile.level(level)
@@ -296,9 +316,10 @@ class TheWorldFrame(Mosaic):
                 for axis in ("z", "y", "x"):
                     down = float(rung.downsampling.get(axis, 1))
                     edge = max(
-                        (float(placement.origin.get(axis, 0))
-                         + float(frame.get(axis, 1))
-                         for placement in self._layout.positions),
+                        (
+                            float(placement.origin.get(axis, 0)) + float(frame.get(axis, 1))
+                            for placement in self._layout.positions
+                        ),
                         default=float(frame.get(axis, 1)),
                     )
                     reach.append(rounded_up(int(edge), int(down)))
@@ -318,8 +339,7 @@ class TheWorldFrame(Mosaic):
         moments is believed.
         """
         from_tiles = super().frame_room
-        return (max(int(self._profile.timepoints), from_tiles[0]),
-                len(self._profile.channels))
+        return (max(int(self._profile.timepoints), from_tiles[0]), len(self._profile.channels))
 
     @property
     def slab_depths(self) -> list[int]:
@@ -329,8 +349,7 @@ class TheWorldFrame(Mosaic):
         committed nothing yet — a grid is not allowed to depend on arrivals.
         """
         return [
-            int(self._profile.level(level).inner_chunk.get("z", 1))
-            for level in range(self.levels)
+            int(self._profile.level(level).inner_chunk.get("z", 1)) for level in range(self.levels)
         ]
 
 
@@ -346,8 +365,7 @@ class GovernedRun:
     for the state it was built from.
     """
 
-    def __init__(self, folder: str | Path, piece: int = PIECE,
-                 store: str | Path | None = None):
+    def __init__(self, folder: str | Path, piece: int = PIECE, store: str | Path | None = None):
         self.folder = Path(folder).resolve()
         self._run = _LiveRun(self.folder)
         self._piece = piece
@@ -430,15 +448,19 @@ class GovernedRun:
         # per landing was where a large survey's landings quietly grew dear.
         # Read in-process by whoever started the server; never consulted by
         # the serving path itself.
-        self.accounting = {"derives": 0, "last_derive_ms": 0.0,
-                           "last_tiles_read": 0, "last_positions": 0,
-                           "last_bake_arrays_opened": 0,
-                           "last_bake_stagings_built": 0,
-                           "last_bake_zarr_ops": 0,
-                           "last_bake_pieces_rehalved": 0,
-                           "last_bake_slabs_built": 0,
-                           "last_bake_slabs_warm": 0,
-                           "last_snapshot_swept": 0}
+        self.accounting = {
+            "derives": 0,
+            "last_derive_ms": 0.0,
+            "last_tiles_read": 0,
+            "last_positions": 0,
+            "last_bake_arrays_opened": 0,
+            "last_bake_stagings_built": 0,
+            "last_bake_zarr_ops": 0,
+            "last_bake_pieces_rehalved": 0,
+            "last_bake_slabs_built": 0,
+            "last_bake_slabs_warm": 0,
+            "last_snapshot_swept": 0,
+        }
 
     def composer(self) -> Composer:
         """The composer for the manifest's state as of now."""
@@ -451,14 +473,14 @@ class GovernedRun:
             if self._closing:
                 return
             self._catch_up_requested = True
-            self._catch_up_after = (time.monotonic()
-                                    + _BAKE_CATCH_UP_QUIET_S)
+            self._catch_up_after = time.monotonic() + _BAKE_CATCH_UP_QUIET_S
             if self._catch_up_thread is not None:
                 self._catch_up_guard.notify_all()
                 return
             worker = threading.Thread(
                 target=self._catch_up_after_announcements,
-                name=f"zmart-bake-catch-up-{self.folder.name}", daemon=True,
+                name=f"zmart-bake-catch-up-{self.folder.name}",
+                daemon=True,
             )
             self._catch_up_thread = worker
             worker.start()
@@ -477,8 +499,8 @@ class GovernedRun:
                         self._catch_up_requested = False
                         break
                     self._catch_up_guard.wait(
-                        timeout=max(0.0, wait_for)
-                        if self._catch_up_requested else None)
+                        timeout=max(0.0, wait_for) if self._catch_up_requested else None
+                    )
             try:
                 self.composer()
                 # Take the locks in the same order as composer. A request may
@@ -489,8 +511,7 @@ class GovernedRun:
                     with self._guard:
                         settled = current == self._mark
             except Exception:
-                log.exception("the announced bake at %s could not catch up",
-                              self.folder)
+                log.exception("the announced bake at %s could not catch up", self.folder)
                 with self._catch_up_guard:
                     if self._catch_up_requested and not self._closing:
                         continue
@@ -502,8 +523,7 @@ class GovernedRun:
                     return
                 if not settled and not self._catch_up_requested:
                     self._catch_up_requested = True
-                    self._catch_up_after = (time.monotonic()
-                                            + _BAKE_CATCH_UP_QUIET_S)
+                    self._catch_up_after = time.monotonic() + _BAKE_CATCH_UP_QUIET_S
                 if self._catch_up_requested:
                     continue
                 self._catch_up_thread = None
@@ -539,8 +559,7 @@ class GovernedRun:
         marked = watch()
         self._run.manifest.committed_strict()
         phases["strict_read"] = (watch() - marked) * 1000
-        baked_picture = self._shown is not None and bool(
-            self._the_baked_levels())
+        baked_picture = self._shown is not None and bool(self._the_baked_levels())
         began = time.perf_counter()
         marked = watch()
         layout, profile = self._run._geometry()
@@ -564,15 +583,15 @@ class GovernedRun:
             # positions: several sweeps per commit, each identifying the
             # same handful of changes.
             changed_names = frozenset(
-                one for one in before.keys() | drawing.keys()
+                one
+                for one in before.keys() | drawing.keys()
                 if before.get(one) != drawing.get(one)
                 # A new MOMENT moves no generation, but the piece it lands
                 # in may hold an inherited slab built when that moment was
                 # still absent -- serving it warm would show yesterday's
                 # emptiness over today's commit (caught by the combined-axes
                 # oracle the day this line was written).
-                or (one in kept and one in tiles
-                    and kept[one].moments != tiles[one].moments)
+                or (one in kept and one in tiles and kept[one].moments != tiles[one].moments)
             )
             # The paths the change retired: a replaced or vanished
             # position's old copies. Their cached blocks go no further. A
@@ -585,7 +604,8 @@ class GovernedRun:
                 for copy in kept[one].copies
             )
             dirtied = self._what_changed_dirtied(
-                previous, made,
+                previous,
+                made,
                 {one: kept[one] for one in changed_names if one in kept},
                 {one: tiles[one] for one in changed_names if one in drawing},
             )
@@ -601,16 +621,16 @@ class GovernedRun:
             for one in changed_names:
                 was = kept[one].moments if one in kept else frozenset()
                 now = tiles[one].moments if one in tiles else frozenset()
-                touched |= (was | now if before.get(one) != drawing.get(one)
-                            else was ^ now)
+                touched |= was | now if before.get(one) != drawing.get(one) else was ^ now
             dirty_moments = frozenset(touched)
             made.inherit_the_unchanged(previous, dirtied, stale=stale)
             # The piece index moves house with the slabs, patched only where
             # the change reached -- see Composer.inherit_the_index.
             made.inherit_the_index(
-                previous, dirtied, changed_names,
-                [(one, tiles[one]) for one in drawing
-                 if one in changed_names],
+                previous,
+                dirtied,
+                changed_names,
+                [(one, tiles[one]) for one in drawing if one in changed_names],
             )
         # The fold's own bookkeeping, NOT a fresh read of the events file:
         # the compose above already folded the manifest, and a second reader
@@ -621,12 +641,18 @@ class GovernedRun:
         folded = self._run._folded
         phases["inherit"] = (watch() - marked) * 1000
         if baked_picture:
-            current = {"events": folded,
-                       "tail": self._run._last_folded_revision,
-                       "layout": layout.revision}
+            current = {
+                "events": folded,
+                "tail": self._run._last_folded_revision,
+                "layout": layout.revision,
+            }
             self._keep_the_bake_true(
-                made, None if moved_frame else dirtied, current, phases,
-                moments=None if moved_frame else dirty_moments)
+                made,
+                None if moved_frame else dirtied,
+                current,
+                phases,
+                moments=None if moved_frame else dirty_moments,
+            )
         self.accounting["derives"] += 1
         self.accounting["last_derive_ms"] = (time.perf_counter() - began) * 1000
         self.accounting["last_positions"] = len(drawing)
@@ -639,9 +665,9 @@ class GovernedRun:
             # finding D10). A ROLLBACK legitimately folds less than what is
             # installed, and is told apart from a stale racer by its
             # fingerprint still being the manifest's current one.
-            if ((mark != self._mark or self._held is None)
-                    and (folded >= self._folded_installed
-                         or mark == self._run.manifest.fingerprint())):
+            if (mark != self._mark or self._held is None) and (
+                folded >= self._folded_installed or mark == self._run.manifest.fingerprint()
+            ):
                 stood_down = self._held
                 self._mark, self._held = mark, made
                 self._drawing, self._tiles = drawing, tiles
@@ -673,8 +699,10 @@ class GovernedRun:
         if baked_picture:
             self._held.warm_from_the_baked(
                 self._shown,
-                frozenset(one for one in self._the_baked_levels()
-                          if one < self._held.mosaic.levels))
+                frozenset(
+                    one for one in self._the_baked_levels() if one < self._held.mosaic.levels
+                ),
+            )
         self._held.keep_the_coarse_levels_warm()
         phases["warm"] = (watch() - marked) * 1000
         self.accounting["last_phase_ms"] = phases
@@ -691,14 +719,16 @@ class GovernedRun:
             held: tuple[int, ...] = ()
             described = self._shown / "zarr.json" if self._shown else None
             if described is not None and described.is_file():
-                ours = (json.loads(described.read_text(encoding="utf-8"))
-                        .get("attributes") or {}).get("zmart") or {}
+                ours = (
+                    json.loads(described.read_text(encoding="utf-8")).get("attributes") or {}
+                ).get("zmart") or {}
                 held = tuple(int(one) for one in ours.get("baked") or ())
             self._baked = held
         return self._baked
 
-    def stamp_the_bake(self, store: str | Path | None = None, *,
-                       events: int, tail: int, layout: int) -> None:
+    def stamp_the_bake(
+        self, store: str | Path | None = None, *, events: int, tail: int, layout: int
+    ) -> None:
         """Write down exactly which manifest prefix the baked files absorbed.
 
         The stamp is an identity, never a bare count: the count of events
@@ -717,8 +747,8 @@ class GovernedRun:
         stamp = where / "baked.json"
         arriving = stamp.with_name("baked.json.stamping")
         arriving.write_text(
-            json.dumps({"events": events, "tail": tail, "layout": layout}),
-            encoding="utf-8")
+            json.dumps({"events": events, "tail": tail, "layout": layout}), encoding="utf-8"
+        )
         _after_a_windows_reader(os.replace, arriving, stamp)
 
     def _the_stamp(self) -> dict | None:
@@ -733,16 +763,23 @@ class GovernedRun:
             return None
         try:
             held = json.loads(stamp.read_text(encoding="utf-8"))
-            return {"events": int(held["events"]), "tail": int(held["tail"]),
-                    "layout": int(held["layout"])}
+            return {
+                "events": int(held["events"]),
+                "tail": int(held["tail"]),
+                "layout": int(held["layout"]),
+            }
         except (ValueError, KeyError, TypeError):
             return None
 
-    def _keep_the_bake_true(self, made: Composer,
-                            dirtied: dict[int, set[tuple[int, int]]] | None,
-                            current: dict,
-                            phases: dict[str, float] | None = None, *,
-                            moments: frozenset[int] | None = None) -> None:
+    def _keep_the_bake_true(
+        self,
+        made: Composer,
+        dirtied: dict[int, set[tuple[int, int]]] | None,
+        current: dict,
+        phases: dict[str, float] | None = None,
+        *,
+        moments: frozenset[int] | None = None,
+    ) -> None:
         """Patch the baked files the manifest's movement reached, then stamp.
 
         ``moments`` bounds the patch along time for a grown run: only these
@@ -822,8 +859,7 @@ class GovernedRun:
                 phases["bake_scan"] = (watch() - marked) * 1000
                 return
             if dirtied is None or stamped != self._stamp_installed:
-                dirtied, moments = self._the_ground_the_bake_missed(made,
-                                                                    current)
+                dirtied, moments = self._the_ground_the_bake_missed(made, current)
                 if dirtied is None:
                     self._stamp_installed = current
                     phases["bake_scan"] = (watch() - marked) * 1000
@@ -838,20 +874,21 @@ class GovernedRun:
             # here: only the touched moments' frames are recomposed, every
             # channel of each (see the ``moments`` contract above).
             moments_room, channels = made.mosaic.frame_room
-            patched = (range(moments_room) if moments is None else
-                       sorted(one for one in moments if one < moments_room))
-            for level in sorted(one for one in baked
-                                if one < made.mosaic.levels):
+            patched = (
+                range(moments_room)
+                if moments is None
+                else sorted(one for one in moments if one < moments_room)
+            )
+            for level in sorted(one for one in baked if one < made.mosaic.levels):
                 for row, column in sorted(dirtied.get(level, ())):
                     deep = made.grid(level)[0]
                     for moment in patched:
                         for channel in range(channels):
-                            self.accounting[
-                                "last_bake_pieces_composed"] += 1
+                            self.accounting["last_bake_pieces_composed"] += 1
                             for plane in range(deep):
                                 self._replace_one_piece(
-                                    made, level, plane, row, column,
-                                    moment=moment, channel=channel)
+                                    made, level, plane, row, column, moment=moment, channel=channel
+                                )
             # The compose phase split into its components, from the
             # composer's own cost ledger: time spent reading tiles, building
             # slabs (laying included -- reading happens inside building, so
@@ -861,20 +898,20 @@ class GovernedRun:
             # landings slower; whatever is aimed at next is aimed at a
             # measured component of the wall clock, or not at all.
             for cost in ("read_ms", "build_ms", "encode_ms"):
-                phases["bake_compose_" + cost[:-3]] = (
-                    made.costs[cost] - costs_before[cost])
+                phases["bake_compose_" + cost[:-3]] = made.costs[cost] - costs_before[cost]
             self.accounting["last_bake_slabs_built"] = (
-                made.costs["slabs_built"] - costs_before["slabs_built"])
+                made.costs["slabs_built"] - costs_before["slabs_built"]
+            )
             self.accounting["last_bake_slabs_warm"] = (
-                made.costs["slabs_warm"] - costs_before["slabs_warm"])
+                made.costs["slabs_warm"] - costs_before["slabs_warm"]
+            )
             # How many tile rectangles composing the dirty pieces read --
             # a hundred-odd at survey scale for a one-position change, and
             # measured to be the WRONG number to optimise: shrinking it to
             # four (see the docstring above) made landings slower, because
             # warm slabs already amortize these reads. Kept as a diagnostic,
             # not a target.
-            self.accounting["last_bake_tile_reads"] = (
-                made.tile_reads - reads_before)
+            self.accounting["last_bake_tile_reads"] = made.tile_reads - reads_before
             phases["bake_compose"] = (watch() - marked) * 1000
             marked = watch()
             coarsest = made.mosaic.levels - 1
@@ -882,28 +919,28 @@ class GovernedRun:
             # The extended levels are re-halved under the same time bound:
             # one (moment, channel) address per touched frame, or the single
             # empty address that is the flat form.
-            frames = ([()] if (moments_room, channels) == (1, 1) else
-                      [(moment, channel) for moment in patched
-                       for channel in range(channels)])
-            for level in sorted(one for one in baked
-                                if one >= made.mosaic.levels):
-                reached = {(row // 2, column // 2)
-                           for row, column in reached}
+            frames = (
+                [()]
+                if (moments_room, channels) == (1, 1)
+                else [(moment, channel) for moment in patched for channel in range(channels)]
+            )
+            for level in sorted(one for one in baked if one >= made.mosaic.levels):
+                reached = {(row // 2, column // 2) for row, column in reached}
                 if reached:
                     self._rehalve_one_level(level, sorted(reached), frames)
             phases["bake_rehalve"] = (watch() - marked) * 1000
             marked = watch()
-            self.stamp_the_bake(events=current["events"],
-                                tail=current["tail"],
-                                layout=current["layout"])
+            self.stamp_the_bake(
+                events=current["events"], tail=current["tail"], layout=current["layout"]
+            )
             self._stamp_installed = current
             phases["bake_stamp"] = (watch() - marked) * 1000
 
-    def _the_ground_the_bake_missed(self, made: Composer, current: dict,
-                                    ) -> tuple[dict[int, set[tuple[int,
-                                                                   int]]]
-                                               | None,
-                                               frozenset[int] | None]:
+    def _the_ground_the_bake_missed(
+        self,
+        made: Composer,
+        current: dict,
+    ) -> tuple[dict[int, set[tuple[int, int]]] | None, frozenset[int] | None]:
         """The footprints of every event the stamp cannot prove it absorbed.
 
         Returns the dirty footprint and WHICH MOMENTS it is dirty at --
@@ -925,10 +962,14 @@ class GovernedRun:
         """
         events = self._run.manifest.events()
         stamped = self._the_stamp()
-        everything = {level: {(row, column)
-                              for row in range(made.grid(level)[1])
-                              for column in range(made.grid(level)[2])}
-                      for level in range(made.mosaic.levels)}
+        everything = {
+            level: {
+                (row, column)
+                for row in range(made.grid(level)[1])
+                for column in range(made.grid(level)[2])
+            }
+            for level in range(made.mosaic.levels)
+        }
         if stamped is None or stamped["layout"] != current["layout"]:
             return everything, None
         absorbed = stamped["events"]
@@ -943,43 +984,48 @@ class GovernedRun:
             if event.event_type == "position_replaced" or touched is None:
                 touched = None
             else:
-                touched.add(0 if event.timepoint is None
-                            else event.timepoint)
+                touched.add(0 if event.timepoint is None else event.timepoint)
         moments = None if touched is None else frozenset(touched)
         missed = {event.position_id for event in events[absorbed:]}
         dirty: dict[int, set[tuple[int, int]]] = {}
-        named = {tile.name.split(".")[0]: tile
-                 for tile in made.mosaic.tiles
-                 if tile.name.split(".")[0] in missed}
+        named = {
+            tile.name.split(".")[0]: tile
+            for tile in made.mosaic.tiles
+            if tile.name.split(".")[0] in missed
+        }
         for tile in named.values():
             for level in range(made.mosaic.levels):
                 at = made.mosaic.lands_at(tile, level)
                 held = tile.copies[level].shape
                 reached = dirty.setdefault(level, set())
-                for row in range(at[1] // self._piece,
-                                 (at[1] + held[1] - 1) // self._piece + 1):
+                for row in range(at[1] // self._piece, (at[1] + held[1] - 1) // self._piece + 1):
                     for column in range(
-                            at[2] // self._piece,
-                            (at[2] + held[2] - 1) // self._piece + 1):
+                        at[2] // self._piece, (at[2] + held[2] - 1) // self._piece + 1
+                    ):
                         reached.add((row, column))
         return dirty, moments
 
-    def _replace_one_piece(self, made: Composer, level: int, plane: int,
-                           row: int, column: int, *, moment: int = 0,
-                           channel: int = 0) -> None:
+    def _replace_one_piece(
+        self,
+        made: Composer,
+        level: int,
+        plane: int,
+        row: int,
+        column: int,
+        *,
+        moment: int = 0,
+        channel: int = 0,
+    ) -> None:
         """One baked chunk file made true, atomically, or removed if empty.
 
         A grown run's chunk files carry the (moment, channel) frame in
         their path, exactly where the from-scratch bake writes them; a
         flat run keeps the three-part path it always had.
         """
-        frame = ((str(moment), str(channel))
-                 if made.mosaic.frame_room != (1, 1) else ())
-        inside = self._shown.joinpath(str(level), "c", *frame, str(plane),
-                                      str(row))
+        frame = (str(moment), str(channel)) if made.mosaic.frame_room != (1, 1) else ()
+        inside = self._shown.joinpath(str(level), "c", *frame, str(plane), str(row))
         baked = inside / str(column)
-        body = made.bytes_for(level, plane, row, column,
-                              moment=moment, channel=channel)
+        body = made.bytes_for(level, plane, row, column, moment=moment, channel=channel)
         if body is None:
             if baked.is_file():
                 _after_a_windows_reader(os.unlink, baked)
@@ -989,8 +1035,9 @@ class GovernedRun:
         arriving.write_bytes(body)
         _after_a_windows_reader(os.replace, arriving, baked)
 
-    def _rehalve_one_level(self, level: int, pieces: list[tuple[int, int]],
-                           frames: list[tuple[int, ...]]) -> None:
+    def _rehalve_one_level(
+        self, level: int, pieces: list[tuple[int, int]], frames: list[tuple[int, ...]]
+    ) -> None:
         """Recompute touched pieces of one extended level from the one below.
 
         ``frames`` are the (moment, channel) addresses to re-halve -- the
@@ -1030,8 +1077,7 @@ class GovernedRun:
         """
         below = self._bake_below.get(level)
         if below is None:
-            below = zarr.open_array(str(self._shown / str(level - 1)),
-                                    mode="r")
+            below = zarr.open_array(str(self._shown / str(level - 1)), mode="r")
             self._bake_below[level] = below
             self.accounting["last_bake_arrays_opened"] += 1
         staging = self._shown / f".patching-{level}"
@@ -1039,8 +1085,7 @@ class GovernedRun:
         if above is None:
             shutil.rmtree(staging, ignore_errors=True)
             staging.mkdir()
-            shutil.copy2(self._shown / str(level) / "zarr.json",
-                         staging / "zarr.json")
+            shutil.copy2(self._shown / str(level) / "zarr.json", staging / "zarr.json")
             above = zarr.open_array(str(staging), mode="r+")
             self._bake_staging[level] = above
             self.accounting["last_bake_arrays_opened"] += 1
@@ -1052,8 +1097,11 @@ class GovernedRun:
         self.accounting["last_bake_pieces_rehalved"] += len(pieces)
         served_recipe = self._the_baked_recipe(level)
         source_recipe = self._the_baked_recipe(level - 1)
-        if (served_recipe is not None and source_recipe is not None
-                and served_recipe["shape"][0] == source_recipe["shape"][0]):
+        if (
+            served_recipe is not None
+            and source_recipe is not None
+            and served_recipe["shape"][0] == source_recipe["shape"][0]
+        ):
             # The direct path: the chunk files are read and written through
             # the recipe their own zarr.json states, skipping the array
             # API's per-operation dispatcher -- measured as milliseconds of
@@ -1063,8 +1111,8 @@ class GovernedRun:
             # this repository did not write takes the general path below.
             for row, column in pieces:
                 self._rehalve_one_piece_directly(
-                    level, staging, source_recipe, served_recipe,
-                    row, column)
+                    level, staging, source_recipe, served_recipe, row, column
+                )
         else:
             for row, column in pieces:
                 top, left = row * self._piece, column * self._piece
@@ -1075,21 +1123,30 @@ class GovernedRun:
                     # The leading integers pick one (moment, channel) frame
                     # (none for a flat run), so what is read and halved is
                     # always one three-axis block.
-                    source = below[(*address, slice(None),
-                                    slice(2 * top,
-                                          min(2 * bottom, below.shape[-2])),
-                                    slice(2 * left,
-                                          min(2 * right, below.shape[-1])))]
+                    source = below[
+                        (
+                            *address,
+                            slice(None),
+                            slice(2 * top, min(2 * bottom, below.shape[-2])),
+                            slice(2 * left, min(2 * right, below.shape[-1])),
+                        )
+                    ]
                     self.accounting["last_bake_zarr_ops"] += 1
                     evened = np.pad(
                         source,
-                        ((0, 0), (0, 2 * wanted[0] - source.shape[-2]),
-                         (0, 2 * wanted[1] - source.shape[-1])),
-                        mode="edge")
-                    above[(*address, slice(None), slice(top, bottom),
-                           slice(left, right))] = (
+                        (
+                            (0, 0),
+                            (0, 2 * wanted[0] - source.shape[-2]),
+                            (0, 2 * wanted[1] - source.shape[-1]),
+                        ),
+                        mode="edge",
+                    )
+                    above[(*address, slice(None), slice(top, bottom), slice(left, right))] = (
                         evened.reshape(deep, wanted[0], 2, wanted[1], 2)
-                        .mean(axis=(2, 4)).round().astype(above.dtype))
+                        .mean(axis=(2, 4))
+                        .round()
+                        .astype(above.dtype)
+                    )
                     self.accounting["last_bake_zarr_ops"] += 1
         planes = -(-deep // int(above.chunks[-3]))
         # Only the frames that were just re-halved are moved (or removed
@@ -1100,11 +1157,10 @@ class GovernedRun:
             for address in frames:
                 parts = tuple(str(one) for one in address)
                 for plane in range(planes):
-                    staged = staging.joinpath("c", *parts, str(plane),
-                                              str(row), str(column))
-                    real = self._shown.joinpath(str(level), "c", *parts,
-                                                str(plane), str(row),
-                                                str(column))
+                    staged = staging.joinpath("c", *parts, str(plane), str(row), str(column))
+                    real = self._shown.joinpath(
+                        str(level), "c", *parts, str(plane), str(row), str(column)
+                    )
                     if staged.is_file():
                         real.parent.mkdir(parents=True, exist_ok=True)
                         _after_a_windows_reader(os.replace, staged, real)
@@ -1134,21 +1190,24 @@ class GovernedRun:
         recipe = None
         try:
             described = json.loads(
-                (self._shown / str(level) / "zarr.json").read_text(
-                    encoding="utf-8"))
+                (self._shown / str(level) / "zarr.json").read_text(encoding="utf-8")
+            )
             codecs = described["codecs"]
             chunk = described["chunk_grid"]["configuration"]["chunk_shape"]
-            if (len(codecs) == 2
-                    and codecs[0]["name"] == "bytes"
-                    and codecs[0]["configuration"]["endian"] == "little"
-                    and codecs[1]["name"] == "zstd"
-                    and not codecs[1]["configuration"].get("checksum")
-                    and len(chunk) == 3 and chunk[0] == 1
-                    and chunk[1] == self._piece and chunk[2] == self._piece):
+            if (
+                len(codecs) == 2
+                and codecs[0]["name"] == "bytes"
+                and codecs[0]["configuration"]["endian"] == "little"
+                and codecs[1]["name"] == "zstd"
+                and not codecs[1]["configuration"].get("checksum")
+                and len(chunk) == 3
+                and chunk[0] == 1
+                and chunk[1] == self._piece
+                and chunk[2] == self._piece
+            ):
                 recipe = {
                     "shape": tuple(int(one) for one in described["shape"]),
-                    "dtype": np.dtype(described["data_type"])
-                    .newbyteorder("<"),
+                    "dtype": np.dtype(described["data_type"]).newbyteorder("<"),
                     "fill": described["fill_value"],
                     "zstd_level": int(codecs[1]["configuration"]["level"]),
                 }
@@ -1157,9 +1216,15 @@ class GovernedRun:
         self._bake_recipes[level] = recipe
         return recipe
 
-    def _rehalve_one_piece_directly(self, level: int, staging: Path,
-                                    source_recipe: dict, served_recipe: dict,
-                                    row: int, column: int) -> None:
+    def _rehalve_one_piece_directly(
+        self,
+        level: int,
+        staging: Path,
+        source_recipe: dict,
+        served_recipe: dict,
+        row: int,
+        column: int,
+    ) -> None:
         """One piece of one extended level, re-halved file by file.
 
         The same arithmetic as the array path -- assemble the 2x2 ground
@@ -1176,8 +1241,7 @@ class GovernedRun:
         below_deep, below_height, below_width = source_recipe["shape"]
         piece = self._piece
         top, left = row * piece, column * piece
-        wanted = (min(top + piece, height) - top,
-                  min(left + piece, width) - left)
+        wanted = (min(top + piece, height) - top, min(left + piece, width) - left)
         src_h = min(2 * (top + wanted[0]), below_height) - 2 * top
         src_w = min(2 * (left + wanted[1]), below_width) - 2 * left
         below_dir = self._shown / str(level - 1)
@@ -1195,38 +1259,44 @@ class GovernedRun:
                         continue
                     rows = min(piece, 2 * top + src_h - row0)
                     cols = min(piece, 2 * left + src_w - col0)
-                    held = (below_dir / "c" / str(plane) / str(grid_row)
-                            / str(grid_col))
+                    held = below_dir / "c" / str(plane) / str(grid_row) / str(grid_col)
                     if held.is_file():
                         block = np.frombuffer(
-                            unpacking.decode(held.read_bytes()),
-                            dtype=source_dtype).reshape(1, piece, piece)
+                            unpacking.decode(held.read_bytes()), dtype=source_dtype
+                        ).reshape(1, piece, piece)
                         part = block[0, :rows, :cols]
                     else:
-                        part = np.full((rows, cols),
-                                       source_recipe["fill"], source_dtype)
-                    canvas[row0 - 2 * top:row0 - 2 * top + rows,
-                           col0 - 2 * left:col0 - 2 * left + cols] = part
-            evened = np.pad(canvas[None],
-                            ((0, 0), (0, 2 * wanted[0] - src_h),
-                             (0, 2 * wanted[1] - src_w)), mode="edge")
-            halved = (evened.reshape(1, wanted[0], 2, wanted[1], 2)
-                      .mean(axis=(2, 4)).round()
-                      .astype(served_recipe["dtype"]))
-            buffer = np.full((1, piece, piece), served_recipe["fill"],
-                             served_recipe["dtype"])
-            buffer[0, :wanted[0], :wanted[1]] = halved[0]
+                        part = np.full((rows, cols), source_recipe["fill"], source_dtype)
+                    canvas[
+                        row0 - 2 * top : row0 - 2 * top + rows,
+                        col0 - 2 * left : col0 - 2 * left + cols,
+                    ] = part
+            evened = np.pad(
+                canvas[None],
+                ((0, 0), (0, 2 * wanted[0] - src_h), (0, 2 * wanted[1] - src_w)),
+                mode="edge",
+            )
+            halved = (
+                evened.reshape(1, wanted[0], 2, wanted[1], 2)
+                .mean(axis=(2, 4))
+                .round()
+                .astype(served_recipe["dtype"])
+            )
+            buffer = np.full((1, piece, piece), served_recipe["fill"], served_recipe["dtype"])
+            buffer[0, : wanted[0], : wanted[1]] = halved[0]
             if np.all(buffer == served_recipe["fill"]):
                 continue
             staged = staging / "c" / str(plane) / str(row)
             staged.mkdir(parents=True, exist_ok=True)
             (staged / str(column)).write_bytes(
-                packing.encode(np.ascontiguousarray(buffer).tobytes()))
+                packing.encode(np.ascontiguousarray(buffer).tobytes())
+            )
 
-    def _compose_the_snapshot(self, before: dict[str, int],
-                              kept: dict[str, Tile],
-                              ) -> tuple[Composer, dict[str, int],
-                                         dict[str, Tile]]:
+    def _compose_the_snapshot(
+        self,
+        before: dict[str, int],
+        kept: dict[str, Tile],
+    ) -> tuple[Composer, dict[str, int], dict[str, Tile]]:
         """Derive tiles, frame and composer from the manifest's current truth.
 
         Nothing is read from disk here beyond the one pattern store, once per
@@ -1258,10 +1328,10 @@ class GovernedRun:
         for position_id, moment, generation in published:
             if generation == current[position_id]:
                 gathered.setdefault(position_id, set()).add(moment)
-        moments_of = {position_id: frozenset(moments)
-                      for position_id, moments in gathered.items()}
+        moments_of = {position_id: frozenset(moments) for position_id, moments in gathered.items()}
         drawing = {
-            position_id: current[position_id] for position_id in order
+            position_id: current[position_id]
+            for position_id in order
             # The two manifest reads above can straddle a commit, and then the
             # order names a position the published set does not know yet. Not
             # drawn HERE, deliberately: that commit moved the fingerprint, so
@@ -1270,13 +1340,17 @@ class GovernedRun:
             # blinking absent, never at the writer's own cadence.
             if moments_of.get(position_id)
         }
-        changed = [one for one, generation in drawing.items()
-                   if before.get(one) != generation or one not in kept
-                   # A new MOMENT moves no generation, but the tile carries
-                   # its committed-moment set, so the tile must be restamped
-                   # (cheap: no file is read) or the landing would serve as
-                   # absent from the carried-over tile.
-                   or kept[one].moments != moments_of[one]]
+        changed = [
+            one
+            for one, generation in drawing.items()
+            if before.get(one) != generation
+            or one not in kept
+            # A new MOMENT moves no generation, but the tile carries
+            # its committed-moment set, so the tile must be restamped
+            # (cheap: no file is read) or the landing would serve as
+            # absent from the carried-over tile.
+            or kept[one].moments != moments_of[one]
+        ]
         read = 0
         fresh: dict[str, Tile] = {}
         if changed:
@@ -1293,19 +1367,22 @@ class GovernedRun:
             if self._pattern is None or self._pattern_of != profile.profile_id:
                 first = changed[0]
                 self._pattern = self._the_pattern_read_and_checked(
-                    first, drawing[first], corners[first])
+                    first, drawing[first], corners[first]
+                )
                 self._pattern_of = profile.profile_id
                 read = 1
             fresh = {
                 one: _a_tile_stamped(
-                    self._pattern, self._the_store_of(one, drawing[one]),
-                    corners[one], moments=moments_of[one])
+                    self._pattern,
+                    self._the_store_of(one, drawing[one]),
+                    corners[one],
+                    moments=moments_of[one],
+                )
                 for one in changed
             }
         self.accounting["last_tiles_read"] = read
         tiles = {
-            position_id: fresh.get(position_id) or kept[position_id]
-            for position_id in drawing
+            position_id: fresh.get(position_id) or kept[position_id] for position_id in drawing
         }
         ordered = [tiles[position_id] for position_id in drawing]
         # How many position entries this snapshot's bookkeeping handled --
@@ -1319,15 +1396,19 @@ class GovernedRun:
         # test_absorbing_a_change_touches_the_change).
         # Two passes over the published units now: the generation fold and
         # the per-position moment gathering above.
-        self.accounting["last_snapshot_swept"] = (
-            2 * len(published) + len(order) + 2 * len(drawing))
-        return (Composer(TheWorldFrame(ordered, layout, profile,
-                                       run=self.folder),
-                         piece=self._piece), drawing, tiles)
+        self.accounting["last_snapshot_swept"] = 2 * len(published) + len(order) + 2 * len(drawing)
+        return (
+            Composer(TheWorldFrame(ordered, layout, profile, run=self.folder), piece=self._piece),
+            drawing,
+            tiles,
+        )
 
-    def _the_pattern_read_and_checked(self, position_id: str, generation: int,
-                                      corner_um: tuple[float, float, float],
-                                      ) -> Tile:
+    def _the_pattern_read_and_checked(
+        self,
+        position_id: str,
+        generation: int,
+        corner_um: tuple[float, float, float],
+    ) -> Tile:
         """Read the one store that stands in for every other, and check it.
 
         Stamping trusts the layout for every corner, so the one store that IS
@@ -1352,8 +1433,7 @@ class GovernedRun:
                 )
         return pattern
 
-    def _corners_of(self, layout, profile) -> dict[str, tuple[float, float,
-                                                              float]]:
+    def _corners_of(self, layout, profile) -> dict[str, tuple[float, float, float]]:
         """Where each planned position's first voxel sits, in micrometres.
 
         The same arithmetic the writer uses for a store's translation
@@ -1364,22 +1444,24 @@ class GovernedRun:
         """
         named = (layout.revision, profile.profile_id)
         if self._corners_mark != named:
-            voxel = tuple(float(profile.voxel_size.get(axis, 1.0))
-                          for axis in ("z", "y", "x"))
+            voxel = tuple(float(profile.voxel_size.get(axis, 1.0)) for axis in ("z", "y", "x"))
             self._corners = {
                 placement.position_id: tuple(
                     float(placement.origin.get(axis, 0.0)) * size
-                    for axis, size in zip(("z", "y", "x"), voxel,
-                                          strict=True))
+                    for axis, size in zip(("z", "y", "x"), voxel, strict=True)
+                )
                 for placement in layout.positions
             }
             self._corners_mark = named
         return self._corners
 
-    def _what_changed_dirtied(self, previous: Composer, fresh: Composer,
-                              was_tiles: dict[str, Tile],
-                              now_tiles: dict[str, Tile],
-                              ) -> dict[int, set[tuple[int, int]]]:
+    def _what_changed_dirtied(
+        self,
+        previous: Composer,
+        fresh: Composer,
+        was_tiles: dict[str, Tile],
+        now_tiles: dict[str, Tile],
+    ) -> dict[int, set[tuple[int, int]]]:
         """Which pieces the manifest's movement reached, per level.
 
         A position is a change if it appeared, vanished, or moved to another
@@ -1401,11 +1483,12 @@ class GovernedRun:
                     at = composer.mosaic.lands_at(tile, level)
                     held = tile.copies[level].shape
                     reached = dirty.setdefault(level, set())
-                    for row in range(at[1] // self._piece,
-                                     (at[1] + held[1] - 1) // self._piece + 1):
+                    for row in range(
+                        at[1] // self._piece, (at[1] + held[1] - 1) // self._piece + 1
+                    ):
                         for column in range(
-                                at[2] // self._piece,
-                                (at[2] + held[2] - 1) // self._piece + 1):
+                            at[2] // self._piece, (at[2] + held[2] - 1) // self._piece + 1
+                        ):
                             reached.add((row, column))
         return dirty
 
@@ -1416,8 +1499,7 @@ class GovernedRun:
             catching_up = self._catch_up_thread
             self._catch_up_requested = False
             self._catch_up_guard.notify_all()
-        if (catching_up is not None
-                and catching_up is not threading.current_thread()):
+        if catching_up is not None and catching_up is not threading.current_thread():
             catching_up.join()
         with self._derive_guard, self._guard:
             held, self._held, self._mark = self._held, None, None

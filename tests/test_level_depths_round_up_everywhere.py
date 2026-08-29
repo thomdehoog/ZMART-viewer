@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "picture"))
+sys.path.insert(0, str(_VIZ))
 
 from zmart_live.coordinator import LivePublisher  # noqa: E402
 from zmart_live.model import AcquisitionProfile, GridCell, LevelGeometry  # noqa: E402
@@ -76,7 +76,7 @@ def a_deep_run_whose_levels_halve_z(tmp_path):
 def test_the_writer_and_the_world_frame_agree_on_the_ceiling(
     a_deep_run_whose_levels_halve_z,
 ):
-    from governed import TheWorldFrame
+    from zmart_viewer.governed import TheWorldFrame
 
     run = a_deep_run_whose_levels_halve_z
     ceiling = (-(-DEPTH // 2), 64, 64)  # (7, 64, 64)
@@ -111,7 +111,7 @@ def test_the_rule_has_exactly_one_definition():
     how deep the world is. Identity (`is`), not equality: the same
     function object, not a lookalike.
     """
-    import governed
+    from zmart_viewer import governed
 
     from zmart_live import coordinator, gateway, model
 

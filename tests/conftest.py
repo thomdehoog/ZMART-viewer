@@ -1,11 +1,10 @@
 """Shared fixtures for the viz-studio tests.
 
-The server is a set of plain modules under ``app/server/`` rather than an
-installed package (the tool is launched by path, not imported by consumers), so
-tests put that directory on ``sys.path`` the same way ``run_demo.py`` does. The
-repository root is included as well because the backend's live-publication gate
-is the installed `zmart_live` package in production, while a source-tree test
-must be able to exercise it before the editable install has been made.
+The backend is the ``zmart_viewer`` package at the repository root, so tests
+put that root on ``sys.path``; the checkout's parent is included as well
+because the live-publication gate is the installed ``zmart_live`` package in
+production, while a source-tree test must be able to exercise it before the
+editable install has been made.
 
 The browser-driven tests are opt-out rather than opt-in: they run wherever the
 page has been built and a Chromium is available, and skip with a clear reason
@@ -32,8 +31,6 @@ from pathlib import Path
 import pytest
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
-_BACKEND = _VIZ_ROOT / "app" / "server"
-_PICTURE = _VIZ_ROOT / "app" / "picture"
 _MEASURE = _VIZ_ROOT / "measure"
 _DEMOS = _VIZ_ROOT / "demos"
 _TESTDATA = _VIZ_ROOT / "testdata"
@@ -110,15 +107,12 @@ def _give_up_on_the_picture(reason: str) -> None:
     pytest.skip(f"{PIXELS_NOT_LOOKED_AT}: {reason}")
 
 
-# Last inserted ends up first, and the server the tests mean is the viewer's
-# own -- app/picture has a small server of its own that must not shadow it.
-for source_root in (_REPO_ROOT, _VIZ_ROOT, _PICTURE, _MEASURE, _DEMOS,
-                    _TESTDATA, _BACKEND):
+for source_root in (_REPO_ROOT, _VIZ_ROOT, _MEASURE, _DEMOS, _TESTDATA):
     if str(source_root) not in sys.path:
         sys.path.insert(0, str(source_root))
 
 from demo_data import write_demo_zarr  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 _DIST = _VIZ_ROOT / "app" / "page" / "dist"
 

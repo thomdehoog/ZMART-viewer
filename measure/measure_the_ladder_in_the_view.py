@@ -45,14 +45,14 @@ import urllib.request
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "server"))
+sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 from make_ladder_stores import RUNGS, a_rung_of  # noqa: E402
 from pixels import fraction_lit  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # The picture has settled when nothing new has been asked for this long.
 QUIET_S = 2.0

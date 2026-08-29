@@ -24,9 +24,9 @@ import pytest
 import zarr
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 
-from contrast import measure_here  # noqa: E402
+from zmart_viewer.contrast import measure_here  # noqa: E402
 
 # A picture in four quarters: dim tissue at the top left, bright tissue at the
 # bottom right, and nothing imaged in the other two.
@@ -119,7 +119,7 @@ def test_a_box_outside_the_picture_is_not_an_error(a_picture):
 
 import threading  # noqa: E402
 
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 
 def test_auto_windows_the_well_being_looked_at(browser, built_dist, tmp_path):

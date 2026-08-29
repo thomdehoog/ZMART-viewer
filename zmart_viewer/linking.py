@@ -214,10 +214,18 @@ class _WhereThePiecesReallyAre:
         # pieces the first one is, which folder it is in) — all counted in pieces
         # and given as (z, y, x) — and the same tuple is shared by every row it
         # appears in rather than copied into each.
-        self._rows: dict[int, list[tuple[
-            tuple[int, int, int], tuple[int, int, int],
-            tuple[int, int, int], str, str,
-        ]]] = {}
+        self._rows: dict[
+            int,
+            list[
+                tuple[
+                    tuple[int, int, int],
+                    tuple[int, int, int],
+                    tuple[int, int, int],
+                    str,
+                    str,
+                ]
+            ],
+        ] = {}
         # How wide the widest tile is, in pieces. The search below walks back along
         # a row from the query, and this says when to stop: a tile beginning further
         # back than the widest tile is wide cannot still be reaching this far.
@@ -270,13 +278,19 @@ class _WhereThePiecesReallyAre:
             begins, size, low, store, held_as = crossing[index]
             if at[2] - begins[2] >= self._widest:
                 break
-            if (begins[2] <= at[2] < begins[2] + size[2]
-                    and begins[0] <= at[0] < begins[0] + size[0]):
-                return store, (
-                    low[0] + at[0] - begins[0],
-                    low[1] + at[1] - begins[1],
-                    low[2] + at[2] - begins[2],
-                ), held_as
+            if (
+                begins[2] <= at[2] < begins[2] + size[2]
+                and begins[0] <= at[0] < begins[0] + size[0]
+            ):
+                return (
+                    store,
+                    (
+                        low[0] + at[0] - begins[0],
+                        low[1] + at[1] - begins[1],
+                        low[2] + at[2] - begins[2],
+                    ),
+                    held_as,
+                )
         return None
 
     def the_bytes_behind(self, inside: str) -> Held | None:
@@ -309,13 +323,12 @@ class _WhereThePiecesReallyAre:
         # are exact rather than rounded -- and if that were ever not so, the tile
         # would be found at the wrong place rather than not found, which is why the
         # writer refuses such a placement rather than trusting this.
-        shrink = 2 ** level
+        shrink = 2**level
         found = self._tile_covering((z, y * shrink, x * shrink))
         if found is None:
             return None
         store, (from_z, from_y, from_x), held_as = found
-        piece = self._named(frame, channel, from_z,
-                            from_y // shrink, from_x // shrink)
+        piece = self._named(frame, channel, from_z, from_y // shrink, from_x // shrink)
         where = f"{store}/{level}/{piece}"
         # One piece, one file: all of it, from the beginning. A store that packs
         # several pieces into one file would work out the place and the length from
@@ -360,7 +373,7 @@ class _WhereThePiecesReallyAre:
         wanted = f"{which}/"
         if not inside.startswith(wanted):
             return None
-        rest = inside[len(wanted):]
+        rest = inside[len(wanted) :]
         parts = rest.split(self.separator) if self.separator else [rest]
         if self.prefix:
             # The ``c`` version 3 puts in front is a part of the name of its own,
@@ -442,8 +455,7 @@ def rewrite_the_map_inside(store: Path, ours: dict) -> None:
     if "version" in held and "tiles" in held:
         listing.write_text(json.dumps(ours, indent=1), encoding="utf-8")
         return
-    where = (held.setdefault("attributes", {}) if listing.name == "zarr.json"
-             else held)
+    where = held.setdefault("attributes", {}) if listing.name == "zarr.json" else held
     where[OURS_IN_THE_DESCRIPTION] = ours
     listing.write_text(json.dumps(held, indent=1), encoding="utf-8")
 
@@ -569,8 +581,7 @@ def _read(listing: Path, added: Path) -> _WhereThePiecesReallyAre | None:
     if held is None or held.get("version") not in LINKS_VERSIONS_UNDERSTOOD:
         return None
     try:
-        held = {**held, "tiles": [*(held.get("tiles") or []),
-                                  *_the_tiles_added_since(added)]}
+        held = {**held, "tiles": [*(held.get("tiles") or []), *_the_tiles_added_since(added)]}
         return _WhereThePiecesReallyAre(held)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None

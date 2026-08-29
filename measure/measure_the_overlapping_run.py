@@ -84,7 +84,7 @@ from pathlib import Path
 import numpy as np
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
 from zmart_storage.canvas import Channel  # noqa: E402
@@ -514,7 +514,7 @@ def look_at_it(folder: Path, store: str = "overview.ome.zarr") -> dict:
     thing differing between two rows of its table is which arrangement was opened.
     """
     from playwright.sync_api import sync_playwright
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     result: dict = {}
     httpd = make_server(

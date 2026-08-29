@@ -92,7 +92,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
-from server import make_server
+from zmart_viewer.server import make_server
 
 # The element the viewer labels its scale bar with, and the plain rectangle
 # inside it that is the bar. The label sits above the rectangle, so the two are

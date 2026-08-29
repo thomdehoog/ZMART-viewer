@@ -19,10 +19,10 @@ import json
 import threading
 import time
 
-import announcements as announcements_mod
+from zmart_viewer import announcements as announcements_mod
 import pytest
-from announcements import Announcements, FolderWatcher
-from server import make_server
+from zmart_viewer.announcements import Announcements, FolderWatcher
+from zmart_viewer.server import make_server
 
 
 class TestKeepingTrackOfWhoIsListening:

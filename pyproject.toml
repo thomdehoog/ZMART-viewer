@@ -45,15 +45,7 @@ dev = [
 ]
 
 [tool.setuptools]
-# Nothing is packaged yet, deliberately.
-#
-# The viewer is a set of loose modules under ``app/`` that its scripts and tests
-# reach by putting the folder on the import path, and it is started from inside
-# its own folder rather than imported by anything. Turning it into an importable
-# package is worth doing and is not small: a dozen scripts and the whole browser
-# suite import those modules by bare name. Until then, installing this project
-# gets you the dependencies and the run itself comes from ``install.py``.
-packages = []
+packages = ["zmart_viewer"]
 
 [tool.ruff]
 target-version = "py310"

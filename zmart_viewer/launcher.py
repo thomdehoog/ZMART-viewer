@@ -18,8 +18,7 @@ import sys
 import threading
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from server import make_server  # noqa: E402
+from .server import make_server
 
 
 def _webview2_present() -> bool:
@@ -97,7 +96,7 @@ def open_window(
         show = chooser.get("show")
         if show:
             return show()
-        from server import ask_this_machine_for_a_folder
+        from .server import ask_this_machine_for_a_folder
 
         return ask_this_machine_for_a_folder()
 

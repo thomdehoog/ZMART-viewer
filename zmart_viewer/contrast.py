@@ -65,7 +65,7 @@ from pathlib import Path
 # teach rather than two. It is spelled with a leading underscore to say "this is
 # internal to the viewer's backend", which it is; this module is part of the same
 # backend and is a fair caller of it.
-from stores import DESCRIPTION_FILES, _moments_folder, _read_attrs_at
+from .stores import DESCRIPTION_FILES, _moments_folder, _read_attrs_at
 
 # The flat window, and what the Auto button restores: the 1st and 99th
 # percentiles of the measured brightness. Percentiles rather than min and max
@@ -257,7 +257,9 @@ def _sample(array, held: dict[int, int] | None = None) -> object:
 
     spread_axis = free[-1]
     depth = leading[spread_axis]
-    positions = sorted({int(i * (depth - 1) / max(_SAMPLE_PLANES - 1, 1)) for i in range(_SAMPLE_PLANES)})
+    positions = sorted(
+        {int(i * (depth - 1) / max(_SAMPLE_PLANES - 1, 1)) for i in range(_SAMPLE_PLANES)}
+    )
     pieces = []
     for position in positions:
         where: list[int] = []
@@ -394,15 +396,14 @@ def _samples(store: Path, *, channel: int | None = None):
     return None
 
 
-def _a_built_pictures_values(store: str | Path, level: int, box,
-                             channel: int | None):
+def _a_built_pictures_values(store: str | Path, level: int, box, channel: int | None):
     """A built picture's pixels inside the share of it on screen, or None.
 
     Imported lazily from the building shelf, like the whole-picture sample
     beside it: a checkout without it has no built pictures to measure.
     """
     try:
-        from served import the_values_inside
+        from .served import the_values_inside
     except ImportError:
         return None
     return the_values_inside(Path(store), level, box, channel=channel or 0)
@@ -415,7 +416,7 @@ def _a_built_pictures_sample(store: str | Path, channel: int | None):
     has no built pictures to measure, exactly as the server treats it.
     """
     try:
-        from served import a_sample_behind
+        from .served import a_sample_behind
     except ImportError:
         return None
     return a_sample_behind(Path(store), channel=channel or 0)
@@ -440,8 +441,7 @@ def _the_members_behind(store: str | Path) -> list[Path]:
     return [collection / member for member in members]
 
 
-def camera_range(store: str | Path,
-                 declared: dict | None = None) -> tuple[float, float] | None:
+def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float, float] | None:
     """The whole range this channel's numbers live in, or None where nothing says.
 
     ``declared`` is what the run itself wrote down (the ``min`` and ``max``
@@ -526,7 +526,9 @@ def _hold_the_channel(attrs: dict, channel: int | None) -> dict[int, int]:
     """
     if channel is None:
         return {}
-    axes = [axis.get("name", "") for axis in (attrs.get("multiscales") or [{}])[0].get("axes") or []]
+    axes = [
+        axis.get("name", "") for axis in (attrs.get("multiscales") or [{}])[0].get("axes") or []
+    ]
     return {axes.index("c"): channel} if "c" in axes else {}
 
 
@@ -537,9 +539,7 @@ def _hold_the_channel(attrs: dict, channel: int | None) -> dict[int, int]:
 # the pixels; the others exist for callers that want one answer on its own.
 
 
-def measure(
-    store: str | Path, *, channel: int | None = None, bins: int = HISTOGRAM_BINS
-) -> dict:
+def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOGRAM_BINS) -> dict:
     """Everything the panel needs to know about one channel's brightness.
 
     This is what the server calls when it meets a store for the first time. It
@@ -643,17 +643,26 @@ def _thinned(shape, taken, most: int):
     held = _how_many(shape, taken)
     if held <= most:
         return taken
-    spread = sum(1 for length, part in zip(shape, taken)
-                 if len(range(*part.indices(int(length)))) > 1) or 1
+    spread = (
+        sum(1 for length, part in zip(shape, taken) if len(range(*part.indices(int(length)))) > 1)
+        or 1
+    )
     step = max(2, int(round((held / most) ** (1.0 / spread))))
-    return [slice(part.start, part.stop, (part.step or 1) * step)
-            if len(range(*part.indices(int(length)))) > 1 else part
-            for length, part in zip(shape, taken)]
+    return [
+        slice(part.start, part.stop, (part.step or 1) * step)
+        if len(range(*part.indices(int(length)))) > 1
+        else part
+        for length, part in zip(shape, taken)
+    ]
 
 
-def measure_here(store: str | Path, *, channel: int | None = None,
-                 box=((0.0, 0.0), (1.0, 1.0)),
-                 bins: int = HISTOGRAM_BINS) -> dict | None:
+def measure_here(
+    store: str | Path,
+    *,
+    channel: int | None = None,
+    box=((0.0, 0.0), (1.0, 1.0)),
+    bins: int = HISTOGRAM_BINS,
+) -> dict | None:
     """The brightness of the part of a picture an operator is looking at.
 
     :func:`measure` answers for the whole picture, which is the right question
@@ -685,8 +694,9 @@ def measure_here(store: str | Path, *, channel: int | None = None,
     levels = _level_paths(attrs)
     if not levels:
         return None
-    axes = [axis.get("name", "") for axis
-            in (attrs.get("multiscales") or [{}])[0].get("axes") or []]
+    axes = [
+        axis.get("name", "") for axis in (attrs.get("multiscales") or [{}])[0].get("axes") or []
+    ]
     try:
         group = zarr.open_group(str(store), mode="r")
     except (OSError, KeyError, ValueError):

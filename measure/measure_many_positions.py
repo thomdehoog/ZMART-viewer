@@ -29,10 +29,10 @@ import numpy as np
 import zarr
 
 VIZ = Path("/home/user/ZMART-microscopy/zmart-viewer")
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 
 from playwright.sync_api import sync_playwright  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 1, 64, 64, 2
 

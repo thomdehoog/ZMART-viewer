@@ -18,7 +18,7 @@ import time
 import numpy as np
 import pytest
 import zarr
-from server import make_server
+from zmart_viewer.server import make_server
 
 
 def _serve_tree(tmp_path, *, live: bool = True):
@@ -562,7 +562,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_the_description_is_forgotten(self, two_open):
         """What a store contains, remembered while reading it, is dropped on close."""
-        import stores
+        from zmart_viewer import stores
 
         port, data = two_open
         closed = str(data / "targetscan_cell001.ome.zarr")
@@ -578,7 +578,7 @@ class TestClosingGivesTheMemoryBack:
         Dropping too much would be quietly expensive rather than wrong: the
         acquisition still on screen would be read from disk all over again.
         """
-        import stores
+        from zmart_viewer import stores
 
         port, data = two_open
         kept = str(data / "overview_pos001.ome.zarr")
@@ -587,7 +587,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_the_files_served_to_the_browser_are_forgotten(self, two_open):
         """The small files handed to the page are held in memory too."""
-        from server import _Handler
+        from zmart_viewer.server import _Handler
 
         port, data = two_open
         closed = str(data / "targetscan_cell001.ome.zarr")
@@ -599,7 +599,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_closing_says_which_images_went(self, tmp_path):
         """The server can only forget what the library tells it was closed."""
-        from library import Library
+        from zmart_viewer.library import Library
 
         _, data = self._two_acquisitions(tmp_path)
         library = Library()

@@ -12,7 +12,7 @@ from __future__ import annotations
 import threading
 
 import pytest
-from server import make_server
+from zmart_viewer.server import make_server
 from driving import colour_shown, pick_colormap  # noqa: E402
 
 # What the engine ended up holding, read back from the engine itself rather than

@@ -17,8 +17,8 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from library import Library
-from server import make_server
+from zmart_viewer.library import Library
+from zmart_viewer.server import make_server
 
 
 def _tiny_store(path):

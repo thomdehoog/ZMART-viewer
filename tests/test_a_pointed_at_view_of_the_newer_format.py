@@ -27,9 +27,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import linking
+from zmart_viewer import linking
 import numpy as np
-from server import make_server
+from zmart_viewer.server import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 

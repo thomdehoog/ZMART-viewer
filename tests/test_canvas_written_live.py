@@ -49,7 +49,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from pixels import colour_spread, image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 
 from zmart_storage.canvas import Channel, TileCanvases
 

@@ -91,7 +91,7 @@ from collections import Counter
 from pathlib import Path
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 
 # One small plane per position. The number of separate positions is what is being
 # measured, so there is no reason to write more than that -- and a great deal of
@@ -259,7 +259,7 @@ def write_folder(root: Path, positions: int) -> None:
 def look(positions: int, budget: int) -> dict:
     """Open the viewer on a folder of ``positions`` positions and see what happens."""
     from playwright.sync_api import sync_playwright
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     root = Path(tempfile.mkdtemp(prefix=f"zmart-scale-{positions}-"))
     result: dict = {"positions": positions}

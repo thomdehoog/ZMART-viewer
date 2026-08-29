@@ -27,10 +27,10 @@ import threading
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "server"))
+sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
-from server import make_server            # noqa: E402
+from zmart_viewer.server import make_server            # noqa: E402
 from conftest import find_a_chromium      # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 

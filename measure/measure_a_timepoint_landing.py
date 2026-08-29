@@ -27,9 +27,9 @@ from pathlib import Path
 import numpy as np
 
 VIZ = Path(__file__).resolve().parents[1]
-HERE = VIZ / "app" / "picture"
+HERE = VIZ
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ / "tests"))
 
 FRAME = 384
@@ -50,7 +50,7 @@ def _one_rung(browser_kind, built, positions: int, keep: Path) -> dict:
     import tempfile
     import threading
 
-    from server import make_server
+    from zmart_viewer.server import make_server
     from test_manifest_refresh_browser import _open, _wait_for_picture
 
     from zmart_live.coordinator import LivePublisher

@@ -93,7 +93,7 @@ import time
 from pathlib import Path
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
 from measure_the_overlapping_run import _a_tile, look_at_it  # noqa: E402

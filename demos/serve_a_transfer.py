@@ -31,10 +31,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "picture"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from composer import PIECE, Composer, the_piece_address  # noqa: E402
-from mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer.composer import PIECE, Composer, the_piece_address  # noqa: E402
+from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
 
 
 # --- the server, which lived in app/picture/server.py until 2026-08-26.

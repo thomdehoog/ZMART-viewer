@@ -27,12 +27,12 @@ from pathlib import Path
 import pytest
 
 VIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(VIZ / "app" / "picture"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-import served  # noqa: E402
-from declare import declare_a_governed_picture  # noqa: E402
-from governed import GovernedRun  # noqa: E402
+from zmart_viewer import served  # noqa: E402
+from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.governed import GovernedRun  # noqa: E402
 from test_the_composer_obeys_the_manifest import PIECE, a_governed_run, the_columns_of  # noqa: E402
 
 from zmart_live.fixtures import some_specimen  # noqa: E402
@@ -200,7 +200,7 @@ def test_the_bake_retries_a_transient_windows_sharing_violation(
                                        name="live", piece=PIECE, bake=True)
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     governed.composer()
-    import governed as governed_module
+    from zmart_viewer import governed as governed_module
 
     real_replace = governed_module.os.replace
     refused = {"left": 1}
@@ -243,12 +243,12 @@ def test_the_http_route_consults_the_manifest_before_any_baked_file(tmp_path):
     import threading
     import urllib.request
 
-    backend = str(Path(__file__).resolve().parent.parent / "app" / "server")
+    backend = str(Path(__file__).resolve().parent.parent)
     if backend not in sys.path:
         sys.path.insert(0, backend)
     import numpy as np
     from check_the_built_picture import decode
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -344,7 +344,7 @@ def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path,
     generation from files forever. The stamp must say what the bake actually
     absorbed — the fold count of the snapshot it baked.
     """
-    import declare as declaring
+    from zmart_viewer import declare as declaring
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -395,10 +395,10 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
                                        name="live", piece=PIECE, bake=True)
     import urllib.request
 
-    backend = str(Path(__file__).resolve().parent.parent / "app" / "server")
+    backend = str(Path(__file__).resolve().parent.parent)
     if backend not in sys.path:
         sys.path.insert(0, backend)
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     # One piece ask opens and remembers the governed run.  It is deliberately
     # the final image request in this test.
@@ -677,10 +677,10 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
     import threading
     import urllib.request
 
-    backend = str(Path(__file__).resolve().parent.parent / "app" / "server")
+    backend = str(Path(__file__).resolve().parent.parent)
     if backend not in sys.path:
         sys.path.insert(0, backend)
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -729,7 +729,7 @@ def test_a_baked_picture_still_warms_the_composer_for_its_patcher(tmp_path):
     """
     import time
 
-    from governed import GovernedRun
+    from zmart_viewer.governed import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -773,7 +773,7 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
     padding included.
     """
     import numpy as np
-    from governed import GovernedRun
+    from zmart_viewer.governed import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -804,5 +804,5 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
                 "warm's shortcut changed what the operator would be shown"
             )
     finally:
-        import served
+        from zmart_viewer import served
         served.forget(store)
