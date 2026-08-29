@@ -30,6 +30,14 @@ import pytest
 
 _VIZ = Path(__file__).resolve().parents[1]
 _OPTIONS = _VIZ / "parked"
+
+if not _OPTIONS.is_dir():
+    pytest.skip(
+        "the parked comparison harness is not in this checkout -- these "
+        "gates compare drawing options against pages built there",
+        allow_module_level=True,
+    )
+
 if str(_OPTIONS / "measure") not in sys.path:
     sys.path.insert(0, str(_OPTIONS / "measure"))
 
