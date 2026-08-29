@@ -79,9 +79,11 @@ def _bake_one_stripe(store: Path, level: int, rows: tuple[int, ...]) -> int:
 
                         if body is None:
                             continue
+
                         inside.mkdir(parents=True, exist_ok=True)
                         (inside / str(column)).write_bytes(body)
                         written += 1
+
     return written
 
 
@@ -117,7 +119,8 @@ def declare_a_built_picture(
         inside = store / str(level)
         inside.mkdir(exist_ok=True)
         (inside / "zarr.json").write_text(
-            json.dumps(json.loads(composer.array_json(level)), indent=1), encoding="utf-8"
+            json.dumps(json.loads(composer.array_json(level)), indent=1),
+            encoding="utf-8",
         )
 
     described = json.loads(composer.group_json())
@@ -180,7 +183,8 @@ def declare_a_governed_picture(
             inside = store / str(level)
             inside.mkdir(exist_ok=True)
             (inside / "zarr.json").write_text(
-                json.dumps(json.loads(composer.array_json(level)), indent=1), encoding="utf-8"
+                json.dumps(json.loads(composer.array_json(level)), indent=1),
+                encoding="utf-8",
             )
 
         described = json.loads(composer.group_json())
@@ -189,6 +193,7 @@ def declare_a_governed_picture(
         if bake:
             with _holding_the_bake_lock(store):
                 baked = _bake_the_coarse_ground(store, composer, described, governed_run=run)
+
         described["attributes"][OURS] = {
             "what": (
                 "A picture of a live, manifest-governed run. It holds no "
@@ -205,13 +210,19 @@ def declare_a_governed_picture(
 
         if bake:
             governed.stamp_the_bake(store, events=folded, tail=tail, layout=revision)
+
         return store
     finally:
         governed.close()
 
 
 def _bake_the_coarse_ground(
-    store: Path, composer: Composer, described: dict, *, governed_run: Path | None = None, told=None
+    store: Path,
+    composer: Composer,
+    described: dict,
+    *,
+    governed_run: Path | None = None,
+    told=None,
 ) -> list[int]:
     """Build the coarse ground once, into real files, and extend the pyramid."""
     coarsest = composer.mosaic.levels - 1
@@ -248,6 +259,7 @@ def _bake_the_coarse_ground(
                     stripe.result()
             finally:
                 working.shutdown(wait=True, cancel_futures=True)
+
             built_by_workers = True
         except BrokenProcessPool:
             print(
@@ -283,15 +295,22 @@ def _bake_the_coarse_ground(
 
                             if told is not None:
                                 told(done, total)
+
                             inside = store.joinpath(str(level), "c", *frame, str(plane), str(row))
 
                             for column in range(across):
                                 body = composer.bytes_for(
-                                    level, plane, row, column, moment=moment, channel=channel
+                                    level,
+                                    plane,
+                                    row,
+                                    column,
+                                    moment=moment,
+                                    channel=channel,
                                 )
 
                                 if body is None:
                                     continue
+
                                 inside.mkdir(parents=True, exist_ok=True)
                                 (inside / str(column)).write_bytes(body)
 
@@ -394,6 +413,7 @@ def _promising_its_blocks(copy: Copy) -> Copy:
     def is_on_disk(index: tuple[int, ...]) -> bool:
         if not stored:
             stored.append(how_the_array_is_stored(copy.held_in))
+
         return stored[0].where_one_chunk_lives(tuple(index)) is not None
 
     copy.presence = is_on_disk
@@ -406,6 +426,7 @@ def _a_committed_tile(store) -> Tile:
 
     for copy in tile.copies:
         _promising_its_blocks(copy)
+
     return tile
 
 
@@ -455,6 +476,7 @@ def _after_a_windows_reader(operation, *paths):
 
             if os.name != "nt" or not sharing or time.monotonic() >= deadline:
                 raise
+
             time.sleep(pause)
             pause = min(pause * 2, 0.05)
 
@@ -513,6 +535,7 @@ class TheWorldFrame(Mosaic):
                 for axis in ("z", "y", "x")
             )
             TheWorldFrame._origins[named] = remembered
+
         origin_um = remembered
         super().__init__(
             tiles=tiles,
@@ -563,16 +586,22 @@ class TheWorldFrame(Mosaic):
                         default=float(frame.get(axis, 1)),
                     )
                     reach.append(rounded_up(int(edge), int(down)))
+
                 found = tuple(reach)
                 TheWorldFrame._shapes[named] = found
+
             self._shape[level] = found  # type: ignore[assignment]
+
         return found  # type: ignore[return-value]
 
     @property
     def frame_room(self) -> tuple[int, int]:
         """The run's (moments, channels) room, knowable before any arrival."""
         from_tiles = super().frame_room
-        return (max(int(self._profile.timepoints), from_tiles[0]), len(self._profile.channels))
+        return (
+            max(int(self._profile.timepoints), from_tiles[0]),
+            len(self._profile.channels),
+        )
 
     @property
     def slab_depths(self) -> list[int]:
@@ -637,12 +666,14 @@ class GovernedRun:
         with self._catch_up_guard:
             if self._closing:
                 return
+
             self._catch_up_requested = True
             self._catch_up_after = time.monotonic() + _BAKE_CATCH_UP_QUIET_S
 
             if self._catch_up_thread is not None:
                 self._catch_up_guard.notify_all()
                 return
+
             worker = threading.Thread(
                 target=self._catch_up_after_announcements,
                 name=f"zmart-bake-catch-up-{self.folder.name}",
@@ -660,11 +691,13 @@ class GovernedRun:
                     if self._closing:
                         self._catch_up_thread = None
                         return
+
                     wait_for = self._catch_up_after - time.monotonic()
 
                     if self._catch_up_requested and wait_for <= 0:
                         self._catch_up_requested = False
                         break
+
                     self._catch_up_guard.wait(
                         timeout=max(0.0, wait_for) if self._catch_up_requested else None
                     )
@@ -683,6 +716,7 @@ class GovernedRun:
                 with self._catch_up_guard:
                     if self._catch_up_requested and not self._closing:
                         continue
+
                     self._catch_up_thread = None
                     return
 
@@ -697,6 +731,7 @@ class GovernedRun:
 
                 if self._catch_up_requested:
                     continue
+
                 self._catch_up_thread = None
                 return
 
@@ -707,8 +742,10 @@ class GovernedRun:
         with self._guard:
             if mark == self._mark and self._held is not None:
                 return self._held
+
             previous, before = self._held, dict(self._drawing)
             kept = dict(self._tiles)
+
         phases: dict[str, float] = {}
         watch = time.perf_counter
         marked = watch()
@@ -751,6 +788,7 @@ class GovernedRun:
                 was = kept[one].moments if one in kept else frozenset()
                 now = tiles[one].moments if one in tiles else frozenset()
                 touched |= was | now if before.get(one) != drawing.get(one) else was ^ now
+
             dirty_moments = frozenset(touched)
             made.inherit_the_unchanged(previous, dirtied, stale=stale)
             # The piece index moves house with the slabs, patched only where
@@ -761,6 +799,7 @@ class GovernedRun:
                 changed_names,
                 [(one, tiles[one]) for one in drawing if one in changed_names],
             )
+
         folded = self._run._folded
         phases["inherit"] = (watch() - marked) * 1000
 
@@ -777,6 +816,7 @@ class GovernedRun:
                 phases,
                 moments=None if moved_frame else dirty_moments,
             )
+
         self.accounting["derives"] += 1
         self.accounting["last_derive_ms"] = (time.perf_counter() - began) * 1000
         self.accounting["last_positions"] = len(drawing)
@@ -793,11 +833,13 @@ class GovernedRun:
                 self._frame_installed = framed
             else:
                 stood_down = made
+
         phases["install"] = (watch() - marked) * 1000
         marked = watch()
 
         if stood_down is not None and stood_down is not self._held:
             stood_down.stop_warming()
+
         phases["stop_warming"] = (watch() - marked) * 1000
         marked = watch()
 
@@ -808,6 +850,7 @@ class GovernedRun:
                     one for one in self._the_baked_levels() if one < self._held.mosaic.levels
                 ),
             )
+
         self._held.keep_the_coarse_levels_warm()
         phases["warm"] = (watch() - marked) * 1000
         self.accounting["last_phase_ms"] = phases
@@ -824,7 +867,9 @@ class GovernedRun:
                     json.loads(described.read_text(encoding="utf-8")).get("attributes") or {}
                 ).get("zmart") or {}
                 held = tuple(int(one) for one in ours.get("baked") or ())
+
             self._baked = held
+
         return self._baked
 
     def stamp_the_bake(
@@ -835,7 +880,8 @@ class GovernedRun:
         stamp = where / "baked.json"
         arriving = stamp.with_name("baked.json.stamping")
         arriving.write_text(
-            json.dumps({"events": events, "tail": tail, "layout": layout}), encoding="utf-8"
+            json.dumps({"events": events, "tail": tail, "layout": layout}),
+            encoding="utf-8",
         )
         _after_a_windows_reader(os.replace, arriving, stamp)
 
@@ -868,6 +914,7 @@ class GovernedRun:
         """Patch the baked files the manifest's movement reached, then stamp."""
         if phases is None:
             phases = {}
+
         watch = time.perf_counter
         marked = watch()
 
@@ -892,6 +939,7 @@ class GovernedRun:
                     self._stamp_installed = current
                     phases["bake_scan"] = (watch() - marked) * 1000
                     return
+
             baked = self._the_baked_levels()
             phases["bake_scan"] = (watch() - marked) * 1000
             marked = watch()
@@ -914,11 +962,18 @@ class GovernedRun:
 
                             for plane in range(deep):
                                 self._replace_one_piece(
-                                    made, level, plane, row, column, moment=moment, channel=channel
+                                    made,
+                                    level,
+                                    plane,
+                                    row,
+                                    column,
+                                    moment=moment,
+                                    channel=channel,
                                 )
 
             for cost in ("read_ms", "build_ms", "encode_ms"):
                 phases["bake_compose_" + cost[:-3]] = made.costs[cost] - costs_before[cost]
+
             self.accounting["last_bake_slabs_built"] = (
                 made.costs["slabs_built"] - costs_before["slabs_built"]
             )
@@ -941,6 +996,7 @@ class GovernedRun:
 
                 if reached:
                     self._rehalve_one_level(level, sorted(reached), frames)
+
             phases["bake_rehalve"] = (watch() - marked) * 1000
             marked = watch()
             self.stamp_the_bake(
@@ -968,6 +1024,7 @@ class GovernedRun:
 
         if stamped is None or stamped["layout"] != current["layout"]:
             return everything, None
+
         absorbed = stamped["events"]
 
         if absorbed > len(events) or absorbed < 0:
@@ -978,6 +1035,7 @@ class GovernedRun:
 
         if absorbed == len(events):
             return None, None
+
         touched: set[int] | None = set()
 
         for event in events[absorbed:]:
@@ -985,6 +1043,7 @@ class GovernedRun:
                 touched = None
             else:
                 touched.add(0 if event.timepoint is None else event.timepoint)
+
         moments = None if touched is None else frozenset(touched)
         missed = {event.position_id for event in events[absorbed:]}
         dirty: dict[int, set[tuple[int, int]]] = {}
@@ -1005,6 +1064,7 @@ class GovernedRun:
                         at[2] // self._piece, (at[2] + held[2] - 1) // self._piece + 1
                     ):
                         reached.add((row, column))
+
         return dirty, moments
 
     def _replace_one_piece(
@@ -1027,7 +1087,9 @@ class GovernedRun:
         if body is None:
             if baked.is_file():
                 _after_a_windows_reader(os.unlink, baked)
+
             return
+
         inside.mkdir(parents=True, exist_ok=True)
         arriving = baked.with_name(f"{baked.name}.baking")
         arriving.write_bytes(body)
@@ -1043,6 +1105,7 @@ class GovernedRun:
             below = zarr.open_array(str(self._shown / str(level - 1)), mode="r")
             self._bake_below[level] = below
             self.accounting["last_bake_arrays_opened"] += 1
+
         staging = self._shown / f".patching-{level}"
         above = self._bake_staging.get(level)
 
@@ -1054,6 +1117,7 @@ class GovernedRun:
             self._bake_staging[level] = above
             self.accounting["last_bake_arrays_opened"] += 1
             self.accounting["last_bake_stagings_built"] += 1
+
         deep, height, width = above.shape[-3:]
         self.accounting["last_bake_pieces_rehalved"] += len(pieces)
         served_recipe = self._the_baked_recipe(level)
@@ -1101,6 +1165,7 @@ class GovernedRun:
                         .astype(above.dtype)
                     )
                     self.accounting["last_bake_zarr_ops"] += 1
+
         planes = -(-deep // int(above.chunks[-3]))
 
         for row, column in pieces:
@@ -1125,6 +1190,7 @@ class GovernedRun:
 
         if found is not False:
             return found
+
         recipe = None
 
         try:
@@ -1153,6 +1219,7 @@ class GovernedRun:
                 }
         except (OSError, KeyError, TypeError, ValueError):
             recipe = None
+
         self._bake_recipes[level] = recipe
         return recipe
 
@@ -1191,6 +1258,7 @@ class GovernedRun:
 
                     if row0 >= 2 * top + src_h or col0 >= 2 * left + src_w:
                         continue
+
                     rows = min(piece, 2 * top + src_h - row0)
                     cols = min(piece, 2 * left + src_w - col0)
                     held = below_dir / "c" / str(plane) / str(grid_row) / str(grid_col)
@@ -1202,10 +1270,12 @@ class GovernedRun:
                         part = block[0, :rows, :cols]
                     else:
                         part = np.full((rows, cols), source_recipe["fill"], source_dtype)
+
                     canvas[
                         row0 - 2 * top : row0 - 2 * top + rows,
                         col0 - 2 * left : col0 - 2 * left + cols,
                     ] = part
+
             evened = np.pad(
                 canvas[None],
                 ((0, 0), (0, 2 * wanted[0] - src_h), (0, 2 * wanted[1] - src_w)),
@@ -1222,6 +1292,7 @@ class GovernedRun:
 
             if np.all(buffer == served_recipe["fill"]):
                 continue
+
             staged = staging / "c" / str(plane) / str(row)
             staged.mkdir(parents=True, exist_ok=True)
             (staged / str(column)).write_bytes(
@@ -1243,11 +1314,13 @@ class GovernedRun:
         for position_id, _moment, generation in published:
             if generation > current.get(position_id, -1):
                 current[position_id] = generation
+
         gathered: dict[str, set[int]] = {}
 
         for position_id, moment, generation in published:
             if generation == current[position_id]:
                 gathered.setdefault(position_id, set()).add(moment)
+
         moments_of = {position_id: frozenset(moments) for position_id, moments in gathered.items()}
         drawing = {
             position_id: current[position_id]
@@ -1284,6 +1357,7 @@ class GovernedRun:
                 )
                 self._pattern_of = profile.profile_id
                 read = 1
+
             fresh = {
                 one: _a_tile_stamped(
                     self._pattern,
@@ -1293,6 +1367,7 @@ class GovernedRun:
                 )
                 for one in changed
             }
+
         self.accounting["last_tiles_read"] = read
         tiles = {
             position_id: fresh.get(position_id) or kept[position_id] for position_id in drawing
@@ -1300,7 +1375,10 @@ class GovernedRun:
         ordered = [tiles[position_id] for position_id in drawing]
         self.accounting["last_snapshot_swept"] = 2 * len(published) + len(order) + 2 * len(drawing)
         return (
-            Composer(TheWorldFrame(ordered, layout, profile, run=self.folder), piece=self._piece),
+            Composer(
+                TheWorldFrame(ordered, layout, profile, run=self.folder),
+                piece=self._piece,
+            ),
             drawing,
             tiles,
         )
@@ -1326,6 +1404,7 @@ class GovernedRun:
                     "store's word, so this is refused rather than drawn "
                     "somewhere quietly wrong."
                 )
+
         return pattern
 
     def _corners_of(self, layout, profile) -> dict[str, tuple[float, float, float]]:
@@ -1342,6 +1421,7 @@ class GovernedRun:
                 for placement in layout.positions
             }
             self._corners_mark = named
+
         return self._corners
 
     def _what_changed_dirtied(
@@ -1365,9 +1445,11 @@ class GovernedRun:
                         at[1] // self._piece, (at[1] + held[1] - 1) // self._piece + 1
                     ):
                         for column in range(
-                            at[2] // self._piece, (at[2] + held[2] - 1) // self._piece + 1
+                            at[2] // self._piece,
+                            (at[2] + held[2] - 1) // self._piece + 1,
                         ):
                             reached.add((row, column))
+
         return dirty
 
     def close(self) -> None:
@@ -1397,4 +1479,5 @@ class GovernedRun:
             name = position_id
         else:
             name = f"{position_id}.generation-{generation}"
+
         return self.folder / "data" / "survey.ome.zarr" / name

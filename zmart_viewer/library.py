@@ -66,6 +66,7 @@ def _with_filter(short: str, store_name: str) -> str:
         if part.startswith("Flt"):
             filter_name = part[3:] or "None"
             return f"{short}_{filter_name[:12]}"
+
     return short
 
 
@@ -110,11 +111,13 @@ def _ome_holders(described: dict) -> list[dict]:
     for outer in (described, described.get("attributes")):
         if not isinstance(outer, dict):
             continue
+
         holders.append(outer)
         nested = outer.get("ome")
 
         if isinstance(nested, dict):
             holders.append(nested)
+
     return holders
 
 
@@ -130,6 +133,7 @@ def normalise_units(raw: bytes) -> bytes:
 
     if not isinstance(described, dict):
         return raw
+
     changed = False
 
     for holder in _ome_holders(described):
@@ -140,6 +144,7 @@ def normalise_units(raw: bytes) -> bytes:
             for axis in multiscale.get("axes") or []:
                 if not isinstance(axis, dict):
                     continue
+
                 spelled = axis.get("unit")
                 correct = _UNIT_SPELLINGS.get(spelled) if isinstance(spelled, str) else None
 
@@ -149,6 +154,7 @@ def normalise_units(raw: bytes) -> bytes:
 
     if not changed:
         return raw
+
     return json.dumps(described).encode("utf-8")
 
 
@@ -163,6 +169,7 @@ def voxel_size(store: Path) -> tuple[float, ...]:
 
             if not isinstance(found, list):
                 continue
+
             names = axis_names(store)
 
             if len(names) == len(found):
@@ -171,7 +178,9 @@ def voxel_size(store: Path) -> tuple[float, ...]:
                     for name, value in zip(names, found, strict=True)
                     if name in ("z", "y", "x")
                 ]
+
             return tuple(round(float(value), 6) for value in found)
+
     return ()
 
 
@@ -179,6 +188,7 @@ def declared_channels(store: Path) -> list[str] | None:
     """The channels a store names inside itself, or ``None`` if it holds one image."""
     if "c" not in axis_names(store):
         return None
+
     return [str(channel["name"]) for channel in channels(store)]
 
 
@@ -192,6 +202,7 @@ def _description_file(path: Path) -> Path | None:
 
         if candidate.exists():
             return candidate
+
     return None
 
 
@@ -209,6 +220,7 @@ def _read_attrs_at(path: Path) -> dict:
     except OSError:
         _attrs_cache.pop(key, None)
         return {}
+
     remembered = _attrs_cache.get(key)
 
     if remembered is not None and remembered[0] == stamp:
@@ -232,6 +244,7 @@ def _read_attrs_at(path: Path) -> dict:
 
     for holder in _ome_holders(attrs):
         flat.update(holder)
+
     attrs = flat
     _attrs_cache[key] = (stamp, attrs)
     return attrs
@@ -251,6 +264,7 @@ def _read_array_description(level: Path) -> dict:
             stamp = found.stat().st_mtime_ns
         except OSError:
             continue
+
         remembered = _array_cache.get(key)
 
         if remembered is not None and remembered[0] == stamp:
@@ -260,9 +274,11 @@ def _read_array_description(level: Path) -> dict:
             described = json.loads(found.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             described = None
+
         answer = _array_layout(described) if isinstance(described, dict) else {}
         _array_cache[key] = (stamp, answer)
         return answer
+
     _array_cache.pop(key, None)
     return {}
 
@@ -273,6 +289,7 @@ def _array_layout(described: dict) -> dict:
 
     if described.get("zarr_format") == 3 or "chunk_grid" in described:
         return {"shape": shape, **_version_3_layout(described)}
+
     return {"shape": shape, **_version_2_layout(described)}
 
 
@@ -367,12 +384,14 @@ def described_channels(described: list[dict], count: int) -> list[dict]:
         if all(channel["color"] in (None, (1.0, 1.0, 1.0)) for channel in out):
             for channel in out:
                 channel["color"] = None
+
         turn = 0
 
         for channel in out:
             if channel["color"] is None:
                 channel["color"] = _DEFAULT_CHANNEL_TURNS[turn % len(_DEFAULT_CHANNEL_TURNS)]
                 turn += 1
+
     return out
 
 
@@ -382,6 +401,7 @@ def _the_range_declared_by(channel: dict) -> dict | None:
 
     if not isinstance(window, dict):
         return None
+
     low, high = window.get("min"), window.get("max")
 
     if not isinstance(low, (int, float)) or not isinstance(high, (int, float)):
@@ -389,6 +409,7 @@ def _the_range_declared_by(channel: dict) -> dict | None:
 
     if high <= low:
         return None
+
     return {"low": float(low), "high": float(high)}
 
 
@@ -398,6 +419,7 @@ def _the_window_asked_for(channel: dict) -> dict | None:
 
     if not isinstance(window, dict):
         return None
+
     low, high = window.get("start"), window.get("end")
 
     if not isinstance(low, (int, float)) or not isinstance(high, (int, float)):
@@ -408,6 +430,7 @@ def _the_window_asked_for(channel: dict) -> dict | None:
 
     if low == window.get("min") and high == window.get("max"):
         return None
+
     return {"low": float(low), "high": float(high)}
 
 
@@ -415,10 +438,12 @@ def _channel_count(store: Path, names: list[str], described: int) -> int | None:
     """How many channels the store's own array says it has."""
     if "c" not in names:
         return None
+
     datasets = (_read_attrs_at(store).get("multiscales") or [{}])[0].get("datasets") or []
 
     if not datasets:
         return described or None
+
     shape = _read_array_description(store / str(datasets[0].get("path"))).get("shape") or []
     index = names.index("c")
     return int(shape[index]) if index < len(shape) else (described or None)
@@ -437,6 +462,7 @@ def label_images(store: Path) -> list[str]:
             names = sorted(child.name for child in folder.iterdir() if is_store(child))
         except OSError:
             return []
+
     return [name for name in names if is_store(folder / name)]
 
 
@@ -472,10 +498,12 @@ def written_timepoints(store: Path) -> int | None:
 
     if "t" not in names or names.index("t") != 0:
         return None
+
     datasets = (_read_attrs_at(store).get("multiscales") or [{}])[0].get("datasets") or []
 
     if not datasets:
         return None
+
     level = _the_copy_that_holds_the_picture(store, datasets)
     watched = _moments_folder(level)
 
@@ -483,6 +511,7 @@ def written_timepoints(store: Path) -> int | None:
         stamp = watched.stat().st_mtime_ns
     except OSError:
         return None
+
     remembered = _frame_counts.get(str(watched))
 
     if remembered is not None and (remembered[0] == stamp or remembered[1] is _TOO_MANY):
@@ -492,6 +521,7 @@ def written_timepoints(store: Path) -> int | None:
 
     if answer is _TOO_MANY or time.time_ns() - stamp > _MTIME_STILL_MOVING_NS:
         _frame_counts[str(watched)] = (stamp, answer)
+
     return None if answer is _TOO_MANY else answer
 
 
@@ -507,6 +537,7 @@ def _the_copy_that_holds_the_picture(store: Path, datasets: list[dict]) -> Path:
                 return level
         except OSError:
             continue
+
     return copies[0]
 
 
@@ -516,6 +547,7 @@ def _moments_folder(level: Path) -> Path:
 
     if described.get("prefix") and described.get("separator") == "/":
         return level / str(described["prefix"])
+
     return level
 
 
@@ -538,6 +570,7 @@ def _count_frames(level: Path) -> int | None | _TooManyToCount:
 
     if not isinstance(furthest, int):
         return furthest  # Nothing there yet, or more pieces than are worth reading.
+
     return furthest + 1
 
 
@@ -553,6 +586,7 @@ def _furthest_moment_among_folders(folder: Path) -> int | None:
                     furthest = moment if furthest is None else max(furthest, moment)
     except OSError:
         return None
+
     return furthest
 
 
@@ -574,18 +608,22 @@ def _furthest_moment_among_files(folder: Path, prefix: str) -> int | None | _Too
                 if prefix:
                     if not name.startswith(prefix):
                         continue
+
                     name = name[len(prefix) :]
+
                 head, _, rest = name.partition(".")
 
                 if rest and head.isdigit():
                     moment = int(head)
                     furthest = moment if furthest is None else max(furthest, moment)
+
                 seen += 1
 
                 if seen > _SCAN_LIMIT:
                     return _TOO_MANY
     except OSError:
         return None
+
     return furthest
 
 
@@ -593,6 +631,7 @@ def _hex_to_rgb(value: object) -> tuple[float, float, float] | None:
     """Turn an ``omero`` colour like ``"00FF66"`` into fractions of red/green/blue."""
     if not isinstance(value, str):
         return None
+
     text = value.strip().lstrip("#")
 
     if len(text) != 6:
@@ -608,6 +647,7 @@ def select_tiles(names: list[str], tiles: list[int] | None) -> list[str]:
     """Keep only the named tiles, or everything when ``tiles`` is ``None``."""
     if tiles is None:
         return names
+
     wanted = {f"Tile{n}" for n in tiles}
     return [
         name
@@ -620,6 +660,7 @@ def prefer_filter(names: list[str], wanted: str | None) -> list[str]:
     """Keep one store per tile and channel, preferring a filter by name."""
     if wanted is None:
         return names
+
     chosen: dict[tuple[str | None, str | None], str] = {}
 
     for name in names:
@@ -631,6 +672,7 @@ def prefer_filter(names: list[str], wanted: str | None) -> list[str]:
             and wanted.lower() not in _filter_of(current).lower()
         ):
             chosen[key] = name
+
     return [name for name in names if name in set(chosen.values())]
 
 
@@ -638,6 +680,7 @@ def _tile_of(name: str) -> str | None:
     for part in without_format_suffix(name).split("_"):
         if part.startswith("Tile"):
             return part
+
     return None
 
 
@@ -645,6 +688,7 @@ def _filter_of(name: str) -> str:
     for part in without_format_suffix(name).split("_"):
         if part.startswith("Flt"):
             return part[3:]
+
     return ""
 
 
@@ -654,6 +698,7 @@ def discover(path: str | Path) -> tuple[Path, list[str]]:
 
     if is_store(path):
         return path.parent, [path.name]
+
     names = sorted(child.name for child in path.iterdir() if child.is_dir() and is_store(child))
     return path, names
 
@@ -668,7 +713,9 @@ def _described_at(folder: Path) -> str:
             found = (folder / name).stat()
         except OSError:
             continue
+
         return f"{found.st_mtime_ns}:{found.st_size}"
+
     return "-"
 
 
@@ -678,6 +725,7 @@ def _named_for(path: Path, parent: Path) -> str:
 
     if path.name.endswith(".zmartview.zarr"):
         return path.name
+
     return without_format_suffix(path.name)
 
 
@@ -701,6 +749,7 @@ def _same_acquisition(one: Acquisition | None, other: Acquisition | None) -> boo
     """Whether two stores can be pieces of the same acquisition."""
     if one is None or other is None:
         return True
+
     size_here, channels_here = one
     size_there, channels_there = other
 
@@ -710,6 +759,7 @@ def _same_acquisition(one: Acquisition | None, other: Acquisition | None) -> boo
     if channels_here is not None and channels_there is not None:
         if channels_here != channels_there:
             return False
+
     return True
 
 
@@ -720,6 +770,7 @@ def _kind_of_acquisition(root: Path, names: list[str]) -> Acquisition | None:
 
         if found[0] or found[1] is not None:
             return found
+
     return None
 
 
@@ -750,6 +801,7 @@ def _is_a_pyramid_level(folder: Path) -> bool:
     try:
         if not folder.is_dir():
             return False
+
         return (folder / "zarr.json").exists() or (folder / ".zarray").exists()
     except OSError:
         return False
@@ -780,6 +832,7 @@ def _borrowed_folders(root: Path, names: Iterable[str]) -> list[Path]:
 
             if _is_a_pyramid_level(target):
                 borrowed[target] = None
+
     return list(borrowed)
 
 
@@ -828,6 +881,7 @@ def _channels_of(root: Path, names: list[str]) -> list[str]:
 
         if found is not None:
             return found
+
     seen: list[str] = []
 
     for name in sorted(names):
@@ -835,6 +889,7 @@ def _channels_of(root: Path, names: list[str]) -> list[str]:
 
         if wavelength and f"Ch{wavelength}" not in seen:
             seen.append(f"Ch{wavelength}")
+
     return seen
 
 
@@ -867,6 +922,7 @@ class Library:
 
         if not path.is_dir():
             raise ValueError(f"{path} is a file, not a folder of images")
+
         parent, found = discover(path)
         chosen = names if names is not None else found
 
@@ -875,6 +931,7 @@ class Library:
                 f"no OME-Zarr image was found in {path} — if the images are one "
                 "level down, choose the folder that contains them"
             )
+
         root = parent.resolve()
         _one_acquisition_only(root, list(chosen))
         watched = watch if watch is not None else (names is None)
@@ -894,6 +951,7 @@ class Library:
                 acquisition=_kind_of_acquisition(root, list(chosen)),
                 borrows=_borrowed_folders(root, chosen),
             )
+
         return number
 
     def dataset(self, number: int) -> Dataset | None:
@@ -933,8 +991,10 @@ class Library:
 
                 if dataset.name != group:
                     continue
+
                 closed += [(number, dataset.root, store) for store in dataset.stores]
                 self._close(number)
+
         return closed
 
     def entries(self) -> list[tuple[int, Path, str]]:
@@ -967,10 +1027,12 @@ class Library:
 
         with self._lock:
             spoken_for = self._spoken_for(root)
+
         unknown = [name for name in found if name not in spoken_for]
 
         if not unknown:
             return
+
         kinds = {name: _acquisition_of(root, name) for name in unknown}
 
         with self._lock:
@@ -979,6 +1041,7 @@ class Library:
             for name in unknown:
                 if name in spoken_for:
                     continue
+
                 self._place(root, name, kinds[name])
                 spoken_for.add(name)
 
@@ -989,6 +1052,7 @@ class Library:
         for dataset in self._datasets.values():
             if dataset.root == root:
                 spoken.update(dataset.stores)
+
         return spoken
 
     def _place(self, root: Path, name: str, kind: Acquisition) -> None:
@@ -1009,7 +1073,9 @@ class Library:
 
                 if dataset.acquisition is None and (kind[0] or kind[1] is not None):
                     dataset.acquisition = kind
+
                 return
+
         number = self._next
         self._next += 1
         self._datasets[number] = Dataset(
@@ -1033,6 +1099,7 @@ class Library:
         for candidate in (kind, whole, f"{kind} ({number})", f"{whole} ({number})"):
             if candidate not in taken:
                 return candidate
+
         return f"{whole} ({number})"
 
     # -- noticing a change without reading anything ------------------------
@@ -1051,13 +1118,18 @@ class Library:
                 for dataset in self.datasets()
                 if dataset.number not in excluded
             ]
+
         marks = []
 
         for number, root, names in open_now:
             try:
                 with os.scandir(root) as listing:
                     beside = sorted(
-                        (entry.name, entry.stat().st_mtime_ns, _described_at(Path(entry.path)))
+                        (
+                            entry.name,
+                            entry.stat().st_mtime_ns,
+                            _described_at(Path(entry.path)),
+                        )
                         for entry in listing
                         if entry.is_dir()
                     )
@@ -1066,6 +1138,7 @@ class Library:
                 # not read as "everything changed" and trigger a needless rebuild.
                 marks.append(f"{number}:?")
                 continue
+
             marks.append(
                 f"{number}:"
                 + ",".join(f"{name}@{when}/{described}" for name, when, described in beside)
@@ -1076,6 +1149,7 @@ class Library:
                     marks.append(str(_moments_folder(root / name / "0").stat().st_mtime_ns))
                 except OSError:
                     marks.append("?")
+
         return hashlib.blake2b("|".join(marks).encode("utf-8"), digest_size=16).hexdigest()
 
     # -- the two questions the server asks ---------------------------------
@@ -1098,6 +1172,7 @@ class Library:
 
         if found is None:
             return None
+
         target = (found.root / rest).resolve()
 
         for root in (found.root, *borrows):
@@ -1105,4 +1180,5 @@ class Library:
 
             if target == root or root in target.parents:
                 return target
+
         return None

@@ -62,7 +62,9 @@ class Announcements:
                 # immediately rather than a listener that would wait for ever.
                 waiting.put(None)
                 return waiting
+
             self._listeners.add(waiting)
+
         return waiting
 
     def stop_listening(self, waiting: queue.SimpleQueue) -> None:
@@ -81,6 +83,7 @@ class Announcements:
         with self._lock:
             if covering is not None:
                 self._already_told = covering
+
             listeners = list(self._listeners)
 
         if self._when_changed is not None:
@@ -91,6 +94,7 @@ class Announcements:
 
         for waiting in listeners:
             waiting.put(message)
+
         return len(listeners)
 
     def already_told_about(self) -> object | None:
@@ -136,6 +140,7 @@ class FolderWatcher:
     def start(self) -> None:
         if self._thread is not None:
             return
+
         self._thread = threading.Thread(target=self._watch, daemon=True, name="zmart-folder-watch")
         self._thread.start()
 
@@ -164,6 +169,7 @@ class FolderWatcher:
             if last is not None and now != last:
                 if now != self._announcements.already_told_about():
                     self._announcements.say_something_changed()
+
             last = now
             self._stop.wait(self._every)
 
@@ -203,18 +209,22 @@ class ManifestWatcher:
                 self._announcements.say_something_changed()
                 announced += 1
                 continue
+
             previous = self._announced[tracker]
 
             if tracker.error is not None or tracker.revision <= previous:
                 continue
+
             self._announced[tracker] = tracker.revision
             self._announcements.say_something_changed()
             announced += 1
+
         return announced
 
     def start(self) -> None:
         if self._thread is not None:
             return
+
         self._thread = threading.Thread(
             target=self._watch,
             daemon=True,
@@ -251,15 +261,17 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
 
     if _already_this_runs_picture(store, run_root, grown, bake):
         return store
+
     began = time.perf_counter()
     made = declare_a_governed_picture(
         run_root / "views" / "live", run_root, name="picture", bake=bake
     )
-    print(
-        f"declared the {'grown, ' if grown else ''}"
-        f"{'baked' if bake else 'unbaked'} live picture "
-        f"{made} in {time.perf_counter() - began:.1f} s",
-        flush=True,
+    log.info(
+        "declared the %s%s live picture %s in %.1f s",
+        "grown, " if grown else "",
+        "baked" if bake else "unbaked",
+        made,
+        time.perf_counter() - began,
     )
     return made
 
@@ -272,6 +284,7 @@ def _the_run_is_grown(run_root: Path) -> bool:
 
     if profile.timepoints > 1 or len(profile.channels) > 1:
         return True
+
     collection = run_root / "data" / "survey.ome.zarr"
 
     for member in sorted(collection.glob("*/0/zarr.json")):
@@ -282,6 +295,7 @@ def _the_run_is_grown(run_root: Path) -> bool:
 
         if shape and len(shape) == 5:
             return shape[0] > 1 or shape[1] > 1
+
     return False
 
 
@@ -291,6 +305,7 @@ def _already_this_runs_picture(store: Path, run_root: Path, grown: bool, bake: b
         described = json.loads((store / "zarr.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
+
     ours = (described.get("attributes") or {}).get("zmart") or {}
     governs = ours.get("governed_from")
 
@@ -302,6 +317,7 @@ def _already_this_runs_picture(store: Path, run_root: Path, grown: bool, bake: b
             return False
     except OSError:
         return False
+
     axes = [
         axis.get("name")
         for axis in ((described.get("attributes") or {}).get("ome") or {})
@@ -339,6 +355,7 @@ class LiveBinding:
                 f"The compiled live source {store} is outside the opened folder "
                 f"{self.dataset_root}. Open the run root or its views folder."
             ) from why
+
         return f"/data/{self.dataset_number}/{inside.as_posix()}/|{zarr_scheme(store)}:"
 
     def state_json(self, snapshot: LiveStateSnapshot | None = None) -> dict:
@@ -348,6 +365,7 @@ class LiveBinding:
         for source in answer.get("sources", ()):
             if source.get("role") == "linked":
                 source["url"] = LIVE_PICTURE
+
         answer["dataset"] = self.dataset_number
         return answer
 
@@ -379,11 +397,13 @@ class LiveRegistry:
 
                 if run_root is None:
                     continue
+
                 picture = (run_root / LIVE_PICTURE).resolve()
                 opened = Path(dataset.root).resolve()
 
                 if not (opened == picture or opened in picture.parents):
                     continue
+
                 governed.add(dataset.number)
                 dataset.watch = False
                 tracker = self._trackers_by_root.get(run_root)
@@ -396,13 +416,16 @@ class LiveRegistry:
                         # to folder scanning. A later refresh retries strict open.
                         errors[run_root] = str(why)
                         continue
+
                     self._trackers_by_root[run_root] = tracker
+
                 used_roots.add(run_root)
                 refused = self._without_a_picture(run_root)
 
                 if refused is not None:
                     errors[run_root] = refused
                     continue
+
                 bindings.append(
                     LiveBinding(
                         tracker=tracker,
@@ -410,6 +433,7 @@ class LiveRegistry:
                         dataset_root=dataset.root,
                     )
                 )
+
             self._trackers_by_root = {
                 root: tracker
                 for root, tracker in self._trackers_by_root.items()
@@ -430,11 +454,13 @@ class LiveRegistry:
         """Why this run has no served picture right now, or ``None`` once it has."""
         if run_root in self._pictures:
             return None
+
         stumbled = self._picture_refused.get(run_root)
 
         if stumbled is not None:
             if time.monotonic() - stumbled[0] < _DECLARE_RETRY_S:
                 return stumbled[1]
+
             del self._picture_refused[run_root]
 
         try:
@@ -442,6 +468,7 @@ class LiveRegistry:
         except Exception as why:  # noqa: BLE001 - reported and retried, never hidden
             self._picture_refused[run_root] = (time.monotonic(), str(why))
             return str(why)
+
         self._pictures[run_root] = made
         return None
 
@@ -474,7 +501,9 @@ def capture_live_state(
         if snapshot is None:
             binding.tracker.observe()
             snapshot = by_tracker[binding.tracker] = binding.tracker.snapshot()
+
         snapshots[binding.dataset_number] = snapshot
+
     return live_state_document(bindings, snapshots=snapshots), snapshots
 
 
@@ -494,7 +523,9 @@ def live_state_document(
             if snapshot is None:
                 binding.tracker.observe()
                 snapshot = by_tracker[binding.tracker] = binding.tracker.snapshot()
+
             snapshots[binding.dataset_number] = snapshot
+
     return {
         "schema": LIVE_STATE_SET_SCHEMA,
         "runs": [binding.state_json(snapshots[binding.dataset_number]) for binding in bindings],
@@ -545,6 +576,7 @@ def live_rows(
 
     if scene is None:
         return []
+
     frontend_sources = {source.source_id: source for source in snapshot.state.sources}
     compiled_sources = {source.source_id: source for source in scene.sources}
     described = the_runs_channels(binding.run_root)
@@ -581,4 +613,5 @@ def live_rows(
                 **display,
             }
         )
+
     return rows

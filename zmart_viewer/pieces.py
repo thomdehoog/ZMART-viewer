@@ -92,6 +92,7 @@ class _WhereThePiecesReallyAre:
 
             if any(n < 0 for n in at + low) or any(n <= 0 for n in size):
                 raise ValueError("a tile cannot begin before the view or be empty")
+
             held_as = str(tile.get("held_as") or HELD_AS_A_FILE)
 
             if held_as != HELD_AS_A_FILE:
@@ -101,6 +102,7 @@ class _WhereThePiecesReallyAre:
                     "in a file a piece begins — and hand the viewer somebody else's "
                     "bytes to draw — the whole view is left unread."
                 )
+
             held = (at, size, low, store, held_as)
             self._widest = max(self._widest, size[2])
 
@@ -118,6 +120,7 @@ class _WhereThePiecesReallyAre:
 
         if not crossing:
             return None
+
         nearest = bisect_right(crossing, at[2], key=lambda tile: tile[0][2])
 
         for index in range(nearest - 1, -1, -1):
@@ -139,6 +142,7 @@ class _WhereThePiecesReallyAre:
                     ),
                     held_as,
                 )
+
         return None
 
     def the_bytes_behind(self, inside: str) -> Held | None:
@@ -147,12 +151,14 @@ class _WhereThePiecesReallyAre:
 
         if named is None:
             return None
+
         level, frame, channel, z, y, x = named
         shrink = 2**level
         found = self._tile_covering((z, y * shrink, x * shrink))
 
         if found is None:
             return None
+
         store, (from_z, from_y, from_x), held_as = found
         piece = self._named(frame, channel, from_z, from_y // shrink, from_x // shrink)
         where = f"{store}/{level}/{piece}"
@@ -164,6 +170,7 @@ class _WhereThePiecesReallyAre:
 
         if self.prefix:
             parts.insert(0, self.prefix)
+
         return self.separator.join(parts)
 
     def _numbers_in(self, inside: str) -> tuple[int, int, int, int, int, int] | None:
@@ -177,10 +184,12 @@ class _WhereThePiecesReallyAre:
 
         if not 0 <= level < self.pointed_levels:
             return None
+
         wanted = f"{which}/"
 
         if not inside.startswith(wanted):
             return None
+
         rest = inside[len(wanted) :]
         parts = rest.split(self.separator) if self.separator else [rest]
 
@@ -189,6 +198,7 @@ class _WhereThePiecesReallyAre:
             # so it is taken off here rather than being read as a number.
             if not parts or parts[0] != self.prefix:
                 return None
+
             parts = parts[1:]
 
         if len(parts) != 5:
@@ -198,6 +208,7 @@ class _WhereThePiecesReallyAre:
             frame, channel, z, y, x = (int(part) for part in parts)
         except ValueError:
             return None
+
         return level, frame, channel, z, y, x
 
 
@@ -210,10 +221,12 @@ def where_the_list_is(store: Path) -> tuple[Path, Path]:
     for description in (store / "zarr.json", store / ".zattrs"):
         if description.is_file():
             return description, store.parent / f"{store.name}{LINKS_ADDED_ENDING}"
+
     beside = store.parent / LINKS_FOLDER / f"{store.name}.json"
 
     if beside.is_file():
         return beside, beside.with_name(f"{store.name}{LINKS_ADDED_ENDING}")
+
     return store / LINKS_FILE, store / LINKS_ADDED_FILE
 
 
@@ -225,6 +238,7 @@ def the_map_inside(store: Path) -> dict | None:
         held = json.loads(listing.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
+
     return _the_part_that_is_ours(held) if isinstance(held, dict) else None
 
 
@@ -236,6 +250,7 @@ def rewrite_the_map_inside(store: Path, ours: dict) -> None:
     if "version" in held and "tiles" in held:
         listing.write_text(json.dumps(ours, indent=1), encoding="utf-8")
         return
+
     where = held.setdefault("attributes", {}) if listing.name == "zarr.json" else held
     where[OURS] = ours
     listing.write_text(json.dumps(held, indent=1), encoding="utf-8")
@@ -254,6 +269,7 @@ def pointed_bytes_behind(store: Path, inside: str) -> Held | None:
         grown = added.stat().st_size
     except OSError:
         grown = -1
+
     key = str(listing)
 
     with _known_lock:
@@ -269,6 +285,7 @@ def pointed_bytes_behind(store: Path, inside: str) -> Held | None:
             _known[key] = ((written, grown), spread)
     else:
         spread = remembered[1]
+
     return spread.the_bytes_behind(inside)
 
 
@@ -278,6 +295,7 @@ def _the_tiles_added_since(added: Path) -> list[dict]:
         lines = added.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return []
+
     tiles = []
 
     for at, line in enumerate(lines):
@@ -289,7 +307,9 @@ def _the_tiles_added_since(added: Path) -> list[dict]:
         except json.JSONDecodeError:
             if at == len(lines) - 1:
                 break
+
             raise
+
     return tiles
 
 
@@ -297,6 +317,7 @@ def _the_part_that_is_ours(held: dict) -> dict | None:
     """The list of pointers inside whatever was just read, or ``None``."""
     if "version" in held and "tiles" in held:
         return held
+
     inside = held.get("attributes") if isinstance(held.get("attributes"), dict) else held
     ours = inside.get(OURS) if isinstance(inside, dict) else None
     return ours if isinstance(ours, dict) else None
@@ -311,13 +332,17 @@ def _read(listing: Path, added: Path) -> _WhereThePiecesReallyAre | None:
 
     if not isinstance(held, dict):
         return None
+
     held = _the_part_that_is_ours(held)
 
     if held is None or held.get("version") not in LINKS_VERSIONS_UNDERSTOOD:
         return None
 
     try:
-        held = {**held, "tiles": [*(held.get("tiles") or []), *_the_tiles_added_since(added)]}
+        held = {
+            **held,
+            "tiles": [*(held.get("tiles") or []), *_the_tiles_added_since(added)],
+        }
         return _WhereThePiecesReallyAre(held)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None
@@ -355,11 +380,13 @@ def _what_it_was_built_from(store: Path) -> dict | None:
 
     if not described.is_file():
         return None
+
     held = json.loads(described.read_text(encoding="utf-8"))
     ours = (held.get("attributes") or {}).get(OURS)
 
     if isinstance(ours, dict) and (ours.get("built_from") or ours.get("governed_from")):
         return ours
+
     return None
 
 
@@ -369,6 +396,7 @@ def _the_pictures_mark(store: Path) -> tuple | None:
         stamp = (store / "zarr.json").stat()
     except OSError:
         return None
+
     return (
         stamp.st_dev,
         getattr(stamp, "st_ino", 0),
@@ -384,6 +412,7 @@ def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
 
     if ledger.is_file():
         return read_the_mosaic_as_written(json.loads(ledger.read_text(encoding="utf-8")))
+
     return read_the_transfer(Path(ours["built_from"]))
 
 
@@ -399,14 +428,18 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
 
             if kept_mark == mark:
                 return kept
+
             del _composers[store]
             stale = kept
+
         stumbled = _refused.get(store)
 
         if stumbled is not None:
             if time.monotonic() - stumbled < _REFUSED_FOR_SECONDS:
                 return None
+
             del _refused[store]
+
         making = _being_made.setdefault(store, threading.Lock())
 
     if stale is not None:
@@ -425,6 +458,7 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
         with _guard:
             if store in _composers and _composers[store][0] == mark:
                 return _composers[store][1]
+
         made = None
 
         try:
@@ -439,6 +473,7 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
 
             with _guard:
                 _refused[store] = time.monotonic()
+
             return None
 
         with _guard:
@@ -450,10 +485,12 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | GovernedRu
     """What answers for this store: a composer, a governed run, or nothing."""
     if ours is None:
         return None
+
     governs = ours.get("governed_from")
 
     if governs:
         return GovernedRun(Path(governs), piece=int(ours.get("piece") or 512), store=store)
+
     transfer = Path(ours["built_from"])
     holding = live_run_holding(transfer)
 
@@ -467,13 +504,17 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | GovernedRu
             holding,
         )
         return None
+
     workers = int(os.environ.get("ZMART_BUILD_WORKERS") or 1)
     made = Composer(
-        _the_mosaic_behind(store, ours), piece=int(ours.get("piece") or 512), workers=workers
+        _the_mosaic_behind(store, ours),
+        piece=int(ours.get("piece") or 512),
+        workers=workers,
     )
 
     if not ours.get("baked"):
         made.keep_the_coarse_levels_warm()
+
     return made
 
 
@@ -488,6 +529,7 @@ def a_manifest_governs(store: Path) -> bool:
     if held is None:
         with _guard:
             return where in _refused
+
     return False
 
 
@@ -502,11 +544,14 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
                 raise TemporarilyUnanswerable(
                     f"the picture at {where} could not be opened just now"
                 )
+
         return None
+
     address = the_piece_address(inside)
 
     if address is None:
         return None
+
     level, moment, channel, plane, row, column = address
     composer = None
 
@@ -515,11 +560,13 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
             composer = held.composer()
         except Exception as problem:
             log.exception(
-                "the governed run behind %s could not derive; answering 'try again shortly'", store
+                "the governed run behind %s could not derive; answering 'try again shortly'",
+                store,
             )
             raise TemporarilyUnanswerable(
                 f"the governed run behind {store} could not derive"
             ) from problem
+
     baked = Path(store).joinpath(*inside.strip("/").split("/"))
 
     if baked.is_file():
@@ -531,6 +578,7 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
 
         if not 0 <= level < composer.mosaic.levels:
             return None
+
         deep, down, across = composer.grid(level)
         moments, channels = composer.mosaic.frame_room
 
@@ -542,10 +590,13 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
             and 0 <= channel < channels
         ):
             return None
+
         return composer.bytes_for(level, plane, row, column, moment, channel)
     except Exception as problem:
         log.exception(
-            "the piece %s of %s could not be served; answering 'try again shortly'", inside, store
+            "the piece %s of %s could not be served; answering 'try again shortly'",
+            inside,
+            store,
         )
         raise TemporarilyUnanswerable(
             f"the piece {inside} of {store} could not be served just now"
@@ -569,6 +620,7 @@ def a_sample_behind(store: Path, channel: int = 0):
 
         if not 0 <= channel < channels:
             return None
+
         middle = (down // 2, across // 2)
         nearby = sorted(
             ((row, column) for row in range(down) for column in range(across)),
@@ -585,6 +637,7 @@ def a_sample_behind(store: Path, channel: int = 0):
             "the picture behind %s could not be sampled for measuring; it will open unmeasured",
             store,
         )
+
     return None
 
 
@@ -606,6 +659,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
 
         if not 0 <= channel < channels or not height or not width:
             return None
+
         (top, left), (bottom, right) = box
         first_row = max(0, min(height - 1, int(top * height)))
         last_row = max(first_row, min(height - 1, int(bottom * height) - 1))
@@ -629,6 +683,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
 
             if piece is None:
                 continue
+
             block = np.asarray(piece)
             rows = slice(
                 max(0, first_row - row * composer.piece),
@@ -642,10 +697,12 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
 
         if not taken:
             return None
+
         return np.concatenate(taken)
     except Exception:
         log.exception(
-            "the picture behind %s could not be measured where it is being looked at", store
+            "the picture behind %s could not be measured where it is being looked at",
+            store,
         )
         return None
 
@@ -657,6 +714,7 @@ def forget_composer(store: Path) -> None:
         remembered = _composers.pop(where, None)
         _being_made.pop(where, None)
         _refused.pop(where, None)
+
     held = remembered[1] if remembered is not None else None
 
     if held is not None:

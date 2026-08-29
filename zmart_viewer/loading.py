@@ -52,6 +52,7 @@ def load(path: str | Path, *, bake: bool = False, scenes: Path | None = None) ->
             "there any more -- point it at the raw data again",
             relink=relink,
         )
+
     return Opened(target, names=live_run_view(target, bake=bake))
 
 
@@ -61,6 +62,7 @@ def live_run_view(target: Path, *, bake: bool = False) -> list[str] | None:
     """
     if live_run_holding(target) != target.resolve():
         return None
+
     the_live_picture_declared(target, bake=bake)
     return [LIVE_PICTURE]
 
@@ -69,6 +71,7 @@ def scene_behind_a_plate(target: Path) -> Path | None:
     """The laid-out scene to open instead, when the target is an HCS plate."""
     if not target.is_dir():
         return None
+
     from .compose import _the_description_of  # deferred: pulls numpy and zarr
 
     try:
@@ -78,6 +81,7 @@ def scene_behind_a_plate(target: Path) -> Path | None:
 
     if not isinstance(described.get("plate"), dict):
         return None
+
     from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     scenes = target.parent / "scenes"
@@ -106,6 +110,7 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
 
     if len(inside) < 2:
         return None
+
     from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     existing = _scene_built_from(scenes / the_scene_folder_name(target.name), target)
@@ -136,6 +141,7 @@ def relink_needed(store: Path) -> dict | None:
 
     if not built_from:
         return None
+
     was = Path(built_from)
     still_a_source = was.is_dir() and (
         any((was / name).is_file() for name in DESCRIPTION_FILES)
@@ -144,6 +150,7 @@ def relink_needed(store: Path) -> dict | None:
 
     if still_a_source:
         return None
+
     return {
         "store": str(store),
         "was": str(built_from),
@@ -162,4 +169,5 @@ def _scene_built_from(scene: Path, data: Path) -> Path | None:
             return scene
     except (OSError, ValueError, KeyError, TypeError):
         pass
+
     return None

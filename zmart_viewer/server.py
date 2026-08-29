@@ -75,16 +75,19 @@ def _validate_annotations(payload: object) -> dict:
     """Return a small, safe annotation document or raise ValueError."""
     if not isinstance(payload, dict) or payload.get("version") != 1:
         raise ValueError("expected annotation document version 1")
+
     items = payload.get("annotations")
 
     if not isinstance(items, list) or len(items) > 10_000:
         raise ValueError("annotations must be a list of at most 10000 items")
+
     clean = []
     seen = set()
 
     for item in items:
         if not isinstance(item, dict):
             raise ValueError("each annotation must be an object")
+
         annotation_id = item.get("id")
         kind = item.get("type")
 
@@ -93,6 +96,7 @@ def _validate_annotations(payload: object) -> dict:
 
         if kind not in {"point", "axis_aligned_bounding_box"}:
             raise ValueError("unsupported annotation type")
+
         coordinate_keys = ("point",) if kind == "point" else ("pointA", "pointB")
         result = {"id": annotation_id, "type": kind}
 
@@ -108,14 +112,18 @@ def _validate_annotations(payload: object) -> dict:
                 )
             ):
                 raise ValueError(f"{key} must contain finite coordinates")
+
             result[key] = [float(x) for x in value]
+
         description = item.get("description", "")
 
         if not isinstance(description, str) or len(description) > 1000:
             raise ValueError("description must be a string of at most 1000 characters")
+
         result["description"] = description
         clean.append(result)
         seen.add(annotation_id)
+
     return {"version": 1, "annotations": clean}
 
 
@@ -128,6 +136,7 @@ def group_labels(datasets) -> dict[int, str]:
 
     for dataset in datasets:
         shared[dataset.name] = shared.get(dataset.name, 0) + 1
+
     qualified = {
         dataset.number: (
             dataset.name if shared[dataset.name] == 1 else f"{dataset.root.name} · {dataset.name}"
@@ -141,6 +150,7 @@ def group_labels(datasets) -> dict[int, str]:
         label = qualified[dataset.number]
         worn[label] = worn.get(label, 0) + 1
         labels[dataset.number] = label if worn[label] == 1 else f"{label} ({worn[label]})"
+
     return labels
 
 
@@ -225,7 +235,8 @@ class _Handler(SimpleHTTPRequestHandler):
         if not self.path.startswith(("/data/", "/api/")):
             page = self.path in ("/", "/index.html") or self.path.endswith("/")
             self.send_header(
-                "Cache-Control", "no-store" if page else "public, max-age=31536000, immutable"
+                "Cache-Control",
+                "no-store" if page else "public, max-age=31536000, immutable",
             )
 
     # -- routing ---------------------------------------------------------
@@ -239,6 +250,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/"):
             self._serve_api_get()
             return
+
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
@@ -246,6 +258,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/"):
             self._serve_api_post()
             return
+
         self._send_empty(HTTPStatus.NOT_FOUND)
 
     def do_HEAD(self) -> None:  # noqa: N802
@@ -253,6 +266,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/data/") or self.path.startswith("/api/"):
             self.do_GET()
             return
+
         super().do_HEAD()
 
     def _wanted_range(self, total: int) -> tuple[int, int] | None:
@@ -261,12 +275,14 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if not asked:
             return None
+
         found = _RANGE_HEADER.match(asked.strip())
 
         if not found:
             # A range we do not understand is not an error: answering with the
             # whole file is always a correct response to a Range request.
             return None
+
         first, last = found.group(1), found.group(2)
 
         if not first:
@@ -275,12 +291,15 @@ class _Handler(SimpleHTTPRequestHandler):
 
             if length == 0:
                 raise ValueError("an empty suffix range cannot be satisfied")
+
             start = max(0, total - length)
             return start, total - start
+
         start = int(first)
 
         if start >= total:
             raise ValueError(f"range starts at {start}, past the end at {total}")
+
         end = int(last) if last else total - 1
         end = min(end, total - 1)
         return start, end - start + 1
@@ -315,6 +334,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 if not source.is_file():
                     self._send_empty(HTTPStatus.NOT_FOUND)
                     return
+
                 self._send_file(
                     source,
                     begins_at=live.serving.offset,
@@ -326,6 +346,7 @@ class _Handler(SimpleHTTPRequestHandler):
             if live is not None:
                 self._send_empty(HTTPStatus.NOT_FOUND)
                 return
+
             elsewhere = self._pointed_at(rel)
 
             if elsewhere is not None:
@@ -342,8 +363,10 @@ class _Handler(SimpleHTTPRequestHandler):
             if made is not None:
                 self._send_bytes(made)
                 return
+
             self._send_empty(HTTPStatus.NOT_FOUND)
             return
+
         governed = self._a_governed_piece_behind(target)
 
         if governed is not None:
@@ -357,7 +380,9 @@ class _Handler(SimpleHTTPRequestHandler):
                 self._send_bytes(made)
             else:
                 self._send_empty(HTTPStatus.NOT_FOUND)
+
             return
+
         self._send_file(target)
 
     def _a_governed_piece_behind(self, target: Path) -> tuple[Path, str] | None:
@@ -366,6 +391,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if len(parents) < 5:
             return None
+
         store = parents[4]
         parts = target.relative_to(store).parts
 
@@ -380,6 +406,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if not pieces.a_manifest_governs(store):
             return None
+
         return store, "/".join(parts)
 
     def _pointed_at(self, rel: str) -> tuple[Path, int, int | None] | None:
@@ -389,18 +416,22 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if not inside:
             return None
+
         store = self._library.resolve(f"{number}/{image}")
 
         if store is None:
             return None
+
         found = pieces.pointed_bytes_behind(store, inside)
 
         if found is None:
             return None
+
         where = self._library.resolve(f"{number}/{found.path}")
 
         if where is None:
             return None
+
         return where, found.offset, found.length
 
     def _built(self, rel: str) -> bytes | None:
@@ -410,15 +441,19 @@ class _Handler(SimpleHTTPRequestHandler):
         for arity in (7, 5):
             if len(parts) < arity + 2:
                 continue
+
             suffix = "/".join(parts[-arity:])
 
             if pieces.the_piece_address(suffix) is None:
                 continue
+
             store = self._library.resolve("/".join(parts[:-arity]))
 
             if store is None:
                 return None
+
             return pieces.built_bytes_behind(store, suffix)
+
         return None
 
     def _send_bytes(self, body: bytes) -> None:
@@ -429,6 +464,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if self._live:
             self.send_header("Cache-Control", "no-store")
+
         self.end_headers()
         self.wfile.write(body)
 
@@ -439,6 +475,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if self._live:
             self.send_header("Cache-Control", "no-store")
+
         self.end_headers()
 
     _DESCRIBING_FILES = DESCRIPTION_FILES
@@ -469,6 +506,7 @@ class _Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+
         total = (
             max(0, on_disk - begins_at)
             if how_many is None
@@ -495,6 +533,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 body = handle.read(length)
         else:
             body = data[begins_at + start : begins_at + start + length]
+
         self.send_response(HTTPStatus.PARTIAL_CONTENT if wanted else HTTPStatus.OK)
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
@@ -510,6 +549,7 @@ class _Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
         else:
             self.send_header("Cache-Control", self._how_long_to_keep(describing))
+
         self.end_headers()
 
         if self.command != "HEAD":
@@ -524,18 +564,21 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if time.time_ns() - about.st_mtime_ns < self._STAMP_STILL_MOVING_NS:
             return None
+
         return f'"{about.st_mtime_ns:x}-{about.st_size:x}"'
 
     def _how_long_to_keep(self, describing: bool) -> str:
         """How long the browser may keep a copy of what we are about to send."""
         if describing or self._live:
             return "no-cache" if describing else "no-store"
+
         return "max-age=31536000, immutable"
 
     def _read(self, target: Path) -> bytes:
         """The file's contents, remembering the small ones that describe a store."""
         if target.name not in self._DESCRIBING_FILES:
             return target.read_bytes()
+
         key = str(target)
         written = target.stat().st_mtime_ns
 
@@ -544,10 +587,12 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if remembered is not None and remembered[0] == written:
             return remembered[1]
+
         data = normalise_units(target.read_bytes())
 
         with self._described_lock:
             self._described[key] = (written, data)
+
         return data
 
     # -- JSON endpoints --------------------------------------------------
@@ -591,8 +636,10 @@ class _Handler(SimpleHTTPRequestHandler):
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
                 return
+
             self._send_json(payload)
             return
+
         self._send_empty(HTTPStatus.NOT_FOUND)
 
     def _serve_events(self) -> None:
@@ -620,6 +667,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
                 if message is None:
                     return  # the server is shutting down
+
                 self.wfile.write(message)
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
@@ -636,12 +684,14 @@ class _Handler(SimpleHTTPRequestHandler):
         if not isinstance(source, str) or not source.strip():
             self._send_json({"error": "which picture to measure is needed"}, HTTPStatus.BAD_REQUEST)
             return
+
         rel = source.split("/data/", 1)[-1].split("|", 1)[0].strip("/")
         store = self._library.resolve(rel)
 
         if store is None or not store.is_dir():
             self._send_json({"error": "that picture is not open here"}, HTTPStatus.NOT_FOUND)
             return
+
         box = asked.get("box")
 
         try:
@@ -656,6 +706,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
             )
             return
+
         channel = asked.get("channel")
         channel = channel if isinstance(channel, int) else None
         found = measure_here(store, channel=channel, box=corners)
@@ -663,6 +714,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if found is None:
             self._send_json({"empty": True})
             return
+
         low, high = found["window"]
         self._send_json(
             {
@@ -681,6 +733,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 covering = self._library.revision()
         except Exception:
             covering = None
+
         self._send_json(
             {
                 "told": self._announcements.say_something_changed(
@@ -699,6 +752,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if self._live_state is None:
             self._send_empty(HTTPStatus.NOT_FOUND)
             return
+
         document, etag = self._live_state()
 
         if self.headers.get("If-None-Match") == etag:
@@ -708,6 +762,7 @@ class _Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+
         self._send_json(
             document,
             headers={"ETag": etag, "Cache-Control": "no-store"},
@@ -750,6 +805,7 @@ class _Handler(SimpleHTTPRequestHandler):
         ):
             self._send_json({"error": "opening by hand is switched off here"}, HTTPStatus.NOT_FOUND)
             return
+
         length = int(self.headers.get("Content-Length", 0))
 
         try:
@@ -813,6 +869,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 HTTPStatus.INTERNAL_SERVER_ERROR,
             )
             return
+
         self._send_json(
             {"path": chosen, "parent": str(Path(chosen).parent)} if chosen else {"cancelled": True}
         )
@@ -832,6 +889,7 @@ class _Handler(SimpleHTTPRequestHandler):
             if not path.is_dir():
                 self._send_json({"error": f"there is no folder at {path}"}, HTTPStatus.NOT_FOUND)
                 return
+
             described = set(DESCRIPTION_FILES)
 
             def kind_of(folder: Path) -> str | None:
@@ -855,6 +913,7 @@ class _Handler(SimpleHTTPRequestHandler):
                         return "run"
                 except OSError:
                     pass
+
                 return None
 
             def describe(folder: Path) -> dict:
@@ -865,6 +924,7 @@ class _Handler(SimpleHTTPRequestHandler):
                     told_of["baked"] = bool(
                         (_read_attrs_at(folder).get("zmart") or {}).get("baked")
                     )
+
                 return told_of
 
             folders = [
@@ -876,6 +936,7 @@ class _Handler(SimpleHTTPRequestHandler):
         except OSError as why:
             self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
             return
+
         self._send_json(
             {
                 "path": str(path),
@@ -891,6 +952,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if running:
             job["stop"] = True
+
         self._send_json({"stopping": running})
 
     def _serve_construct(self, payload: object) -> None:
@@ -901,24 +963,28 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if not isinstance(data, str) or not data.strip():
             self._send_json(
-                {"error": "the folder holding the images is needed"}, HTTPStatus.BAD_REQUEST
+                {"error": "the folder holding the images is needed"},
+                HTTPStatus.BAD_REQUEST,
             )
             return
 
         if not isinstance(viewer, str) or not viewer.strip():
             self._send_json(
-                {"error": "the folder for the viewer's files is needed"}, HTTPStatus.BAD_REQUEST
+                {"error": "the folder for the viewer's files is needed"},
+                HTTPStatus.BAD_REQUEST,
             )
             return
 
         if self._bake_job.get("state") == "running":
             self._send_json({"error": "a bake is already running"}, HTTPStatus.CONFLICT)
             return
+
         data_path = Path(data.strip()).expanduser()
 
         if not data_path.is_dir():
             self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
             return
+
         from .building import declare_a_built_picture, the_scene_folder_name
 
         bake = bool(asked.get("bake"))
@@ -930,6 +996,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
             )
             return
+
         job = self._bake_job
         job.clear()
         job.update({"state": "running", "fraction": 0.0, "bake": bake})
@@ -938,17 +1005,23 @@ class _Handler(SimpleHTTPRequestHandler):
         def told(done, total):
             if job.get("stop"):
                 raise _StoppedByTheOperator()
+
             job["fraction"] = round(done / max(total, 1), 4)
 
         def work():
             try:
                 store = declare_a_built_picture(
-                    viewer_path, data_path, name=name or data_path.name, bake=bake, told=told
+                    viewer_path,
+                    data_path,
+                    name=name or data_path.name,
+                    bake=bake,
+                    told=told,
                 )
                 job.update({"state": "done", "fraction": 1.0, "store": str(store)})
             except _StoppedByTheOperator:
                 shutil.rmtree(
-                    viewer_path / the_scene_folder_name(name or data_path.name), ignore_errors=True
+                    viewer_path / the_scene_folder_name(name or data_path.name),
+                    ignore_errors=True,
                 )
                 job.update({"state": "cancelled"})
             except Exception as why:  # noqa: BLE001 -- shown to the operator whole
@@ -964,18 +1037,21 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if not isinstance(path, str) or not path.strip():
             self._send_json(
-                {"error": "the folder holding the dataset is needed"}, HTTPStatus.BAD_REQUEST
+                {"error": "the folder holding the dataset is needed"},
+                HTTPStatus.BAD_REQUEST,
             )
             return
 
         if self._replay_job.get("state") == "running":
             self._send_json({"error": "a replay is already running"}, HTTPStatus.CONFLICT)
             return
+
         data_path = Path(path.strip()).expanduser()
 
         if not data_path.is_dir():
             self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
             return
+
         from .rehearsal import replay_the_dataset
 
         every = asked.get("every")
@@ -986,6 +1062,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         while (replays / f"replay-{number}").exists():
             number += 1
+
         run_folder = replays / f"replay-{number}"
         job = self._replay_job
         job.clear()
@@ -1025,6 +1102,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if job.get("state") == "error":
             self._send_json({"error": job["error"]}, HTTPStatus.BAD_REQUEST)
             return
+
         self._library.close_group(f"{data_path.name} replay")
 
         try:
@@ -1038,6 +1116,7 @@ class _Handler(SimpleHTTPRequestHandler):
         except (FileNotFoundError, ValueError, OSError) as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+
         self._send_json(self._config())
 
     def _scenes_of_this_session(self) -> Path:
@@ -1053,6 +1132,7 @@ class _Handler(SimpleHTTPRequestHandler):
             home.mkdir(parents=True, exist_ok=True)
             folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
             self._scratch[kind] = folder
+
         return folder
 
     def _serve_open(self, payload: object) -> None:
@@ -1062,6 +1142,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if not isinstance(path, str) or not path.strip():
             self._send_json({"error": "a folder path is needed"}, HTTPStatus.BAD_REQUEST)
             return
+
         target = Path(path.strip()).expanduser()
 
         try:
@@ -1084,6 +1165,7 @@ class _Handler(SimpleHTTPRequestHandler):
         except (ValueError, OSError) as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+
         self._send_json(self._config())
 
     def _asked_for_the_live_bake(self, run_folder: Path, payload: object) -> bool:
@@ -1093,6 +1175,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if bool(asked.get("bake")):
             baking.add(Path(run_folder).resolve())
+
         return Path(run_folder).resolve() in baking
 
     def _serve_close(self, payload: object) -> None:
@@ -1101,9 +1184,11 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if not isinstance(group, str) or not group:
             self._send_json(
-                {"error": "which acquisition to close is needed"}, HTTPStatus.BAD_REQUEST
+                {"error": "which acquisition to close is needed"},
+                HTTPStatus.BAD_REQUEST,
             )
             return
+
         datasets = self._library.datasets()
         named = group_labels(datasets)
         by_number = {dataset.number: dataset for dataset in datasets}
@@ -1120,6 +1205,7 @@ class _Handler(SimpleHTTPRequestHandler):
             forget(root / name)
             pieces.forget(root / name)
             self.forget_described(root / name)
+
         self._forget_measurements(closed)
         self._send_json(self._config())
 
@@ -1130,6 +1216,7 @@ class _Handler(SimpleHTTPRequestHandler):
         except ValueError as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+
         path = self._data_dir / _ANNOTATIONS_FILE
         temporary = None
 
@@ -1143,6 +1230,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
+
             os.replace(temporary, path)
         except OSError as why:
             # The half-written file is cleared away so a failed save does not
@@ -1152,6 +1240,7 @@ class _Handler(SimpleHTTPRequestHandler):
                     os.unlink(temporary)
                 except OSError:
                     pass
+
             self._send_json(
                 {
                     "error": (
@@ -1165,6 +1254,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 HTTPStatus.INTERNAL_SERVER_ERROR,
             )
             return
+
         self._send_json(document)
 
     def _send_json(
@@ -1181,6 +1271,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         for name, value in (headers or {}).items():
             self.send_header(name, value)
+
         self.end_headers()
 
         if self.command != "HEAD":
@@ -1211,6 +1302,7 @@ def ask_this_machine_for_a_folder() -> str | None:
             )
         finally:
             root.destroy()
+
     return chosen or None
 
 
@@ -1314,6 +1406,7 @@ def make_server(
 
             if remembered is not None and key not in provisional:
                 return {**remembered, "name": label}
+
             return _measure(key, root_number, root, name, label, coloured, channel, declared_range)
 
     def _worth_measuring_again(store: Path) -> bool:
@@ -1329,10 +1422,12 @@ def make_server(
             described = channels(store)
         except Exception:
             return None
+
         at = 0 if channel is None else int(channel)
 
         if at >= len(described):
             return None
+
         return described[at].get("window")
 
     def _measure(
@@ -1348,12 +1443,14 @@ def make_server(
             }
         else:
             found = measure(root / name, channel=channel)
+
         flat, volume = found["window"], found["volumeWindow"]
 
         asked_for = _the_window_this_channel_asked_for(root / name, channel)
 
         if asked_for is not None:
             flat = volume = (asked_for["low"], asked_for["high"])
+
         color = channel_color(name) if coloured else None
         described = {
             "sources": [f"/data/{root_number}/{name}/|{zarr_scheme(root / name)}:"],
@@ -1374,6 +1471,7 @@ def make_server(
                 provisional.discard(key)
             else:
                 provisional.add(key)
+
         return {**described, "name": label}
 
     last_built: dict = {"revision": None, "config": None}
@@ -1400,6 +1498,7 @@ def make_server(
             # built exactly what this one was about to build.
             if last_built["revision"] == revision:
                 return last_built["config"]
+
             built = build_config(
                 live_document,
                 live_bindings,
@@ -1426,6 +1525,7 @@ def make_server(
         for (root_number, root, name), label in zip(entries, labels, strict=True):
             if root_number in live_numbers:
                 continue
+
             group = groups_named[root_number]
             store_path = root / name
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
@@ -1444,7 +1544,15 @@ def make_server(
             else:
                 wavelength = channel_of(name)
                 colour = channel_color(name) if len(present) > 1 else None
-                found = [(None, f"Ch{wavelength}" if wavelength else label, colour, None, True)]
+                found = [
+                    (
+                        None,
+                        f"Ch{wavelength}" if wavelength else label,
+                        colour,
+                        None,
+                        True,
+                    )
+                ]
 
             frames = written_timepoints(store_path)
 
@@ -1504,6 +1612,7 @@ def make_server(
                 else:
                     row["sources"].append(source)
                     row["frameCounts"].append(frames)
+
         rows = [{"kind": "image", **row} for row in merged.values()]
 
         for binding in live_bindings:
@@ -1543,6 +1652,7 @@ def make_server(
         def server_bind(self):
             if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
                 self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+
             super().server_bind()
 
         def serve_forever(self, *args, **kwargs):
@@ -1550,6 +1660,7 @@ def make_server(
             # only for data that is still being written -- see FolderWatcher.
             for watcher in watchers:
                 watcher.start()
+
             super().serve_forever(*args, **kwargs)
 
         def shutdown(self):
@@ -1565,6 +1676,7 @@ def make_server(
 
                 if made is not None:
                     shutil.rmtree(made, ignore_errors=True)
+
             super().shutdown()
 
     handler = functools.partial(
