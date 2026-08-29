@@ -16,7 +16,7 @@ import zarr
 from zmart_live.coordinator import LivePublisher
 from zmart_live.profiles import DEFAULTS, plan_the_writing
 
-from .mosaic import read_the_transfer, the_front_axes
+from .compose import read_the_transfer, the_front_axes
 
 GRID_TOLERANCE_UM = 0.1
 

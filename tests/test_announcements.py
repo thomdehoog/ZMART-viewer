@@ -19,9 +19,9 @@ import json
 import threading
 import time
 
-from zmart_viewer import announcements as announcements_mod
+from zmart_viewer import live as announcements_mod
 import pytest
-from zmart_viewer.announcements import Announcements, FolderWatcher
+from zmart_viewer.live import Announcements, FolderWatcher
 from zmart_viewer.server import make_server
 
 

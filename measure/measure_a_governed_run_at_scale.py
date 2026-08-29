@@ -71,8 +71,8 @@ sys.path.insert(0, str(_VIZ.parent))
 
 import measure_the_frame_rate_of_a_linked_view as watching  # noqa: E402
 import numpy as np  # noqa: E402
-from zmart_viewer import served  # noqa: E402
-from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
+from zmart_viewer import pieces as served  # noqa: E402
+from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
 from zmart_live.coordinator import LivePublisher  # noqa: E402

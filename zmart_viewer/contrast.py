@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .stores import DESCRIPTION_FILES, _moments_folder, _read_attrs_at
+from .library import DESCRIPTION_FILES, _moments_folder, _read_attrs_at
 
 LOW_PERCENTILE = 1.0
 HIGH_PERCENTILE = 99.0
@@ -177,7 +177,7 @@ def _samples(store: Path, *, channel: int | None = None):
 def _a_built_pictures_values(store: str | Path, level: int, box, channel: int | None):
     """A built picture's pixels inside the share of it on screen, or None."""
     try:
-        from .served import the_values_inside
+        from .pieces import the_values_inside
     except ImportError:
         return None
     return the_values_inside(Path(store), level, box, channel=channel or 0)
@@ -186,7 +186,7 @@ def _a_built_pictures_values(store: str | Path, level: int, box, channel: int | 
 def _a_built_pictures_sample(store: str | Path, channel: int | None):
     """The composer's own sample of a built picture, or None outside one."""
     try:
-        from .served import a_sample_behind
+        from .pieces import a_sample_behind
     except ImportError:
         return None
     return a_sample_behind(Path(store), channel=channel or 0)

@@ -33,9 +33,9 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.declare import declare_a_built_picture  # noqa: E402
+from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from zmart_viewer.library import Library  # noqa: E402
-from zmart_viewer.live_config import LIVE_PICTURE, LiveRegistry  # noqa: E402
+from zmart_viewer.live import LIVE_PICTURE, LiveRegistry  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 from test_a_dataset_is_relived_as_a_live_run import _a_grid_scan, _post  # noqa: E402
 from test_open_and_close import _store  # noqa: E402
@@ -142,7 +142,7 @@ def test_a_moved_run_redeclares_its_picture_at_its_new_home(tmp_path):
     )
     # And the picture is servable from the new home: the finest piece of
     # the committed position answers with its own pixels.
-    from zmart_viewer.governed import GovernedRun
+    from zmart_viewer.building import GovernedRun
 
     governed = GovernedRun(moved)
     try:

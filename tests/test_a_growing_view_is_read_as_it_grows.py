@@ -25,7 +25,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer import linking  # noqa: E402
+from zmart_viewer import pieces as linking  # noqa: E402
 
 from zmart_storage.canvas import Channel, _declare_one  # noqa: E402
 from zmart_storage.linked import (  # noqa: E402
@@ -95,11 +95,11 @@ def test_a_tile_is_answered_for_the_moment_it_lands(tmp_path):
     ) as view:
         for index, tile in enumerate(arriving):
             # Before it lands there is nothing at that address.
-            assert linking.the_bytes_behind(view.path, where_that_tile_is(index)) is None
+            assert linking.pointed_bytes_behind(view.path, where_that_tile_is(index)) is None
 
             view.add(tile)
 
-            found = linking.the_bytes_behind(view.path, where_that_tile_is(index))
+            found = linking.pointed_bytes_behind(view.path, where_that_tile_is(index))
             assert found is not None, (
                 f"tile {index} had landed and the reader still answered 'nothing "
                 "here'. A run being watched would stop filling in, with nothing "
@@ -109,7 +109,7 @@ def test_a_tile_is_answered_for_the_moment_it_lands(tmp_path):
 
             # And every tile before it is still answered for.
             for earlier in range(index):
-                assert linking.the_bytes_behind(
+                assert linking.pointed_bytes_behind(
                     view.path, where_that_tile_is(earlier)) is not None
 
 
@@ -130,7 +130,7 @@ def test_the_view_still_reads_after_the_run_has_finished(tmp_path):
     for tile in arriving:
         view.add(tile)
     during = {
-        index: linking.the_bytes_behind(view.path, where_that_tile_is(index))
+        index: linking.pointed_bytes_behind(view.path, where_that_tile_is(index))
         for index in range(len(arriving))
     }
     finished = view.finish()
@@ -139,7 +139,7 @@ def test_the_view_still_reads_after_the_run_has_finished(tmp_path):
         "the companion file was left behind on a finished run"
     )
     after = {
-        index: linking.the_bytes_behind(finished.path, where_that_tile_is(index))
+        index: linking.pointed_bytes_behind(finished.path, where_that_tile_is(index))
         for index in range(len(arriving))
     }
     assert after == during, (
@@ -176,7 +176,7 @@ def test_a_line_caught_half_written_is_simply_not_there_yet(tmp_path):
         linking._known.clear()
 
         for index in range(len(arriving) - 1):
-            assert linking.the_bytes_behind(
+            assert linking.pointed_bytes_behind(
                 view.path, where_that_tile_is(index)) is not None, (
                 "a half-written last line stopped the tiles before it being read"
             )

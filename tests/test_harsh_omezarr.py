@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 from zmart_viewer.contrast import display_window
 from zmart_viewer.server import make_server
-from zmart_viewer.stores import (
+from zmart_viewer.library import (
     channel_color,
     channel_of,
     discover,

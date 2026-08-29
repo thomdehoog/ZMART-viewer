@@ -30,7 +30,7 @@ import numpy as np
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402
 from zmart_live.profiles import plan_the_writing  # noqa: E402

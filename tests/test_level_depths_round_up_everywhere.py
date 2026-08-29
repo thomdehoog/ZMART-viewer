@@ -76,7 +76,7 @@ def a_deep_run_whose_levels_halve_z(tmp_path):
 def test_the_writer_and_the_world_frame_agree_on_the_ceiling(
     a_deep_run_whose_levels_halve_z,
 ):
-    from zmart_viewer.governed import TheWorldFrame
+    from zmart_viewer.building import TheWorldFrame
 
     run = a_deep_run_whose_levels_halve_z
     ceiling = (-(-DEPTH // 2), 64, 64)  # (7, 64, 64)
@@ -111,7 +111,7 @@ def test_the_rule_has_exactly_one_definition():
     how deep the world is. Identity (`is`), not equality: the same
     function object, not a lookalike.
     """
-    from zmart_viewer import governed
+    from zmart_viewer import building as governed
 
     from zmart_live import coordinator, gateway, model
 

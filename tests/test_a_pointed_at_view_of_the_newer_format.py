@@ -27,7 +27,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from zmart_viewer import linking
+from zmart_viewer import pieces as linking
 import numpy as np
 from zmart_viewer.server import make_server
 
@@ -110,7 +110,7 @@ def test_a_newer_format_view_points_at_files_that_exist(tmp_path):
 
     for x in range(ACROSS):
         asked = f"0/c/0/0/0/0/{x}"
-        found = linking.the_bytes_behind(view.path, asked)
+        found = linking.pointed_bytes_behind(view.path, asked)
         assert found is not None, (
             f"the view could not say where {asked} is, so that part of the picture "
             "would come out blank with nothing to say why"
@@ -380,7 +380,7 @@ def test_the_older_format_still_names_its_pieces_the_old_way(tmp_path):
     listed = linking.the_map_inside(view.path)
     assert listed["prefix"] == "", "an 0.4 store puts nothing in front of a piece name"
 
-    found = linking.the_bytes_behind(view.path, f"0/0{listed['separator']}0"
+    found = linking.pointed_bytes_behind(view.path, f"0/0{listed['separator']}0"
                                                 f"{listed['separator']}0"
                                                 f"{listed['separator']}0"
                                                 f"{listed['separator']}0")

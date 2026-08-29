@@ -170,7 +170,7 @@ def test_the_two_formats_describe_the_same_run(tmp_path):
     Everything an operator sees comes through these five answers, so if they agree
     then choosing a format is genuinely a matter of what else can read the folder.
     """
-    from zmart_viewer.stores import axis_names, channels, voxel_size, written_timepoints, zarr_scheme
+    from zmart_viewer.library import axis_names, channels, voxel_size, written_timepoints, zarr_scheme
 
     seen = {}
     for version in ("0.4", "0.5"):

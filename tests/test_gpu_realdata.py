@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 import pytest
 from zmart_viewer.server import make_server
-from zmart_viewer.stores import declared_channels, discover
+from zmart_viewer.library import declared_channels, discover
 
 REAL_STORE_ENV = "ZMART_TEST_STORE"
 

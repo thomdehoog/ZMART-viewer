@@ -30,9 +30,9 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer import served  # noqa: E402
-from zmart_viewer.declare import declare_a_built_picture, the_scene_folder_name  # noqa: E402
-from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer import pieces as served  # noqa: E402
+from zmart_viewer.building import declare_a_built_picture, the_scene_folder_name  # noqa: E402
+from zmart_viewer.compose import read_the_transfer  # noqa: E402
 
 FIELD = (2, 32, 32)  # planes, height, width of one field
 VOXEL_UM = (1.0, 0.5, 0.5)
@@ -142,7 +142,7 @@ def test_a_plate_builds_and_each_field_serves_its_own_pixels(tmp_path):
         for name, expected in (("A1-0", 1000), ("A2-1", 2100), ("B1-0", 3000)):
             row = int(corners[name][0] / VOXEL_UM[1]) // piece
             column = int(corners[name][1] / VOXEL_UM[2]) // piece
-            body = served.the_bytes_behind(store, f"0/c/0/{row}/{column}")
+            body = served.built_bytes_behind(store, f"0/c/0/{row}/{column}")
             assert body is not None, f"{name} served nothing"
             values = np.frombuffer(decode(body), "uint16")
             assert values.max() == expected, (
@@ -320,7 +320,7 @@ def test_a_placed_field_serves_its_own_pixels(tmp_path):
         for name, expected in (("A1-2", 1200), ("B1-1", 3100)):
             row = int(corners[name][0] / VOXEL_UM[1]) // 32
             column = int(corners[name][1] / VOXEL_UM[2]) // 32
-            body = served.the_bytes_behind(store, f"0/c/0/{row}/{column}")
+            body = served.built_bytes_behind(store, f"0/c/0/{row}/{column}")
             held = np.frombuffer(decode(body), "<u2")
             assert held.max() == expected, (
                 f"{name} should answer {expected}, not {held.max()}"

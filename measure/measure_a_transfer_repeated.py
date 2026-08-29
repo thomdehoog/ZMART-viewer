@@ -28,8 +28,8 @@ from pathlib import Path
 # Beside the code it measures, so it finds it without being told where.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.composer import Composer  # noqa: E402
-from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer.compose import Composer  # noqa: E402
+from zmart_viewer.compose import read_the_transfer  # noqa: E402
 
 # The transfer to lay out again, and where to put the result. Both are given
 # on the command line; these are only what this was developed against.

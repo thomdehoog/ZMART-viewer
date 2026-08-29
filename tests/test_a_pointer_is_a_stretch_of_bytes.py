@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from zmart_viewer import linking
+from zmart_viewer import pieces as linking
 from zmart_viewer.server import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -91,7 +91,7 @@ def test_a_pointer_says_where_the_bytes_are_and_how_many(tmp_path):
     run = tmp_path / "run"
     view = _a_small_view(run)
 
-    found = linking.the_bytes_behind(view, "0/0/0/0/0/0")
+    found = linking.pointed_bytes_behind(view, "0/0/0/0/0/0")
     assert found is not None, (
         "the view could not say where its first piece is, so it would draw nothing"
     )
@@ -138,7 +138,7 @@ def test_a_view_written_before_this_change_is_still_read(tmp_path):
         tile.pop("held_as", None)
     linking.rewrite_the_map_inside(view, older)
 
-    found = linking.the_bytes_behind(view, "0/0/0/0/0/0")
+    found = linking.pointed_bytes_behind(view, "0/0/0/0/0/0")
     assert found is not None, "a view written before this change stopped being read"
     assert found.is_the_whole_file
 
@@ -158,7 +158,7 @@ def test_a_way_of_holding_pieces_we_do_not_know_is_refused(tmp_path):
         tile["held_as"] = "packed-somehow"
     linking.rewrite_the_map_inside(view, listed)
 
-    assert linking.the_bytes_behind(view, "0/0/0/0/0/0") is None, (
+    assert linking.pointed_bytes_behind(view, "0/0/0/0/0/0") is None, (
         "a way of holding pieces this reader does not know was answered for anyway"
     )
 
@@ -179,7 +179,7 @@ def test_the_server_hands_over_the_stretch_a_pointer_asks_for(tmp_path, monkeypa
     (run / "shard.bin").write_bytes(inside_a_larger_file)
 
     monkeypatch.setattr(
-        linking, "the_bytes_behind",
+        linking, "pointed_bytes_behind",
         lambda store, inside: linking.Held(path="shard.bin", offset=100, length=50),
     )
 

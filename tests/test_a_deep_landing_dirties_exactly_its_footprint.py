@@ -35,7 +35,7 @@ import numpy as np
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-from zmart_viewer.governed import GovernedRun  # noqa: E402
+from zmart_viewer.building import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell, rounded_up  # noqa: E402
 from zmart_live.profiles import plan_the_writing  # noqa: E402

@@ -20,8 +20,8 @@ VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.governed import GovernedRun  # noqa: E402
+from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.building import GovernedRun  # noqa: E402
 from test_a_governed_picture_is_baked_per_commit import (  # noqa: E402
     a_fresh_bake_of,
     every_baked_file,

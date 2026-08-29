@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 import numpy as np
-from zmart_viewer import live_config
+from zmart_viewer import live as live_config
 from zmart_viewer import server as server_module
 from pixels import fraction_lit, image_middle
 from zmart_viewer.server import make_server

@@ -39,10 +39,10 @@ import zarr
 VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 
-from zmart_viewer import served  # noqa: E402
-from zmart_viewer.composer import Composer  # noqa: E402
-from zmart_viewer.declare import declare_a_built_picture, the_scene_folder_name  # noqa: E402
-from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer import pieces as served  # noqa: E402
+from zmart_viewer.compose import Composer  # noqa: E402
+from zmart_viewer.building import declare_a_built_picture, the_scene_folder_name  # noqa: E402
+from zmart_viewer.compose import read_the_transfer  # noqa: E402
 
 # One tile: shallow, small, and square, so a whole transfer of them is quick to
 # write and every test can afford to compare every voxel.
@@ -339,9 +339,9 @@ def test_ground_no_tile_covers_is_answered_with_nothing(a_transfer: Path,
     store = declare_a_built_picture(tmp_path / "views", a_transfer, name="built",
                                     piece=PIECE)
     served.forget(store)
-    assert served.the_bytes_behind(store, "0/c/0/0/0") is not None
-    assert served.the_bytes_behind(store, "0/c/0/9999/9999") is None
-    assert served.the_bytes_behind(store, "not/a/piece") is None
+    assert served.built_bytes_behind(store, "0/c/0/0/0") is not None
+    assert served.built_bytes_behind(store, "0/c/0/9999/9999") is None
+    assert served.built_bytes_behind(store, "not/a/piece") is None
     served.forget(store)
 
 
@@ -371,8 +371,8 @@ def test_a_piece_between_scattered_tiles_is_answered_with_nothing(tmp_path: Path
     store = declare_a_built_picture(tmp_path / "views", folder, name="built",
                                     piece=PIECE)
     served.forget(store)
-    assert served.the_bytes_behind(store, "0/c/0/2/2") is None
-    assert served.the_bytes_behind(store, "0/c/0/0/0") is not None
+    assert served.built_bytes_behind(store, "0/c/0/2/2") is None
+    assert served.built_bytes_behind(store, "0/c/0/0/0") is not None
     served.forget(store)
 
 
@@ -463,7 +463,7 @@ def test_opening_a_served_picture_starts_the_warming(a_transfer: Path,
     store = declare_a_built_picture(tmp_path / "views", a_transfer, name="built",
                                     piece=PIECE)
     served.forget(store)
-    assert served.the_bytes_behind(store, "0/c/0/0/0") is not None
+    assert served.built_bytes_behind(store, "0/c/0/0/0") is not None
     _, composer = served._composers[store.resolve()]
     deadline = time.time() + 10
     while time.time() < deadline and not composer.coarse_levels_are_warm:
@@ -500,14 +500,14 @@ def test_a_baked_picture_shows_its_coarse_ground_without_the_tiles(
             for row in range(-(-shape[1] // PIECE)):
                 for column in range(-(-shape[2] // PIECE)):
                     asked = f"{level}/c/{plane}/{row}/{column}"
-                    remembered[asked] = served.the_bytes_behind(store, asked)
+                    remembered[asked] = served.built_bytes_behind(store, asked)
     assert any(body is not None for body in remembered.values())
 
     a_transfer.rename(a_transfer.with_name("transfer-walked-away"))
     served.forget(store)
     try:
         for asked, before in remembered.items():
-            assert served.the_bytes_behind(store, asked) == before, (
+            assert served.built_bytes_behind(store, asked) == before, (
                 f"{asked} changed once the tiles were gone, so it was built, "
                 "not read"
             )
@@ -636,7 +636,7 @@ def test_a_declared_picture_opens_from_its_own_ledger(a_transfer: Path,
     store = declare_a_built_picture(tmp_path / "views", a_transfer, name="built",
                                     piece=PIECE)
     served.forget(store)
-    before = served.the_bytes_behind(store, "0/c/0/0/0")
+    before = served.built_bytes_behind(store, "0/c/0/0/0")
     assert before is not None
 
     for tile in sorted(a_transfer.glob("*.ome.zarr")):
@@ -644,7 +644,7 @@ def test_a_declared_picture_opens_from_its_own_ledger(a_transfer: Path,
 
     served.forget(store)
     try:
-        assert served.the_bytes_behind(store, "0/c/0/0/0") == before
+        assert served.built_bytes_behind(store, "0/c/0/0/0") == before
     finally:
         for tile in sorted(a_transfer.glob("*.ome.zarr")):
             (tile / "zarr.json.walked-away").rename(tile / "zarr.json")
@@ -745,7 +745,7 @@ def test_declaring_again_over_a_new_tile_serves_it_without_a_restart(
     try:
         # Ground only the missing tile will cover: the top-right piece, past
         # tile 0's right edge and above the second row's top.
-        empty = served.the_bytes_behind(store, "0/c/0/0/3")
+        empty = served.built_bytes_behind(store, "0/c/0/0/3")
         assert empty is None, "ground no tile covers must be served as absent"
 
         _write_a_tile(folder / "Tile1.ome.zarr", 1, (0.0, STEP_UM))
@@ -753,7 +753,7 @@ def test_declaring_again_over_a_new_tile_serves_it_without_a_restart(
                                         name="built", piece=PIECE)
         assert again == store
 
-        grown = served.the_bytes_behind(store, "0/c/0/0/3")
+        grown = served.built_bytes_behind(store, "0/c/0/0/3")
         assert grown is not None, (
             "the tile that landed is still being served as absent ground -- "
             "the remembered composer outlived the declaration that replaced it"
@@ -940,8 +940,8 @@ def test_a_grown_picture_bakes_one_file_per_frame(tmp_path: Path):
         (tile / "zarr.json").rename(tile / "zarr.json.walked-away")
     try:
         coarsest = mosaic.levels - 1
-        one = served.the_bytes_behind(store, f"{coarsest}/c/1/1/0/0/0")
-        other = served.the_bytes_behind(store, f"{coarsest}/c/0/0/0/0/0")
+        one = served.built_bytes_behind(store, f"{coarsest}/c/1/1/0/0/0")
+        other = served.built_bytes_behind(store, f"{coarsest}/c/0/0/0/0/0")
         assert one is not None and other is not None
         assert one != other, "two frames must answer two different pictures"
     finally:

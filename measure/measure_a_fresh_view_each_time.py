@@ -115,7 +115,7 @@ sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
 import measure_the_frame_rate_of_a_linked_view as watching  # noqa: E402
-from zmart_viewer.declare import declare_a_built_picture  # noqa: E402
+from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from measure_scaling import write_a_transfer  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 

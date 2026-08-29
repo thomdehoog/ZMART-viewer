@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         window = (float(low), float(high))
 
     if args.data:
-        from zmart_viewer.stores import discover, prefer_filter, select_tiles
+        from zmart_viewer.library import discover, prefer_filter, select_tiles
 
         try:
             parent, names = discover(args.data)
