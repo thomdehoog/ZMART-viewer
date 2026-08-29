@@ -235,7 +235,7 @@ There are three layers, and it is worth being able to name them:
 
 ```
         FRONT                     MIDDLE                      BACK
-   Neuroglancer and          app/server/server.py           OME-Zarr on disk
+   Neuroglancer and          zmart_viewer/server.py           OME-Zarr on disk
    our interface
 
   +------------------+      +-------------------+      +-------------------+
@@ -282,7 +282,7 @@ not to what the viewer would prefer.
 
 **The middle is the server, and its job is to let those two disagree.** It answers
 the front's questions about a picture that need not exist on disk in that shape. It
-is not a new component: `app/server/server.py` is already this layer. Today it passes
+is not a new component: `zmart_viewer/server.py` is already this layer. Today it passes
 files straight through, which is the simplest thing it can do and the right thing
 when the store on disk is already the picture the operator wants to see.
 
@@ -397,21 +397,22 @@ wants to know which one to open.
  ══════════════════════════════════════════════▲══════════════════════════════
                                   HTTP         │  pieces, descriptions, events
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE MIDDLE — what answers            app/server/
+   THE MIDDLE — what answers            zmart_viewer/
  ══════════════════════════════════════════════════════════════════════════════
 
      server.py ────── answers every request; guards the opened folder
-       ├── stores.py ────── which stores are one acquisition, read from
-       │                    inside them rather than from their names
-       ├── linking.py ───── "no file here?" → which position's file holds
-       │                    those exact bytes.  The view is served here.
-       ├── contrast.py ──── without this, real acquisitions draw black
-       ├── library.py ───── add last week's run beside today's
-       ├── announcements.py ─ tells an open viewer that a position arrived
-       └── demo_data.py ─── a pretend specimen, so it runs with no microscope
+       ├── loading.py ──── the one door: classify a path, open it right
+       ├── library.py ──── what is open, and how stores are read
+       ├── pieces.py ───── "no file here?" → pointed or built bytes
+       ├── compose.py ──── the arrangement, and building pieces of it
+       ├── building.py ─── a picture written down; a governed one patched
+       ├── live.py ─────── announce changes; adapt live runs
+       ├── contrast.py ─── without this, real acquisitions draw black
+       ├── rehearsal.py ── replay a finished run through the live writer
+       └── launcher.py ─── the native window, or a printed address
 
-     browsercheck.py ─ the safety net: serves the page, opens it, reads the
-                       pixels that came out
+     tests/browsercheck.py ─ the safety net: serves the page, opens it,
+                             reads the pixels that came out
 
  ══════════════════════════════════════════════▼══════════════════════════════
    THE BACK — what is written            zmart_storage/
