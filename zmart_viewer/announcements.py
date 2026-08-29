@@ -112,7 +112,10 @@ class Announcements:
             self._listeners.discard(waiting)
 
     def say_something_changed(
-        self, *, image_written_in_place: bool = False, covering: object | None = None,
+        self,
+        *,
+        image_written_in_place: bool = False,
+        covering: object | None = None,
     ) -> int:
         """Tell every open page to ask again. Returns how many were told.
 
@@ -311,9 +314,7 @@ class ManifestWatcher:
         trackers = self._trackers()
         alive = set(trackers)
         self._announced = {
-            tracker: revision
-            for tracker, revision in self._announced.items()
-            if tracker in alive
+            tracker: revision for tracker, revision in self._announced.items() if tracker in alive
         }
         for tracker in trackers:
             tracker.observe()

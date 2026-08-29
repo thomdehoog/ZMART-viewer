@@ -53,10 +53,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(HERE / "app" / "server"))
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "tests"))
 
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # How much is already open when the new thing arrives. The point is the *shape* of the
 # curve rather than any single figure, so these span from "just started" to "a decent

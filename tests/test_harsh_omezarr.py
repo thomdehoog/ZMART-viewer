@@ -20,9 +20,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from contrast import display_window
-from server import make_server
-from stores import (
+from zmart_viewer.contrast import display_window
+from zmart_viewer.server import make_server
+from zmart_viewer.stores import (
     channel_color,
     channel_of,
     discover,

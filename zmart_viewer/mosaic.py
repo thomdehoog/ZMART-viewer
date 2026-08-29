@@ -155,8 +155,7 @@ class Tile:
     # written but not yet published cannot leak onto anybody's screen.
     moments: frozenset[int] | None = None
 
-    def footprint(self, level: int, at: tuple[int, int, int]
-                  ) -> tuple[int, int, int, int]:
+    def footprint(self, level: int, at: tuple[int, int, int]) -> tuple[int, int, int, int]:
         """The box this tile occupies across the specimen once it is turned.
 
         Returned as ``(top, bottom, left, right)`` in the picture's own voxels at
@@ -173,12 +172,18 @@ class Tile:
         corners = []
         for down in (-middle[0], middle[0]):
             for across in (-middle[1], middle[1]):
-                corners.append((down * cos - across * sin + middle[0] + at[1],
-                                down * sin + across * cos + middle[1] + at[2]))
-        return (math.floor(min(one[0] for one in corners)),
-                math.ceil(max(one[0] for one in corners)),
-                math.floor(min(one[1] for one in corners)),
-                math.ceil(max(one[1] for one in corners)))
+                corners.append(
+                    (
+                        down * cos - across * sin + middle[0] + at[1],
+                        down * sin + across * cos + middle[1] + at[2],
+                    )
+                )
+        return (
+            math.floor(min(one[0] for one in corners)),
+            math.ceil(max(one[0] for one in corners)),
+            math.floor(min(one[1] for one in corners)),
+            math.ceil(max(one[1] for one in corners)),
+        )
 
     @property
     def keeps(self) -> int:
@@ -236,9 +241,9 @@ class Mosaic:
     # transfer is open, since it comes from descriptions on disk that are not
     # being written, so working it out once is safe as well as necessary.
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
-        default_factory=dict, repr=False)
-    _shape: dict[int, tuple[int, int, int]] = field(
-        default_factory=dict, repr=False)
+        default_factory=dict, repr=False
+    )
+    _shape: dict[int, tuple[int, int, int]] = field(default_factory=dict, repr=False)
     _room: tuple[int, int] | None = field(default=None, repr=False)
 
     @property
@@ -315,8 +320,7 @@ class Mosaic:
         copy = tile.copies[level]
         voxel = self.voxel_um(level)
         return tuple(
-            math.floor((copy.corner_um[axis] - self.corner_um[axis]) / voxel[axis]
-                       + 0.5)
+            math.floor((copy.corner_um[axis] - self.corner_um[axis]) / voxel[axis] + 0.5)
             for axis in range(3)
         )  # type: ignore[return-value]
 
@@ -334,15 +338,15 @@ class Mosaic:
         if found is None:
             placed = self.placements(level)
             found = tuple(
-                max(at[axis] + tile.copies[level].shape[axis]
-                    for tile, at in placed)
+                max(at[axis] + tile.copies[level].shape[axis] for tile, at in placed)
                 for axis in range(3)
             )
             self._shape[level] = found  # type: ignore[assignment]
         return found  # type: ignore[return-value]
 
-    def reaching_into(self, level: int, low: tuple[int, int, int],
-                      high: tuple[int, int, int]) -> list[tuple[Tile, tuple[int, int, int]]]:
+    def reaching_into(
+        self, level: int, low: tuple[int, int, int], high: tuple[int, int, int]
+    ) -> list[tuple[Tile, tuple[int, int, int]]]:
         """Which tiles cover any part of this box, and where each of them lands.
 
         This looks at every tile, which is right for a handful and wrong for
@@ -360,10 +364,13 @@ class Mosaic:
             Each tile that overlaps the box at all, paired with where it lands.
         """
         return [
-            (tile, at) for tile, at in self.placements(level)
-            if all(max(low[axis], at[axis])
-                   < min(high[axis], at[axis] + tile.copies[level].shape[axis])
-                   for axis in range(3))
+            (tile, at)
+            for tile, at in self.placements(level)
+            if all(
+                max(low[axis], at[axis])
+                < min(high[axis], at[axis] + tile.copies[level].shape[axis])
+                for axis in range(3)
+            )
         ]
 
 
@@ -384,8 +391,7 @@ def _the_description_of(store: Path) -> tuple[dict, str]:
     )
 
 
-def _how_a_resolution_is_stored(held_in: Path) -> tuple[tuple[int, ...],
-                                                        tuple[int, ...], str]:
+def _how_a_resolution_is_stored(held_in: Path) -> tuple[tuple[int, ...], tuple[int, ...], str]:
     """How large one resolution is, how it is chunked, and what a voxel holds.
 
     Read out of the array's own description rather than by opening it through
@@ -425,8 +431,7 @@ def _read_one_tile(store: Path) -> Tile:
     described, _ = _the_description_of(store)
     multiscale = (described.get("multiscales") or [{}])[0]
     datasets = multiscale.get("datasets") or []
-    axes = tuple(str(axis.get("name", ""))
-                 for axis in multiscale.get("axes") or ())
+    axes = tuple(str(axis.get("name", "")) for axis in multiscale.get("axes") or ())
     if not datasets:
         raise ValueError(
             f"{store} says it keeps no copies of its picture, so there is nothing "
@@ -462,19 +467,20 @@ def _read_one_tile(store: Path) -> Tile:
         # position is (t, c, z, y, x). What sits in front is recorded so a read
         # can hold it fixed; the scale and translation above already take the
         # last three of themselves for the same reason.
-        copies.append(Copy(
-            held_in=held_in,
-            shape=tuple(shape[-3:]),  # type: ignore[arg-type]
-            chunks=tuple(chunks[-3:]),  # type: ignore[arg-type]
-            dtype=kind,
-            voxel_um=voxel,
-            corner_um=(corner[0], corner[1], corner[2]),
-            outer_shape=tuple(shape[:-3]),
-        ))
+        copies.append(
+            Copy(
+                held_in=held_in,
+                shape=tuple(shape[-3:]),  # type: ignore[arg-type]
+                chunks=tuple(chunks[-3:]),  # type: ignore[arg-type]
+                dtype=kind,
+                voxel_um=voxel,
+                corner_um=(corner[0], corner[1], corner[2]),
+                outer_shape=tuple(shape[:-3]),
+            )
+        )
     ours = described.get(OURS_IN_THE_DESCRIPTION)
     turned = float((ours or {}).get("turned_radians") or 0.0)
-    return Tile(name=store.name, store=store, copies=copies, axes=axes,
-                turned=turned)
+    return Tile(name=store.name, store=store, copies=copies, axes=axes, turned=turned)
 
 
 def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
@@ -521,8 +527,7 @@ def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
                 "This usually means two acquisitions have been gathered into one "
                 "folder. Build a picture over each of them separately."
             )
-        for level, (ours, other) in enumerate(zip(first.copies, tile.copies,
-                                                  strict=True)):
+        for level, (ours, other) in enumerate(zip(first.copies, tile.copies, strict=True)):
             if ours.voxel_um != other.voxel_um:
                 raise ValueError(
                     f"{first.store.name} was taken with voxels of "
@@ -544,7 +549,7 @@ def the_front_axes(outer_shape: tuple[int, ...]) -> tuple[str, ...]:
     so their meaning follows from the count. This is the ONE place that rule
     lives; every read that fixes the front axes builds its index through it.
     """
-    return ("t", "c")[2 - len(outer_shape):]
+    return ("t", "c")[2 - len(outer_shape) :]
 
 
 def the_frame_room_of(outer_shape: tuple[int, ...]) -> tuple[int, int]:
@@ -582,8 +587,7 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
         described = {}
     if isinstance(described.get("plate"), dict):
         return folder, described["plate"]
-    stores = sorted(one for one in folder.glob("*.zarr")
-                    if one.is_dir())
+    stores = sorted(one for one in folder.glob("*.zarr") if one.is_dir())
     plates, plain = [], []
     for store in stores:
         try:
@@ -628,10 +632,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
     """
     wells = plate.get("wells") or []
     if not wells:
-        raise ValueError(
-            f"the plate at {store} declares no wells, so there is nothing "
-            "to lay out."
-        )
+        raise ValueError(f"the plate at {store} declares no wells, so there is nothing to lay out.")
     row_names = [row.get("name") for row in plate.get("rows") or []]
     column_names = [column.get("name") for column in plate.get("columns") or []]
     read = []
@@ -654,8 +655,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
                 ) from None
         described, _ = _the_description_of(store / path)
         images = (described.get("well") or {}).get("images") or []
-        fields = [_read_one_tile(store / path / image["path"])
-                  for image in images]
+        fields = [_read_one_tile(store / path / image["path"]) for image in images]
         read.append((row, column, path.replace("/", ""), fields))
 
     sample = read[0][3][0].copies[0]
@@ -667,28 +667,30 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
     # needs. Recorded places win (see the docstring); the squarest grid is
     # the fallback for wells whose corners are all alike.
     def _the_well_laid_out(fields):
-        corners = [tuple(float(one) for one in tile.copies[0].corner_um[-2:])
-                   for tile in fields]
+        corners = [tuple(float(one) for one in tile.copies[0].corner_um[-2:]) for tile in fields]
         if len(set(corners)) > 1:
             base_y = min(y for y, _ in corners)
             base_x = min(x for _, x in corners)
             offsets = [(y - base_y, x - base_x) for y, x in corners]
         else:
-            offsets = [(down * field_h, along * field_w)
-                       for down, along in (divmod(number, across)
-                                           for number in range(len(fields)))]
-        height = max(off_y + tile.copies[0].shape[-2]
-                     * tile.copies[0].voxel_um[-2]
-                     for (off_y, _), tile in zip(offsets, fields,
-                                                 strict=True))
-        width = max(off_x + tile.copies[0].shape[-1]
-                    * tile.copies[0].voxel_um[-1]
-                    for (_, off_x), tile in zip(offsets, fields,
-                                                strict=True))
+            offsets = [
+                (down * field_h, along * field_w)
+                for down, along in (divmod(number, across) for number in range(len(fields)))
+            ]
+        height = max(
+            off_y + tile.copies[0].shape[-2] * tile.copies[0].voxel_um[-2]
+            for (off_y, _), tile in zip(offsets, fields, strict=True)
+        )
+        width = max(
+            off_x + tile.copies[0].shape[-1] * tile.copies[0].voxel_um[-1]
+            for (_, off_x), tile in zip(offsets, fields, strict=True)
+        )
         return offsets, height, width
 
-    laid = [(row, column, well_name, fields, *_the_well_laid_out(fields))
-            for row, column, well_name, fields in read]
+    laid = [
+        (row, column, well_name, fields, *_the_well_laid_out(fields))
+        for row, column, well_name, fields in read
+    ]
     # Wells step by the LARGEST well's extent plus a visible gap, per axis,
     # so every well fits its cell whichever way its fields were placed.
     pitch_y = max(height for *_, height, _ in laid) * PLATE_WELL_GAP
@@ -696,8 +698,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
 
     tiles = []
     for row, column, well_name, fields, offsets, _, _ in laid:
-        for number, (tile, (off_y, off_x)) in enumerate(
-                zip(fields, offsets, strict=True)):
+        for number, (tile, (off_y, off_x)) in enumerate(zip(fields, offsets, strict=True)):
             tile.name = f"{well_name}-{number}"
             # Moved by the same amount at every level: the target is where
             # the FIRST copy must land, and the finer-to-coarser corner
@@ -741,9 +742,11 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
         # inside decides what a store is, not its name. Built views are the
         # one exception: a view sitting beside the tiles is a picture OF
         # them, not one of them.
-        stores = sorted(one for one in folder.glob("*.zarr")
-                        if one.is_dir()
-                        and not one.name.endswith(".zmartview.zarr"))
+        stores = sorted(
+            one
+            for one in folder.glob("*.zarr")
+            if one.is_dir() and not one.name.endswith(".zmartview.zarr")
+        )
         if not stores:
             raise ValueError(
                 f"{folder} holds no OME-Zarr images, so there is nothing to "
@@ -757,8 +760,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
         # than on the processor -- which is exactly the case threads help
         # with, even in Python. A survey is thousands of tiles and this is
         # the whole of what opening one costs, so it is worth the four lines.
-        with ThreadPoolExecutor(
-                max_workers=min(32, (len(stores) + 3) // 4 or 1)) as pool:
+        with ThreadPoolExecutor(max_workers=min(32, (len(stores) + 3) // 4 or 1)) as pool:
             tiles = list(pool.map(_read_one_tile, stores))
 
     keeps = {tile.keeps for tile in tiles}
@@ -789,7 +791,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
     # the spatial three either way, because everything spatial in here
     # reasons in (z, y, x).
     front = tuple(axes[:-3])
-    if tuple(axes[-3:]) != ("z", "y", "x") or front != ("t", "c")[2 - len(front):]:
+    if tuple(axes[-3:]) != ("z", "y", "x") or front != ("t", "c")[2 - len(front) :]:
         raise ValueError(
             f"{tiles[0].store} stores its picture as {', '.join(axes)}. This "
             "builds over tiles of three spatial axes — depth, height and "
@@ -811,9 +813,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
 
     kind = _refuse_tiles_that_disagree(tiles)
 
-    corner = tuple(
-        min(tile.copies[0].corner_um[axis] for tile in tiles) for axis in range(3)
-    )
+    corner = tuple(min(tile.copies[0].corner_um[axis] for tile in tiles) for axis in range(3))
     said = None
     for tile in tiles:
         try:
@@ -872,8 +872,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
                         # The room along the store's front axes -- written
                         # only when there is one, so every flat picture's
                         # ledger stays byte-for-byte what it always was.
-                        **({"outer_shape": list(copy.outer_shape)}
-                           if copy.outer_shape else {}),
+                        **({"outer_shape": list(copy.outer_shape)} if copy.outer_shape else {}),
                     }
                     for copy in tile.copies
                 ],

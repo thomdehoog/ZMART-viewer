@@ -6,11 +6,11 @@ import http.client
 import json
 import threading
 
-import live_config
-from announcements import Announcements, ManifestWatcher
-from library import Library
-from live_config import LIVE_PICTURE, LiveBinding, LiveRegistry, live_rows
-from server import make_server
+from zmart_viewer import live_config
+from zmart_viewer.announcements import Announcements, ManifestWatcher
+from zmart_viewer.library import Library
+from zmart_viewer.live_config import LIVE_PICTURE, LiveBinding, LiveRegistry, live_rows
+from zmart_viewer.server import make_server
 
 from zmart_live.live_state import LiveStateTracker
 from zmart_live.fixtures import a_live_run, prepare_without_publishing, some_specimen  # noqa: E402

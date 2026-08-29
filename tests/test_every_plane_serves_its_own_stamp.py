@@ -37,10 +37,10 @@ import numpy as np
 import zarr
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "picture"))
+sys.path.insert(0, str(_VIZ))
 
 from check_the_built_picture import decode  # noqa: E402
-from governed import GovernedRun  # noqa: E402
+from zmart_viewer.governed import GovernedRun  # noqa: E402
 
 from zmart_live.model import GridCell  # noqa: E402
 from zmart_live.profiles import plan_the_writing  # noqa: E402
@@ -107,8 +107,8 @@ def test_the_governed_door_serves_the_stamp_one_plane_per_block(tmp_path):
 
 def test_the_built_door_serves_the_stamp_several_planes_per_block(tmp_path):
     """Thy1's packing: 8-plane blocks over 13 planes, the final block partial."""
-    import served
-    from declare import declare_a_built_picture
+    from zmart_viewer import served
+    from zmart_viewer.declare import declare_a_built_picture
 
     side = 256
     store = tmp_path / "stores" / "stamped.ome.zarr"
@@ -190,8 +190,8 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
     takes — so a shift anywhere between the address and the pixels decodes
     to another frame's stamp and fails loudly.
     """
-    import served
-    from declare import declare_a_built_picture
+    from zmart_viewer import served
+    from zmart_viewer.declare import declare_a_built_picture
 
     side = 128
     store = tmp_path / "stores" / "combined.ome.zarr"
@@ -271,7 +271,7 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
     everything), and a moment published later starts serving the moment
     it is published.
     """
-    from governed import GovernedRun
+    from zmart_viewer.governed import GovernedRun
 
     from zmart_live.coordinator import LivePublisher
 
@@ -337,13 +337,13 @@ def test_every_door_parses_the_one_address():
     """The one-definition rule for the piece address, checked by identity."""
     import importlib.util
 
-    import served
-    from composer import the_piece_address
+    from zmart_viewer import served
+    from zmart_viewer.composer import the_piece_address
 
     # Both server modules are called ``server``; load the building one by
     # its path so the check cannot silently land on the backend's.
     spec = importlib.util.spec_from_file_location(
-        "the_building_server", _VIZ / "app" / "picture" / "server.py")
+        "the_building_server", _VIZ / "server.py")
     building_server = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(building_server)
 

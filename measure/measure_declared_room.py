@@ -60,10 +60,10 @@ import time
 from pathlib import Path
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-import contrast  # noqa: E402
+from zmart_viewer import contrast  # noqa: E402
 import numpy as np  # noqa: E402
 import zarr  # noqa: E402
 

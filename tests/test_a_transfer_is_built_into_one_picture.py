@@ -37,12 +37,12 @@ import pytest
 import zarr
 
 VIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(VIZ / "app" / "picture"))
+sys.path.insert(0, str(VIZ))
 
-import served  # noqa: E402
-from composer import Composer  # noqa: E402
-from declare import declare_a_built_picture, the_scene_folder_name  # noqa: E402
-from mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer import served  # noqa: E402
+from zmart_viewer.composer import Composer  # noqa: E402
+from zmart_viewer.declare import declare_a_built_picture, the_scene_folder_name  # noqa: E402
+from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
 
 # One tile: shallow, small, and square, so a whole transfer of them is quick to
 # write and every test can afford to compare every voxel.
@@ -968,8 +968,8 @@ def test_a_built_picture_is_measured_where_the_operator_is_looking(
     it. A thumbnail cannot: three pixels of white averaged into a coarse
     piece are gone.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "server"))
-    from contrast import measure_here  # noqa: PLC0415
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from zmart_viewer.contrast import measure_here  # noqa: PLC0415
 
     # Unbaked on purpose: then NOTHING in the folder holds pixels, which is
     # what every level past the baked ones looks like on a real plate.

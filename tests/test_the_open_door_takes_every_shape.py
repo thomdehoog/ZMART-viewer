@@ -37,7 +37,7 @@ import pytest
 import zarr
 from driving import open_through_the_window, replay_through_the_window
 from pixels import fraction_lit, image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 from test_a_plate_lays_itself_out import a_small_plate
 
 # One micrometre per voxel across the specimen, two through it. Round numbers
@@ -490,7 +490,7 @@ def test_a_bake_changes_how_fast_the_picture_arrives_and_nothing_else(
     a tidy grid is the easy case; these three sit at fractional offsets, at
     three different sizes, with unimaged ground between them.
     """
-    from declare import declare_a_built_picture
+    from zmart_viewer.declare import declare_a_built_picture
 
     plain = declare_a_built_picture(tmp_path / "unbaked", shapes / "odd",
                                     name="odd", bake=False)

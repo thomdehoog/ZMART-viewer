@@ -28,7 +28,7 @@ import numpy as np
 import pytest
 import zarr
 from PIL import Image
-from server import make_server
+from zmart_viewer.server import make_server
 
 # How far apart the two views may be before an operator would notice. A few
 # per cent of the size, and a handful of pixels of the place: the difference

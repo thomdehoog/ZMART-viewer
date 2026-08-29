@@ -64,7 +64,7 @@ import pytest
 from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-from server import make_server
+from zmart_viewer.server import make_server
 
 # The little acquisition this file draws. It is one plane of one channel, a few
 # hundred voxels across, at half a micrometre to a voxel — big enough to fill a

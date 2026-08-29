@@ -23,16 +23,16 @@ import zarr
 from numcodecs import Zstd
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "picture"))
+sys.path.insert(0, str(VIZ))
 # The backend goes in FRONT of the building folder: both hold a server.py,
 # and the one with make_server -- the one the door gates below drive -- is
 # the backend's.
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-import served  # noqa: E402
-from declare import declare_a_built_picture, the_scene_folder_name  # noqa: E402
-from mosaic import read_the_transfer  # noqa: E402
+from zmart_viewer import served  # noqa: E402
+from zmart_viewer.declare import declare_a_built_picture, the_scene_folder_name  # noqa: E402
+from zmart_viewer.mosaic import read_the_transfer  # noqa: E402
 
 FIELD = (2, 32, 32)  # planes, height, width of one field
 VOXEL_UM = (1.0, 0.5, 0.5)
@@ -399,7 +399,7 @@ def door(built_dist, tmp_path):
     """A served viewer beside a folder holding one plate, for the door gates."""
     import threading
 
-    from server import make_server
+    from zmart_viewer.server import make_server
     from test_open_and_close import _store
 
     first = tmp_path / "overview"

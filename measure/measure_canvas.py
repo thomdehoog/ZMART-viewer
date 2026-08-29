@@ -38,7 +38,7 @@ import numpy as np
 import zarr
 
 sys.path.insert(0, "/home/user/ZMART-microscopy/app/server")
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # A canvas sized for the stage, not for what we happened to image.
 CANVAS = 8192          # y and x, in pixels

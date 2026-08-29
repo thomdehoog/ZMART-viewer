@@ -29,11 +29,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import zarr
-from mosaic import read_the_transfer, the_front_axes
-
 from zmart_live.coordinator import LivePublisher
-from zmart_live.model import GridCell
 from zmart_live.profiles import DEFAULTS, plan_the_writing
+
+from .mosaic import read_the_transfer, the_front_axes
 
 # How much a tile's offset may miss its grid place, in micrometres, before the
 # dataset is refused. Stages report positions to fractions of a micrometre;
@@ -120,8 +119,10 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
     # down the specimen turned into a demand for a 97.5% overlap. So the step
     # is taken only when both directions agree there is one.
     on_a_grid = _evenly_spaced(down) and _evenly_spaced(across)
-    steps_um = (_the_one_step(down) if on_a_grid else None,
-                _the_one_step(across) if on_a_grid else None)
+    steps_um = (
+        _the_one_step(down) if on_a_grid else None,
+        _the_one_step(across) if on_a_grid else None,
+    )
     # In pixels, each against its own axis. A frame is two numbers -- plenty of
     # cameras are longer one way than the other, a light sheet's routinely so
     # -- and the live geometry has always kept it that way, with its own
@@ -166,14 +167,21 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
 
     channels = tuple(f"channel {index}" for index in range(channel_count))
     profile, geometry = plan_the_writing(
-        "overview", frame=frame, dtype=mosaic.dtype, z_planes=z_planes,
-        timepoints=moments, channels=channels,
+        "overview",
+        frame=frame,
+        dtype=mosaic.dtype,
+        z_planes=z_planes,
+        timepoints=moments,
+        channels=channels,
         voxel_size=(voxel["z"], voxel["y"], voxel["x"]),
-        readable_prefix="replay", defaults=defaults,
+        readable_prefix="replay",
+        defaults=defaults,
     )
     wanted = tuple(None if step is None else round(step) for step in steps_px)
-    if any(step is not None and step != planned
-           for step, planned in zip(wanted, geometry.step_shape, strict=True)):
+    if any(
+        step is not None and step != planned
+        for step, planned in zip(wanted, geometry.step_shape, strict=True)
+    ):
         raise ValueError(
             f"these positions sit {wanted} pixels apart, but the live planner "
             f"can only place this frame {geometry.step_shape} pixels apart. The "
@@ -185,8 +193,10 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
     # position's own description. Nothing is snapped to anything: a run laid
     # out on a grid comes out on that grid because that is where its tiles
     # are, and a run laid out by nobody comes out where it was imaged.
-    least = (min(corner[0] for corner in corners.values()),
-             min(corner[1] for corner in corners.values()))
+    least = (
+        min(corner[0] for corner in corners.values()),
+        min(corner[1] for corner in corners.values()),
+    )
     ordered, positions = [], {}
     for tile in sorted(mosaic.tiles, key=lambda t: corners[t.name]):
         name = tile.name.removesuffix(".ome.zarr")
@@ -200,16 +210,22 @@ def plan_a_replay(transfer: str | Path) -> ReplayPlan:
     # A timelapse sweeps the whole grid once per moment, walking the same
     # path each sweep -- the way a stage revisits its positions -- so the
     # time slider grows on screen exactly as it did during the experiment.
-    beats = [(name, held_in, front, moment)
-             for moment in range(moments)
-             for name, held_in in ordered]
-    return ReplayPlan(profile=profile, geometry=geometry, positions=positions,
-                      beats=beats, z_planes=z_planes,
-                      channel_count=channel_count)
+    beats = [
+        (name, held_in, front, moment) for moment in range(moments) for name, held_in in ordered
+    ]
+    return ReplayPlan(
+        profile=profile,
+        geometry=geometry,
+        positions=positions,
+        beats=beats,
+        z_planes=z_planes,
+        channel_count=channel_count,
+    )
 
 
-def replay_the_dataset(transfer: str | Path, folder: str | Path, *,
-                       every_s: float = 0.7, told=None, announce=None) -> Path:
+def replay_the_dataset(
+    transfer: str | Path, folder: str | Path, *, every_s: float = 0.7, told=None, announce=None
+) -> Path:
     """Publish every position of the dataset through the live writer, paced.
 
     Args:
@@ -227,8 +243,9 @@ def replay_the_dataset(transfer: str | Path, folder: str | Path, *,
         The run's live view -- the one folder a viewer opens to watch.
     """
     plan = plan_a_replay(transfer)
-    publisher = LivePublisher(Path(folder), plan.profile,
-                              run_id=Path(transfer).name, positions=plan.positions)
+    publisher = LivePublisher(
+        Path(folder), plan.profile, run_id=Path(transfer).name, positions=plan.positions
+    )
     if told:
         # Say how far there is to go before the first position starts. The
         # window read "0 of …" for as long as the first (sometimes only)

@@ -51,7 +51,7 @@ def _ask(port: int, door: str, **payload) -> tuple[int, dict]:
 
 
 def sweep() -> list[str]:
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     server = make_server(0, store="demo.zarr")
     port = server.server_address[1]

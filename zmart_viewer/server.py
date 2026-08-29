@@ -43,40 +43,41 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from zmart_live.gateway import answer_from_a_live_run, live_run_holding
 
 # These are the viewer's own modules, and none of them pulls in anything heavy
 # when imported -- numpy and zarr are only reached for inside the functions that
 # actually read pixels. So they are imported here in the ordinary way rather than
 # inside the function that uses them, which keeps import errors surfacing at
 # startup instead of on the first request an operator makes.
-import announcements as announcements_mod
-import linking
-from announcements import Announcements, FolderWatcher, ManifestWatcher
+from . import announcements as announcements_mod
+from . import linking
 
-# The other way a picture can exist without being written: built when asked for,
-# rather than pointed at. Its folder sits beside the viewer's own modules rather
-# than among them, so its path is added here -- and the import is guarded, because
-# a checkout without it should still serve every ordinary image.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "picture"))
-try:
-    import served as building
-except ImportError:  # pragma: no cover - a checkout without the building module
-    building = None
-from contrast import (
+# The other way a picture can exist without being written: built when asked
+# for, rather than pointed at.
+from . import served as building
+from .announcements import Announcements, FolderWatcher, ManifestWatcher
+from .contrast import (
     camera_range,
-    measure_here,
     coarsest_level_is_written,
     intensity_histogram,
     measure,
+    measure_here,
 )
-from library import Library
-from live_config import (LIVE_PICTURE, LiveRegistry, capture_live_state,
-                         live_rows, the_live_picture_declared)
-from stores import (
-    is_store,
+from .library import Library
+from .live_config import (
+    LIVE_PICTURE,
+    LiveRegistry,
+    capture_live_state,
+    live_rows,
+    the_live_picture_declared,
+)
+from .stores import (
     DESCRIPTION_FILES,
     _read_attrs_at,
     axis_names,
@@ -84,14 +85,13 @@ from stores import (
     channel_of,
     channels,
     forget,
+    is_store,
     label_images,
     layer_names,
     normalise_units,
     written_timepoints,
     zarr_scheme,
 )
-
-from zmart_live.gateway import answer_from_a_live_run, live_run_holding
 
 # Where the two kinds of content live on disk. Both are resolved to absolute
 # paths so the server behaves the same regardless of the working directory it
@@ -140,9 +140,7 @@ def _validate_annotations(payload: object) -> dict:
                 not isinstance(value, list)
                 or not 1 <= len(value) <= 8
                 or any(
-                    isinstance(x, bool)
-                    or not isinstance(x, (int, float))
-                    or not math.isfinite(x)
+                    isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x)
                     for x in value
                 )
             ):
@@ -207,8 +205,7 @@ def group_labels(datasets) -> dict[int, str]:
 # is which.
 
 
-def the_store_a_live_run_is_opened_by(target: Path, *,
-                                     bake: bool = False) -> list[str] | None:
+def the_store_a_live_run_is_opened_by(target: Path, *, bake: bool = False) -> list[str] | None:
     """The one store inside a live run's folder that the viewer should open.
 
     A live run's folder is not an ordinary folder of images. Beside the raw
@@ -377,8 +374,8 @@ class _Handler(SimpleHTTPRequestHandler):
         if not self.path.startswith(("/data/", "/api/")):
             page = self.path in ("/", "/index.html") or self.path.endswith("/")
             self.send_header(
-                "Cache-Control",
-                "no-store" if page else "public, max-age=31536000, immutable")
+                "Cache-Control", "no-store" if page else "public, max-age=31536000, immutable"
+            )
 
     # -- routing ---------------------------------------------------------
 
@@ -571,8 +568,7 @@ class _Handler(SimpleHTTPRequestHandler):
             return
         self._send_file(target)
 
-    def _a_governed_piece_behind(self, target: Path
-                                 ) -> tuple[Path, str] | None:
+    def _a_governed_piece_behind(self, target: Path) -> tuple[Path, str] | None:
         """The (store, piece address) when this FILE is a governed chunk.
 
         Judged from the RESOLVED target, never from the request string: the
@@ -585,8 +581,6 @@ class _Handler(SimpleHTTPRequestHandler):
         Only piece-shaped paths are anybody's to govern — a store's
         descriptions stay ordinary files however the pixels are ruled.
         """
-        if building is None:
-            return None
         parents = target.parents
         if len(parents) < 5:
             return None
@@ -655,8 +649,6 @@ class _Handler(SimpleHTTPRequestHandler):
         anything the operator opened. ``served.py`` says more about why that is a
         decision rather than an oversight.
         """
-        if building is None:
-            return None
         parts = rel.split("/")
         # The piece is the address at the end -- seven parts for a picture
         # grown along (t, c), five for a flat one. The longer form is tried
@@ -734,9 +726,7 @@ class _Handler(SimpleHTTPRequestHandler):
             for key in [key for key in cls._described if key.startswith(inside)]:
                 del cls._described[key]
 
-    def _send_file(
-        self, target: Path, *, begins_at: int = 0, how_many: int | None = None
-    ) -> None:
+    def _send_file(self, target: Path, *, begins_at: int = 0, how_many: int | None = None) -> None:
         """Answer with a file, or with one stretch of bytes out of the middle of it.
 
         ``begins_at`` and ``how_many`` say which part of the file is the thing being
@@ -767,7 +757,8 @@ class _Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
         total = (
-            max(0, on_disk - begins_at) if how_many is None
+            max(0, on_disk - begins_at)
+            if how_many is None
             else max(0, min(how_many, on_disk - begins_at))
         )
         try:
@@ -1020,8 +1011,7 @@ class _Handler(SimpleHTTPRequestHandler):
         asked = payload if isinstance(payload, dict) else {}
         source = asked.get("source")
         if not isinstance(source, str) or not source.strip():
-            self._send_json({"error": "which picture to measure is needed"},
-                            HTTPStatus.BAD_REQUEST)
+            self._send_json({"error": "which picture to measure is needed"}, HTTPStatus.BAD_REQUEST)
             return
         # The address a layer draws from, as the page holds it:
         # ``/data/<number>/<store>/|zarr2:``. The store is whatever the
@@ -1030,8 +1020,7 @@ class _Handler(SimpleHTTPRequestHandler):
         rel = source.split("/data/", 1)[-1].split("|", 1)[0].strip("/")
         store = self._library.resolve(rel)
         if store is None or not store.is_dir():
-            self._send_json({"error": "that picture is not open here"},
-                            HTTPStatus.NOT_FOUND)
+            self._send_json({"error": "that picture is not open here"}, HTTPStatus.NOT_FOUND)
             return
         box = asked.get("box")
         try:
@@ -1039,9 +1028,12 @@ class _Handler(SimpleHTTPRequestHandler):
             corners = ((float(top), float(left)), (float(bottom), float(right)))
         except (TypeError, ValueError):
             self._send_json(
-                {"error": "the part of the picture in view is needed, as "
-                          "fractions: [[top, left], [bottom, right]]"},
-                HTTPStatus.BAD_REQUEST)
+                {
+                    "error": "the part of the picture in view is needed, as "
+                    "fractions: [[top, left], [bottom, right]]"
+                },
+                HTTPStatus.BAD_REQUEST,
+            )
             return
         channel = asked.get("channel")
         channel = channel if isinstance(channel, int) else None
@@ -1050,10 +1042,12 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json({"empty": True})
             return
         low, high = found["window"]
-        self._send_json({
-            "window": {"low": low, "high": high},
-            "histogram": found["histogram"],
-        })
+        self._send_json(
+            {
+                "window": {"low": low, "high": high},
+                "histogram": found["histogram"],
+            }
+        )
 
     def _serve_announcement(self, payload: object) -> None:
         """Accept the legacy optional hint used by generic live folders.
@@ -1085,9 +1079,7 @@ class _Handler(SimpleHTTPRequestHandler):
         that announces a position and is told nobody was listening has learnt that
         the viewer is not open.
         """
-        in_place = bool(
-            isinstance(payload, dict) and payload.get("wrote_image_in_place")
-        )
+        in_place = bool(isinstance(payload, dict) and payload.get("wrote_image_in_place"))
         # A writer may still send a "dirty" table of touched pieces beside
         # the flag; it is accepted and ignored. The page's one invalidation
         # drops every decoded piece and refetches behind the picture on
@@ -1108,7 +1100,8 @@ class _Handler(SimpleHTTPRequestHandler):
         self._send_json(
             {
                 "told": self._announcements.say_something_changed(
-                    image_written_in_place=in_place, covering=covering,
+                    image_written_in_place=in_place,
+                    covering=covering,
                 )
             }
         )
@@ -1178,13 +1171,20 @@ class _Handler(SimpleHTTPRequestHandler):
         # something a run-mode page offers. ``/api/stores/open`` itself stays
         # answerable either way -- it is the doorway a smart-microscopy
         # workflow uses to say what should be shown, button or no button.
-        if route in ("/api/stores/list", "/api/stores/construct",
-                     "/api/stores/construct-status",
-                     "/api/stores/construct-cancel", "/api/stores/replay",
-                     "/api/stores/replay-status",
-                     "/api/stores/replay-cancel") and not self._allow_open:
-            self._send_json({"error": "opening by hand is switched off here"},
-                            HTTPStatus.NOT_FOUND)
+        if (
+            route
+            in (
+                "/api/stores/list",
+                "/api/stores/construct",
+                "/api/stores/construct-status",
+                "/api/stores/construct-cancel",
+                "/api/stores/replay",
+                "/api/stores/replay-status",
+                "/api/stores/replay-cancel",
+            )
+            and not self._allow_open
+        ):
+            self._send_json({"error": "opening by hand is switched off here"}, HTTPStatus.NOT_FOUND)
             return
         length = int(self.headers.get("Content-Length", 0))
         try:
@@ -1271,8 +1271,8 @@ class _Handler(SimpleHTTPRequestHandler):
         # "/" mangled every Windows path, so the arithmetic stays here where
         # the machine's own path rules apply.
         self._send_json(
-            {"path": chosen, "parent": str(Path(chosen).parent)}
-            if chosen else {"cancelled": True})
+            {"path": chosen, "parent": str(Path(chosen).parent)} if chosen else {"cancelled": True}
+        )
 
     def _serve_list_folders(self, payload: object) -> None:
         """List the folders at a path, for the in-page load window.
@@ -1285,12 +1285,15 @@ class _Handler(SimpleHTTPRequestHandler):
         into.
         """
         asked = payload.get("path") if isinstance(payload, dict) else None
-        path = Path(asked).expanduser() if isinstance(asked, str) and asked.strip() else self._open_from
+        path = (
+            Path(asked).expanduser()
+            if isinstance(asked, str) and asked.strip()
+            else self._open_from
+        )
         try:
             path = path.resolve()
             if not path.is_dir():
-                self._send_json({"error": f"there is no folder at {path}"},
-                                HTTPStatus.NOT_FOUND)
+                self._send_json({"error": f"there is no folder at {path}"}, HTTPStatus.NOT_FOUND)
                 return
             described = set(DESCRIPTION_FILES)
 
@@ -1313,8 +1316,9 @@ class _Handler(SimpleHTTPRequestHandler):
                             return "plate"
                         if told.get("multiscales"):
                             return "image"
-                    if any((folder / name / stamp).exists()
-                           for name in inside for stamp in described):
+                    if any(
+                        (folder / name / stamp).exists() for name in inside for stamp in described
+                    ):
                         return "run"
                 except OSError:
                     pass
@@ -1328,7 +1332,8 @@ class _Handler(SimpleHTTPRequestHandler):
                     # hard copy on disk (the bake). The window marks such a
                     # view, because it is the one that opens fast.
                     told_of["baked"] = bool(
-                        (_read_attrs_at(folder).get("zmart") or {}).get("baked"))
+                        (_read_attrs_at(folder).get("zmart") or {}).get("baked")
+                    )
                 return told_of
 
             folders = [
@@ -1345,12 +1350,14 @@ class _Handler(SimpleHTTPRequestHandler):
         except OSError as why:
             self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
             return
-        self._send_json({
-            "path": str(path),
-            "kind": here,
-            "parent": str(path.parent) if path.parent != path else None,
-            "folders": folders,
-        })
+        self._send_json(
+            {
+                "path": str(path),
+                "kind": here,
+                "parent": str(path.parent) if path.parent != path else None,
+                "folders": folders,
+            }
+        )
 
     @staticmethod
     def _a_relink_needed(store: Path) -> dict | None:
@@ -1383,13 +1390,16 @@ class _Handler(SimpleHTTPRequestHandler):
         # just as disconnected as one that is gone.
         was = Path(built_from)
         if was.is_dir() and (
-                any((was / name).is_file() for name in DESCRIPTION_FILES)
-                or any(one.is_dir() for one in was.glob("*.zarr"))):
+            any((was / name).is_file() for name in DESCRIPTION_FILES)
+            or any(one.is_dir() for one in was.glob("*.zarr"))
+        ):
             return None
-        return {"store": str(store), "was": str(built_from),
-                "name": store.name.removesuffix(".zmartview.zarr")
-                                  .removesuffix(".ome.zarr"),
-                "baked": bool(ours.get("baked"))}
+        return {
+            "store": str(store),
+            "was": str(built_from),
+            "name": store.name.removesuffix(".zmartview.zarr").removesuffix(".ome.zarr"),
+            "baked": bool(ours.get("baked")),
+        }
 
     def _serve_cancel(self, job: dict) -> None:
         """Ask the running build or replay to stop at its next step.
@@ -1425,23 +1435,23 @@ class _Handler(SimpleHTTPRequestHandler):
         data = asked.get("path")
         viewer = asked.get("viewer_folder")
         if not isinstance(data, str) or not data.strip():
-            self._send_json({"error": "the folder holding the images is needed"},
-                            HTTPStatus.BAD_REQUEST)
+            self._send_json(
+                {"error": "the folder holding the images is needed"}, HTTPStatus.BAD_REQUEST
+            )
             return
         if not isinstance(viewer, str) or not viewer.strip():
-            self._send_json({"error": "the folder for the viewer's files is needed"},
-                            HTTPStatus.BAD_REQUEST)
+            self._send_json(
+                {"error": "the folder for the viewer's files is needed"}, HTTPStatus.BAD_REQUEST
+            )
             return
         if self._bake_job.get("state") == "running":
-            self._send_json({"error": "a bake is already running"},
-                            HTTPStatus.CONFLICT)
+            self._send_json({"error": "a bake is already running"}, HTTPStatus.CONFLICT)
             return
         data_path = Path(data.strip()).expanduser()
         if not data_path.is_dir():
-            self._send_json({"error": f"there is no folder at {data_path}"},
-                            HTTPStatus.NOT_FOUND)
+            self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
             return
-        from declare import declare_a_built_picture, the_scene_folder_name
+        from .declare import declare_a_built_picture, the_scene_folder_name
 
         bake = bool(asked.get("bake"))
         name = asked.get("name") if isinstance(asked.get("name"), str) else None
@@ -1449,11 +1459,11 @@ class _Handler(SimpleHTTPRequestHandler):
         # carrying path steps would land the scene outside the folder the
         # operator chose -- fed "../escaped", anywhere the server can write.
         # Found by the abuse battery of 2026-08-18; refused at the door.
-        if name is not None and (not name.strip() or "/" in name
-                                 or "\\" in name or ".." in name):
+        if name is not None and (not name.strip() or "/" in name or "\\" in name or ".." in name):
             self._send_json(
-                {"error": "the scene's name cannot contain path steps -- "
-                          "give it a plain name"}, HTTPStatus.BAD_REQUEST)
+                {"error": "the scene's name cannot contain path steps -- give it a plain name"},
+                HTTPStatus.BAD_REQUEST,
+            )
             return
         job = self._bake_job
         job.clear()
@@ -1468,14 +1478,13 @@ class _Handler(SimpleHTTPRequestHandler):
         def work():
             try:
                 store = declare_a_built_picture(
-                    viewer_path, data_path, name=name or data_path.name,
-                    bake=bake, told=told)
+                    viewer_path, data_path, name=name or data_path.name, bake=bake, told=told
+                )
                 # Building does not open: the window says "built", and showing
                 # it is the operator's own next click. Building several views
                 # ahead of a session, without each one landing on screen, is
                 # the ordinary way to prepare.
-                job.update({"state": "done", "fraction": 1.0,
-                            "store": str(store)})
+                job.update({"state": "done", "fraction": 1.0, "store": str(store)})
             except _StoppedByTheOperator:
                 # A stopped build keeps nothing: the scene's description is
                 # written after its bake, so what exists at this point is
@@ -1483,8 +1492,8 @@ class _Handler(SimpleHTTPRequestHandler):
                 # it would let a half-made folder be quietly picked up
                 # later. Building again is the way to have it.
                 shutil.rmtree(
-                    viewer_path / the_scene_folder_name(name or data_path.name),
-                    ignore_errors=True)
+                    viewer_path / the_scene_folder_name(name or data_path.name), ignore_errors=True
+                )
                 job.update({"state": "cancelled"})
             except Exception as why:  # noqa: BLE001 -- shown to the operator whole
                 job.update({"state": "error", "error": str(why)})
@@ -1510,19 +1519,18 @@ class _Handler(SimpleHTTPRequestHandler):
         asked = payload if isinstance(payload, dict) else {}
         path = asked.get("path")
         if not isinstance(path, str) or not path.strip():
-            self._send_json({"error": "the folder holding the dataset is needed"},
-                            HTTPStatus.BAD_REQUEST)
+            self._send_json(
+                {"error": "the folder holding the dataset is needed"}, HTTPStatus.BAD_REQUEST
+            )
             return
         if self._replay_job.get("state") == "running":
-            self._send_json({"error": "a replay is already running"},
-                            HTTPStatus.CONFLICT)
+            self._send_json({"error": "a replay is already running"}, HTTPStatus.CONFLICT)
             return
         data_path = Path(path.strip()).expanduser()
         if not data_path.is_dir():
-            self._send_json({"error": f"there is no folder at {data_path}"},
-                            HTTPStatus.NOT_FOUND)
+            self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
             return
-        from rehearsal import replay_the_dataset
+        from .rehearsal import replay_the_dataset
 
         every = asked.get("every")
         every_s = float(every) if isinstance(every, (int, float)) else 0.7
@@ -1562,9 +1570,14 @@ class _Handler(SimpleHTTPRequestHandler):
         def work():
             try:
                 view = replay_the_dataset(
-                    data_path, run_folder, every_s=every_s, told=told,
+                    data_path,
+                    run_folder,
+                    every_s=every_s,
+                    told=told,
                     announce=lambda: announcements.say_something_changed(
-                        image_written_in_place=True))
+                        image_written_in_place=True
+                    ),
+                )
                 job.update({"state": "done", "view": str(view)})
             except _StoppedByTheOperator:
                 # What landed stays: the replay's run is a real run and its
@@ -1602,9 +1615,10 @@ class _Handler(SimpleHTTPRequestHandler):
             self._library.open(
                 str(run_folder),
                 names=the_store_a_live_run_is_opened_by(
-                    run_folder, bake=self._asked_for_the_live_bake(run_folder,
-                                                                  asked)),
-                name=f"{data_path.name} replay")
+                    run_folder, bake=self._asked_for_the_live_bake(run_folder, asked)
+                ),
+                name=f"{data_path.name} replay",
+            )
         except (FileNotFoundError, ValueError, OSError) as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
@@ -1635,7 +1649,7 @@ class _Handler(SimpleHTTPRequestHandler):
         """
         if not target.is_dir():
             return None
-        from mosaic import _the_description_of
+        from .mosaic import _the_description_of
 
         try:
             described, _ = _the_description_of(target)
@@ -1643,14 +1657,14 @@ class _Handler(SimpleHTTPRequestHandler):
             return None
         if not isinstance(described.get("plate"), dict):
             return None
-        from declare import declare_a_built_picture, the_scene_folder_name
+        from .declare import declare_a_built_picture, the_scene_folder_name
 
         scenes = target.parent / "scenes"
         scene = scenes / the_scene_folder_name(target.name)
         try:
-            built_from = json.loads(
-                (scene / "zarr.json").read_text(encoding="utf-8")
-            )["attributes"]["zmart"]["built_from"]
+            built_from = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))[
+                "attributes"
+            ]["zmart"]["built_from"]
             if Path(built_from).resolve() == target.resolve():
                 return scene
         except (OSError, ValueError, KeyError, TypeError):
@@ -1724,8 +1738,7 @@ class _Handler(SimpleHTTPRequestHandler):
         if not target.is_dir():
             return None
         try:
-            inside = [one for one in sorted(target.iterdir())
-                      if one.is_dir() and is_store(one)]
+            inside = [one for one in sorted(target.iterdir()) if one.is_dir() and is_store(one)]
         except OSError:
             return None
         if len(inside) < 2:
@@ -1733,14 +1746,14 @@ class _Handler(SimpleHTTPRequestHandler):
             # description and a layer of indirection and change nothing.
             return None
 
-        from declare import declare_a_built_picture, the_scene_folder_name
+        from .declare import declare_a_built_picture, the_scene_folder_name
 
         scenes = self._scenes_of_this_session()
         scene = scenes / the_scene_folder_name(target.name)
         try:
-            built_from = json.loads(
-                (scene / "zarr.json").read_text(encoding="utf-8")
-            )["attributes"]["zmart"]["built_from"]
+            built_from = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))[
+                "attributes"
+            ]["zmart"]["built_from"]
             if Path(built_from).resolve() == target.resolve():
                 return scene
         except (OSError, ValueError, KeyError, TypeError):
@@ -1752,8 +1765,11 @@ class _Handler(SimpleHTTPRequestHandler):
             # open. Before composing was tried here it opened as separate
             # positions and drew correctly, so that is what it falls back
             # to rather than becoming unopenable on the way past.
-            log.exception("could not compose %s; opening its positions instead",
-                          target)
+            print(
+                f"could not compose {target}; opening its positions instead:\n"
+                f"{traceback.format_exc()}",
+                file=sys.stderr,
+            )
             return None
 
     def _serve_open(self, payload: object) -> None:
@@ -1783,14 +1799,17 @@ class _Handler(SimpleHTTPRequestHandler):
             # request at a time, drawing nothing but black with no reason on
             # screen. Refusing at the door, with where the data WAS, lets the
             # load window ask where it is now.
-            self._send_json({
-                "error": (
-                    f"this viewer was built from {homeless['was']}, and "
-                    "nothing is there any more -- point it at the raw data "
-                    "again"
-                ),
-                "relink": homeless,
-            }, HTTPStatus.CONFLICT)
+            self._send_json(
+                {
+                    "error": (
+                        f"this viewer was built from {homeless['was']}, and "
+                        "nothing is there any more -- point it at the raw data "
+                        "again"
+                    ),
+                    "relink": homeless,
+                },
+                HTTPStatus.CONFLICT,
+            )
             return
         # A live run's root -- a replay's or the microscope's own, data
         # beside views and no image directly inside -- is opened with its
@@ -1801,7 +1820,8 @@ class _Handler(SimpleHTTPRequestHandler):
         # found", which cost every finished replay its promised reopening
         # (found on the workstation, 2026-08-19).
         served_view = the_store_a_live_run_is_opened_by(
-            target, bake=self._asked_for_the_live_bake(target, payload))
+            target, bake=self._asked_for_the_live_bake(target, payload)
+        )
         try:
             if served_view is not None:
                 self._library.open(str(target), names=served_view)
@@ -1836,7 +1856,9 @@ class _Handler(SimpleHTTPRequestHandler):
         """Close an acquisition type, and answer with what is left."""
         group = payload.get("group") if isinstance(payload, dict) else None
         if not isinstance(group, str) or not group:
-            self._send_json({"error": "which acquisition to close is needed"}, HTTPStatus.BAD_REQUEST)
+            self._send_json(
+                {"error": "which acquisition to close is needed"}, HTTPStatus.BAD_REQUEST
+            )
             return
         # The panel closes by the heading it shows, which with two runs open names
         # the folder as well as the dataset. Working back from the heading to the
@@ -1984,7 +2006,8 @@ def ask_this_machine_for_a_folder() -> str | None:
         root.attributes("-topmost", True)
         try:
             chosen = filedialog.askdirectory(
-                parent=root, title="Choose the folder holding the images")
+                parent=root, title="Choose the folder holding the images"
+            )
         finally:
             root.destroy()
     return chosen or None
@@ -2122,10 +2145,7 @@ def make_server(
     # How open pages are told that something has changed.  A recognized ZMART
     # run is governed only by its atomic publication marker; ordinary folders
     # retain the generic directory watcher.
-    told = Announcements(
-        when_changed=(building.catch_up_governed_runs
-                      if building is not None else None)
-    )
+    told = Announcements(when_changed=building.catch_up_governed_runs)
     # Small things this server remembers between requests: where the
     # scenes it composed were put, and which live runs were opened with
     # a bake asked for. Declared here because the live registry below
@@ -2134,8 +2154,7 @@ def make_server(
 
     live_registry = LiveRegistry(
         library,
-        wants_the_bake=lambda run_root: (
-            Path(run_root).resolve() in scratch.get("bake_live", ())),
+        wants_the_bake=lambda run_root: Path(run_root).resolve() in scratch.get("bake_live", ()),
     )
     live_registry.refresh()
     watchers = []
@@ -2205,8 +2224,13 @@ def make_server(
                 provisional.discard(key)
 
     def describe(
-        root_number: int, root: Path, name: str, label: str, coloured: bool,
-        channel: int | None = None, declared_range: dict | None = None,
+        root_number: int,
+        root: Path,
+        name: str,
+        label: str,
+        coloured: bool,
+        channel: int | None = None,
+        declared_range: dict | None = None,
     ) -> dict:
         # The channel belongs in the key. A store holding several channels is
         # measured once per channel, because one window covering all of them
@@ -2230,8 +2254,7 @@ def make_server(
             remembered = measured.get(key)
             if remembered is not None and key not in provisional:
                 return {**remembered, "name": label}
-            return _measure(key, root_number, root, name, label, coloured,
-                            channel, declared_range)
+            return _measure(key, root_number, root, name, label, coloured, channel, declared_range)
 
     def _worth_measuring_again(store: Path) -> bool:
         """Has the store gained the whole-field copy it was missing?
@@ -2261,8 +2284,9 @@ def make_server(
             return None
         return described[at].get("window")
 
-    def _measure(key, root_number, root, name, label, coloured, channel=None,
-                 declared_range=None) -> dict:
+    def _measure(
+        key, root_number, root, name, label, coloured, channel=None, declared_range=None
+    ) -> dict:
         """Read one store's pixels and work out how it should first be shown.
 
         This is the expensive part of answering "what is open" — everything else
@@ -2450,8 +2474,13 @@ def make_server(
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
             if "c" in axis_names(store_path):
                 found = [
-                    (index, channel["name"], channel["color"],
-                     channel.get("range"), channel.get("active", True))
+                    (
+                        index,
+                        channel["name"],
+                        channel["color"],
+                        channel.get("range"),
+                        channel.get("active", True),
+                    )
                     for index, channel in enumerate(channels(store_path))
                 ]
             else:
@@ -2463,8 +2492,7 @@ def make_server(
                 # A channel written as its own file says nothing about a
                 # range or about being switched off; both are questions only a
                 # channel INSIDE a store can be asked.
-                found = [(None, f"Ch{wavelength}" if wavelength else label,
-                          colour, None, True)]
+                found = [(None, f"Ch{wavelength}" if wavelength else label, colour, None, True)]
 
             frames = written_timepoints(store_path)
             for index, channel_name, color, declared_range, active in found:
@@ -2493,8 +2521,12 @@ def make_server(
                     # its channels in separate files, ``index`` is None and the
                     # whole store already is the one channel.
                     base = describe(
-                        root_number, root, name, label,
-                        coloured=len(present) > 1, channel=index,
+                        root_number,
+                        root,
+                        name,
+                        label,
+                        coloured=len(present) > 1,
+                        channel=index,
                         declared_range=declared_range,
                     )
                     merged[key] = {
@@ -2637,9 +2669,7 @@ def make_server(
 
         def server_bind(self):
             if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-                self.socket.setsockopt(
-                    socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1
-                )
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             super().server_bind()
 
         def serve_forever(self, *args, **kwargs):

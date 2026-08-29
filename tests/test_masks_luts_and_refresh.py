@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import zarr
 from pixels import colour_spread, image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 from driving import pick_colormap  # noqa: E402
 
 

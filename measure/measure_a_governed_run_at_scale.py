@@ -60,10 +60,10 @@ import urllib.request
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-_BUILDING = _VIZ / "app" / "picture"
+_BUILDING = _VIZ
 sys.path.insert(0, str(_BUILDING))
 sys.path.insert(0, str(_VIZ))
-sys.path.insert(0, str(_VIZ / "app" / "server"))
+sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 # The repository root as well, so zmart_live imports on a machine where the
 # package was never installed -- the harness should run from a fresh clone.
@@ -71,9 +71,9 @@ sys.path.insert(0, str(_VIZ.parent))
 
 import measure_the_frame_rate_of_a_linked_view as watching  # noqa: E402
 import numpy as np  # noqa: E402
-import served  # noqa: E402
-from declare import declare_a_governed_picture  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer import served  # noqa: E402
+from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 from zmart_live.coordinator import LivePublisher  # noqa: E402
 from zmart_live.model import CommitEvent, GridCell  # noqa: E402

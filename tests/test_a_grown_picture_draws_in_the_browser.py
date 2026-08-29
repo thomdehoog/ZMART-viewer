@@ -28,10 +28,10 @@ import numpy as np
 import zarr
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "picture"))
+sys.path.insert(0, str(_VIZ))
 
-from declare import declare_a_built_picture  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.declare import declare_a_built_picture  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 MOMENTS, COLOURS, PLANES = 2, 2, 3
 SIDE = 256

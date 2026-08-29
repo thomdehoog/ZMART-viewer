@@ -67,7 +67,7 @@ import threading
 from pathlib import Path
 
 import numpy as np
-from server import make_server
+from zmart_viewer.server import make_server
 
 # The size of one tile, in voxels and in micrometres. Small enough that several of
 # them fit on screen at once with clear space in between, which is what makes the

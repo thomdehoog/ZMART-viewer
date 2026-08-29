@@ -10,7 +10,7 @@ than trusting the click.
 from __future__ import annotations
 
 import pytest
-from server import make_server
+from zmart_viewer.server import make_server
 
 _STATE = """() => {
   const v = window.zmartViewer;

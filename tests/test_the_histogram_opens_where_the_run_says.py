@@ -33,7 +33,7 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from server import make_server
+from zmart_viewer.server import make_server
 
 # Where the window's edges are meant to land along the histogram, and how far
 # out they may be before this fails. The tolerance is a whole percent of the

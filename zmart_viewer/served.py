@@ -39,17 +39,17 @@ import threading
 import time
 from pathlib import Path
 
-from composer import Composer, the_piece_address
-from declare import OURS
-from mosaic import Mosaic, read_the_mosaic_as_written, read_the_transfer
+from .composer import Composer, the_piece_address
+from .declare import OURS
+from .mosaic import Mosaic, read_the_mosaic_as_written, read_the_transfer
 
 # The governed-run pieces come from zmart_live, and a checkout without that
 # package must still serve every ordinary built picture -- the same guard the
 # backend server keeps for this module itself.
 try:
-    from governed import GovernedRun
-
     from zmart_live.gateway import live_run_holding
+
+    from .governed import GovernedRun
 except ImportError:  # pragma: no cover - a checkout without zmart_live
     GovernedRun = None  # type: ignore[assignment, misc]
 
@@ -78,14 +78,14 @@ class TemporarilyUnanswerable(Exception):
     a bounded burst of retries and an honest failure, never a quiet hole.
     """
 
+
 # One composer per built picture, kept for as long as the viewer is open on
 # it, each remembered WITH the identity of the description it was opened
 # from, so a re-declaration is noticed and rebuilt rather than served stale.
 # A governed picture keeps its GovernedRun here instead, because its composer
 # is not one object but one per manifest state, and the run is what hands out
 # the current one.
-_composers: dict[Path, tuple[tuple | None,
-                             Composer | GovernedRun | None]] = {}
+_composers: dict[Path, tuple[tuple | None, Composer | GovernedRun | None]] = {}
 _guard = threading.Lock()
 
 # Pictures whose composer could not be made, each with the moment it failed.
@@ -128,8 +128,7 @@ def _what_it_was_built_from(store: Path) -> dict | None:
         return None
     held = json.loads(described.read_text(encoding="utf-8"))
     ours = (held.get("attributes") or {}).get(OURS)
-    if isinstance(ours, dict) and (ours.get("built_from")
-                                   or ours.get("governed_from")):
+    if isinstance(ours, dict) and (ours.get("built_from") or ours.get("governed_from")):
         return ours
     return None
 
@@ -146,8 +145,13 @@ def _the_pictures_mark(store: Path) -> tuple | None:
         stamp = (store / "zarr.json").stat()
     except OSError:
         return None
-    return (stamp.st_dev, getattr(stamp, "st_ino", 0), stamp.st_size,
-            stamp.st_mtime_ns, stamp.st_ctime_ns)
+    return (
+        stamp.st_dev,
+        getattr(stamp, "st_ino", 0),
+        stamp.st_size,
+        stamp.st_mtime_ns,
+        stamp.st_ctime_ns,
+    )
 
 
 def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
@@ -162,8 +166,7 @@ def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
     """
     ledger = store / "tiles.json"
     if ledger.is_file():
-        return read_the_mosaic_as_written(
-            json.loads(ledger.read_text(encoding="utf-8")))
+        return read_the_mosaic_as_written(json.loads(ledger.read_text(encoding="utf-8")))
     return read_the_transfer(Path(ours["built_from"]))
 
 
@@ -199,9 +202,11 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
         try:
             stale.close()
         except Exception:
-            log.exception("the re-declared picture at %s would not close "
-                          "cleanly; serving continues from the fresh one",
-                          store)
+            log.exception(
+                "the re-declared picture at %s would not close "
+                "cleanly; serving continues from the fresh one",
+                store,
+            )
 
     # Held across the reading of the transfer, so the many requests the engine
     # makes at once produce one composer between them rather than one each.
@@ -214,9 +219,11 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
             ours = _what_it_was_built_from(store)
             made = _the_serving_behind(store, ours)
         except Exception:
-            log.exception("the picture at %s could not be opened; answering "
-                          "absent for the next %.0f seconds", store,
-                          _REFUSED_FOR_SECONDS)
+            log.exception(
+                "the picture at %s could not be opened; answering absent for the next %.0f seconds",
+                store,
+                _REFUSED_FOR_SECONDS,
+            )
             with _guard:
                 _refused[store] = time.monotonic()
             return None
@@ -225,8 +232,7 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
             return made
 
 
-def _the_serving_behind(store: Path, ours: dict | None
-                        ) -> Composer | GovernedRun | None:
+def _the_serving_behind(store: Path, ours: dict | None) -> Composer | GovernedRun | None:
     """What answers for this store: a composer, a governed run, or nothing.
 
     The one policy decision lives here: a picture whose transfer lies inside
@@ -245,25 +251,27 @@ def _the_serving_behind(store: Path, ours: dict | None
                 "this checkout has no zmart_live, so a governed picture "
                 "cannot consult any manifest and will not be served."
             )
-        return GovernedRun(Path(governs), piece=int(ours.get("piece") or 512),
-                           store=store)
+        return GovernedRun(Path(governs), piece=int(ours.get("piece") or 512), store=store)
     transfer = Path(ours["built_from"])
     holding = live_run_holding(transfer)
     if holding is not None:
         log.warning(
             "refusing the picture at %s: its transfer %s lies inside the "
             "governed run at %s, which would serve the run's pixels past its "
-            "manifest. Declare the run itself instead.", store, transfer,
-            holding)
+            "manifest. Declare the run itself instead.",
+            store,
+            transfer,
+            holding,
+        )
         return None
     # ZMART_BUILD_WORKERS is how many processes build this picture,
     # so one against four is two launches of the same viewer. Unset
     # means one: build in place, the path every recorded figure
     # describes and the one the operator chose as the default.
     workers = int(os.environ.get("ZMART_BUILD_WORKERS") or 1)
-    made = Composer(_the_mosaic_behind(store, ours),
-                    piece=int(ours.get("piece") or 512),
-                    workers=workers)
+    made = Composer(
+        _the_mosaic_behind(store, ours), piece=int(ours.get("piece") or 512), workers=workers
+    )
     # The cold start, paid in the background from the first request on:
     # the coarse levels are built coarsest-first while the viewer shows
     # whatever the operator asked for, stepping aside whenever a real
@@ -331,7 +339,8 @@ def the_bytes_behind(store: Path, inside: str) -> bytes | None:
         with _guard:
             if where.resolve() in _refused:
                 raise TemporarilyUnanswerable(
-                    f"the picture at {where} could not be opened just now")
+                    f"the picture at {where} could not be opened just now"
+                )
         return None
     address = the_piece_address(inside)
     if address is None:
@@ -349,8 +358,9 @@ def the_bytes_behind(store: Path, inside: str) -> bytes | None:
         try:
             composer = held.composer()
         except Exception as problem:
-            log.exception("the governed run behind %s could not derive; "
-                          "answering 'try again shortly'", store)
+            log.exception(
+                "the governed run behind %s could not derive; answering 'try again shortly'", store
+            )
             raise TemporarilyUnanswerable(
                 f"the governed run behind {store} could not derive"
             ) from problem
@@ -380,13 +390,19 @@ def the_bytes_behind(store: Path, inside: str) -> bytes | None:
             return None
         deep, down, across = composer.grid(level)
         moments, channels = composer.mosaic.frame_room
-        if not (0 <= plane < deep and 0 <= row < down and 0 <= column < across
-                and 0 <= moment < moments and 0 <= channel < channels):
+        if not (
+            0 <= plane < deep
+            and 0 <= row < down
+            and 0 <= column < across
+            and 0 <= moment < moments
+            and 0 <= channel < channels
+        ):
             return None
         return composer.bytes_for(level, plane, row, column, moment, channel)
     except Exception as problem:
-        log.exception("the piece %s of %s could not be served; answering "
-                      "'try again shortly'", inside, store)
+        log.exception(
+            "the piece %s of %s could not be served; answering 'try again shortly'", inside, store
+        )
         raise TemporarilyUnanswerable(
             f"the piece {inside} of {store} could not be served just now"
         ) from problem
@@ -410,9 +426,9 @@ def a_sample_behind(store: Path, channel: int = 0):
     if held is None:
         return None
     try:
-        composer = (held.composer()
-                    if GovernedRun is not None and isinstance(held, GovernedRun)
-                    else held)
+        composer = (
+            held.composer() if GovernedRun is not None and isinstance(held, GovernedRun) else held
+        )
         level = composer.mosaic.levels - 1
         deep, down, across = composer.grid(level)
         moments, channels = composer.mosaic.frame_room
@@ -421,20 +437,21 @@ def a_sample_behind(store: Path, channel: int = 0):
         middle = (down // 2, across // 2)
         nearby = sorted(
             ((row, column) for row in range(down) for column in range(across)),
-            key=lambda at: abs(at[0] - middle[0]) + abs(at[1] - middle[1]))
+            key=lambda at: abs(at[0] - middle[0]) + abs(at[1] - middle[1]),
+        )
         for row, column in nearby[:9]:
-            piece = composer.values_for(level, deep // 2, row, column,
-                                        moment=0, channel=channel)
+            piece = composer.values_for(level, deep // 2, row, column, moment=0, channel=channel)
             if piece is not None:
                 return piece
     except Exception:
-        log.exception("the picture behind %s could not be sampled for "
-                      "measuring; it will open unmeasured", store)
+        log.exception(
+            "the picture behind %s could not be sampled for measuring; it will open unmeasured",
+            store,
+        )
     return None
 
 
-def the_values_inside(store: Path, level: int, box, *, channel: int = 0,
-                      pieces: int = 4):
+def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces: int = 4):
     """A built picture's pixels inside a share of itself, for measuring.
 
     :func:`a_sample_behind` answers "how bright is this picture", which is the
@@ -462,9 +479,9 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0,
     if held is None:
         return None
     try:
-        composer = (held.composer()
-                    if GovernedRun is not None and isinstance(held, GovernedRun)
-                    else held)
+        composer = (
+            held.composer() if GovernedRun is not None and isinstance(held, GovernedRun) else held
+        )
         depth, height, width = composer.mosaic.shape(level)
         moments, channels = composer.mosaic.frame_room
         if not 0 <= channel < channels or not height or not width:
@@ -476,36 +493,40 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0,
         last_column = max(first_column, min(width - 1, int(right * width) - 1))
         wanted = [
             (row, column)
-            for row in range(first_row // composer.piece,
-                             last_row // composer.piece + 1)
-            for column in range(first_column // composer.piece,
-                                last_column // composer.piece + 1)
+            for row in range(first_row // composer.piece, last_row // composer.piece + 1)
+            for column in range(first_column // composer.piece, last_column // composer.piece + 1)
         ]
-        middle = ((first_row + last_row) / 2 / composer.piece,
-                  (first_column + last_column) / 2 / composer.piece)
+        middle = (
+            (first_row + last_row) / 2 / composer.piece,
+            (first_column + last_column) / 2 / composer.piece,
+        )
         wanted.sort(key=lambda at: abs(at[0] - middle[0]) + abs(at[1] - middle[1]))
 
         taken = []
-        for row, column in wanted[:max(1, pieces)]:
-            piece = composer.values_for(level, depth // 2, row, column,
-                                        moment=0, channel=channel)
+        for row, column in wanted[: max(1, pieces)]:
+            piece = composer.values_for(level, depth // 2, row, column, moment=0, channel=channel)
             if piece is None:
                 continue
             # Only the part of the piece the box actually covers: at deep zoom
             # the box is a fraction of one piece, and measuring the whole piece
             # would be measuring the neighbourhood again.
             block = np.asarray(piece)
-            rows = slice(max(0, first_row - row * composer.piece),
-                         max(1, last_row + 1 - row * composer.piece))
-            columns = slice(max(0, first_column - column * composer.piece),
-                            max(1, last_column + 1 - column * composer.piece))
+            rows = slice(
+                max(0, first_row - row * composer.piece),
+                max(1, last_row + 1 - row * composer.piece),
+            )
+            columns = slice(
+                max(0, first_column - column * composer.piece),
+                max(1, last_column + 1 - column * composer.piece),
+            )
             taken.append(block[..., rows, columns].ravel())
         if not taken:
             return None
         return np.concatenate(taken)
     except Exception:
-        log.exception("the picture behind %s could not be measured where it "
-                      "is being looked at", store)
+        log.exception(
+            "the picture behind %s could not be measured where it is being looked at", store
+        )
         return None
 
 
@@ -537,7 +558,6 @@ def catch_up_governed_runs() -> None:
     if GovernedRun is None:
         return
     with _guard:
-        governed = [held for _mark, held in _composers.values()
-                    if isinstance(held, GovernedRun)]
+        governed = [held for _mark, held in _composers.values() if isinstance(held, GovernedRun)]
     for held in governed:
         held.request_catch_up()

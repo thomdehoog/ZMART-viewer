@@ -32,8 +32,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
-from library import Library
-from server import group_labels, make_server
+from zmart_viewer.library import Library
+from zmart_viewer.server import group_labels, make_server
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
 if str(_VIZ_ROOT) not in sys.path:

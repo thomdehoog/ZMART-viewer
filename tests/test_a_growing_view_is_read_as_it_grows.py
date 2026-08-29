@@ -23,9 +23,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "server"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import linking  # noqa: E402
+from zmart_viewer import linking  # noqa: E402
 
 from zmart_storage.canvas import Channel, _declare_one  # noqa: E402
 from zmart_storage.linked import (  # noqa: E402

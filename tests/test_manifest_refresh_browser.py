@@ -11,10 +11,10 @@ from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 import numpy as np
-import live_config
-import server as server_module
+from zmart_viewer import live_config
+from zmart_viewer import server as server_module
 from pixels import fraction_lit, image_middle
-from server import make_server
+from zmart_viewer.server import make_server
 
 from zmart_live.coordinator import LivePublisher
 from zmart_live.model import GridCell

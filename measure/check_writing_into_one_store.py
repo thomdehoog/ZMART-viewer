@@ -64,10 +64,10 @@ import threading
 from pathlib import Path
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ / "tests"))
 
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 SIDE, CHUNK, LEVELS = 2048, 512, 3
 VOXEL_UM = (2.0, 0.35, 0.35)

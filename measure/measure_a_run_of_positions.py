@@ -65,7 +65,7 @@ import numpy as np
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ.parent))
 sys.path.insert(0, str(_VIZ))
-sys.path.insert(0, str(_VIZ / "app" / "server"))
+sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
 from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
@@ -81,7 +81,7 @@ from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
     say_what_is_drawing,
 )
 from pixels import fraction_lit  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 from zmart_storage.canvas import Channel  # noqa: E402
 from zmart_storage.positions import start_a_run  # noqa: E402

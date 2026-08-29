@@ -18,9 +18,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app" / "picture"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from composer import PIECE, PINNED_SHARE
+from zmart_viewer.composer import PIECE, PINNED_SHARE
 
 BYTES_PER_VOXEL = 2  # uint16, the profile's number type
 

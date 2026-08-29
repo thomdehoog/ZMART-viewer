@@ -77,11 +77,11 @@ import time
 from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_VIZ / "app" / "picture"))
+sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from declare import declare_a_governed_picture  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.declare import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 from zmart_live.fixtures import a_live_run, some_specimen  # noqa: E402
 

@@ -29,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 from pixels import fraction_lit
-from stores import channels
+from zmart_viewer.stores import channels
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -94,7 +94,7 @@ def test_a_picture_that_holds_no_pixels_still_opens_bright(
     import threading
 
     from measure_the_frame_rate_of_a_linked_view import EVERY_SOURCE_RESOLVED
-    from server import make_server
+    from zmart_viewer.server import make_server
 
     folder = tmp_path / "experiment"
     picture = _a_run(folder)

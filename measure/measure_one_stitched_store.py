@@ -61,7 +61,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(HERE / "app" / "server"))
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "tests"))
 
 sys.path.insert(0, str(HERE))
@@ -69,7 +69,7 @@ sys.path.insert(0, str(HERE))
 from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-from server import make_server  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # The specimen being described: eight tiles in each direction, each tile 512 voxels
 # cubed. That is a volume of 4 096 voxels a side, which at two bytes a voxel is about

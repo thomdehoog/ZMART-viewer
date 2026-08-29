@@ -22,10 +22,10 @@ import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_HERE / "app" / "server"))
+sys.path.insert(0, str(_HERE))
 
 from demo_data import write_demo_zarr  # noqa: E402
-from launcher import open_window  # noqa: E402
+from zmart_viewer.launcher import open_window  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         window = (float(low), float(high))
 
     if args.data:
-        from stores import discover, prefer_filter, select_tiles
+        from zmart_viewer.stores import discover, prefer_filter, select_tiles
 
         try:
             parent, names = discover(args.data)

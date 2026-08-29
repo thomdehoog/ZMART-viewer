@@ -13,43 +13,19 @@ publish and keeps its gateway route; only what the frontend draws live moves.
 from __future__ import annotations
 
 import json
-import sys
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from contrast import intensity_histogram
-from stores import described_channels, zarr_scheme
-
-# ``zmart_live`` is a package of the checkout rather than of this folder, so it
-# is reachable only when the checkout's own root is on the path. Put there here
-# because this is the module that needs it, in the same way and for the same
-# reason the backend adds the ``building`` folder a few lines below.
-#
-# Without it the viewer runs under pytest -- which puts the root on the path
-# itself -- and nowhere else. `python run_demo.py` from zmart-viewer, which is
-# what the README tells an operator to type, stopped at this import with
-# "No module named 'zmart_live'"; so did the launcher, and so did the shipped
-# browser check, whose gate has been saying so.
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-
-from zmart_live.gateway import live_run_holding  # noqa: E402
+from zmart_live.gateway import live_run_holding
 from zmart_live.live_state import LiveStateSnapshot, LiveStateTracker
 from zmart_live.model import ZmartLiveError
 from zmart_live.omezarr import the_channels_described
 
-# The governed-picture declaration comes from the building folder, which sits
-# beside the backend rather than among its modules -- the same arrangement, and
-# the same guard, as the backend server's own import of ``served``. A checkout
-# without it can still show ordinary folders; a governed run then binds with an
-# error rather than quietly falling back to the linked view.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "picture"))
-try:
-    from declare import declare_a_governed_picture, the_scene_folder_name
-except ImportError:  # pragma: no cover - a checkout without the building module
-    declare_a_governed_picture = None
-    the_scene_folder_name = None
+from .contrast import intensity_histogram
+from .declare import declare_a_governed_picture, the_scene_folder_name
+from .stores import described_channels, zarr_scheme
 
 LIVE_STATE_SET_SCHEMA = "zmart-live-frontend-state-set/1"
 
@@ -62,8 +38,8 @@ LIVE_STATE_SET_SCHEMA = "zmart-live-frontend-state-set/1"
 # and every replay was served from a path that no longer existed -- black
 # positions, unmeasurable channels (2026-08-23).
 LIVE_PICTURE = "views/live/" + (
-    the_scene_folder_name("picture") if the_scene_folder_name
-    else "picture.zmartview.zarr")
+    the_scene_folder_name("picture") if the_scene_folder_name else "picture.zmartview.zarr"
+)
 
 # How long a failed declaration is remembered before it is tried again. Long
 # enough that a refusal does not re-derive the run on every config poll, short
@@ -95,11 +71,6 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
     grown = _the_run_is_grown(run_root)
     if _already_this_runs_picture(store, run_root, grown, bake):
         return store
-    if declare_a_governed_picture is None:
-        raise RuntimeError(
-            f"the live run at {run_root} needs its governed picture declared, "
-            "and this checkout has no building module to declare it with."
-        )
     began = time.perf_counter()
     made = declare_a_governed_picture(
         run_root / "views" / "live", run_root, name="picture", bake=bake
@@ -139,8 +110,7 @@ def _the_run_is_grown(run_root: Path) -> bool:
     return False
 
 
-def _already_this_runs_picture(store: Path, run_root: Path,
-                               grown: bool, bake: bool) -> bool:
+def _already_this_runs_picture(store: Path, run_root: Path, grown: bool, bake: bool) -> bool:
     """Whether the store already is this run's picture, in the shape asked for.
 
     The shape has to match what the run needs TODAY: a picture declared flat
@@ -169,9 +139,12 @@ def _already_this_runs_picture(store: Path, run_root: Path,
             return False
     except OSError:
         return False
-    axes = [axis.get("name") for axis in
-            ((described.get("attributes") or {}).get("ome") or {})
-            .get("multiscales", [{}])[0].get("axes", [])]
+    axes = [
+        axis.get("name")
+        for axis in ((described.get("attributes") or {}).get("ome") or {})
+        .get("multiscales", [{}])[0]
+        .get("axes", [])
+    ]
     right_shape = axes[:2] == ["t", "c"] if grown else axes[:1] == ["z"]
     return right_shape and (not bake or (store / "baked.json").is_file())
 
@@ -304,14 +277,10 @@ class LiveRegistry:
                 if root in used_roots
             }
             self._pictures = {
-                root: store
-                for root, store in self._pictures.items()
-                if root in used_roots
+                root: store for root, store in self._pictures.items() if root in used_roots
             }
             self._picture_refused = {
-                root: held
-                for root, held in self._picture_refused.items()
-                if root in used_roots
+                root: held for root, held in self._picture_refused.items() if root in used_roots
             }
             self._bindings = tuple(bindings)
             self._dataset_numbers = frozenset(governed)
@@ -336,8 +305,7 @@ class LiveRegistry:
                 return stumbled[1]
             del self._picture_refused[run_root]
         try:
-            made = the_live_picture_declared(
-                run_root, bake=self._wants_the_bake(run_root))
+            made = the_live_picture_declared(run_root, bake=self._wants_the_bake(run_root))
         except Exception as why:  # noqa: BLE001 - reported and retried, never hidden
             self._picture_refused[run_root] = (time.monotonic(), str(why))
             return str(why)
@@ -392,10 +360,7 @@ def live_state_document(
             snapshots[binding.dataset_number] = snapshot
     return {
         "schema": LIVE_STATE_SET_SCHEMA,
-        "runs": [
-            binding.state_json(snapshots[binding.dataset_number])
-            for binding in bindings
-        ],
+        "runs": [binding.state_json(snapshots[binding.dataset_number]) for binding in bindings],
     }
 
 
@@ -421,8 +386,7 @@ def the_runs_channels(run_root: Path) -> list[dict]:
     )
 
 
-def _display_for(described: list[dict], store: Path, channel_index: int,
-                 chosen_window) -> dict:
+def _display_for(described: list[dict], store: Path, channel_index: int, chosen_window) -> dict:
     channel = described[channel_index] if channel_index < len(described) else {}
     window = (
         {"low": float(chosen_window[0]), "high": float(chosen_window[1])}
@@ -473,9 +437,7 @@ def live_rows(
     scene = snapshot.scene
     if scene is None:
         return []
-    frontend_sources = {
-        source.source_id: source for source in snapshot.state.sources
-    }
+    frontend_sources = {source.source_id: source for source in snapshot.state.sources}
     compiled_sources = {source.source_id: source for source in scene.sources}
     described = the_runs_channels(binding.run_root)
     rows = []
@@ -484,11 +446,9 @@ def live_rows(
         sources = [compiled_sources[source_id] for source_id in layer.source_ids]
         urls = [binding.source_url(_the_url_served_for(source)) for source in sources]
         first_store = binding._source_store(_the_url_served_for(sources[0]))
-        display = _display_for(described, first_store, layer.channel_index,
-                               chosen_window)
+        display = _display_for(described, first_store, layer.channel_index, chosen_window)
         available = [
-            {"start": start, "stop": stop}
-            for start, stop in source_states[0].committed_time_ranges
+            {"start": start, "stop": stop} for start, stop in source_states[0].committed_time_ranges
         ]
         # Keep the legacy `frames` field useful without allowing a gap to look
         # like a transition from "no image" to "first image". New frontends use
@@ -497,9 +457,7 @@ def live_rows(
         # non-null so the old first-image cache heuristic cannot fire when the gap
         # is later filled. The authoritative half-open ranges remain unchanged.
         contiguous_frames = (
-            available[0]["stop"]
-            if len(available) == 1 and available[0]["start"] == 0
-            else 0
+            available[0]["stop"] if len(available) == 1 and available[0]["start"] == 0 else 0
         )
         rows.append(
             {

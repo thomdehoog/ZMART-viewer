@@ -11,7 +11,7 @@ import json
 
 import numpy as np
 import zarr
-from contrast import HISTOGRAM_BINS, display_window, intensity_histogram, measure
+from zmart_viewer.contrast import HISTOGRAM_BINS, display_window, intensity_histogram, measure
 from demo_data import write_demo_zarr
 
 
@@ -214,7 +214,7 @@ def a_linked_run(folder, *, channels=("channel 0",), value=1200):
     # linked view moved to end-of-run this fixture got away with naming a
     # store nothing had declared, because the writer left one behind on every
     # publish.
-    from live_config import LIVE_PICTURE, the_live_picture_declared
+    from zmart_viewer.live_config import LIVE_PICTURE, the_live_picture_declared
     the_live_picture_declared(folder)
     return folder / LIVE_PICTURE
 

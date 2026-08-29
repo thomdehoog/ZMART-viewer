@@ -40,7 +40,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from stores import (
+from .stores import (
     _moments_folder,
     channel_of,
     declared_channels,

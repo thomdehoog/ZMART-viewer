@@ -18,12 +18,12 @@ from pathlib import Path
 import pytest
 
 VIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(VIZ / "app" / "picture"))
-sys.path.insert(0, str(VIZ / "app" / "server"))
+sys.path.insert(0, str(VIZ))
+sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from declare import the_scene_folder_name  # noqa: E402
-from server import make_server  # noqa: E402
+from zmart_viewer.declare import the_scene_folder_name  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 from test_a_dataset_is_relived_as_a_live_run import (  # noqa: E402
     _a_grid_scan,
     _post,
@@ -305,7 +305,7 @@ class TestTheDoorsTogether:
     def test_a_build_and_a_replay_can_run_at_once(self, door):
         """The two jobs are separate machines and must not trip each other."""
         address, folder = door
-        building = _a_grid_scan(folder / "app" / "picture")
+        building = _a_grid_scan(folder)
         replaying = _a_grid_scan(folder / "replaying")
         status, _ = _post(address, "/api/stores/replay",
                           {"path": str(replaying), "every": 0.3})
