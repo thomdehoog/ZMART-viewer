@@ -1,15 +1,7 @@
-"""Open the visualization studio in its own desktop window.
+"""Open the studio in a native desktop window, or print the address.
 
-On the microscope PC this is what you run to see the viewer. It starts the
-little web server (which serves the built page and the image volume) and then
-opens a native window pointing at it — no browser tab, no address bar, just the
-tool. The window uses the operating system's own web engine (on Windows that is
-WebView2, which is Chromium), so the heavy 3-D rendering runs on the machine's
-real graphics card.
-
-If the native-window library is not available, or its runtime is missing, this
-falls back to simply printing the address so you can open it in a normal
-browser — the app is identical either way.
+The window uses the OS web engine (WebView2 on Windows); without one the
+viewer runs the same in an ordinary browser.
 """
 
 from __future__ import annotations
@@ -22,14 +14,7 @@ from .server import make_server
 
 
 def _webview2_present() -> bool:
-    """On Windows, check that the WebView2 runtime the window needs is installed.
-
-    pywebview draws its window with Microsoft's WebView2 (the Chromium engine
-    built into Edge). It is present on all Windows 11 machines and almost all
-    up-to-date Windows 10 machines, but on a fresh PC it can be missing — in
-    which case the window would open blank. We check ahead of time so we can
-    give a clear message instead of a mysterious empty window.
-    """
+    """On Windows, check that the WebView2 runtime the window needs is installed."""
     if not sys.platform.startswith("win"):
         return True  # not Windows: not our concern here
     try:
@@ -70,26 +55,7 @@ def open_window(
     panel_side: str = "right",
     open_from: Path | None = None,
 ) -> None:
-    """Start the server and open the studio in a native window.
-
-    Blocks until the window is closed. Falls back to printing the address if a
-    native window cannot be opened. ``data_dir``/``store`` point the viewer at
-    any OME-Zarr store; leaving them unset opens the demo volume.
-
-    ``port`` is which door on this machine the viewer answers on. Passing ``0``
-    asks the machine to pick a free one, which is the thing to do when 8848 is
-    already taken and you do not mind which is used instead.
-
-    ``live`` is what keeps the viewer looking in the folder for images written
-    after it was opened, which is what makes an acquisition appear during a run.
-    Turn it off for data that has finished, and nothing is looked for again.
-    """
-    # The viewer's "open" button needs a folder chooser, and only Python can show
-    # one: a page in a browser cannot be handed a path on the machine. This hands
-    # the server a way to ask for one. It is filled in below once the window
-    # exists; in the browser fallback the machine's own dialog stands in, since
-    # the server answers on this machine only and whoever is looking at the page
-    # is sitting at this desktop.
+    """Start the server and open the studio in a native window."""
     chooser: dict = {}
 
     def browse():
@@ -107,10 +73,6 @@ def open_window(
         "chrome": chrome,
         "browse": browse,
         "live": live,
-        # Which parts of the panel exist, and which edge it sits on. These are
-        # passed straight through so that whoever opens the window decides them --
-        # a smart-microscopy run and someone looking at last week's data want
-        # different answers, and the server explains each one.
         "allow_open": allow_open,
         "allow_selection": allow_selection,
         "panel_side": panel_side,
@@ -122,10 +84,6 @@ def open_window(
         kwargs["data_dir"] = data_dir
     server = make_server(port, **kwargs)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    # Asked of the server rather than built from the number passed in. The two
-    # agree for an ordinary port and disagree exactly when it matters: ``port=0``
-    # means "any free one", and the address built from the argument was then
-    # http://127.0.0.1:0, which leads nowhere.
     url = f"http://127.0.0.1:{server.server_address[1]}"
 
     if not _webview2_present():
@@ -155,13 +113,7 @@ def open_window(
     native = webview.create_window("ZMART Viewer", url, width=width, height=height)
 
     def show_folder_dialog():
-        """Show the operating system's own folder chooser and return what was picked.
-
-        Returns ``None`` when the operator cancels, which is an ordinary outcome and
-        not an error. The dialog is asked for from the web server's thread rather
-        than the window's, which pywebview allows; it returns a list of paths (or
-        nothing at all) so the first is taken.
-        """
+        """Show the operating system's own folder chooser and return what was picked."""
         chosen = native.create_file_dialog(webview.FOLDER_DIALOG)
         if not chosen:
             return None
@@ -177,9 +129,6 @@ def _serve_until_interrupt(server, url: str) -> None:
 
     print(f"Serving at {url} — press Ctrl+C to stop.")
     try:
-        # A short polling sleep, rather than one long wait: on Windows only
-        # time.sleep is interrupted promptly by Ctrl+C, so this keeps the
-        # "press Ctrl+C to stop" promise on the machines that use the fallback.
         while True:
             time.sleep(0.5)
     except KeyboardInterrupt:
