@@ -305,7 +305,7 @@ class TestTheDoorsTogether:
     def test_a_build_and_a_replay_can_run_at_once(self, door):
         """The two jobs are separate machines and must not trip each other."""
         address, folder = door
-        building = _a_grid_scan(folder)
+        building = _a_grid_scan(folder / "building")
         replaying = _a_grid_scan(folder / "replaying")
         status, _ = _post(address, "/api/stores/replay",
                           {"path": str(replaying), "every": 0.3})

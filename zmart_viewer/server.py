@@ -51,8 +51,8 @@ from .library import (
 from .live import SourceRegistry, live_rows
 
 _HERE = Path(__file__).resolve().parent
-_FRONTEND_DIST = (_HERE.parent / "page" / "dist").resolve()
-_DEMO_STORE = (_HERE.parents[1] / "testdata" / "demo_store").resolve()
+_FRONTEND_DIST = (_HERE.parent / "app" / "page" / "dist").resolve()
+_DEMO_STORE = (_HERE.parent / "testdata" / "demo_store").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a

@@ -349,7 +349,7 @@ def test_suppressed_sse_hint_is_recovered_by_conditional_check(
         try:
             _open(page, address, 0)
             monkeypatch.setattr(
-                server_module.Announcements,
+                live_config.Announcements,
                 "say_something_changed",
                 lambda self, **kwargs: 0,
             )

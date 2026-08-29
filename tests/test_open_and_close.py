@@ -835,10 +835,9 @@ class TestRelinking:
         run = tmp_path / "surveyrun"
         run.mkdir()
         _store(run / "surveyrun_pos001.ome.zarr", channels=1)
-        import importlib
-        declare = importlib.import_module("declare")
-        store = declare.declare_a_built_picture(
-            run / "views", run, name="surveyrun")
+        from zmart_viewer.building import declare_a_built_picture
+
+        store = declare_a_built_picture(run / "views", run, name="surveyrun")
         shutil.move(str(run / "surveyrun_pos001.ome.zarr"),
                     str(tmp_path / "elsewhere.ome.zarr"))
         moved_to = tmp_path / "moved"
