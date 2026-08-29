@@ -39,9 +39,13 @@ at `views/live/metadata/`. It is what the viewer reads at live pace:
 
 - `signed.json` — what is published *right now* (atomically replaced);
 - `events.jsonl` — the append-only history, one line per publication;
-- `locations.json` — where every position the run will ever image sits
-  on the canvas, fixed **before the first pixel** (its numbered history
-  in `locations/`);
+- `locations.json` — where every position sits on the canvas (its
+  numbered history in `locations/`). The **canvas** — the declared
+  frame — is the one placement commitment fixed before the first
+  pixel; the placements inside it are versioned state
+  (`layout_revision`), free to be anywhere in the canvas, overlapping
+  or not, declared up front or placed on the fly, with the later
+  commit owning shared ground;
 - `profiles/` — how every store is written (frame, levels, chunking,
   number type), sealed with the locations;
 - `links.json` — which position's own bytes answer for each piece of
