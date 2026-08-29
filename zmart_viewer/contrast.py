@@ -24,14 +24,18 @@ HISTOGRAM_HIGH_PERCENTILE = 99.9
 def _omero_window(attrs: dict, channel: int | None = None) -> tuple[float, float] | None:
     """The display window the store asks for, if it declares one."""
     declared = attrs.get("omero", {}).get("channels") or []
+
     if channel is not None:
         wanted = [declared[channel]] if channel < len(declared) else []
     else:
         wanted = declared
+
     for entry in wanted:
         window = (entry or {}).get("window") or {}
+
         if "start" in window and "end" in window:
             start, end = float(window["start"]), float(window["end"])
+
             if end > start:
                 return start, end
     return None
@@ -51,6 +55,7 @@ def _coarsest_level_path(attrs: dict) -> str | None:
 def _level_holds_pixels(level: Path) -> bool:
     """Has anything actually been written into this copy of the image yet?"""
     holder = _moments_folder(level)
+
     try:
         return any(entry.name not in DESCRIPTION_FILES for entry in holder.iterdir())
     except OSError:
@@ -67,19 +72,23 @@ def _sample(array, held: dict[int, int] | None = None) -> object:
 
     held = held or {}
     shape = tuple(int(n) for n in array.shape)
+
     if not shape:
         return np.asarray(array[...])
 
     budget = _SAMPLE_PLANES * _SAMPLE_SIDE * _SAMPLE_SIDE
     total = 1
+
     for axis, extent in enumerate(shape):
         total *= 1 if axis in held else max(int(extent), 1)
+
     if total <= budget:
         whole = tuple(held.get(axis, slice(None)) for axis in range(len(shape)))
         return np.asarray(array[whole])
 
     # Crop the image plane (the last two axes) to a square about the middle.
     plane: list[slice] = []
+
     for extent in shape[-2:]:
         if extent <= _SAMPLE_SIDE:
             plane.append(slice(None))
@@ -88,12 +97,15 @@ def _sample(array, held: dict[int, int] | None = None) -> object:
             plane.append(slice(start, start + _SAMPLE_SIDE))
 
     leading = shape[: len(shape) - len(plane)]
+
     if not leading:
         return np.asarray(array[tuple(plane)])
 
     free = [axis for axis in range(len(leading)) if axis not in held]
+
     if not free:
         index = tuple([*(held[axis] for axis in range(len(leading))), *plane])
+
         try:
             return np.asarray(array[index]).ravel()
         except (OSError, ValueError, IndexError):
@@ -105,8 +117,10 @@ def _sample(array, held: dict[int, int] | None = None) -> object:
         {int(i * (depth - 1) / max(_SAMPLE_PLANES - 1, 1)) for i in range(_SAMPLE_PLANES)}
     )
     pieces = []
+
     for position in positions:
         where: list[int] = []
+
         for axis, extent in enumerate(leading):
             if axis == spread_axis:
                 where.append(position)
@@ -114,10 +128,12 @@ def _sample(array, held: dict[int, int] | None = None) -> object:
                 where.append(held[axis])
             else:
                 where.append(max(0, extent // 2))
+
         try:
             pieces.append(np.asarray(array[tuple([*where, *plane])]).ravel())
         except (OSError, ValueError, IndexError):
             continue
+
     if not pieces:
         return np.asarray([])
     return np.concatenate(pieces)
@@ -131,6 +147,7 @@ def _samples(store: Path, *, channel: int | None = None):
     try:
         attrs = _read_attrs_at(store)
         levels = _level_paths(attrs)
+
         if not levels:
             return None
         held = _hold_the_channel(attrs, channel)
@@ -141,6 +158,7 @@ def _samples(store: Path, *, channel: int | None = None):
     for position, level in enumerate(reversed(levels)):
         if not _level_holds_pixels(store / level):
             continue
+
         try:
             array = group[level]
             data = _sample(array, held)
@@ -149,26 +167,33 @@ def _samples(store: Path, *, channel: int | None = None):
         values = np.asarray(data, dtype=np.float64).ravel()
         values = values[np.isfinite(values)]
         fill = getattr(array, "fill_value", None)
+
         if fill is not None and np.isfinite(float(fill)):
             imaged = values[values != float(fill)]
+
             if imaged.size:
                 values = imaged
+
         if values.size == 0:
             continue
         return attrs, values, position == 0
 
     for member in _the_members_behind(store):
         followed = _samples(member, channel=channel)
+
         if followed is not None:
             return attrs, followed[1], False
 
     composed = _a_built_pictures_sample(store, channel=channel)
+
     if composed is not None:
         values = np.asarray(composed, dtype=np.float64).ravel()
         values = values[np.isfinite(values)]
         imaged = values[values != 0.0]
+
         if imaged.size:
             values = imaged
+
         if values.size:
             return attrs, values, False
     return None
@@ -176,19 +201,15 @@ def _samples(store: Path, *, channel: int | None = None):
 
 def _a_built_pictures_values(store: str | Path, level: int, box, channel: int | None):
     """A built picture's pixels inside the share of it on screen, or None."""
-    try:
-        from .pieces import the_values_inside
-    except ImportError:
-        return None
+    from .pieces import the_values_inside
+
     return the_values_inside(Path(store), level, box, channel=channel or 0)
 
 
 def _a_built_pictures_sample(store: str | Path, channel: int | None):
     """The composer's own sample of a built picture, or None outside one."""
-    try:
-        from .pieces import a_sample_behind
-    except ImportError:
-        return None
+    from .pieces import a_sample_behind
+
     return a_sample_behind(Path(store), channel=channel or 0)
 
 
@@ -197,6 +218,7 @@ def _the_members_behind(store: str | Path) -> list[Path]:
     import json
 
     collection = Path(store).parent.parent.parent / "data" / "survey.ome.zarr"
+
     try:
         described = json.loads((collection / "zarr.json").read_text())
         members = described["attributes"]["zmart"]["members"]
@@ -214,27 +236,35 @@ def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float
     if declared:
         return float(declared["low"]), float(declared["high"])
     store = Path(store)
+
     try:
         level = _coarsest_level_path(_read_attrs_at(store))
     except (OSError, KeyError, ValueError):
         return None
+
     if level is None:
         return None
+
     for name in (".zarray", "zarr.json"):
         described = store / level / name
+
         try:
             said = json.loads(described.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         declared = said.get("dtype") or said.get("data_type")
+
         if not declared:
             continue
+
         try:
             kind = np.dtype(declared)
         except TypeError:
             return None
+
         if kind.kind == "u":
             return 0.0, float(np.iinfo(kind).max)
+
         if kind.kind == "i":
             return float(np.iinfo(kind).min), float(np.iinfo(kind).max)
         return None
@@ -244,6 +274,7 @@ def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float
 def coarsest_level_is_written(store: str | Path) -> bool:
     """Has the smallest, whole-field copy of this image been written yet?"""
     store = Path(store)
+
     try:
         level = _coarsest_level_path(_read_attrs_at(store))
     except (OSError, KeyError, ValueError):
@@ -265,6 +296,7 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
     """Everything the panel needs to know about one channel's brightness."""
     store = Path(store)
     read = _samples(store, channel=channel)
+
     if read is None:
         return {
             "window": (0.0, 65535.0),
@@ -297,6 +329,7 @@ def _the_box_on(array, axes: list[str], box, channel: int | None):
     shape = tuple(int(n) for n in array.shape)
     (top, left), (bottom, right) = box
     taken: list = [slice(None)] * len(shape)
+
     for name, low, high in (("y", top, bottom), ("x", left, right)):
         if name not in axes:
             continue
@@ -304,9 +337,11 @@ def _the_box_on(array, axes: list[str], box, channel: int | None):
         length = shape[at]
         first = max(0, min(length, int(np.floor(low * length))))
         last = max(0, min(length, int(np.ceil(high * length))))
+
         if last <= first:
             return None
         taken[at] = slice(first, last)
+
     if channel is not None and "c" in axes:
         taken[axes.index("c")] = slice(channel, channel + 1)
     return taken
@@ -315,6 +350,7 @@ def _the_box_on(array, axes: list[str], box, channel: int | None):
 def _how_many(shape, taken) -> int:
     """How many numbers a read of these slices would hand back."""
     total = 1
+
     for length, part in zip(shape, taken):
         total *= len(range(*part.indices(int(length))))
     return total
@@ -323,6 +359,7 @@ def _how_many(shape, taken) -> int:
 def _thinned(shape, taken, most: int):
     """The same slices, stepped so they hand back no more than ``most``."""
     held = _how_many(shape, taken)
+
     if held <= most:
         return taken
     spread = (
@@ -352,34 +389,42 @@ def measure_here(
     store = Path(store)
     attrs = _read_attrs_at(store)
     levels = _level_paths(attrs)
+
     if not levels:
         return None
     axes = [
         axis.get("name", "") for axis in (attrs.get("multiscales") or [{}])[0].get("axes") or []
     ]
+
     try:
         group = zarr.open_group(str(store), mode="r")
     except (OSError, KeyError, ValueError):
         return None
 
     chosen = None
+
     for at, level in reversed(list(enumerate(levels))):
         try:
             array = group[level]
         except (OSError, KeyError, ValueError):
             continue
         held = _the_box_on(array, axes, box, channel)
+
         if held is None:
             return None
+
         if not _level_holds_pixels(store / level):
             made = _a_built_pictures_values(store, at, box, channel)
+
             if made is None:
                 continue
             chosen = (None, made)
         else:
             chosen = (array, held)
+
         if _how_many(array.shape, held) >= ENOUGH_TO_MEASURE:
             break
+
     if chosen is None:
         return None
     array, taken = chosen
@@ -388,6 +433,7 @@ def measure_here(
         values = np.asarray(taken, dtype=np.float64).ravel()
     else:
         taken = _thinned(array.shape, taken, AS_MUCH_AS_NEEDED)
+
         try:
             values = np.asarray(array[tuple(taken)], dtype=np.float64).ravel()
         except (OSError, ValueError, IndexError, MemoryError):
@@ -396,8 +442,10 @@ def measure_here(
     # Ground nobody imaged reads back as the fill value, and it is not part of
     # the specimen. Counted in, it wins the vote wherever a picture has gaps.
     fill = getattr(array, "fill_value", 0)
+
     if fill is not None and np.isfinite(float(fill)):
         values = values[values != float(fill)]
+
     if values.size == 0:
         return None
     return {
@@ -414,6 +462,7 @@ def _window(values, *, volumetric: bool) -> tuple[float, float]:
     low_pct = VOLUME_LOW_PERCENTILE if volumetric else LOW_PERCENTILE
     high_pct = VOLUME_HIGH_PERCENTILE if volumetric else HIGH_PERCENTILE
     low, high = (float(v) for v in np.percentile(values, [low_pct, high_pct]))
+
     if high <= low:
         return low, low + 1.0
     return low, high
@@ -437,8 +486,10 @@ def _histogram(values, *, bins: int) -> dict:
             ],
         )
     )
+
     if plot_high <= plot_low:
         plot_high = plot_low + 1.0
+
     if auto_high <= auto_low:
         auto_high = auto_low + 1.0
     counts, _ = np.histogram(
@@ -457,12 +508,15 @@ def display_window(
 ) -> tuple[float, float]:
     """Return the ``(low, high)`` intensity window to display ``store`` with."""
     store = Path(store)
+
     if not volumetric:
         declared = _omero_window(_read_attrs_at(store), channel)
+
         if declared is not None:
             return declared
 
     read = _samples(store, channel=channel)
+
     if read is None:
         return 0.0, 65535.0
     return _window(read[1], volumetric=volumetric)
@@ -475,6 +529,7 @@ def intensity_histogram(
     if bins < 2:
         raise ValueError("a histogram needs at least two bins")
     read = _samples(Path(store), channel=channel)
+
     if read is None:
         return None
     return _histogram(read[1], bins=bins)

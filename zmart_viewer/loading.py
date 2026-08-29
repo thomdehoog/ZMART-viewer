@@ -45,6 +45,7 @@ def load(path: str | Path, *, bake: bool = False, scenes: Path | None = None) ->
     asked = Path(path).expanduser()
     target = scene_behind_a_plate(asked) or scene_behind_a_run(asked, scenes) or asked
     relink = relink_needed(target)
+
     if relink is not None:
         raise CannotOpen(
             f"this viewer was built from {relink['was']}, and nothing is "
@@ -74,14 +75,17 @@ def scene_behind_a_plate(target: Path) -> Path | None:
         described, _ = _the_description_of(target)
     except ValueError:
         return None
+
     if not isinstance(described.get("plate"), dict):
         return None
     from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     scenes = target.parent / "scenes"
     existing = _scene_built_from(scenes / the_scene_folder_name(target.name), target)
+
     if existing is not None:
         return existing
+
     try:
         return declare_a_built_picture(scenes, target, name=target.name)
     except ValueError as why:
@@ -94,17 +98,21 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
     """
     if not target.is_dir() or scenes is None:
         return None
+
     try:
         inside = [one for one in sorted(target.iterdir()) if one.is_dir() and is_store(one)]
     except OSError:
         return None
+
     if len(inside) < 2:
         return None
     from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     existing = _scene_built_from(scenes / the_scene_folder_name(target.name), target)
+
     if existing is not None:
         return existing
+
     try:
         return declare_a_built_picture(scenes, target, name=target.name)
     except ValueError:
@@ -116,13 +124,16 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
 def relink_needed(store: Path) -> dict | None:
     """Whether this is a built scene whose raw data is no longer there."""
     described = store / "zarr.json"
+
     if not described.is_file():
         return None
+
     try:
         attrs = json.loads(described.read_text()).get("attributes", {})
         built_from = (attrs.get("zmart") or {}).get("built_from")
     except (OSError, ValueError):
         return None
+
     if not built_from:
         return None
     was = Path(built_from)
@@ -130,6 +141,7 @@ def relink_needed(store: Path) -> dict | None:
         any((was / name).is_file() for name in DESCRIPTION_FILES)
         or any(one.is_dir() for one in was.glob("*.zarr"))
     )
+
     if still_a_source:
         return None
     return {
@@ -145,6 +157,7 @@ def _scene_built_from(scene: Path, data: Path) -> Path | None:
     try:
         described = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))
         built_from = described["attributes"]["zmart"]["built_from"]
+
         if Path(built_from).resolve() == data.resolve():
             return scene
     except (OSError, ValueError, KeyError, TypeError):
