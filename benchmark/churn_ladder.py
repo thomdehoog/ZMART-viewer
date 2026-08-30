@@ -467,20 +467,29 @@ def the_physical_look(browser, store: Path, label: str) -> dict:
         first_picture_s = time.perf_counter() - opening
 
         # "Sources resolved and something lit" is not "picture finished": at ten
-        # positions the first look already caught a mosaic photographed while
-        # still refining -- one channel, coarse level. The picture is settled
-        # when it stops changing, and how long that takes is itself the number
-        # an operator feels as time-to-sharp.
-        settled, before = False, image_middle(page)
+        # positions the first look caught a mosaic photographed while still
+        # refining -- one channel, coarse level. And one quiet half-second is
+        # not "finished" either: composed pieces arrive with lulls longer than
+        # that, which once passed for settled and failed the channel guard on a
+        # perfectly healthy viewer. Settled means the canvas has not changed
+        # for two whole seconds AND both channels are in it; how long that
+        # takes is itself the number an operator feels as time-to-sharp.
+        settled, quiet, before = False, 0, image_middle(page)
+
+        def both_channels(view) -> bool:
+            greenish = (view[:, :, 1].astype(int) - view[:, :, 0] > 30).mean()
+            magentaish = (view[:, :, 0].astype(int) - view[:, :, 1] > 30).mean()
+            return bool(greenish > 0.01 and magentaish > 0.01)
 
         for _ in range(240):
             page.wait_for_timeout(500)
             now = image_middle(page)
+            quiet = quiet + 1 if np.array_equal(now, before) else 0
+            before = now
 
-            if np.array_equal(now, before):
+            if quiet >= 4 and both_channels(now):
                 settled = True
                 break
-            before = now
         settled_s = time.perf_counter() - opening
         shot = SHOTS / f"{label}.png"
         page.screenshot(path=str(shot))
@@ -493,13 +502,12 @@ def the_physical_look(browser, store: Path, label: str) -> dict:
             f"whatever {label} is showing, it is not the specimen"
         )
         # Both channels must be in the photograph: DAPI is drawn green and GFP
-        # magenta, so each must dominate somewhere. A mosaic with a channel
-        # missing is exactly what an unsettled look once photographed.
-        greenish = float((settled_view[:, :, 1].astype(int) - settled_view[:, :, 0] > 30).mean())
-        magentaish = float((settled_view[:, :, 0].astype(int) - settled_view[:, :, 1] > 30).mean())
-        assert greenish > 0.01 and magentaish > 0.01, (
-            f"a channel is missing from the settled picture of {label}: "
-            f"{greenish:.3f} of it is green, {magentaish:.3f} magenta"
+        # magenta, so each must dominate somewhere. The settle wait above only
+        # ends early when this holds, so failing here means the deadline passed
+        # with a channel still missing -- a real fault, not a slow load.
+        assert settled and both_channels(settled_view), (
+            f"the picture of {label} never finished: settled={settled}, and a "
+            "channel is still missing after the whole deadline"
         )
 
         asked_opening = asked["requests"]
@@ -547,7 +555,7 @@ def main() -> None:
         for count in RUNGS:
             print(f"\n==== {count} position(s)", flush=True)
 
-            for scattered in (False, True):
+            for scattered in (True, False):
                 for bake in (False, True):
                     placement = "scattered" if scattered else "nominal"
                     # Every cell owns its folder: a shared one would hand the
