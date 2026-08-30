@@ -45,8 +45,8 @@ _BUILDING = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_BUILDING))
 
 import numpy as np  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
 
+from zmart_viewer.building import GovernedRun  # noqa: E402
 from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
 from zmart_viewer.record.model import CommitEvent, GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
@@ -60,35 +60,36 @@ RUNGS = (50, 200, 500)
 PATCH_ONE_MOMENT_MS = (330.0, 380.0)
 
 
-def a_moment_committed(run: LivePublisher, position_id: str,
-                       moment: int) -> None:
+def a_moment_committed(run: LivePublisher, position_id: str, moment: int) -> None:
     """One later moment's commit, appended straight to the record."""
-    run.manifest.publish(CommitEvent(
-        revision=run.manifest.next_revision(),
-        event_type="timepoint_committed",
-        position_id=position_id,
-        timepoint=moment,
-        run_id=run.run_id,
-        acquisition_type=run.profile.acquisition_type,
-        acquisition_profile_id=run.profile.profile_id,
-        scene_layout_revision=run.layout.revision,
-        link_revision=1,
-        channels=tuple(run.channels),
-        levels=tuple(range(len(run.profile.levels))),
-        pyramids_ready=True,
-        links_ready=True,
-        view_ready=True,
-        validated=True,
-    ))
+    run.manifest.publish(
+        CommitEvent(
+            revision=run.manifest.next_revision(),
+            event_type="timepoint_committed",
+            position_id=position_id,
+            timepoint=moment,
+            run_id=run.run_id,
+            acquisition_type=run.profile.acquisition_type,
+            acquisition_profile_id=run.profile.profile_id,
+            scene_layout_revision=run.layout.revision,
+            link_revision=1,
+            channels=tuple(run.channels),
+            levels=tuple(range(len(run.profile.levels))),
+            pyramids_ready=True,
+            links_ready=True,
+            view_ready=True,
+            validated=True,
+        )
+    )
 
 
 def main() -> int:
     folder = Path(mkdtemp(prefix="replacement-stall-"))
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  timepoints=max(RUNGS))
+    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=max(RUNGS))
     run = LivePublisher(
         folder / "experiment" / "acquisitions" / "timelapse",
-        profile, run_id="stall-rung",
+        profile,
+        run_id="stall-rung",
         cells={GridCell(0, 0): "pos00"},
         linked_view="at_run_end",
     )
@@ -98,8 +99,10 @@ def main() -> int:
     opened = GovernedRun(run.folder)
     try:
         published = 1
-        print(f"{'moments':>8} {'derive ms':>10} {'1st piece ms':>13} "
-              f"{'swept':>7} {'projected sync bake':>22} {'lazy':>12}")
+        print(
+            f"{'moments':>8} {'derive ms':>10} {'1st piece ms':>13} "
+            f"{'swept':>7} {'projected sync bake':>22} {'lazy':>12}"
+        )
         for rung in RUNGS:
             for moment in range(published, rung):
                 a_moment_committed(run, "pos00", moment)
@@ -115,9 +118,11 @@ def main() -> int:
             swept = opened.accounting["last_snapshot_swept"]
 
             low, high = (rung * ms / 1000 for ms in PATCH_ONE_MOMENT_MS)
-            print(f"{rung:>8} {derived:>10.1f} {answered:>13.1f} "
-                  f"{swept:>7} {low:>10.1f}-{high:.1f} s "
-                  f"{PATCH_ONE_MOMENT_MS[0] / 1000:>9.2f} s")
+            print(
+                f"{rung:>8} {derived:>10.1f} {answered:>13.1f} "
+                f"{swept:>7} {low:>10.1f}-{high:.1f} s "
+                f"{PATCH_ONE_MOMENT_MS[0] / 1000:>9.2f} s"
+            )
     finally:
         opened.close()
     print(f"(fixture at {folder})")

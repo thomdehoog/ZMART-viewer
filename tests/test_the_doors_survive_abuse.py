@@ -22,13 +22,14 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.building import the_scene_folder_name  # noqa: E402
-from zmart_viewer.server import make_server  # noqa: E402
 from test_a_dataset_is_relived_as_a_live_run import (  # noqa: E402
     _a_grid_scan,
     _post,
 )
 from test_open_and_close import _store  # noqa: E402
+
+from zmart_viewer.building import the_scene_folder_name  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 
 @pytest.fixture
@@ -37,8 +38,9 @@ def door(built_dist, tmp_path):
     first = tmp_path / "overview"
     first.mkdir()
     _store(first / "overview_pos001.ome.zarr", channels=1)
-    server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -60,10 +62,16 @@ class TestTheConstructDoor:
         address, folder = door
         scan = _a_grid_scan(folder / "scan")
         for name in ("../escaped", "a/b", "..", "a\\b"):
-            status, answer = _post(address, "/api/stores/construct",
-                                   {"path": str(scan),
-                                    "viewer_folder": str(scan / "scenes"),
-                                    "bake": False, "name": name})
+            status, answer = _post(
+                address,
+                "/api/stores/construct",
+                {
+                    "path": str(scan),
+                    "viewer_folder": str(scan / "scenes"),
+                    "bake": False,
+                    "name": name,
+                },
+            )
             assert status == 400, (name, status, answer)
             assert "name" in answer["error"], answer
         assert not (folder / "escaped.ome.zarr").exists()
@@ -73,10 +81,11 @@ class TestTheConstructDoor:
         address, folder = door
         pretender = folder / "not-a-folder.txt"
         pretender.write_text("hello", encoding="utf-8")
-        status, answer = _post(address, "/api/stores/construct",
-                               {"path": str(pretender),
-                                "viewer_folder": str(folder / "scenes"),
-                                "bake": False})
+        status, answer = _post(
+            address,
+            "/api/stores/construct",
+            {"path": str(pretender), "viewer_folder": str(folder / "scenes"), "bake": False},
+        )
         assert status == 404 and "folder" in answer["error"]
 
     def test_an_empty_dataset_reports_its_reason_through_the_status(self, door):
@@ -84,10 +93,11 @@ class TestTheConstructDoor:
         address, folder = door
         empty = folder / "empty"
         empty.mkdir()
-        status, _ = _post(address, "/api/stores/construct",
-                          {"path": str(empty),
-                           "viewer_folder": str(empty / "scenes"),
-                           "bake": False})
+        status, _ = _post(
+            address,
+            "/api/stores/construct",
+            {"path": str(empty), "viewer_folder": str(empty / "scenes"), "bake": False},
+        )
         assert status == 200
         for _ in range(100):
             _, told = _post(address, "/api/stores/construct-status", {})
@@ -103,8 +113,7 @@ class TestTheReplayDoorAbused:
         """A negative or absurd 'every' is clamped, not crashed on."""
         address, folder = door
         scan = _a_grid_scan(folder / "paced")
-        status, answer = _post(address, "/api/stores/replay",
-                               {"path": str(scan), "every": -5})
+        status, answer = _post(address, "/api/stores/replay", {"path": str(scan), "every": -5})
         assert status == 200, answer
         for _ in range(100):
             _, told = _post(address, "/api/stores/replay-status", {})
@@ -117,10 +126,16 @@ class TestTheReplayDoorAbused:
         """A scenes folder holds a built picture, not raw positions."""
         address, folder = door
         scan = _a_grid_scan(folder / "raw")
-        status, _ = _post(address, "/api/stores/construct",
-                          {"path": str(scan),
-                           "viewer_folder": str(scan / "scenes"),
-                           "bake": False, "name": "linked"})
+        status, _ = _post(
+            address,
+            "/api/stores/construct",
+            {
+                "path": str(scan),
+                "viewer_folder": str(scan / "scenes"),
+                "bake": False,
+                "name": "linked",
+            },
+        )
         assert status == 200
         for _ in range(100):
             _, told = _post(address, "/api/stores/construct-status", {})
@@ -128,8 +143,7 @@ class TestTheReplayDoorAbused:
                 break
             time.sleep(0.1)
         assert told.get("state") == "done"
-        status, answer = _post(address, "/api/stores/replay",
-                               {"path": str(scan / "scenes")})
+        status, answer = _post(address, "/api/stores/replay", {"path": str(scan / "scenes")})
         assert status == 400, answer
         assert answer.get("error"), "the refusal must carry its reason"
 
@@ -144,8 +158,7 @@ class TestTheReplayDoorAbused:
         address, folder = door
         scan = _a_grid_scan(folder / "again")
         for expected in ("replay-1", "replay-2"):
-            status, _ = _post(address, "/api/stores/replay",
-                              {"path": str(scan), "every": 0})
+            status, _ = _post(address, "/api/stores/replay", {"path": str(scan), "every": 0})
             assert status == 200
             for _ in range(150):
                 _, told = _post(address, "/api/stores/replay-status", {})
@@ -168,10 +181,8 @@ class TestTheOpenDoor:
         address, folder = door
         broken = folder / "broken" / "hurt.ome.zarr"
         broken.mkdir(parents=True)
-        (broken / "zarr.json").write_text('{"attributes": {"ome":',
-                                          encoding="utf-8")
-        status, answer = _post(address, "/api/stores/open",
-                               {"path": str(broken)})
+        (broken / "zarr.json").write_text('{"attributes": {"ome":', encoding="utf-8")
+        status, answer = _post(address, "/api/stores/open", {"path": str(broken)})
         assert status in (400, 404), (status, answer)
         assert answer.get("error"), "the refusal must say something"
 
@@ -180,15 +191,13 @@ class TestTheOpenDoor:
         address, folder = door
         half = folder / "half" / "scene.ome.zarr"
         (half / "0").mkdir(parents=True)
-        status, answer = _post(address, "/api/stores/open",
-                               {"path": str(half)})
+        status, answer = _post(address, "/api/stores/open", {"path": str(half)})
         assert status in (400, 404), (status, answer)
         assert answer.get("error")
 
     def test_listing_a_missing_folder_answers_inside_the_reply(self, door):
         address, _ = door
-        status, answer = _post(address, "/api/stores/list",
-                               {"path": "/nowhere/at/all"})
+        status, answer = _post(address, "/api/stores/list", {"path": "/nowhere/at/all"})
         assert status in (200, 400, 404)
         if status != 200:
             assert answer.get("error")
@@ -198,8 +207,7 @@ class TestTheDoorsTogether:
     def test_stopping_when_nothing_runs_is_not_an_error(self, door):
         """A stop with nothing running is already true, not a fault."""
         address, _ = door
-        for route in ("/api/stores/construct-cancel",
-                      "/api/stores/replay-cancel"):
+        for route in ("/api/stores/construct-cancel", "/api/stores/replay-cancel"):
             status, answer = _post(address, route, {})
             assert status == 200, (route, status, answer)
             assert answer == {"stopping": False}
@@ -215,8 +223,7 @@ class TestTheDoorsTogether:
         """
         address, folder = door
         scan = _a_grid_scan(folder / "unhurried", across=4)
-        status, _ = _post(address, "/api/stores/replay",
-                          {"path": str(scan), "every": 0.5})
+        status, _ = _post(address, "/api/stores/replay", {"path": str(scan), "every": 0.5})
         assert status == 200
         status, answer = _post(address, "/api/stores/replay-cancel", {})
         assert status == 200 and answer == {"stopping": True}
@@ -227,8 +234,7 @@ class TestTheDoorsTogether:
             time.sleep(0.1)
         assert told["state"] == "cancelled", told
         assert 1 <= told["done"] < 16, told
-        status, _ = _post(address, "/api/stores/replay",
-                          {"path": str(scan), "every": 0.0})
+        status, _ = _post(address, "/api/stores/replay", {"path": str(scan), "every": 0.0})
         assert status == 200, "a stopped replay must not block the next one"
         for _ in range(300):
             _, told = _post(address, "/api/stores/replay-status", {})
@@ -242,8 +248,9 @@ class TestTheDoorsTogether:
         second = Path(told["view"]).parents[2]
         assert second.name == "replay-2", told["view"]
         stopped = second.parent / "replay-1"
-        status, _ = _post(address, "/api/stores/open", {
-            "path": str(stopped / "views" / "live" / "live.ome.zarr")})
+        status, _ = _post(
+            address, "/api/stores/open", {"path": str(stopped / "views" / "live" / "live.ome.zarr")}
+        )
         assert status == 200, "the stopped run's view must open cleanly"
 
     def test_a_build_stopped_mid_bake_keeps_nothing(self, door):
@@ -256,42 +263,42 @@ class TestTheDoorsTogether:
         """
         address, folder = door
         scan = _a_grid_scan(folder / "big", across=8)
-        status, _ = _post(address, "/api/stores/construct",
-                          {"path": str(scan),
-                           "viewer_folder": str(folder / "scenes"),
-                           "bake": True})
+        status, _ = _post(
+            address,
+            "/api/stores/construct",
+            {"path": str(scan), "viewer_folder": str(folder / "scenes"), "bake": True},
+        )
         assert status == 200
         caught_running = False
         for _ in range(2000):
             _, told = _post(address, "/api/stores/construct-status", {})
-            if (told.get("state") == "running"
-                    and 0 < told.get("fraction", 0) < 1):
+            if told.get("state") == "running" and 0 < told.get("fraction", 0) < 1:
                 caught_running = True
-                status, answer = _post(address,
-                                       "/api/stores/construct-cancel", {})
+                status, answer = _post(address, "/api/stores/construct-cancel", {})
                 assert status == 200 and answer == {"stopping": True}
                 break
             if told.get("state") in ("done", "error"):
                 break
             time.sleep(0.005)
         if not caught_running:
-            pytest.skip("the bake finished before a stop could land, so "
-                        "there was nothing to stop on this machine")
+            pytest.skip(
+                "the bake finished before a stop could land, so "
+                "there was nothing to stop on this machine"
+            )
         for _ in range(200):
             _, told = _post(address, "/api/stores/construct-status", {})
             if told.get("state") != "running":
                 break
             time.sleep(0.05)
         assert told["state"] == "cancelled", told
-        assert not (folder / "scenes"
-                    / the_scene_folder_name("big")).exists(), (
-            "a stopped build must keep nothing -- pieces without a "
-            "description are not a scene"
+        assert not (folder / "scenes" / the_scene_folder_name("big")).exists(), (
+            "a stopped build must keep nothing -- pieces without a description are not a scene"
         )
-        status, _ = _post(address, "/api/stores/construct",
-                          {"path": str(scan),
-                           "viewer_folder": str(folder / "scenes"),
-                           "bake": False})
+        status, _ = _post(
+            address,
+            "/api/stores/construct",
+            {"path": str(scan), "viewer_folder": str(folder / "scenes"), "bake": False},
+        )
         assert status == 200, "a stopped build must not block the next one"
         for _ in range(300):
             _, told = _post(address, "/api/stores/construct-status", {})
@@ -299,25 +306,31 @@ class TestTheDoorsTogether:
                 break
             time.sleep(0.1)
         assert told["state"] == "done"
-        assert (folder / "scenes" / the_scene_folder_name("big")
-                / "zarr.json").is_file()
+        assert (folder / "scenes" / the_scene_folder_name("big") / "zarr.json").is_file()
 
     def test_a_build_and_a_replay_can_run_at_once(self, door):
         """The two jobs are separate machines and must not trip each other."""
         address, folder = door
         building = _a_grid_scan(folder / "building")
         replaying = _a_grid_scan(folder / "replaying")
-        status, _ = _post(address, "/api/stores/replay",
-                          {"path": str(replaying), "every": 0.3})
+        status, _ = _post(address, "/api/stores/replay", {"path": str(replaying), "every": 0.3})
         assert status == 200
-        status, _ = _post(address, "/api/stores/construct",
-                          {"path": str(building),
-                           "viewer_folder": str(building / "scenes"),
-                           "bake": True, "name": "baked"})
+        status, _ = _post(
+            address,
+            "/api/stores/construct",
+            {
+                "path": str(building),
+                "viewer_folder": str(building / "scenes"),
+                "bake": True,
+                "name": "baked",
+            },
+        )
         assert status == 200
         outcomes = {}
-        for route, key in (("/api/stores/construct-status", "build"),
-                           ("/api/stores/replay-status", "replay")):
+        for route, key in (
+            ("/api/stores/construct-status", "build"),
+            ("/api/stores/replay-status", "replay"),
+        ):
             for _ in range(200):
                 _, told = _post(address, route, {})
                 if told.get("state") != "running":

@@ -33,7 +33,7 @@ import pytest
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
 _MEASURE = _VIZ_ROOT / "measure"
 _DEMOS = _VIZ_ROOT / "demos"
-_TESTDATA = _VIZ_ROOT / "testdata"
+_TESTS = Path(__file__).resolve().parent
 _REPO_ROOT = _VIZ_ROOT.parent
 
 # Set this on any machine that is supposed to be able to draw — a CI runner, the
@@ -107,11 +107,12 @@ def _give_up_on_the_picture(reason: str) -> None:
     pytest.skip(f"{PIXELS_NOT_LOOKED_AT}: {reason}")
 
 
-for source_root in (_REPO_ROOT, _VIZ_ROOT, _MEASURE, _DEMOS, _TESTDATA):
+for source_root in (_REPO_ROOT, _VIZ_ROOT, _MEASURE, _DEMOS, _TESTS):
     if str(source_root) not in sys.path:
         sys.path.insert(0, str(source_root))
 
 from demo_data import write_demo_zarr  # noqa: E402
+
 from zmart_viewer.server import make_server  # noqa: E402
 
 _DIST = _VIZ_ROOT / "app" / "page" / "dist"
@@ -184,9 +185,7 @@ def live_server(built_dist: Path, demo_store: Path):
     """The real server, on a free port, serving the built page and the volume."""
     # The selection list is off unless asked for, so the shared test server asks
     # for it: most of these tests are about marking places on the image.
-    server = make_server(
-        port=0, data_dir=demo_store, site_dir=built_dist, allow_selection=True
-    )
+    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist, allow_selection=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -290,9 +289,7 @@ def _launch_chromium(playwright, args: list[str]):
         already_here = find_a_chromium()
         if already_here is None:
             raise
-        browser = playwright.chromium.launch(
-            executable_path=str(already_here), args=args
-        )
+        browser = playwright.chromium.launch(executable_path=str(already_here), args=args)
         # Worth saying out loud at the end of the run: the pixels were drawn by a
         # browser other than the one Playwright expected, which is useful to know
         # if anything about the picture later looks unfamiliar.
@@ -340,14 +337,12 @@ RENDERER_JS = """() => {
 }"""
 
 _ON_THE_CARD = ["--ignore-gpu-blocklist", "--enable-gpu"]
-_IN_SOFTWARE = ["--use-gl=angle", "--use-angle=swiftshader",
-                "--ignore-gpu-blocklist"]
+_IN_SOFTWARE = ["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
 
 
 def drawn_in_software(renderer: str | None) -> bool:
     """Whether a renderer's own name says there is no card behind it."""
-    return not renderer or any(
-        name in renderer.lower() for name in SOFTWARE_RENDERERS)
+    return not renderer or any(name in renderer.lower() for name in SOFTWARE_RENDERERS)
 
 
 def _the_renderer_of(browser) -> str | None:
@@ -397,7 +392,8 @@ def browser(_playwright):
         except Exception as exc:
             if must_have_card:
                 _give_up_on_the_picture(
-                    f"no usable Chromium on this machine: {_in_a_few_words(exc)}")
+                    f"no usable Chromium on this machine: {_in_a_few_words(exc)}"
+                )
             launched = None
         if launched is not None:
             renderer = _the_renderer_of(launched)
@@ -409,20 +405,20 @@ def browser(_playwright):
                         "ZMART_REAL_GPU asks for this machine's card, and WebGL "
                         f"reports {renderer or 'no renderer at all'} -- the run "
                         "would have measured software rendering and called it a "
-                        "pass on hardware")
+                        "pass on hardware"
+                    )
             else:
                 _tell_the_summary(f"the pictures were drawn on {renderer}.")
     if launched is None:
         try:
             launched = _launch_chromium(_playwright, _IN_SOFTWARE)
         except Exception as exc:
-            _give_up_on_the_picture(
-                f"no usable Chromium on this machine: {_in_a_few_words(exc)}"
-            )
+            _give_up_on_the_picture(f"no usable Chromium on this machine: {_in_a_few_words(exc)}")
         _tell_the_summary(
             "the pictures were drawn in software (no card was usable here), so "
             "what they measure is this machine's arithmetic rather than an "
-            "operator's screen.")
+            "operator's screen."
+        )
     try:
         yield launched
     finally:
@@ -448,8 +444,7 @@ def counting_browser(_playwright):
     try:
         launched = _launch_chromium(_playwright, _IN_SOFTWARE)
     except Exception as exc:
-        _give_up_on_the_picture(
-            f"no usable Chromium on this machine: {_in_a_few_words(exc)}")
+        _give_up_on_the_picture(f"no usable Chromium on this machine: {_in_a_few_words(exc)}")
     try:
         yield launched
     finally:
@@ -466,9 +461,7 @@ def gpu_browser(_playwright):
     try:
         launched = _launch_chromium(_playwright, args)
     except Exception as exc:
-        _give_up_on_the_picture(
-            f"no usable Chromium on this machine: {_in_a_few_words(exc)}"
-        )
+        _give_up_on_the_picture(f"no usable Chromium on this machine: {_in_a_few_words(exc)}")
     try:
         yield launched
     finally:

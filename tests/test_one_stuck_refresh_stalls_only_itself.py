@@ -41,9 +41,6 @@ sys.path.insert(0, str(_VIZ))
 import os  # noqa: E402
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from zmart_viewer import server as server_module  # noqa: E402
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.server import make_server  # noqa: E402
 
 # The announcement helper and the dirty-footprint arithmetic are the storm
 # gate's own, imported rather than copied: which pieces a landing touches
@@ -53,6 +50,10 @@ from zmart_viewer.server import make_server  # noqa: E402
 # begin. One implementation, shared, kept honest by the gate that uses it
 # hardest.
 from test_a_commit_storm_under_zooming import _announce, _dirty_for  # noqa: E402
+
+from zmart_viewer import server as server_module  # noqa: E402
+from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.server import make_server  # noqa: E402
 
 # How long to give the second refresh to arrive while the first hangs, in
 # seconds. Generous on purpose: the point is not speed but independence, and
@@ -67,9 +68,7 @@ INDEPENDENT_REFRESH_WITHIN_S = 30.0
 HOLD_FOR_AT_LEAST_S = 2.0
 
 
-def test_one_stuck_refresh_stalls_only_itself(
-    browser, built_dist, tmp_path, monkeypatch
-):
+def test_one_stuck_refresh_stalls_only_itself(browser, built_dist, tmp_path, monkeypatch):
     """While one chunk's reply hangs forever, other chunks still refresh."""
     harness.FIXTURES = tmp_path
     # Twelve across, deliberately: at its opening overview zoom the page
@@ -83,6 +82,7 @@ def test_one_stuck_refresh_stalls_only_itself(
     # for.
     across = 12
     run, order = harness.the_run(across)
+
     # The two landings are the survey's opposite corners, so at every level
     # fine enough to hold more than one piece their footprints are different
     # pieces -- which is what lets one hang while the other proves itself.
@@ -100,10 +100,12 @@ def test_one_stuck_refresh_stalls_only_itself(
             harness.fast_publish(run, position_id)
 
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
-    pictured = len(json.loads((store / "zarr.json").read_text(
-        encoding="utf-8"))["attributes"]["ome"]["multiscales"][0]["datasets"])
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
+    pictured = len(
+        json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["ome"][
+            "multiscales"
+        ][0]["datasets"]
+    )
 
     first_dirty = _dirty_for(run, pictured, first_landing)
     second_dirty = _dirty_for(run, pictured, second_landing)
@@ -123,8 +125,7 @@ def test_one_stuck_refresh_stalls_only_itself(
     ordinary_serve = server_module._Handler._serve_from_data
 
     def serve_holding_one_corner(handler) -> None:
-        if hold.is_set() and any(handler.path.endswith(one)
-                                 for one in chosen["held"]):
+        if hold.is_set() and any(handler.path.endswith(one) for one in chosen["held"]):
             held_requests["count"] += 1
             # Hang exactly as a wedged server would: no status line, no
             # body, the socket simply stays open until the test releases
@@ -133,12 +134,12 @@ def test_one_stuck_refresh_stalls_only_itself(
             release.wait(timeout=120)
         ordinary_serve(handler)
 
-    monkeypatch.setattr(
-        server_module._Handler, "_serve_from_data", serve_holding_one_corner)
+    monkeypatch.setattr(server_module._Handler, "_serve_from_data", serve_holding_one_corner)
 
     site = Path(os.environ.get("ZMART_STORM_BUILT_DIST", built_dist))
-    server = make_server(port=0, data_dir=shown, site_dir=site,
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    server = make_server(
+        port=0, data_dir=shown, site_dir=site, store=[store.name], window=harness.BRIGHT, live=True
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
@@ -146,10 +147,8 @@ def test_one_stuck_refresh_stalls_only_itself(
         port = server.server_address[1]
         page.add_init_script("globalThis.zmartLiveCheckMs = 150")
         page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                              timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                              timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_500)
 
         # Only pieces of levels the page actually HOLDS can be refreshed at
@@ -175,8 +174,7 @@ def test_one_stuck_refresh_stalls_only_itself(
             .sort((a, b) => extent(b[0]) - extent(a[0]))
             .map(([, keys]) => [...keys]);
         }"""
-        opening_zoom = page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value")
+        opening_zoom = page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
 
         def zoom_to(multiple: float) -> None:
             page.evaluate(
@@ -209,10 +207,8 @@ def test_one_stuck_refresh_stalls_only_itself(
             page.wait_for_timeout(2_000)
             held_by_level = page.evaluate(what_is_held)
             for level in range(min(len(held_by_level), pictured)):
-                mine = {key_of(piece)
-                        for piece in first_dirty.get(str(level), [])}
-                theirs = {key_of(piece)
-                          for piece in second_dirty.get(str(level), [])}
+                mine = {key_of(piece) for piece in first_dirty.get(str(level), [])}
+                theirs = {key_of(piece) for piece in second_dirty.get(str(level), [])}
                 keys = set(held_by_level[level])
                 if (mine - theirs) & keys and (theirs - mine) & keys:
                     qualifying_level = level
@@ -225,8 +221,9 @@ def test_one_stuck_refresh_stalls_only_itself(
             "this machine and the question cannot be asked"
         )
         level_name = str(qualifying_level)
-        shared = ({tuple(one) for one in first_dirty[level_name]}
-                  & {tuple(one) for one in second_dirty[level_name]})
+        shared = {tuple(one) for one in first_dirty[level_name]} & {
+            tuple(one) for one in second_dirty[level_name]
+        }
         chosen["held"] = {
             f"/{level_name}/c/{piece[0]}/{piece[1]}/{piece[2]}"
             for piece in first_dirty[level_name]
@@ -244,9 +241,10 @@ def test_one_stuck_refresh_stalls_only_itself(
         # two landings may sit at the survey's edge where a screenshot at
         # this zoom would barely register them.
         finished: list[str] = []
-        page.on("requestfinished",
-                lambda asked: finished.append(asked.url)
-                if "/c/" in asked.url else None)
+        page.on(
+            "requestfinished",
+            lambda asked: finished.append(asked.url) if "/c/" in asked.url else None,
+        )
 
         # The first landing is announced while its piece of the qualifying
         # level is held. Its refresh starts and cannot finish.
@@ -270,9 +268,14 @@ def test_one_stuck_refresh_stalls_only_itself(
         deadline = time.monotonic() + INDEPENDENT_REFRESH_WITHIN_S
         arrived = None
         while time.monotonic() < deadline:
-            arrived = next((one for one in finished
-                            if any(one.endswith(suffix)
-                                   for suffix in chosen["watch"])), None)
+            arrived = next(
+                (
+                    one
+                    for one in finished
+                    if any(one.endswith(suffix) for suffix in chosen["watch"])
+                ),
+                None,
+            )
             if arrived:
                 break
             page.wait_for_timeout(200)
@@ -295,9 +298,10 @@ def test_one_stuck_refresh_stalls_only_itself(
         deadline = time.monotonic() + 30
         arrived = None
         while time.monotonic() < deadline:
-            arrived = next((one for one in finished
-                            if any(one.endswith(suffix)
-                                   for suffix in chosen["held"])), None)
+            arrived = next(
+                (one for one in finished if any(one.endswith(suffix) for suffix in chosen["held"])),
+                None,
+            )
             if arrived:
                 break
             page.wait_for_timeout(200)

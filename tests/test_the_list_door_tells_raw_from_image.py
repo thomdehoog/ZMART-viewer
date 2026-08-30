@@ -25,9 +25,10 @@ import pytest
 VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VIZ))
 
-from zmart_viewer.server import make_server  # noqa: E402
 from test_a_dataset_is_relived_as_a_live_run import _post  # noqa: E402
 from test_open_and_close import _store  # noqa: E402
+
+from zmart_viewer.server import make_server  # noqa: E402
 
 
 @pytest.fixture
@@ -36,8 +37,9 @@ def door(built_dist, tmp_path):
     first = tmp_path / "overview"
     first.mkdir()
     _store(first / "overview_pos001.ome.zarr", channels=1)
-    server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -67,8 +69,9 @@ class TestTheListingTellsRawFromImage:
         address, folder = door
         run = folder / "survey.ome.zarr"
         run.mkdir()
-        (run / "zarr.json").write_text(json.dumps(
-            {"zarr_format": 3, "node_type": "group", "attributes": {}}))
+        (run / "zarr.json").write_text(
+            json.dumps({"zarr_format": 3, "node_type": "group", "attributes": {}})
+        )
         _store(run / "pos001.ome.zarr", channels=1)
         _store(run / "pos002.ome.zarr", channels=1)
         assert _listed(address, folder)["survey.ome.zarr"] == "run"
@@ -98,10 +101,17 @@ class TestTheListingTellsRawFromImage:
         address, folder = door
         plate = folder / "plate.zarr"
         plate.mkdir()
-        (plate / ".zattrs").write_text(json.dumps({"plate": {
-            "rows": [{"name": "A"}], "columns": [{"name": "1"}],
-            "wells": [{"path": "A/1", "rowIndex": 0, "columnIndex": 0}],
-        }}))
+        (plate / ".zattrs").write_text(
+            json.dumps(
+                {
+                    "plate": {
+                        "rows": [{"name": "A"}],
+                        "columns": [{"name": "1"}],
+                        "wells": [{"path": "A/1", "rowIndex": 0, "columnIndex": 0}],
+                    }
+                }
+            )
+        )
         (plate / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
         well = plate / "A" / "1"
         well.mkdir(parents=True)

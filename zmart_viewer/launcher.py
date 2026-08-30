@@ -47,7 +47,7 @@ def open_window(
     width: int = 1500,
     height: int = 950,
     data_dir: Path | None = None,
-    store: str | list[str] = "demo.zarr",
+    store: str | list[str] | None = None,
     window: tuple[float, float] | None = None,
     depth_samples: int = 256,
     chrome: bool = False,

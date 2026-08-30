@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 import zarr
 from PIL import Image
+
 from zmart_viewer.server import make_server
 
 # How far apart the two views may be before an operator would notice. A few
@@ -43,21 +44,43 @@ def _one_bright_plane(path):
     data = np.zeros((1, 1, 96, 96), "uint16")
     data[0, 0, 16:80, 16:80] = 5000
     zarr.open_group(str(path), mode="w", zarr_format=2).create_array(
-        "0", shape=data.shape, chunks=(1, 1, 96, 96), dtype="uint16")[:] = data
-    (path / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 1.0, 0.5, 0.5]}]}],
-        }],
-        "omero": {"channels": [{
-            "label": "ch0", "color": "00FF66",
-            "window": {"min": 0, "max": 65535, "start": 500, "end": 5200}}]},
-    }), encoding="utf-8")
+        "0", shape=data.shape, chunks=(1, 1, 96, 96), dtype="uint16"
+    )[:] = data
+    (path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 1.0, 0.5, 0.5]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {
+                            "label": "ch0",
+                            "color": "00FF66",
+                            "window": {"min": 0, "max": 65535, "start": 500, "end": 5200},
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -67,14 +90,12 @@ def flat_page(browser, built_dist, tmp_path):
     data = tmp_path / "flat"
     data.mkdir()
     _one_bright_plane(data / "flat_pos001.ome.zarr")
-    server = make_server(port=0, data_dir=data, site_dir=built_dist,
-                         store="flat_pos001.ome.zarr")
+    server = make_server(port=0, data_dir=data, site_dir=built_dist, store="flat_pos001.ome.zarr")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1300, "height": 1000})
     try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         page.wait_for_timeout(4000)
         page.get_by_role("button", name="Overview", exact=True).click()
@@ -92,23 +113,21 @@ def _where_the_block_is(page, saved):
     The toggle, the scale bar and the depth slider are drawn over the canvas
     and would otherwise be measured as though they were specimen.
     """
-    import io
 
-    page.screenshot(path=str(saved),
-                    clip={"x": 0, "y": 0, "width": 1020, "height": 1000})
+    page.screenshot(path=str(saved), clip={"x": 0, "y": 0, "width": 1020, "height": 1000})
     shot = np.array(Image.open(saved).convert("RGB")).astype(int)
-    shot[:60, :260] = 0      # the 2D / 3D / Overview toggle
-    shot[:45, 860:] = 0      # the scale bar
-    shot[:, 955:] = 0        # the depth slider
-    tinted = ((shot[:, :, 1] > shot[:, :, 0]) & (shot[:, :, 1] > shot[:, :, 2])
-              & (shot[:, :, 1] > 60))
+    shot[:60, :260] = 0  # the 2D / 3D / Overview toggle
+    shot[:45, 860:] = 0  # the scale bar
+    shot[:, 955:] = 0  # the depth slider
+    tinted = (
+        (shot[:, :, 1] > shot[:, :, 0]) & (shot[:, :, 1] > shot[:, :, 2]) & (shot[:, :, 1] > 60)
+    )
     rows, columns = np.where(tinted)
     assert rows.size, f"nothing was drawn at all in {saved.name}"
     return {
         "width": int(columns.max() - columns.min() + 1),
         "height": int(rows.max() - rows.min() + 1),
-        "centre": ((columns.min() + columns.max()) / 2,
-                   (rows.min() + rows.max()) / 2),
+        "centre": ((columns.min() + columns.max()) / 2, (rows.min() + rows.max()) / 2),
     }
 
 
@@ -127,8 +146,9 @@ def test_pressing_three_d_on_one_plane_shows_the_same_picture(flat_page, tmp_pat
             f"{volume[side]} in the volume, {apart:.0%} apart -- pressing 3D "
             "resized the specimen"
         )
-    moved = max(abs(volume["centre"][0] - flat["centre"][0]),
-                abs(volume["centre"][1] - flat["centre"][1]))
+    moved = max(
+        abs(volume["centre"][0] - flat["centre"][0]), abs(volume["centre"][1] - flat["centre"][1])
+    )
     assert moved < SAME_PLACE_WITHIN, (
         f"the block sits at {flat['centre']} in the flat view and "
         f"{volume['centre']} in the volume, {moved:.0f} pixels away -- "

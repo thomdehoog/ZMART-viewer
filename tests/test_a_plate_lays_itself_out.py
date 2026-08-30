@@ -42,18 +42,47 @@ def _write_a_field(group: Path, value: int) -> None:
     """One field of a well: an ordinary small image, no translation."""
     picture = np.full(FIELD, value, "uint16")
     array = zarr.create_array(
-        store=str(group / "0"), shape=FIELD, chunks=FIELD, dtype="uint16",
-        zarr_format=3, dimension_names=["z", "y", "x"], overwrite=True)
+        store=str(group / "0"),
+        shape=FIELD,
+        chunks=FIELD,
+        dtype="uint16",
+        zarr_format=3,
+        dimension_names=["z", "y", "x"],
+        overwrite=True,
+    )
     array[:] = picture
-    (group / "zarr.json").write_text(json.dumps({
-        "attributes": {"ome": {"version": "0.5", "multiscales": [{
-            "name": group.name, "type": "nearest",
-            "axes": [{"name": one, "type": "space", "unit": "micrometer"}
-                     for one in ("z", "y", "x")],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": list(VOXEL_UM)}]}],
-        }]}},
-        "zarr_format": 3, "node_type": "group"}), encoding="utf-8")
+    (group / "zarr.json").write_text(
+        json.dumps(
+            {
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "multiscales": [
+                            {
+                                "name": group.name,
+                                "type": "nearest",
+                                "axes": [
+                                    {"name": one, "type": "space", "unit": "micrometer"}
+                                    for one in ("z", "y", "x")
+                                ],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": list(VOXEL_UM)}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                },
+                "zarr_format": 3,
+                "node_type": "group",
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def a_small_plate(folder: Path, *, fields_per_well: int = 2) -> Path:
@@ -72,20 +101,46 @@ def a_small_plate(folder: Path, *, fields_per_well: int = 2) -> Path:
             group = well / str(field)
             group.mkdir()
             _write_a_field(group, 1000 * (number + 1) + 100 * field)
-        (well / "zarr.json").write_text(json.dumps({
-            "attributes": {"ome": {"version": "0.5", "well": {
-                "images": [{"path": str(field)}
-                           for field in range(fields_per_well)]}}},
-            "zarr_format": 3, "node_type": "group"}), encoding="utf-8")
-    (plate / "zarr.json").write_text(json.dumps({
-        "attributes": {"ome": {"version": "0.5", "plate": {
-            "name": "a small screen",
-            "rows": [{"name": "A"}, {"name": "B"}],
-            "columns": [{"name": "1"}, {"name": "2"}],
-            "wells": [{"path": path, "rowIndex": row, "columnIndex": column}
-                      for path, row, column in wells],
-        }}},
-        "zarr_format": 3, "node_type": "group"}), encoding="utf-8")
+        (well / "zarr.json").write_text(
+            json.dumps(
+                {
+                    "attributes": {
+                        "ome": {
+                            "version": "0.5",
+                            "well": {
+                                "images": [{"path": str(field)} for field in range(fields_per_well)]
+                            },
+                        }
+                    },
+                    "zarr_format": 3,
+                    "node_type": "group",
+                }
+            ),
+            encoding="utf-8",
+        )
+    (plate / "zarr.json").write_text(
+        json.dumps(
+            {
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "plate": {
+                            "name": "a small screen",
+                            "rows": [{"name": "A"}, {"name": "B"}],
+                            "columns": [{"name": "1"}, {"name": "2"}],
+                            "wells": [
+                                {"path": path, "rowIndex": row, "columnIndex": column}
+                                for path, row, column in wells
+                            ],
+                        },
+                    }
+                },
+                "zarr_format": 3,
+                "node_type": "group",
+            }
+        ),
+        encoding="utf-8",
+    )
     return folder
 
 
@@ -131,12 +186,10 @@ def test_a_folder_that_is_itself_a_plate_lays_out_its_wells(tmp_path):
 def test_a_plate_builds_and_each_field_serves_its_own_pixels(tmp_path):
     """The built plate is an ordinary picture; wells answer as themselves."""
     folder = a_small_plate(tmp_path)
-    store = declare_a_built_picture(tmp_path / "views", folder, name="plate",
-                                    piece=32)
+    store = declare_a_built_picture(tmp_path / "views", folder, name="plate", piece=32)
     try:
         mosaic = read_the_transfer(folder)
-        corners = {tile.name: tile.copies[0].corner_um[1:]
-                   for tile in mosaic.tiles}
+        corners = {tile.name: tile.copies[0].corner_um[1:] for tile in mosaic.tiles}
         piece = 32  # one field is exactly one piece at this size
         decode = Zstd().decode
         for name, expected in (("A1-0", 1000), ("A2-1", 2100), ("B1-0", 3000)):
@@ -146,8 +199,7 @@ def test_a_plate_builds_and_each_field_serves_its_own_pixels(tmp_path):
             assert body is not None, f"{name} served nothing"
             values = np.frombuffer(decode(body), "uint16")
             assert values.max() == expected, (
-                f"{name} at piece ({row}, {column}) served {values.max()}, "
-                f"not its own {expected}"
+                f"{name} at piece ({row}, {column}) served {values.max()}, not its own {expected}"
             )
     finally:
         served.forget(store)
@@ -174,12 +226,10 @@ def test_no_two_plate_tiles_claim_the_same_ground(tmp_path):
     boxes = []
     for tile in mosaic.tiles:
         _, y, x = tile.copies[0].corner_um
-        boxes.append((tile.name, y, y + FIELD[1] * VOXEL_UM[1],
-                      x, x + FIELD[2] * VOXEL_UM[2]))
+        boxes.append((tile.name, y, y + FIELD[1] * VOXEL_UM[1], x, x + FIELD[2] * VOXEL_UM[2]))
     for i, (name_a, top_a, bottom_a, left_a, right_a) in enumerate(boxes):
-        for name_b, top_b, bottom_b, left_b, right_b in boxes[i + 1:]:
-            apart = (bottom_a <= top_b or bottom_b <= top_a
-                     or right_a <= left_b or right_b <= left_a)
+        for name_b, top_b, bottom_b, left_b, right_b in boxes[i + 1 :]:
+            apart = bottom_a <= top_b or bottom_b <= top_a or right_a <= left_b or right_b <= left_a
             assert apart, f"{name_a} and {name_b} overlap"
 
 
@@ -206,24 +256,47 @@ def a_plate_of_placed_fields(folder: Path) -> Path:
             _write_a_field(group, 1000 * (number + 1) + 100 * field)
             described = json.loads((group / "zarr.json").read_text())
             described["attributes"]["ome"]["multiscales"][0]["datasets"][0][
-                "coordinateTransformations"].append({
-                    "type": "translation",
-                    "translation": [0.0, 5.0 + field * field_h, 3.0]})
-            (group / "zarr.json").write_text(json.dumps(described),
-                                             encoding="utf-8")
-        (well / "zarr.json").write_text(json.dumps({
-            "attributes": {"ome": {"version": "0.5", "well": {
-                "images": [{"path": str(field)} for field in range(3)]}}},
-            "zarr_format": 3, "node_type": "group"}), encoding="utf-8")
-    (plate / "zarr.json").write_text(json.dumps({
-        "attributes": {"ome": {"version": "0.5", "plate": {
-            "name": "a placed screen",
-            "rows": [{"name": "A"}, {"name": "B"}],
-            "columns": [{"name": "1"}, {"name": "2"}],
-            "wells": [{"path": path, "rowIndex": row, "columnIndex": column}
-                      for path, row, column in wells],
-        }}},
-        "zarr_format": 3, "node_type": "group"}), encoding="utf-8")
+                "coordinateTransformations"
+            ].append({"type": "translation", "translation": [0.0, 5.0 + field * field_h, 3.0]})
+            (group / "zarr.json").write_text(json.dumps(described), encoding="utf-8")
+        (well / "zarr.json").write_text(
+            json.dumps(
+                {
+                    "attributes": {
+                        "ome": {
+                            "version": "0.5",
+                            "well": {"images": [{"path": str(field)} for field in range(3)]},
+                        }
+                    },
+                    "zarr_format": 3,
+                    "node_type": "group",
+                }
+            ),
+            encoding="utf-8",
+        )
+    (plate / "zarr.json").write_text(
+        json.dumps(
+            {
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "plate": {
+                            "name": "a placed screen",
+                            "rows": [{"name": "A"}, {"name": "B"}],
+                            "columns": [{"name": "1"}, {"name": "2"}],
+                            "wells": [
+                                {"path": path, "rowIndex": row, "columnIndex": column}
+                                for path, row, column in wells
+                            ],
+                        },
+                    }
+                },
+                "zarr_format": 3,
+                "node_type": "group",
+            }
+        ),
+        encoding="utf-8",
+    )
     return folder
 
 
@@ -254,18 +327,15 @@ def test_fields_keep_the_places_their_writer_recorded(tmp_path):
         "the wells are one field wide, so their columns must step by about "
         "one field plus the gap -- not by the fallback grid's square"
     )
-    assert b1_y > 3 * field_h, (
-        "well B1 must clear the whole of well A1, which is three fields tall"
-    )
+    assert b1_y > 3 * field_h, "well B1 must clear the whole of well A1, which is three fields tall"
     # And no two fields may overlap, exactly as on a grid-laid plate.
     boxes = []
     for tile in mosaic.tiles:
         _, y, x = tile.copies[0].corner_um
         boxes.append((tile.name, y, y + field_h, x, x + field_w))
     for i, (name_a, top_a, bottom_a, left_a, right_a) in enumerate(boxes):
-        for name_b, top_b, bottom_b, left_b, right_b in boxes[i + 1:]:
-            apart = (bottom_a <= top_b or bottom_b <= top_a
-                     or right_a <= left_b or right_b <= left_a)
+        for name_b, top_b, bottom_b, left_b, right_b in boxes[i + 1 :]:
+            apart = bottom_a <= top_b or bottom_b <= top_a or right_a <= left_b or right_b <= left_a
             assert apart, f"{name_a} and {name_b} overlap"
 
 
@@ -287,14 +357,15 @@ def test_global_and_local_field_places_lay_out_the_same(tmp_path):
     for well in ("A/1", "A/2", "B/1"):
         row, column = ord(well[0]) - ord("A"), int(well[-1]) - 1
         for field in range(3):
-            described = json.loads(
-                (plate / well / str(field) / "zarr.json").read_text())
-            placing = described["attributes"]["ome"]["multiscales"][0][
-                "datasets"][0]["coordinateTransformations"][1]
+            described = json.loads((plate / well / str(field) / "zarr.json").read_text())
+            placing = described["attributes"]["ome"]["multiscales"][0]["datasets"][0][
+                "coordinateTransformations"
+            ][1]
             placing["translation"][1] += row * 3000.0
             placing["translation"][2] += column * 2000.0
             (plate / well / str(field) / "zarr.json").write_text(
-                json.dumps(described), encoding="utf-8")
+                json.dumps(described), encoding="utf-8"
+            )
     stage = read_the_transfer(folder)
 
     told = {tile.name: tile.copies[0].corner_um for tile in local.tiles}
@@ -310,21 +381,17 @@ def test_global_and_local_field_places_lay_out_the_same(tmp_path):
 def test_a_placed_field_serves_its_own_pixels(tmp_path):
     """The built plate answers a placed field with that field's own values."""
     folder = a_plate_of_placed_fields(tmp_path)
-    store = declare_a_built_picture(tmp_path / "views", folder, name="plate",
-                                    piece=32)
+    store = declare_a_built_picture(tmp_path / "views", folder, name="plate", piece=32)
     try:
         mosaic = read_the_transfer(folder)
-        corners = {tile.name: tile.copies[0].corner_um[1:]
-                   for tile in mosaic.tiles}
+        corners = {tile.name: tile.copies[0].corner_um[1:] for tile in mosaic.tiles}
         decode = Zstd().decode
         for name, expected in (("A1-2", 1200), ("B1-1", 3100)):
             row = int(corners[name][0] / VOXEL_UM[1]) // 32
             column = int(corners[name][1] / VOXEL_UM[2]) // 32
             body = served.built_bytes_behind(store, f"0/c/0/{row}/{column}")
             held = np.frombuffer(decode(body), "<u2")
-            assert held.max() == expected, (
-                f"{name} should answer {expected}, not {held.max()}"
-            )
+            assert held.max() == expected, f"{name} should answer {expected}, not {held.max()}"
     finally:
         served.forget(store)
 
@@ -365,23 +432,49 @@ def test_a_04_plate_reads_the_same_as_a_05_one(tmp_path):
         field.mkdir()
         group = zarr.open_group(str(field), mode="w", zarr_format=2)
         data = np.full(FIELD, 1000 * (number + 1), "uint16")
-        group.create_array("0", shape=FIELD, chunks=FIELD,
-                           dtype="uint16")[:] = data
-        (field / ".zattrs").write_text(json.dumps({"multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": one, "type": "space", "unit": "micrometer"}
-                     for one in ("z", "y", "x")],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": list(VOXEL_UM)}]}],
-        }]}), encoding="utf-8")
-        (well / ".zattrs").write_text(json.dumps({
-            "well": {"images": [{"path": "0"}]}}), encoding="utf-8")
-    (plate / ".zattrs").write_text(json.dumps({"plate": {
-        "rows": [{"name": "A"}, {"name": "B"}],
-        "columns": [{"name": "1"}, {"name": "2"}],
-        "wells": [{"path": path, "rowIndex": row, "columnIndex": column}
-                  for path, row, column in wells],
-    }}), encoding="utf-8")
+        group.create_array("0", shape=FIELD, chunks=FIELD, dtype="uint16")[:] = data
+        (field / ".zattrs").write_text(
+            json.dumps(
+                {
+                    "multiscales": [
+                        {
+                            "version": "0.4",
+                            "axes": [
+                                {"name": one, "type": "space", "unit": "micrometer"}
+                                for one in ("z", "y", "x")
+                            ],
+                            "datasets": [
+                                {
+                                    "path": "0",
+                                    "coordinateTransformations": [
+                                        {"type": "scale", "scale": list(VOXEL_UM)}
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (well / ".zattrs").write_text(
+            json.dumps({"well": {"images": [{"path": "0"}]}}), encoding="utf-8"
+        )
+    (plate / ".zattrs").write_text(
+        json.dumps(
+            {
+                "plate": {
+                    "rows": [{"name": "A"}, {"name": "B"}],
+                    "columns": [{"name": "1"}, {"name": "2"}],
+                    "wells": [
+                        {"path": path, "rowIndex": row, "columnIndex": column}
+                        for path, row, column in wells
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
     mosaic = read_the_transfer(tmp_path)
     corners = {tile.name: tile.copies[0].corner_um[1:] for tile in mosaic.tiles}
@@ -399,16 +492,18 @@ def door(built_dist, tmp_path):
     """A served viewer beside a folder holding one plate, for the door gates."""
     import threading
 
-    from zmart_viewer.server import make_server
     from test_open_and_close import _store
+
+    from zmart_viewer.server import make_server
 
     first = tmp_path / "overview"
     first.mkdir()
     _store(first / "overview_pos001.ome.zarr", channels=1)
     screen = tmp_path / "screenday"
     a_small_plate(screen)
-    server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -431,21 +526,22 @@ def test_a_plate_store_opened_directly_lays_itself_out(door):
     from test_a_dataset_is_relived_as_a_live_run import _post
 
     address, screen = door
-    status, answer = _post(address, "/api/stores/open",
-                           {"path": str(screen / "plate.ome.zarr")})
+    status, answer = _post(address, "/api/stores/open", {"path": str(screen / "plate.ome.zarr")})
     assert status == 200, answer
     # The scene's folder name follows the one naming rule every built view
     # follows, so the test can never disagree with the builder about it.
     scene = screen / "scenes" / the_scene_folder_name("plate")
     described = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))
     assert described["attributes"]["zmart"]["built_from"] == (
-        (screen / "plate.ome.zarr").as_posix()), (
-        "the scene must say which plate it was built from")
+        (screen / "plate.ome.zarr").as_posix()
+    ), "the scene must say which plate it was built from"
     # The heading keeps the view's full name: the suffix is what tells a
     # view from the raw data beside it (the operator asked, 2026-08-23).
-    composed = [one for one in answer.get("layers", [])
-                if one.get("kind") == "image"
-                and one.get("group") == scene.name]
+    composed = [
+        one
+        for one in answer.get("layers", [])
+        if one.get("kind") == "image" and one.get("group") == scene.name
+    ]
     assert len(composed) == 1, (
         "the laid-out scene is ONE composed picture; several rows means the "
         "raw plate's fields were served directly -- the "
@@ -470,21 +566,20 @@ def test_a_real_plate_lives_beside_other_data(door, tmp_path):
     a_small_plate(bench)
     (bench / "plate.ome.zarr").rename(bench / "HA_plate.zarr")
     _store(bench / "loose_pos001.ome.zarr", channels=1)
-    status, answer = _post(address, "/api/stores/open",
-                           {"path": str(bench / "HA_plate.zarr")})
+    status, answer = _post(address, "/api/stores/open", {"path": str(bench / "HA_plate.zarr")})
     assert status == 200, answer
     scene = bench / "scenes" / the_scene_folder_name("HA_plate")
     described = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))
     assert described["attributes"]["zmart"]["built_from"] == (
-        (bench / "HA_plate.zarr").as_posix()), (
-        "the scene must say it was built from the plate itself"
-    )
-    composed = [one for one in answer.get("layers", [])
-                if one.get("kind") == "image"
-                and one.get("group") == scene.name]
+        (bench / "HA_plate.zarr").as_posix()
+    ), "the scene must say it was built from the plate itself"
+    composed = [
+        one
+        for one in answer.get("layers", [])
+        if one.get("kind") == "image" and one.get("group") == scene.name
+    ]
     assert len(composed) == 1, (
-        "the served rows must draw the one composed scene, never the raw "
-        "plate's fields"
+        "the served rows must draw the one composed scene, never the raw plate's fields"
     )
 
 
@@ -502,12 +597,13 @@ def test_an_unbaked_scene_opens_at_a_measured_window(door):
     from test_a_dataset_is_relived_as_a_live_run import _post
 
     address, screen = door
-    status, answer = _post(address, "/api/stores/open",
-                           {"path": str(screen / "plate.ome.zarr")})
+    status, answer = _post(address, "/api/stores/open", {"path": str(screen / "plate.ome.zarr")})
     assert status == 200, answer
-    layer = next(one for one in answer["layers"]
-                 if one.get("kind") == "image"
-                 and one.get("group") == the_scene_folder_name("plate"))
+    layer = next(
+        one
+        for one in answer["layers"]
+        if one.get("kind") == "image" and one.get("group") == the_scene_folder_name("plate")
+    )
     window = layer["window"]
     assert (window["low"], window["high"]) != (0.0, 65535.0), (
         "the unbaked scene opened at the camera's full range -- nothing "
@@ -528,16 +624,15 @@ def test_a_scene_already_built_for_the_plate_is_reused(door):
     from test_a_dataset_is_relived_as_a_live_run import _post
 
     address, screen = door
-    scene = declare_a_built_picture(screen / "scenes",
-                                    screen / "plate.ome.zarr",
-                                    name="plate", piece=32, bake=True)
-    baked = sorted(str(one.relative_to(scene))
-                   for one in scene.rglob("*") if one.is_file())
-    status, answer = _post(address, "/api/stores/open",
-                           {"path": str(screen / "plate.ome.zarr")})
+    scene = declare_a_built_picture(
+        screen / "scenes", screen / "plate.ome.zarr", name="plate", piece=32, bake=True
+    )
+    baked = sorted(str(one.relative_to(scene)) for one in scene.rglob("*") if one.is_file())
+    status, answer = _post(address, "/api/stores/open", {"path": str(screen / "plate.ome.zarr")})
     assert status == 200, answer
-    assert sorted(str(one.relative_to(scene))
-                  for one in scene.rglob("*") if one.is_file()) == baked, (
+    assert (
+        sorted(str(one.relative_to(scene)) for one in scene.rglob("*") if one.is_file()) == baked
+    ), (
         "opening the plate must not rebuild or strip the scene that "
         "already stands -- the baked ground was paid for once"
     )

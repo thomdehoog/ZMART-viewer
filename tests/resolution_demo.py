@@ -57,9 +57,7 @@ def _add_sphere_shell(volume: np.ndarray) -> None:
     """A hollow shell, so there is real 3-D structure to rotate around."""
     zz, yy, xx = np.ogrid[0:_DEPTH, 0:_HEIGHT, 0:_WIDTH]
     radius = np.sqrt(
-        ((zz - _DEPTH / 2) * 1.0) ** 2
-        + (yy - _HEIGHT * 0.78) ** 2
-        + (xx - _WIDTH / 2) ** 2
+        ((zz - _DEPTH / 2) * 1.0) ** 2 + (yy - _HEIGHT * 0.78) ** 2 + (xx - _WIDTH / 2) ** 2
     )
     shell = (radius > 38) & (radius < 42)
     volume[shell] = _SIGNAL
@@ -119,7 +117,9 @@ def write_resolution_target(path: str | Path) -> Path:
     for index, volume in enumerate(levels):
         z, y, x = volume.shape
         array = group.create_array(
-            str(index), shape=volume.shape, chunks=(min(z, 64), min(y, 128), min(x, 128)),
+            str(index),
+            shape=volume.shape,
+            chunks=(min(z, 64), min(y, 128), min(x, 128)),
             dtype="uint16",
         )
         array[:] = volume

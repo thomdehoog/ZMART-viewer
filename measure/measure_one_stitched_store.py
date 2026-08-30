@@ -7,7 +7,7 @@ one store that stands for the whole specimen, with every position written into i
 inside it.
 
 The second shape is the one this project aims for, and it is reached by writing into it
-from the start rather than by joining a finished folder together afterwards. `oldwriter`
+from the start rather than by joining a finished folder together afterwards. The elder writer
 declares the image before the first tile is taken and the microscope writes each tile
 straight into its place, so the single store exists from the very first tile. Copying a
 finished run into one image is a different route to the same shape, and it is not offered
@@ -66,9 +66,10 @@ sys.path.insert(0, str(HERE / "tests"))
 
 sys.path.insert(0, str(HERE))
 
-from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
+from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
+
 from zmart_viewer.server import make_server  # noqa: E402
 
 # The specimen being described: eight tiles in each direction, each tile 512 voxels
@@ -227,8 +228,7 @@ def write_mosaic_position(store: Path, index: int, across: int) -> None:
                                     {"type": "scale", "scale": [1.0, *VOXEL_UM]},
                                     {
                                         "type": "translation",
-                                        "translation": [0.0, 0.0, row * step,
-                                                        column * step],
+                                        "translation": [0.0, 0.0, row * step, column * step],
                                     },
                                 ],
                             }
@@ -267,21 +267,22 @@ async ({ seconds }) => {
 def look(pw, root: Path, names, label: str, budget: int = 600) -> dict:
     from pixels import colour_spread, image_middle
 
-    httpd = make_server(port=0, data_dir=root, site_dir=HERE / "app" / "page" / "dist",
-                        store=names, live=False)
+    httpd = make_server(
+        port=0, data_dir=root, site_dir=HERE / "app" / "page" / "dist", store=names, live=False
+    )
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{httpd.server_address[1]}"
     browser = pw.chromium.launch(
-        args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"])
+        args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+    )
     page = browser.new_page(viewport={"width": 1100, "height": 800})
     asked: list[str] = []
     page.on("request", lambda request: asked.append(request.url))
     try:
         started = time.monotonic()
         page.goto(url, wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=budget * 1000)
+        page.wait_for_function("() => window.zmartConfig !== undefined", timeout=budget * 1000)
         described = time.monotonic() - started
 
         drawn = None
@@ -297,8 +298,9 @@ def look(pw, root: Path, names, label: str, budget: int = 600) -> dict:
         # thing for both shapes -- otherwise the mosaic would look good simply by having
         # drawn its first few tiles.
         while time.monotonic() < deadline:
-            handed_over = page.evaluate("() => !window.zmartSourcesWaiting "
-                                        "|| window.zmartSourcesWaiting() === 0")
+            handed_over = page.evaluate(
+                "() => !window.zmartSourcesWaiting || window.zmartSourcesWaiting() === 0"
+            )
             # And read, not merely handed over: `zmartSourcesWaiting()` empties when
             # the last URL has been passed to the engine, which on a mosaic of many
             # stores is long before they have resolved.
@@ -339,8 +341,14 @@ def main() -> int:
         one = Path(tempfile.mkdtemp(prefix="zmart-stitched-"))
         try:
             write_stitched(one / "overview_whole.ome.zarr")
-            rows.append(look(pw, one, ["overview_whole.ome.zarr"],
-                             f"one whole-specimen store, {FULL}³ voxels"))
+            rows.append(
+                look(
+                    pw,
+                    one,
+                    ["overview_whole.ome.zarr"],
+                    f"one whole-specimen store, {FULL}³ voxels",
+                )
+            )
         finally:
             shutil.rmtree(one, ignore_errors=True)
 
@@ -348,11 +356,15 @@ def main() -> int:
         try:
             across = max(1, int(MOSAIC_POSITIONS**0.5))
             for index in range(MOSAIC_POSITIONS):
-                write_mosaic_position(many / f"overview_pos{index:05d}.ome.zarr",
-                                      index, across)
-            rows.append(look(pw, many,
-                             sorted(p.name for p in many.glob("*.ome.zarr")),
-                             f"{MOSAIC_POSITIONS} separate positions"))
+                write_mosaic_position(many / f"overview_pos{index:05d}.ome.zarr", index, across)
+            rows.append(
+                look(
+                    pw,
+                    many,
+                    sorted(p.name for p in many.glob("*.ome.zarr")),
+                    f"{MOSAIC_POSITIONS} separate positions",
+                )
+            )
         finally:
             shutil.rmtree(many, ignore_errors=True)
 
@@ -367,13 +379,17 @@ def main() -> int:
                 print(f"nothing readable as a store at {real}; skipping that row")
 
     print()
-    print(f"{'what':>34} {'config':>8} {'1st pixel':>11} {'settled':>9} "
-          f"{'requests':>9} {'stores':>7} {'draw layers':>12} {'frames/5s':>10}")
+    print(
+        f"{'what':>34} {'config':>8} {'1st pixel':>11} {'settled':>9} "
+        f"{'requests':>9} {'stores':>7} {'draw layers':>12} {'frames/5s':>10}"
+    )
     for row in rows:
         pixel = f"{row['first_pixel_s']}s" if row["first_pixel_s"] else "never"
-        print(f"{row['what']:>34} {row['config_s']:>7}s {pixel:>11} "
-              f"{row['settled_s']:>8}s {row['requests']:>9} {row['stores']:>7} "
-              f"{row['drawingLayers']:>12} {row['frames']:>10}")
+        print(
+            f"{row['what']:>34} {row['config_s']:>7}s {pixel:>11} "
+            f"{row['settled_s']:>8}s {row['requests']:>9} {row['stores']:>7} "
+            f"{row['drawingLayers']:>12} {row['frames']:>10}"
+        )
     print()
     print(
         "The one whole-specimen store describes far more data than the mosaic and is\n"

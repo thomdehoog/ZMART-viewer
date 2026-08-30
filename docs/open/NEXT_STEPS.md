@@ -403,7 +403,7 @@ because a moment nothing was written to takes no space, but depth is the one axi
 smaller copies do *not* shrink, and the coarsest copy is what gets read to judge how
 bright an image should look — so a generous depth ought to cost something real. It does.
 It simply costs it in a different currency than anyone expected, and the measurement is
-in `measure_declared_room.py`.
+in `measure_declared_room.py` (since retired with the elder writer; the finding stands, re-provable through the record's generous time room).
 
 **What it does not cost.** Not disk: the same four tiles occupied 482 MB whether the
 canvas around them was declared at the size imaged or thirty-two times larger, in every

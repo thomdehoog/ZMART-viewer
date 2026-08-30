@@ -275,9 +275,7 @@ def main() -> int:
     print(f"{'positions':>10} {'config':>9} {'first pixel':>12} {'requests':>10}")
     for row in rows:
         drawn = f"{row['first_pixel_s']:.1f}s" if row["first_pixel_s"] else "never"
-        print(
-            f"{row['positions']:>10} {row['config_s']:>8.1f}s {drawn:>12} {row['requests']:>10}"
-        )
+        print(f"{row['positions']:>10} {row['config_s']:>8.1f}s {drawn:>12} {row['requests']:>10}")
     print()
     print(
         "If first pixel grows roughly in step with the number of positions, the\n"

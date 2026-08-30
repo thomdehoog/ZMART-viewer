@@ -12,8 +12,9 @@ from __future__ import annotations
 import threading
 
 import pytest
-from zmart_viewer.server import make_server
 from driving import colour_shown, pick_colormap  # noqa: E402
+
+from zmart_viewer.server import make_server
 
 # What the engine ended up holding, read back from the engine itself rather than
 # from the panel. The contrast window is deliberately *not* part of the shader
@@ -130,8 +131,7 @@ def test_recolouring_a_layer_reaches_the_shader(two_channel_page):
     layer = two_channel_page.evaluate(_ENGINE_LAYERS)[0]
     assert layer["controls"]["color"] == "#33ccff"
     assert layer["shader"] == before, (
-        "a colour is a number sent to the program, so choosing one must not "
-        "rewrite the program"
+        "a colour is a number sent to the program, so choosing one must not rewrite the program"
     )
 
 
@@ -151,16 +151,13 @@ def test_the_row_swatch_shows_the_choice_and_opens_the_list(two_channel_page):
         f"the row swatch shows {background}, not the cyan just chosen"
     )
     assert swatch.evaluate("(el) => el.tagName") == "BUTTON", (
-        "the square is the control now, so it has to be something a keyboard "
-        "can reach and press"
+        "the square is the control now, so it has to be something a keyboard can reach and press"
     )
     # And a chosen colour MAP shows on the square too, as its own gradient --
     # the square always mirrors the one lookup-table control.
     pick_colormap(two_channel_page, "Ch488", "viridis")
     background = swatch.evaluate("(el) => getComputedStyle(el).backgroundImage")
-    assert "gradient" in background, (
-        f"the swatch shows {background!r}, not the chosen colour map"
-    )
+    assert "gradient" in background, f"the swatch shows {background!r}, not the chosen colour map"
 
 
 def test_colour_survives_the_three_d_toggle(two_channel_page):
@@ -325,9 +322,7 @@ def test_the_bars_on_screen_are_the_brightness_the_server_measured(two_channel_p
     measurement does: the tallest bar has to sit over the fullest bin, and a bar of
     no height has to sit over every bin that counted nothing.
     """
-    measured = two_channel_page.evaluate(
-        "() => window.zmartConfig.layers[0].histogram.counts"
-    )
+    measured = two_channel_page.evaluate("() => window.zmartConfig.layers[0].histogram.counts")
     drawn = two_channel_page.evaluate(_HISTOGRAM_BARS, "histogram Ch488")
     assert len(drawn) == len(measured), "one bar per measured bin"
     assert drawn.index(max(drawn)) == measured.index(max(measured)), (
@@ -345,9 +340,7 @@ def test_auto_contrast_restores_the_measured_window(two_channel_page):
     _set_range(two_channel_page, "max Ch488", 9000)
     two_channel_page.click("[aria-label='auto contrast Ch488']")
     two_channel_page.wait_for_timeout(800)
-    expected = two_channel_page.evaluate(
-        "() => window.zmartConfig.layers[0].histogram.autoWindow"
-    )
+    expected = two_channel_page.evaluate("() => window.zmartConfig.layers[0].histogram.autoWindow")
     actual = two_channel_page.evaluate("() => window.zmartLayerState[0].window")
     assert actual == expected
     # Compared loosely on purpose: the engine writes the window out with fewer
@@ -380,9 +373,9 @@ def test_the_saturation_bars_in_the_histogram_can_be_dragged(two_channel_page):
       const track = document.querySelector("[aria-label='min Ch488']");
       return { min: Number(track.min), max: Number(track.max) };
     }""")
+
     def across(value):
-        return box["x"] + box["width"] * (
-            (value - axis["min"]) / (axis["max"] - axis["min"]))
+        return box["x"] + box["width"] * ((value - axis["min"]) / (axis["max"] - axis["min"]))
 
     low0, high0 = before
     reach = (high0 - low0) * 0.3
@@ -394,9 +387,7 @@ def test_the_saturation_bars_in_the_histogram_can_be_dragged(two_channel_page):
     page.mouse.up()
     page.wait_for_timeout(600)
     lifted = _window_in_engine(page)
-    assert lifted[0] > before[0], (
-        "dragging the left bar right must raise the black point"
-    )
+    assert lifted[0] > before[0], "dragging the left bar right must raise the black point"
     assert lifted[1] == pytest.approx(before[1]), (
         "the white point must hold still while the black point is dragged"
     )
@@ -408,9 +399,7 @@ def test_the_saturation_bars_in_the_histogram_can_be_dragged(two_channel_page):
     page.mouse.up()
     page.wait_for_timeout(600)
     lowered = _window_in_engine(page)
-    assert lowered[1] < lifted[1], (
-        "dragging the right bar left must lower the white point"
-    )
+    assert lowered[1] < lifted[1], "dragging the right bar left must lower the white point"
     assert lowered[0] == pytest.approx(lifted[0]), (
         "the black point must hold still while the white point is dragged"
     )
@@ -439,9 +428,10 @@ def test_the_histogram_dims_the_brightness_outside_the_window(two_channel_page):
     }""")
     hist = page.evaluate("() => window.zmartConfig.layers[0].histogram")
     low0 = _window_in_engine(page)[0]
+
     def across(value):
-        return box["x"] + box["width"] * (
-            (value - axis["min"]) / (axis["max"] - axis["min"]))
+        return box["x"] + box["width"] * ((value - axis["min"]) / (axis["max"] - axis["min"]))
+
     page.mouse.move(across(low0 + (hist["high"] - low0) * 0.02), middle)
     page.mouse.down()
     page.mouse.move(across((hist["low"] + hist["high"]) / 2), middle, steps=6)
@@ -465,7 +455,7 @@ def test_the_histogram_dims_the_brightness_outside_the_window(two_channel_page):
     # The dimmed bars sit at the edges, the full ones in one middle stretch.
     inside = [opacity == full for opacity in opacities]
     first, last = inside.index(True), len(inside) - 1 - inside[::-1].index(True)
-    assert all(inside[first:last + 1]), (
+    assert all(inside[first : last + 1]), (
         "the full-brightness stretch must be contiguous -- it is the window"
     )
     assert first > 0, "bars below the black point must be dimmed"
@@ -502,8 +492,7 @@ def test_the_numbers_beside_the_sliders_can_be_typed_into(two_channel_page):
     assert box.input_value() != "1234", "sliding must update the number box"
 
 
-def test_auto_is_a_plain_press_that_leaves_nothing_switched_on(
-        browser, built_dist, tmp_path):
+def test_auto_is_a_plain_press_that_leaves_nothing_switched_on(browser, built_dist, tmp_path):
     """Auto sets the window from what is on screen. It does not stay on.
 
     It was briefly a light: on while the window matched its reading, and a
@@ -527,40 +516,50 @@ def test_auto_is_a_plain_press_that_leaves_nothing_switched_on(
     store = quiet / "overview_pos001.ome.zarr"
     store.mkdir()
     group = zarr.open_group(str(store), mode="w", zarr_format=2)
-    values = (np.random.default_rng(7).integers(90, 400, (1, 4, 64, 64))
-              .astype(np.uint16))
-    group.create_array("0", shape=values.shape, chunks=(1, 1, 64, 64),
-                       dtype="uint16")[:] = values
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 2.0, 0.35, 0.35]}]}],
-        }],
-        "omero": {"channels": [{"label": "ch0", "color": "00FF66"}]},
-    }), encoding="utf-8")
-    server = make_server(port=0, data_dir=quiet, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    values = np.random.default_rng(7).integers(90, 400, (1, 4, 64, 64)).astype(np.uint16)
+    group.create_array("0", shape=values.shape, chunks=(1, 1, 64, 64), dtype="uint16")[:] = values
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 2.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {"channels": [{"label": "ch0", "color": "00FF66"}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    server = make_server(
+        port=0, data_dir=quiet, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
     try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=30_000)
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         auto = page.locator("[aria-label='auto contrast ch0']")
         auto.wait_for(timeout=10_000)
         assert auto.get_attribute("aria-pressed") is None, (
             "Auto is a press, not a state: it must not report itself pressed"
         )
-        assert auto.is_enabled(), (
-            "Auto must be pressable at rest: that press is the whole point"
-        )
+        assert auto.is_enabled(), "Auto must be pressable at rest: that press is the whole point"
         auto.click()
         page.wait_for_timeout(1_200)
         once = page.evaluate("() => window.zmartLayerState[0].window")
@@ -568,17 +567,13 @@ def test_auto_is_a_plain_press_that_leaves_nothing_switched_on(
             f"Auto left the window at {once}, which is the camera's whole "
             "range rather than a measurement"
         )
-        assert auto.get_attribute("aria-pressed") is None, (
-            "Auto lit itself up after the press"
-        )
+        assert auto.get_attribute("aria-pressed") is None, "Auto lit itself up after the press"
 
         auto.click()
         page.wait_for_timeout(1_200)
         twice = page.evaluate("() => window.zmartLayerState[0].window")
-        assert (abs(twice["low"] - once["low"]) < 0.5
-                and abs(twice["high"] - once["high"]) < 0.5), (
-            f"the second press moved the window from {once} to {twice}, so "
-            "Auto is still a toggle"
+        assert abs(twice["low"] - once["low"]) < 0.5 and abs(twice["high"] - once["high"]) < 0.5, (
+            f"the second press moved the window from {once} to {twice}, so Auto is still a toggle"
         )
     finally:
         page.close()
@@ -586,8 +581,7 @@ def test_auto_is_a_plain_press_that_leaves_nothing_switched_on(
         thread.join(timeout=5)
 
 
-def test_channels_of_one_picture_blend_like_light(browser, built_dist,
-                                                  tmp_path):
+def test_channels_of_one_picture_blend_like_light(browser, built_dist, tmp_path):
     """Channel rows of one picture sum additively; stitched rows still cover.
 
     On a real four-channel plate the top channel's coverage alpha hid the
@@ -620,21 +614,21 @@ def test_channels_of_one_picture_blend_like_light(browser, built_dist,
     stitched = tmp_path / "stitched"
     stitched.mkdir()
     _store(stitched / "overview_pos001.ome.zarr", channels=1)
-    server = make_server(port=0, data_dir=channels, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=channels, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
     try:
         address = f"http://127.0.0.1:{server.server_address[1]}"
         page.goto(address, wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=30_000)
+        page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         status, _ = _post(address, "/api/stores/open", {"path": str(stitched)})
         assert status == 200
         page.wait_for_function(
-            "() => window.zmartConfig.groups.includes('stitched')",
-            timeout=30_000)
+            "() => window.zmartConfig.groups.includes('stitched')", timeout=30_000
+        )
         # And now it grows, as an acquisition does.
         _store(stitched / "overview_pos002.ome.zarr", channels=1)
         page.evaluate(ANNOUNCE)
@@ -642,7 +636,8 @@ def test_channels_of_one_picture_blend_like_light(browser, built_dist,
             """() => window.zmartViewer.layerManager.managedLayers.some(
                  (m) => m.name.startsWith('stitched')
                         && (m.layer?.dataSources || []).length > 1)""",
-            timeout=30_000)
+            timeout=30_000,
+        )
         page.wait_for_timeout(800)
         blends = page.evaluate("""() => {
             const said = {};
@@ -668,8 +663,7 @@ def test_channels_of_one_picture_blend_like_light(browser, built_dist,
                 )
         kinds = {told["sources"] > 1 for told in blends.values()}
         assert kinds == {True, False}, (
-            f"the gate needs both a single-source and a stitched row to "
-            f"mean anything; saw {blends}"
+            f"the gate needs both a single-source and a stitched row to mean anything; saw {blends}"
         )
     finally:
         page.close()
@@ -694,14 +688,13 @@ def test_the_colour_control_is_the_colour_itself(two_channel_page):
     assert page.locator(f"[aria-label='{old_name}']").count() == 0, (
         "the old name is still on the page, so there are two names for one thing"
     )
-    assert page.locator("[aria-label='layer panel']").get_by_text(
-        "colormap", exact=False).count() == 0, (
-        "the labelled row is back; the colour is meant to be its own control"
-    )
+    assert (
+        page.locator("[aria-label='layer panel']").get_by_text("colormap", exact=False).count() == 0
+    ), "the labelled row is back; the colour is meant to be its own control"
 
 
 def test_a_channel_can_be_painted_any_colour_at_all(two_channel_page):
-    """"Custom" at the head of the list, so the named colours are not the limit.
+    """ "Custom" at the head of the list, so the named colours are not the limit.
 
     Seven named colours are a quick pick, not the whole of what a specimen
     might need -- and on a picture of many channels the named list runs out
@@ -722,9 +715,7 @@ def test_a_channel_can_be_painted_any_colour_at_all(two_channel_page):
     }""")
     page.wait_for_timeout(800)
     held = page.evaluate(_ENGINE_LAYERS)[0]["controls"]["color"]
-    assert held == "#ff8800", (
-        f"the channel is painted {held}, not the colour that was picked"
-    )
+    assert held == "#ff8800", f"the channel is painted {held}, not the colour that was picked"
 
 
 def test_picking_a_colour_puts_aside_the_colour_map(two_channel_page):
@@ -789,7 +780,8 @@ def test_a_picked_colour_is_never_shown_under_a_name_it_is_not(two_channel_page)
     page.locator("[aria-label='colour Ch488']").click()
     page.wait_for_timeout(200)
     claimed = page.eval_on_selector_all(
-        "[role='option'][aria-selected='true']", "els => els.map(e => e.innerText.trim())")
+        "[role='option'][aria-selected='true']", "els => els.map(e => e.innerText.trim())"
+    )
     assert claimed == [], (
         f"a colour picked by hand is being shown as {claimed}, which is a "
         "name the operator never chose"
@@ -813,7 +805,8 @@ def test_every_entry_shows_the_colour_it_would_paint(two_channel_page):
         assert entry.count() == 1, f"{name} is not offered"
         painted = entry.locator("span").first.evaluate(
             "(el) => getComputedStyle(el).backgroundImage + '|' + "
-            "getComputedStyle(el).backgroundColor")
+            "getComputedStyle(el).backgroundColor"
+        )
         assert "gradient" in painted or "rgb" in painted, (
             f"the entry for {name} shows no colour of its own: {painted}"
         )
@@ -852,7 +845,8 @@ def test_the_brightness_axis_opens_around_the_window(two_channel_page):
     _choose(page, "Ch488")
     window_ = _window_in_engine(page)
     reach = page.locator("[aria-label='max Ch488']").evaluate(
-        "(element) => ({ min: Number(element.min), max: Number(element.max) })")
+        "(element) => ({ min: Number(element.min), max: Number(element.max) })"
+    )
     assert reach["max"] < 65535, (
         "the axis is drawn to what the camera could have written, which is "
         "mostly headroom nothing occupies"
@@ -874,8 +868,7 @@ def test_the_brightness_axis_opens_around_the_window(two_channel_page):
     beyond = (window_[1] - window_[0]) / across
     meant = (window_[1] - window_[0]) / (framed[1] - framed[0])
     assert reach["min"] >= 0, (
-        f"the axis starts at {reach['min']}, below any brightness a pixel "
-        "can hold"
+        f"the axis starts at {reach['min']}, below any brightness a pixel can hold"
     )
     assert beyond == pytest.approx(meant, abs=0.02), (
         f"the window fills {beyond:.0%} of the track rather than the "
@@ -904,7 +897,8 @@ def test_two_boxes_say_how_much_of_the_axis_to_show(two_channel_page):
         box.press("Enter")
         page.wait_for_timeout(400)
     reach = page.locator("[aria-label='max Ch488']").evaluate(
-        "(element) => ({ min: Number(element.min), max: Number(element.max) })")
+        "(element) => ({ min: Number(element.min), max: Number(element.max) })"
+    )
     assert reach == pytest.approx({"min": 400, "max": 2200}, rel=0.01), (
         f"the handles travel over {reach}, not the 400 to 2200 that was asked for"
     )
@@ -927,18 +921,15 @@ def test_log_stretches_the_bars_upward_not_sideways(two_channel_page):
     page.wait_for_timeout(400)
     logged = page.evaluate(_BARS)
 
-    assert [bar["x"] for bar in logged] == pytest.approx(
-        [bar["x"] for bar in plain], abs=1e-6), (
+    assert [bar["x"] for bar in logged] == pytest.approx([bar["x"] for bar in plain], abs=1e-6), (
         "the bars moved sideways, so Log is still warping the brightness axis"
     )
     assert [bar["width"] for bar in logged] == pytest.approx(
-        [bar["width"] for bar in plain], abs=1e-6), (
-        "the bars changed width, so Log is still warping the brightness axis"
-    )
+        [bar["width"] for bar in plain], abs=1e-6
+    ), "the bars changed width, so Log is still warping the brightness axis"
     assert [bar["height"] for bar in logged] != pytest.approx(
-        [bar["height"] for bar in plain], abs=1e-6), (
-        "nothing about the bars changed, so Log did nothing at all"
-    )
+        [bar["height"] for bar in plain], abs=1e-6
+    ), "nothing about the bars changed, so Log did nothing at all"
     # The point of it: the small counts are lifted into view.
     quiet = min((bar["height"] for bar in plain if bar["height"] > 0), default=0)
     lifted = min((bar["height"] for bar in logged if bar["height"] > 0), default=0)
@@ -967,15 +958,20 @@ def test_the_row_under_the_histogram_lines_up_with_it(two_channel_page):
     _choose(page, "Ch488")
     page.wait_for_timeout(400)
     picture = page.get_by_label("histogram Ch488").bounding_box()
-    row = [page.get_by_label(label).bounding_box() for label in (
-        "axis from Ch488", "auto contrast Ch488", "logarithmic counts",
-        "axis to Ch488")]
+    row = [
+        page.get_by_label(label).bounding_box()
+        for label in (
+            "axis from Ch488",
+            "auto contrast Ch488",
+            "logarithmic counts",
+            "axis to Ch488",
+        )
+    ]
 
     tops = {round(box["y"]) for box in row}
     bottoms = {round(box["y"] + box["height"]) for box in row}
     assert len(tops) == 1 and len(bottoms) == 1, (
-        f"the row is not on one line: tops {sorted(tops)}, "
-        f"bottoms {sorted(bottoms)}"
+        f"the row is not on one line: tops {sorted(tops)}, bottoms {sorted(bottoms)}"
     )
     # Two pixels of tolerance: the histogram carries a one-pixel frame on
     # each side, and its own edge is the outside of that frame.
@@ -984,8 +980,7 @@ def test_the_row_under_the_histogram_lines_up_with_it(two_channel_page):
     )
     ends = row[-1]["x"] + row[-1]["width"]
     assert abs(ends - (picture["x"] + picture["width"])) <= 2, (
-        f"the row ends at {ends}, the picture at "
-        f"{picture['x'] + picture['width']}"
+        f"the row ends at {ends}, the picture at {picture['x'] + picture['width']}"
     )
 
     # And the right-hand box stands in the column the value boxes below it
@@ -994,12 +989,10 @@ def test_the_row_under_the_histogram_lines_up_with_it(two_channel_page):
     # in the same place.
     below = page.get_by_label("min value Ch488").bounding_box()
     assert abs(row[-1]["x"] - below["x"]) <= 1, (
-        f"the axis box starts at {row[-1]['x']}, the value boxes below it at "
-        f"{below['x']}"
+        f"the axis box starts at {row[-1]['x']}, the value boxes below it at {below['x']}"
     )
     assert abs(row[-1]["width"] - below["width"]) <= 1, (
-        f"the axis box is {row[-1]['width']} wide, the value boxes below it "
-        f"{below['width']}"
+        f"the axis box is {row[-1]['width']} wide, the value boxes below it {below['width']}"
     )
 
     # All four are built to one block. Four sizes in a line reads as four
@@ -1007,14 +1000,12 @@ def test_the_row_under_the_histogram_lines_up_with_it(two_channel_page):
     widths = {round(box["width"]) for box in row}
     heights = {round(box["height"]) for box in row}
     assert len(widths) == 1 and len(heights) == 1, (
-        f"the row is not one block: widths {sorted(widths)}, "
-        f"heights {sorted(heights)}"
+        f"the row is not one block: widths {sorted(widths)}, heights {sorted(heights)}"
     )
 
     # And the grouping is carried by the gaps: Auto and Log are a pair, so
     # they sit closer to each other than to the boxes at the ends.
-    gaps = [round(nxt["x"] - (box["x"] + box["width"]))
-            for box, nxt in zip(row, row[1:])]
+    gaps = [round(nxt["x"] - (box["x"] + box["width"])) for box, nxt in zip(row, row[1:])]
     assert gaps[1] < gaps[0] and gaps[1] < gaps[2], (
         f"Auto and Log are {gaps[1]}px apart against {gaps[0]} and {gaps[2]} "
         "to the boxes, so the row reads as four unrelated controls"
@@ -1030,8 +1021,7 @@ def test_the_row_under_the_histogram_lines_up_with_it(two_channel_page):
     )
     pair_ends = row[2]["x"] + row[2]["width"]
     assert abs(pair_ends - (track["x"] + track["width"])) <= 1, (
-        f"Log ends at {pair_ends}, the slider track at "
-        f"{track['x'] + track['width']}"
+        f"Log ends at {pair_ends}, the slider track at {track['x'] + track['width']}"
     )
 
 
@@ -1054,16 +1044,14 @@ def test_the_panel_reads_as_three_evenly_spaced_sections(two_channel_page):
     # "data" and "channel settings" since 2026-08-23: the middle card lists
     # data of every kind, and the settings below are one channel's.
     assert named[:3] == ["LOAD DATA", "DATA", "CHANNEL SETTINGS"], named
-    gaps = [second["top"] - first["bottom"]
-            for first, second in zip(cards, cards[1:])]
+    gaps = [second["top"] - first["bottom"] for first, second in zip(cards, cards[1:])]
     assert len(set(gaps[:2])) == 1, (
         f"the sections are {gaps[:2]} pixels apart, so the panel reads as "
         "two blocks rather than three sections of one"
     )
 
 
-def test_the_chosen_channel_is_marked_by_its_ground_and_nothing_else(
-        two_channel_page):
+def test_the_chosen_channel_is_marked_by_its_ground_and_nothing_else(two_channel_page):
     """A tinted row, no blue bar, and a right edge shared with the histogram.
 
     The row picked out has to be unmistakable, because a slider that is
@@ -1125,11 +1113,9 @@ def test_the_settings_name_the_channel_above_the_histogram(two_channel_page):
               eyeAbove: above(eye), squareAbove: above(square)};
     }""")
     assert said["text"][0] == "CHANNEL SETTINGS", said["text"]
-    named = page.evaluate(
-        "() => window.zmartConfig.layers[0].group || ''")
+    named = page.evaluate("() => window.zmartConfig.layers[0].group || ''")
     assert said["text"][1].strip() == named, (
-        f"the acquisition ({named!r}) should head the block; it says "
-        f"{said['text'][1]!r}"
+        f"the acquisition ({named!r}) should head the block; it says {said['text'][1]!r}"
     )
     assert said["eyeAbove"], "the channel's eye is not above the histogram"
     assert said["squareAbove"], "the channel's colour is not above the histogram"
@@ -1158,9 +1144,7 @@ def test_the_colour_list_is_not_cut_off_by_the_list_it_opens_from(two_channel_pa
         reach: Math.round(entries[entries.length - 1].bottom - entries[0].top),
       };
     }""")
-    assert seen["offered"] > 8, (
-        f"only {seen['offered']} colours are on offer at all"
-    )
+    assert seen["offered"] > 8, f"only {seen['offered']} colours are on offer at all"
     assert seen["showing"] == seen["offered"], (
         f"{seen['offered']} colours are offered but {seen['showing']} can be "
         "seen; the list is being cut off by something around it"

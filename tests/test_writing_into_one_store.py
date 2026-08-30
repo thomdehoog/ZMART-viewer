@@ -44,6 +44,7 @@ import threading
 
 import numpy as np
 from pixels import colour_spread, fraction_lit, image_middle
+
 from zmart_viewer.server import make_server
 
 # A specimen a few tiles across, declared up front the way a run would declare a mosaic
@@ -186,9 +187,7 @@ def test_a_tile_written_into_an_open_store_appears(browser, built_dist, tmp_path
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 800})
     try:
-        page.goto(
-            f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-        )
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         page.wait_for_timeout(3000)
 
@@ -232,8 +231,7 @@ def test_a_tile_written_into_an_open_store_appears(browser, built_dist, tmp_path
         # Not assert_something_was_drawn: the tiles cover the whole view, and a view
         # covered by an even tile is one flat colour just as a blank one is.
         assert fraction_lit(page) > 0.5, (
-            "a tile written during the run did not light the view: "
-            f"{fraction_lit(page):.3f}"
+            f"a tile written during the run did not light the view: {fraction_lit(page):.3f}"
         )
     finally:
         page.close()
@@ -305,9 +303,7 @@ def test_a_store_grows_tile_by_tile_and_each_one_is_seen(browser, built_dist, tm
     asked: list[str] = []
     page.on("request", lambda request: asked.append(request.url))
     try:
-        page.goto(
-            f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-        )
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         page.wait_for_timeout(3000)
 
@@ -433,9 +429,7 @@ def write_position(folder, name, *, at):
     return store
 
 
-def test_a_position_arriving_still_keeps_the_image_already_fetched(
-    browser, built_dist, tmp_path
-):
+def test_a_position_arriving_still_keeps_the_image_already_fetched(browser, built_dist, tmp_path):
     """The other half: letting go must stay confined to the case that needs it.
 
     In the layout used today a position arriving is a change the scene can see, so there
@@ -461,15 +455,15 @@ def test_a_position_arriving_still_keeps_the_image_already_fetched(
     pieces: list[str] = []
     page.on(
         "request",
-        lambda request: pieces.append(request.url)
-        if "/data/" in request.url
-        and not request.url.endswith((".zarray", ".zattrs", ".zgroup"))
-        else None,
+        lambda request: (
+            pieces.append(request.url)
+            if "/data/" in request.url
+            and not request.url.endswith((".zarray", ".zattrs", ".zgroup"))
+            else None
+        ),
     )
     try:
-        page.goto(
-            f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-        )
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         page.wait_for_timeout(3000)
         assert fraction_lit(page) > 0.1, (

@@ -80,8 +80,10 @@ try:
     from multiview_stitcher import fusion, msi_utils, ngff_utils
     from multiview_stitcher import spatial_image_utils as si_utils
 except ImportError as missing:  # pragma: no cover - depends on the machine
-    print(f"This measurement needs multiview-stitcher, which is not installed "
-          f"({missing}).\n\n    python -m pip install multiview-stitcher\n")
+    print(
+        f"This measurement needs multiview-stitcher, which is not installed "
+        f"({missing}).\n\n    python -m pip install multiview-stitcher\n"
+    )
     raise SystemExit(0) from missing
 
 TILE = 256
@@ -94,12 +96,13 @@ def make_tile(iy: int, ix: int):
     """One tile, carrying where it sits on the stage."""
     step = TILE - OVERLAP
     data = np.random.default_rng(iy * 100 + ix).integers(
-        1000, 4000, size=(DEPTH, TILE, TILE), dtype=np.uint16)
+        1000, 4000, size=(DEPTH, TILE, TILE), dtype=np.uint16
+    )
     sim = si_utils.get_sim_from_array(
-        data, dims=["z", "y", "x"], scale=VOXEL,
-        translation={"z": 0.0,
-                     "y": iy * step * VOXEL["y"],
-                     "x": ix * step * VOXEL["x"]},
+        data,
+        dims=["z", "y", "x"],
+        scale=VOXEL,
+        translation={"z": 0.0, "y": iy * step * VOXEL["y"], "x": ix * step * VOXEL["x"]},
         transform_key="stage",
     )
     return msi_utils.get_msim_from_sim(sim, scale_factors=[2, 4])
@@ -108,9 +111,11 @@ def make_tile(iy: int, ix: int):
 def _report(name: str, times: list[float]) -> float:
     ordered = sorted(times)
     middle = statistics.median(ordered)
-    print(f"  {name:<30} n={len(ordered):<3} median={middle:8.1f} ms  "
-          f"p90={ordered[int(len(ordered) * 0.9)]:8.1f} ms  "
-          f"max={max(ordered):8.1f} ms")
+    print(
+        f"  {name:<30} n={len(ordered):<3} median={middle:8.1f} ms  "
+        f"p90={ordered[int(len(ordered) * 0.9)]:8.1f} ms  "
+        f"max={max(ordered):8.1f} ms"
+    )
     return middle
 
 
@@ -118,16 +123,20 @@ def main() -> None:
     grid = int(sys.argv[1]) if len(sys.argv) > 1 else 4
     work = Path(tempfile.mkdtemp(prefix="live-fusion-"))
     try:
-        print(f"\n{grid * grid} overlapping tiles of {TILE}x{TILE}x{DEPTH}, "
-              f"{OVERLAP} voxels of overlap")
+        print(
+            f"\n{grid * grid} overlapping tiles of {TILE}x{TILE}x{DEPTH}, "
+            f"{OVERLAP} voxels of overlap"
+        )
 
         tiles = [make_tile(iy, ix) for iy in range(grid) for ix in range(grid)]
 
         started = time.perf_counter()
         stitched = fusion.fuse(images=tiles, transform_key="stage")
         planning = time.perf_counter() - started
-        print(f"planning the stitch: {planning:.2f} s "
-              f"({planning / (grid * grid) * 1000:.0f} ms a tile, and no picture yet)")
+        print(
+            f"planning the stitch: {planning:.2f} s "
+            f"({planning / (grid * grid) * 1000:.0f} ms a tile, and no picture yet)"
+        )
 
         pretend = ngff_utils.VirtualOMEZarr(stitched, name="stitched")
 
@@ -135,11 +144,13 @@ def main() -> None:
         # arrangement the viewer is already known to be quick on.
         on_disk = work / "written_out.ome.zarr"
         started = time.perf_counter()
-        with contextlib.redirect_stdout(io.StringIO()), \
-                contextlib.redirect_stderr(io.StringIO()):
-            fusion.fuse(images=tiles, transform_key="stage",
-                        output_zarr_url=str(on_disk),
-                        zarr_options={"ome_zarr": True})
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            fusion.fuse(
+                images=tiles,
+                transform_key="stage",
+                output_zarr_url=str(on_disk),
+                zarr_options={"ome_zarr": True},
+            )
         print(f"writing the same stitch out once: {time.perf_counter() - started:.2f} s")
 
         store = zarr.open_group(str(on_disk), mode="r")
@@ -155,11 +166,11 @@ def main() -> None:
             for zi in range(min(across[-3], 4)):
                 for yi in range(min(across[-2], 3)):
                     for xi in range(min(across[-1], 3)):
-                        wanted.append("/".join(
-                            ["0"] * (len(across) - 3) + [str(zi), str(yi), str(xi)]))
+                        wanted.append(
+                            "/".join(["0"] * (len(across) - 3) + [str(zi), str(yi), str(xi)])
+                        )
 
-            print(f"\nlevel {level}  shape={shape}  pieces={pieces}  "
-                  f"({len(wanted)} timed)")
+            print(f"\nlevel {level}  shape={shape}  pieces={pieces}  ({len(wanted)} timed)")
 
             live = []
             for key in wanted:
@@ -174,16 +185,17 @@ def main() -> None:
                 continue
             plain = []
             for key in wanted:
-                where = tuple(slice(int(i) * c, int(i) * c + c)
-                              for i, c in zip(key.split("/"), pieces, strict=True))
+                where = tuple(
+                    slice(int(i) * c, int(i) * c + c)
+                    for i, c in zip(key.split("/"), pieces, strict=True)
+                )
                 started = time.perf_counter()
                 np.asarray(array[where])
                 plain.append((time.perf_counter() - started) * 1000)
             read_ms = _report("read from disk (control)", plain)
 
             if read_ms:
-                print(f"  -> stitching on the spot costs "
-                      f"{stitched_ms / read_ms:.0f}x a plain read")
+                print(f"  -> stitching on the spot costs {stitched_ms / read_ms:.0f}x a plain read")
 
         _how_much_does_doing_several_at_once_help(pretend)
     finally:
@@ -205,12 +217,14 @@ def _how_much_does_doing_several_at_once_help(pretend) -> None:
     described = pretend.array_zarray(level)
     if isinstance(described, (str, bytes)):
         described = json.loads(described)
-    across = [max(1, -(-size // piece))
-              for size, piece in zip(described["shape"], described["chunks"],
-                                     strict=True)]
-    wanted = ["/".join(str(i) for i in where)
-              for where in itertools.islice(
-                  itertools.product(*[range(n) for n in across]), 12)]
+    across = [
+        max(1, -(-size // piece))
+        for size, piece in zip(described["shape"], described["chunks"], strict=True)
+    ]
+    wanted = [
+        "/".join(str(i) for i in where)
+        for where in itertools.islice(itertools.product(*[range(n) for n in across]), 12)
+    ]
     if len(wanted) < 2:
         return
 
@@ -233,15 +247,21 @@ def _how_much_does_doing_several_at_once_help(pretend) -> None:
     at_once = time.perf_counter() - started
 
     print(f"\nstitching {len(wanted)} pieces, on {os.cpu_count()} processors")
-    print(f"  one after another   {serially:5.2f} s   "
-          f"{statistics.median(alone):7.1f} ms a piece   "
-          f"{len(wanted)/serially:5.2f} a second")
-    print(f"  {workers} at a time         {at_once:5.2f} s   "
-          f"{statistics.median(together):7.1f} ms a piece   "
-          f"{len(wanted)/at_once:5.2f} a second")
-    print(f"  -> {serially/at_once:.1f}x more pieces a second, and one piece went "
-          f"from {statistics.median(alone):.0f} to "
-          f"{statistics.median(together):.0f} ms")
+    print(
+        f"  one after another   {serially:5.2f} s   "
+        f"{statistics.median(alone):7.1f} ms a piece   "
+        f"{len(wanted) / serially:5.2f} a second"
+    )
+    print(
+        f"  {workers} at a time         {at_once:5.2f} s   "
+        f"{statistics.median(together):7.1f} ms a piece   "
+        f"{len(wanted) / at_once:5.2f} a second"
+    )
+    print(
+        f"  -> {serially / at_once:.1f}x more pieces a second, and one piece went "
+        f"from {statistics.median(alone):.0f} to "
+        f"{statistics.median(together):.0f} ms"
+    )
 
 
 if __name__ == "__main__":

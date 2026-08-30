@@ -165,7 +165,7 @@ A_SECOND = 1.0
 #:
 #: ``mean`` is what :mod:`zmart_viewer.record.coordinator` does today — it averages each
 #: two-by-two block of voxels in y and x — and it is the default here for that
-#: reason. ``nearest`` is what :mod:`oldwriter.canvas` (testdata) does, keeping every
+#: reason. ``nearest`` is what the retired elder writer did, keeping every
 #: second voxel and discarding the rest, and it is offered so that a position
 #: written that way can be described truthfully by the same code.
 HOW_THE_COPIES_WERE_MADE = {
@@ -351,8 +351,7 @@ def _the_brightest_a_pixel_can_be(dtype: str) -> int:
 _CHANNEL_TURNS = ("00FF66", "FF33FF", "33CCFF", "FFBF19")
 
 
-def the_channels_described(channels: Sequence[str | Channel],
-                           dtype: str) -> list[dict]:
+def the_channels_described(channels: Sequence[str | Channel], dtype: str) -> list[dict]:
     """Name and colour each channel, in the form a reader expects.
 
     The colours and the brightness window are built by
@@ -372,15 +371,16 @@ def the_channels_described(channels: Sequence[str | Channel],
     from, a colour would be an invention.
     """
     brightest = _the_brightest_a_pixel_can_be(dtype)
-    named = [channel if isinstance(channel, Channel) else Channel(str(channel))
-             for channel in channels]
+    named = [
+        channel if isinstance(channel, Channel) else Channel(str(channel)) for channel in channels
+    ]
     if len(named) > 1:
         turn = 0
         for at, channel in enumerate(named):
             if channel.color is None:
-                named[at] = Channel(channel.name,
-                                    _CHANNEL_TURNS[turn % len(_CHANNEL_TURNS)],
-                                    channel.window)
+                named[at] = Channel(
+                    channel.name, _CHANNEL_TURNS[turn % len(_CHANNEL_TURNS)], channel.window
+                )
                 turn += 1
     return [channel.described(brightest) for channel in named]
 
@@ -494,9 +494,7 @@ def the_image_description(
         "multiscales": [multiscale],
     }
     if channels:
-        described["omero"] = {
-            "channels": the_channels_described(channels, profile.dtype)
-        }
+        described["omero"] = {"channels": the_channels_described(channels, profile.dtype)}
     return described
 
 
@@ -622,11 +620,7 @@ def describe_the_position(
         )
 
     described_levels = tuple(profile.levels if levels is None else levels)
-    missing = [
-        level.level
-        for level in described_levels
-        if not (store / str(level.level)).is_dir()
-    ]
+    missing = [level.level for level in described_levels if not (store / str(level.level)).is_dir()]
     if missing:
         raise ZmartLiveError(
             f"The position at {store} promises zoomed-out copies at levels "

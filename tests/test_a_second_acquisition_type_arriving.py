@@ -32,6 +32,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
+
 from zmart_viewer.library import Library
 from zmart_viewer.server import group_labels, make_server
 
@@ -164,8 +165,7 @@ class TestASecondAcquisitionArrivesDuringTheRun:
 
         open_now = _by_dataset(library)
         assert len(open_now) == 2, (
-            "the target scan and the overview were shown as one picture: "
-            f"{open_now}"
+            f"the target scan and the overview were shown as one picture: {open_now}"
         )
         overview, target = (sorted(names) for names in open_now.values())
         assert overview == ["overview_pos001.ome.zarr", "overview_pos002.ome.zarr"]
@@ -235,9 +235,7 @@ class TestASecondAcquisitionArrivesDuringTheRun:
             f"the closed target scan came back on its own: {open_now}"
         )
 
-    def test_a_later_position_of_it_joins_it_rather_than_starting_again(
-        self, a_run_being_watched
-    ):
+    def test_a_later_position_of_it_joins_it_rather_than_starting_again(self, a_run_being_watched):
         """A target scan of a second cell is another piece of the same picture.
 
         If each newcomer started a dataset of its own, a run visiting forty targets
@@ -251,9 +249,9 @@ class TestASecondAcquisitionArrivesDuringTheRun:
 
         open_now = _by_dataset(library)
         assert len(open_now) == 2, f"a heading per target rather than per scan: {open_now}"
-        targets = sorted(
-            names for names in open_now.values() if names[0].startswith("targetscan")
-        )[0]
+        targets = sorted(names for names in open_now.values() if names[0].startswith("targetscan"))[
+            0
+        ]
         assert sorted(targets) == [
             "targetscan_cell001.ome.zarr",
             "targetscan_cell002.ome.zarr",

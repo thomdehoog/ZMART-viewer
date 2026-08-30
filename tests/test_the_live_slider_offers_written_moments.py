@@ -32,6 +32,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from pixels import fraction_lit  # noqa: E402
+from record_fixtures import FRAME  # noqa: E402
 from test_manifest_refresh_browser import (  # noqa: E402
     _open,
     _serving,
@@ -42,16 +43,16 @@ from test_manifest_refresh_browser import (  # noqa: E402
 from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
 from zmart_viewer.record.model import GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
-from record_fixtures import FRAME  # noqa: E402
 
 ROOM = 4  # declared moments; only some are ever written here
 
 
 def a_timelapse(folder):
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  timepoints=ROOM)
+    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=ROOM)
     return LivePublisher(
-        folder, profile, run_id="slider-run",
+        folder,
+        profile,
+        run_id="slider-run",
         cells={GridCell(0, 0): "posA", GridCell(0, 1): "posB"},
     )
 
@@ -72,9 +73,9 @@ def _mean_brightness(page) -> float:
 def _settle(page) -> None:
     """Refresh flights drained AND the engine fully loaded — the storm
     census's rule: pixels are only comparable once nothing more is coming."""
-    page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                           timeout=90_000)
-    page.wait_for_function("""() => {
+    page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
+    page.wait_for_function(
+        """() => {
       for (const managed of window.zmartViewer.layerManager.managedLayers) {
         for (const rl of (managed.layer?.renderLayers || [])) {
           const p = rl.layerChunkProgressInfo;
@@ -83,13 +84,13 @@ def _settle(page) -> None:
         }
       }
       return true;
-    }""", timeout=90_000)
+    }""",
+        timeout=90_000,
+    )
     page.wait_for_timeout(800)
 
 
-def test_the_slider_ranges_over_written_moments_and_grows(
-    browser, built_dist, tmp_path
-):
+def test_the_slider_ranges_over_written_moments_and_grows(browser, built_dist, tmp_path):
     shots = tmp_path / "shots"
     shots.mkdir()
     run = a_timelapse(tmp_path)
@@ -145,16 +146,18 @@ def test_the_slider_ranges_over_written_moments_and_grows(
               moved[names.indexOf('t')] = 3;
               position.value = moved;
             }""")
-            page.wait_for_function("""() => {
+            page.wait_for_function(
+                """() => {
               const p = window.zmartViewer.navigationState.position;
               const i = p.coordinateSpace.value.names.indexOf('t');
               return Math.abs(p.value[i] - 1) <= 0.5;
-            }""", timeout=10_000)
+            }""",
+                timeout=10_000,
+            )
             _settle(page)
             page.screenshot(path=str(shots / "3_snapped_back_to_written.png"))
             assert fraction_lit(page) > 0.01, (
-                "the view was brought back to a written moment but the "
-                "screen stayed empty"
+                "the view was brought back to a written moment but the screen stayed empty"
             )
 
             # A landing grows the slider on the held page, no reload.
@@ -182,17 +185,14 @@ def test_the_slider_ranges_over_written_moments_and_grows(
             fresh = _mean_brightness(page)
             page.screenshot(path=str(shots / "5_after_f5.png"))
             assert abs(fresh - held) < 12, (
-                f"the same written moment shows {held:.1f} held and "
-                f"{fresh:.1f} after F5"
+                f"the same written moment shows {held:.1f} held and {fresh:.1f} after F5"
             )
         finally:
             page.close()
     print(f"screenshots kept at {shots}")
 
 
-def test_a_landing_moves_a_watcher_on_the_front_to_the_new_moment(
-    browser, built_dist, tmp_path
-):
+def test_a_landing_moves_a_watcher_on_the_front_to_the_new_moment(browser, built_dist, tmp_path):
     """Watching the front means seeing each moment as it lands.
 
     An operator sitting on the NEWEST written moment is watching the run
@@ -232,13 +232,16 @@ def test_a_landing_moves_a_watcher_on_the_front_to_the_new_moment(
             run.write_and_publish("posA", a_moment(4000), timepoint=2)
             run.write_and_publish("posB", a_moment(4000), timepoint=2)
             _wait_for_revision(page, 6)
-            page.wait_for_function("""() => {
+            page.wait_for_function(
+                """() => {
               const p = window.zmartViewer.navigationState.position;
               const names = p.coordinateSpace.value.names;
               const i = names.indexOf('t');
               const lower = p.coordinateSpace.value.bounds.lowerBounds[i];
               return Math.abs(p.value[i] - Math.ceil(lower) - 2) <= 0.5;
-            }""", timeout=15_000)
+            }""",
+                timeout=15_000,
+            )
             reading = page.get_by_label("t position value").text_content()
             assert reading.startswith("3 / 3"), (
                 f"the watcher was on the front but reads {reading!r} after "
@@ -258,8 +261,7 @@ def test_a_landing_moves_a_watcher_on_the_front_to_the_new_moment(
                 timeout=15_000,
             )
             assert abs(moment_on_screen(page)) <= 0.5, (
-                "the operator had stepped back to moment 0 and a landing "
-                "dragged them to the front"
+                "the operator had stepped back to moment 0 and a landing dragged them to the front"
             )
         finally:
             page.close()

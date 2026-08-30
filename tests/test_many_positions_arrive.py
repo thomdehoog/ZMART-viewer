@@ -33,10 +33,11 @@ import json
 import threading
 
 import numpy as np
-from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
+from pixels import assert_something_was_drawn
+from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-from pixels import assert_something_was_drawn
+
 from zmart_viewer.server import make_server
 
 # Enough positions to show pacing plainly at a small group size, and few enough that
@@ -139,7 +140,8 @@ def write_folder(root, count: int) -> None:
 # holding. This runs before any of the page's own code, so the very first group is seen
 # as well as the later ones. Only changes are recorded, so the list that comes back is
 # the sequence of sizes the engine passed through rather than thousands of repeats.
-WATCH = """
+WATCH = (
+    """
 window.zmartSourceBatch = %d;
 window.zmartArrivals = [];
 setInterval(() => {
@@ -151,16 +153,16 @@ setInterval(() => {
   const seen = window.zmartArrivals;
   if (seen[seen.length - 1] !== held) seen.push(held);
 }, 5);
-""" % GROUP  # noqa: UP031 -- the payload is JavaScript; its braces would fight str.format
+"""
+    % GROUP
+)  # noqa: UP031 -- the payload is JavaScript; its braces would fight str.format
 
 HELD = """() => window.zmartViewer.layerManager.managedLayers
            .filter((managed) => managed.layer && managed.layer.type === 'image')
            .reduce((total, managed) => total + managed.layer.dataSources.length, 0)"""
 
 
-def test_every_position_reaches_the_engine_and_they_arrive_in_groups(
-    browser, built_dist, tmp_path
-):
+def test_every_position_reaches_the_engine_and_they_arrive_in_groups(browser, built_dist, tmp_path):
     """A folder of many positions loads all of them, a group at a time."""
     write_folder(tmp_path, POSITIONS)
     # Opened the way a finished folder is opened: everything already on disk, nothing
@@ -178,9 +180,7 @@ def test_every_position_reaches_the_engine_and_they_arrive_in_groups(
     page = browser.new_page(viewport={"width": 1000, "height": 800})
     page.add_init_script(WATCH)
     try:
-        page.goto(
-            f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-        )
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
 
         # Every position the panel knows about has been handed over, and the queue of
@@ -366,8 +366,11 @@ def test_finds_the_limit_where_positions_begin_to_be_lost(browser, built_dist, t
         worse than no pacing at all, which is the opposite of the truth.
         """
         server = make_server(
-            port=0, data_dir=tmp_path / "probe", site_dir=built_dist,
-            store=every[:count], live=False,
+            port=0,
+            data_dir=tmp_path / "probe",
+            site_dir=built_dist,
+            store=every[:count],
+            live=False,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -392,9 +395,10 @@ def test_finds_the_limit_where_positions_begin_to_be_lost(browser, built_dist, t
                     # Nothing has moved for a while, and nothing is queued to be
                     # handed over. Whatever has not arrived is not going to.
                     settled += 1
-                    if settled >= QUIET_ROUNDS and page.evaluate(
-                        "() => window.zmartSourcesWaiting()"
-                    ) == 0:
+                    if (
+                        settled >= QUIET_ROUNDS
+                        and page.evaluate("() => window.zmartSourcesWaiting()") == 0
+                    ):
                         break
                 else:
                     settled, held = 0, now
@@ -438,9 +442,7 @@ def test_finds_the_limit_where_positions_begin_to_be_lost(browser, built_dist, t
                 intact = middle
             else:
                 lossy = middle
-        print(
-            f"\n  the browser carried {intact} positions unpaced and lost some by {lossy}"
-        )
+        print(f"\n  the browser carried {intact} positions unpaced and lost some by {lossy}")
         print(f"  the viewer ships a group size of {the_shipped_group_size()}")
         assert the_shipped_group_size() <= intact, (
             f"the shipped group size ({the_shipped_group_size()}) is above what this "

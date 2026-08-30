@@ -67,6 +67,7 @@ import threading
 from pathlib import Path
 
 import numpy as np
+
 from zmart_viewer.server import make_server
 
 # The size of one tile, in voxels and in micrometres. Small enough that several of
@@ -262,19 +263,13 @@ def open_the_viewer(browser, built_dist, folder: Path, *, stores: int, loads=Non
     """
     if loads is None:
         store = sorted(p.name for p in folder.glob("*.ome.zarr"))
-        server = make_server(
-            port=0, data_dir=folder, site_dir=built_dist, store=store, live=False
-        )
+        server = make_server(port=0, data_dir=folder, site_dir=built_dist, store=store, live=False)
     else:
-        server = make_server(
-            port=0, data_dir=folder, site_dir=built_dist, loads=loads, live=False
-        )
+        server = make_server(port=0, data_dir=folder, site_dir=built_dist, loads=loads, live=False)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1400, "height": 1000})
-    page.goto(
-        f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-    )
+    page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
     page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
     page.wait_for_function(f"{_STORES_HELD} === {stores}", timeout=90_000)
     page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
@@ -601,9 +596,7 @@ def test_a_tile_further_along_the_stage_is_drawn_further_along_the_picture(
         thread.join(timeout=5)
 
 
-def test_two_tiles_recorded_apart_in_y_are_drawn_one_above_the_other(
-    browser, built_dist, tmp_path
-):
+def test_two_tiles_recorded_apart_in_y_are_drawn_one_above_the_other(browser, built_dist, tmp_path):
     """A step along y moves the tile up or down the picture, not across it.
 
     Together with the two tests above this is what pins the axes to each other. A
@@ -738,9 +731,7 @@ def test_a_tile_recorded_twice_as_far_away_is_drawn_twice_as_far_away(
     )
 
 
-def test_a_coarser_acquisition_takes_up_more_room_on_screen(
-    browser, built_dist, tmp_path
-):
+def test_a_coarser_acquisition_takes_up_more_room_on_screen(browser, built_dist, tmp_path):
     """The same number of voxels at a bigger voxel covers more of the specimen.
 
     A tile's ``translation`` says where it sits and its ``scale`` says how big its
@@ -793,9 +784,7 @@ def test_a_coarser_acquisition_takes_up_more_room_on_screen(
             "the fine acquisition was not drawn at all, so there is nothing to "
             f"compare the coarse one against: {describe(picture)}"
         )
-        assert dim.any(), (
-            "the coarse acquisition was not drawn at all: " f"{describe(picture)}"
-        )
+        assert dim.any(), f"the coarse acquisition was not drawn at all: {describe(picture)}"
 
         # How wide each patch is, in columns. Measured across rather than by
         # counting pixels because a patch clipped at the top or bottom would still

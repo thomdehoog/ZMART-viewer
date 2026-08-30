@@ -20,7 +20,7 @@ from pathlib import Path
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
-sys.path.insert(0, str(_VIZ / "testdata"))
+sys.path.insert(0, str(_VIZ / "tests"))
 
 import numpy as np  # noqa: E402
 from test_positions_land_wherever_they_are_put import write_position  # noqa: E402
@@ -122,7 +122,7 @@ def main() -> None:
     print("\n== every awkward store, each through the same door\n")
 
     if not AWKWARD.is_dir():
-        print("  (awkward stores not on disk -- run testdata/make_awkward_stores.py)")
+        print("  (awkward stores not on disk -- run tests/make_awkward_stores.py)")
         return
 
     for awkward in sorted(AWKWARD.iterdir()):

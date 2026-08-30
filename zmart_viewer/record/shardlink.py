@@ -720,9 +720,7 @@ def read_the_index(
     # no file behind it to notice a change in, so it is simply read.
     was = None
     if remember and isinstance(shard, (str, Path)):
-        was = _which_file_this_was(
-            Path(shard), (inner, bundle, index_location, has_checksum)
-        )
+        was = _which_file_this_was(Path(shard), (inner, bundle, index_location, has_checksum))
         if was is not None:
             with _ONE_AT_A_TIME:
                 already_read = _REMEMBERED.get(was)
@@ -788,9 +786,14 @@ def read_the_index(
     # table is still returned — it is the best answer available for a file that is
     # moving underneath us, and the same answer this function has always given —
     # but it is not kept.
-    if was is not None and _which_file_this_was(
-        Path(shard), (inner, bundle, index_location, has_checksum)  # type: ignore[arg-type]
-    ) == was:
+    if (
+        was is not None
+        and _which_file_this_was(
+            Path(shard),
+            (inner, bundle, index_location, has_checksum),  # type: ignore[arg-type]
+        )
+        == was
+    ):
         _remember(was, index)
     return index
 
@@ -1191,9 +1194,7 @@ class StoredArray:
         has already been read, so asking is cheap enough to do it for every piece
         of a screenful.
         """
-        return _where_one_chunk_lives(
-            self.path, self.description, self.bundling, chunk_coordinate
-        )
+        return _where_one_chunk_lives(self.path, self.description, self.bundling, chunk_coordinate)
 
 
 def how_the_array_is_stored(array_path: str | Path) -> StoredArray:
@@ -1225,8 +1226,13 @@ def how_the_array_is_stored(array_path: str | Path) -> StoredArray:
     mark = None
     try:
         stamp = (path / "zarr.json").stat()
-        mark = (stamp.st_dev, getattr(stamp, "st_ino", 0), stamp.st_size,
-                stamp.st_mtime_ns, stamp.st_ctime_ns)
+        mark = (
+            stamp.st_dev,
+            getattr(stamp, "st_ino", 0),
+            stamp.st_size,
+            stamp.st_mtime_ns,
+            stamp.st_ctime_ns,
+        )
     except OSError:
         pass  # unreadable is _read_the_array_description's error to explain
     key = str(path)

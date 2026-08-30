@@ -104,8 +104,7 @@ def _write_one_position(rung: Path, row: int, column: int, seed: int) -> None:
     # three-channel block is written here in the same shape.
     described = store / ".zattrs"
     attrs = json.loads(described.read_text(encoding="utf-8"))
-    attrs["omero"] = {"channels": [dict(one) for one in _CHANNELS],
-                      "rdefs": {"model": "color"}}
+    attrs["omero"] = {"channels": [dict(one) for one in _CHANNELS], "rdefs": {"model": "color"}}
     described.write_text(json.dumps(attrs, indent=1), encoding="utf-8")
 
 
@@ -123,8 +122,7 @@ def a_rung_of(count: int) -> Path:
         raise ValueError(f"a rung is a square grid, and {count} is not square")
     rung = LADDER / f"rung_{count}"
     if rung.is_dir():
-        finished = sum(1 for one in rung.glob("pos_*.ome.zarr")
-                       if (one / ".zattrs").is_file())
+        finished = sum(1 for one in rung.glob("pos_*.ome.zarr") if (one / ".zattrs").is_file())
         if finished == count:
             return rung
         shutil.rmtree(rung)
@@ -136,20 +134,25 @@ def a_rung_of(count: int) -> Path:
         with ProcessPoolExecutor() as pool:
             # list() so that a worker's failure surfaces here rather than
             # passing silently and leaving a rung short of its promise.
-            list(pool.map(_write_one_position,
-                          (rung for _ in places),
-                          (row for row, _ in places),
-                          (column for _, column in places),
-                          (row * across + column + 7
-                           for row, column in places),
-                          chunksize=8))
+            list(
+                pool.map(
+                    _write_one_position,
+                    (rung for _ in places),
+                    (row for row, _ in places),
+                    (column for _, column in places),
+                    (row * across + column + 7 for row, column in places),
+                    chunksize=8,
+                )
+            )
     else:
         for row, column in places:
             _write_one_position(rung, row, column, row * across + column + 7)
     took = time.perf_counter() - began
     held = sum(one.stat().st_size for one in rung.rglob("*") if one.is_file())
-    print(f"rung {count:>4}: {count} positions written in {took:>5.1f}s, "
-          f"{held / 1e6:.1f} MB on disk", flush=True)
+    print(
+        f"rung {count:>4}: {count} positions written in {took:>5.1f}s, {held / 1e6:.1f} MB on disk",
+        flush=True,
+    )
     return rung
 
 

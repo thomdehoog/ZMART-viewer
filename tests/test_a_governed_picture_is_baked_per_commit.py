@@ -30,12 +30,11 @@ VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer import pieces as served  # noqa: E402
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
+from record_fixtures import some_specimen  # noqa: E402
 from test_the_composer_obeys_the_manifest import PIECE, a_governed_run, the_columns_of  # noqa: E402
 
-from record_fixtures import some_specimen  # noqa: E402
+from zmart_viewer import pieces as served  # noqa: E402
+from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 
 def every_baked_file(store: Path) -> dict[str, bytes]:
@@ -43,15 +42,13 @@ def every_baked_file(store: Path) -> dict[str, bytes]:
     return {
         str(one.relative_to(store)): one.read_bytes()
         for one in store.rglob("*")
-        if one.is_file() and one.name != "zarr.json"
-        and "c" in one.relative_to(store).parts
+        if one.is_file() and one.name != "zarr.json" and "c" in one.relative_to(store).parts
     }
 
 
 def a_fresh_bake_of(run_folder: Path, where: Path) -> dict[str, bytes]:
     """The trivially-true reference: bake the same run state from scratch."""
-    store = declare_a_governed_picture(where, run_folder, name="reference",
-                                       piece=PIECE, bake=True)
+    store = declare_a_governed_picture(where, run_folder, name="reference", piece=PIECE, bake=True)
     return every_baked_file(store)
 
 
@@ -60,24 +57,26 @@ def test_declaring_with_bake_writes_the_coarse_ground_as_files(tmp_path):
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
 
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     baked = every_baked_file(store)
     assert baked, "bake=True must leave the coarse ground on disk as files"
 
     import json
 
-    plain = declare_a_governed_picture(tmp_path / "plain", run.folder,
-                                       name="live", piece=PIECE)
-    declared = len(json.loads((plain / "zarr.json").read_text(
-        encoding="utf-8"))["attributes"]["ome"]["multiscales"][0]["datasets"])
+    plain = declare_a_governed_picture(tmp_path / "plain", run.folder, name="live", piece=PIECE)
+    declared = len(
+        json.loads((plain / "zarr.json").read_text(encoding="utf-8"))["attributes"]["ome"][
+            "multiscales"
+        ][0]["datasets"]
+    )
     try:
         for inside, held in baked.items():
             level, _, plane, row, column = Path(inside).parts
             if int(level) >= declared:
                 continue  # the picture's own levels exist only as baked files
-            computed = served.built_bytes_behind(
-                plain, f"{level}/c/{plane}/{row}/{column}")
+            computed = served.built_bytes_behind(plain, f"{level}/c/{plane}/{row}/{column}")
             assert computed == held, (
                 f"baked piece {inside} differs from the computed answer — "
                 "the two modes must be indistinguishable byte for byte"
@@ -98,25 +97,22 @@ def test_a_landing_patches_the_bake_to_match_a_fresh_one(tmp_path):
     """
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     before = every_baked_file(store)
 
     run.write_and_publish("posB", some_specimen(4242))
     try:
         _, _, b_only = the_columns_of(run)
         appeared = served.built_bytes_behind(store, f"0/c/0/0/{b_only}")
-        assert appeared is not None, (
-            "the landing must be served the moment its commit is visible"
-        )
+        assert appeared is not None, "the landing must be served the moment its commit is visible"
         after = every_baked_file(store)
     finally:
         served.forget(store)
 
     reference = a_fresh_bake_of(run.folder, tmp_path / "reference")
-    assert after == reference, (
-        "the patched bake must equal a from-scratch bake of the same state"
-    )
+    assert after == reference, "the patched bake must equal a from-scratch bake of the same state"
     assert after != before, "a landing inside the picture must patch the bake"
 
 
@@ -124,20 +120,20 @@ def test_a_replacement_is_served_new_from_files_with_no_stale_moment(tmp_path):
     """Between the commit and the answer there is no window of old ground."""
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     try:
         a_only, _, _ = the_columns_of(run)
         import numpy as np
         from check_the_built_picture import decode
+
         first = served.built_bytes_behind(store, f"0/c/0/0/{a_only}")
-        assert first is not None and 700 in decode(
-            first, PIECE, "uint16", ("z", "y", "x"))
+        assert first is not None and 700 in decode(first, PIECE, "uint16", ("z", "y", "x"))
 
         run.replace_a_position("posA", some_specimen(2200))
         second = served.built_bytes_behind(store, f"0/c/0/0/{a_only}")
-        seen = set(np.unique(decode(second, PIECE, "uint16",
-                                    ("z", "y", "x"))))
+        seen = set(np.unique(decode(second, PIECE, "uint16", ("z", "y", "x"))))
         assert 2200 in seen and 700 not in seen, (
             "the first ask after the commit answered the superseded "
             "generation — the file door ran ahead of the manifest"
@@ -153,12 +149,14 @@ def test_declaring_without_bake_removes_an_earlier_bake(tmp_path):
     """The switch works both ways, exactly as it does for transfers."""
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     assert every_baked_file(store)
 
-    again = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE)
+    again = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE
+    )
     assert again == store
     assert not every_baked_file(store), (
         "declaring without --bake left yesterday's baked ground being served"
@@ -169,8 +167,9 @@ def test_the_writer_can_replace_a_baked_piece_while_it_is_served(tmp_path):
     """The WinError 5 rule extends to baked files: read, and let go."""
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     try:
         a_only, _, _ = the_columns_of(run)
         assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
@@ -184,8 +183,7 @@ def test_the_writer_can_replace_a_baked_piece_while_it_is_served(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows sharing semantics")
-def test_the_bake_retries_a_transient_windows_sharing_violation(
-        tmp_path, monkeypatch):
+def test_the_bake_retries_a_transient_windows_sharing_violation(tmp_path, monkeypatch):
     """A transient Windows sharing lock must not turn a commit into absence.
 
     Windows refuses ``os.replace`` while another thread is reading the
@@ -196,8 +194,9 @@ def test_the_bake_retries_a_transient_windows_sharing_violation(
     """
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     governed.composer()
     from zmart_viewer import building as governed_module
@@ -206,14 +205,12 @@ def test_the_bake_retries_a_transient_windows_sharing_violation(
     refused = {"left": 1}
 
     def a_reader_temporarily_owns_the_destination(arriving, real):
-        if (refused["left"] and ".patching-" in str(arriving)
-                and ".patching-" not in str(real)):
+        if refused["left"] and ".patching-" in str(arriving) and ".patching-" not in str(real):
             refused["left"] -= 1
             raise PermissionError(5, "Access is denied", str(real))
         return real_replace(arriving, real)
 
-    monkeypatch.setattr(governed_module.os, "replace",
-                        a_reader_temporarily_owns_the_destination)
+    monkeypatch.setattr(governed_module.os, "replace", a_reader_temporarily_owns_the_destination)
     try:
         run.replace_a_position("posA", some_specimen(2200))
         governed.composer()
@@ -248,41 +245,40 @@ def test_the_http_route_consults_the_manifest_before_any_baked_file(tmp_path):
         sys.path.insert(0, backend)
     import numpy as np
     from check_the_built_picture import decode
+
     from zmart_viewer.server import make_server
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
-    server = make_server(port=0, data_dir=run.folder / "views" / "shown",
-                         store=[store.name])
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
+    server = make_server(port=0, data_dir=run.folder / "views" / "shown", store=[store.name])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         port = server.server_address[1]
-        addresses = ["/".join(Path(one).parts).replace("/c/", "/c/", 1)
-                     for one in every_baked_file(store)]
+        addresses = [
+            "/".join(Path(one).parts).replace("/c/", "/c/", 1) for one in every_baked_file(store)
+        ]
         assert addresses, "the hole only exists where baked files do"
 
         def over_http(inside: str) -> bytes:
             with urllib.request.urlopen(
-                    f"http://127.0.0.1:{port}/data/0/{store.name}/{inside}",
-                    timeout=30) as answer:
+                f"http://127.0.0.1:{port}/data/0/{store.name}/{inside}", timeout=30
+            ) as answer:
                 return answer.read()
 
         showing = {
-            inside: decode(over_http(inside), PIECE, "uint16",
-                           ("z", "y", "x"))
+            inside: decode(over_http(inside), PIECE, "uint16", ("z", "y", "x"))
             for inside in addresses
         }
-        marked = [inside for inside, piece in showing.items()
-                  if 700 in piece]
+        marked = [inside for inside, piece in showing.items() if 700 in piece]
         assert marked, "some baked piece must show the published ground"
 
         run.replace_a_position("posA", some_specimen(2200))
         for inside in marked:
-            seen = set(np.unique(decode(over_http(inside), PIECE, "uint16",
-                                        ("z", "y", "x"))))
+            seen = set(np.unique(decode(over_http(inside), PIECE, "uint16", ("z", "y", "x"))))
             assert 2200 in seen and 700 not in seen, (
                 f"piece {inside}: the backend served the baked file from "
                 "before the replacement — its file door ran ahead of the "
@@ -312,8 +308,9 @@ def test_a_rollback_withdraws_ground_from_the_baked_files_too(tmp_path):
     remembered = truth.read_text(encoding="utf-8")
     run.write_and_publish("posB", some_specimen(4242))
 
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     try:
         _, _, b_only = the_columns_of(run)
         assert served.built_bytes_behind(store, f"0/c/0/0/{b_only}") is not None
@@ -332,8 +329,7 @@ def test_a_rollback_withdraws_ground_from_the_baked_files_too(tmp_path):
     )
 
 
-def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path,
-                                                              monkeypatch):
+def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path, monkeypatch):
     """Review finding D2: the declare-time stamp race.
 
     The initial bake writes the state of the snapshot taken BEFORE it ran,
@@ -359,16 +355,14 @@ def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path,
             run.write_and_publish("posB", some_specimen(4242))
         return baked
 
-    monkeypatch.setattr(declaring, "_bake_the_coarse_ground",
-                        a_commit_lands_mid_bake)
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    monkeypatch.setattr(declaring, "_bake_the_coarse_ground", a_commit_lands_mid_bake)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     try:
         _, _, b_only = the_columns_of(run)
         appeared = served.built_bytes_behind(store, f"0/c/0/0/{b_only}")
-        assert appeared is not None, (
-            "the commit that landed mid-bake must be served"
-        )
+        assert appeared is not None, "the commit that landed mid-bake must be served"
         after = every_baked_file(store)
     finally:
         served.forget(store)
@@ -391,8 +385,9 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
     """
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     import urllib.request
 
     backend = str(Path(__file__).resolve().parent.parent)
@@ -404,8 +399,7 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
     # the final image request in this test.
     inside = next(iter(every_baked_file(store)))
     assert served.built_bytes_behind(store, inside.replace("\\", "/")) is not None
-    server = make_server(port=0, data_dir=run.folder / "views" / "shown",
-                         store=[store.name])
+    server = make_server(port=0, data_dir=run.folder / "views" / "shown", store=[store.name])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -413,7 +407,8 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
         run.replace_a_position("posA", some_specimen(2200))
         request = urllib.request.Request(
             f"http://127.0.0.1:{server.server_address[1]}/api/announce",
-            data=b"{}", headers={"Content-Type": "application/json"},
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=30):
@@ -446,8 +441,7 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
     )
 
 
-def test_background_catch_up_waits_for_the_announcement_storm_to_quiet(
-        tmp_path, monkeypatch):
+def test_background_catch_up_waits_for_the_announcement_storm_to_quiet(tmp_path, monkeypatch):
     """The safety worker must not starve page derives during a commit storm.
 
     An eager background worker acquired the derive lock on every intermediate
@@ -473,21 +467,16 @@ def test_background_catch_up_waits_for_the_announcement_storm_to_quiet(
         for _ in range(6):
             governed.request_catch_up()
             time.sleep(0.05)
-        assert not called, (
-            "background baking began while announcements were still arriving"
-        )
+        assert not called, "background baking began while announcements were still arriving"
         assert caught_up.wait(timeout=2), (
             "the final announcement did not drive a catch-up after quiet"
         )
     finally:
         governed.close()
-    assert len(called) == 1, (
-        f"the announcement burst drove {len(called)} background derives"
-    )
+    assert len(called) == 1, f"the announcement burst drove {len(called)} background derives"
 
 
-def test_an_older_derive_cannot_regress_the_bake_behind_a_newer_one(
-        tmp_path, monkeypatch):
+def test_an_older_derive_cannot_regress_the_bake_behind_a_newer_one(tmp_path, monkeypatch):
     """A stale patcher must stand down before it changes baked files.
 
     Request A can finish composing, pause before the bake lock, and be
@@ -498,27 +487,31 @@ def test_an_older_derive_cannot_regress_the_bake_behind_a_newer_one(
     regressed stamp, patches only its own footprint, and stamps the whole
     history current while B's hole survives forever.
     """
+    from record_fixtures import FRAME
+
     from zmart_viewer.record.coordinator import LivePublisher
     from zmart_viewer.record.model import GridCell
     from zmart_viewer.record.profiles import plan_the_writing
-    from record_fixtures import FRAME
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1)
     cells = {
         GridCell(row, column): (
-            "posA" if (row, column) == (0, 0) else
-            "posB" if (row, column) == (0, 1) else
-            "posC" if (row, column) == (3, 3) else
-            f"unused-{row}-{column}"
+            "posA"
+            if (row, column) == (0, 0)
+            else "posB"
+            if (row, column) == (0, 1)
+            else "posC"
+            if (row, column) == (3, 3)
+            else f"unused-{row}-{column}"
         )
         for row in range(4)
         for column in range(4)
     }
-    run = LivePublisher(tmp_path, profile, run_id="out-of-order-bake",
-                        cells=cells, timepoints=1)
+    run = LivePublisher(tmp_path, profile, run_id="out-of-order-bake", cells=cells, timepoints=1)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     governed.composer()
 
@@ -536,8 +529,7 @@ def test_an_older_derive_cannot_regress_the_bake_behind_a_newer_one(
             assert let_old_continue.wait(timeout=30)
         return real_keep(made, dirtied, current, *rest, **named)
 
-    monkeypatch.setattr(governed, "_keep_the_bake_true",
-                        hold_the_older_snapshot)
+    monkeypatch.setattr(governed, "_keep_the_bake_true", hold_the_older_snapshot)
     run.replace_a_position("posA", some_specimen(2200))
     failed: list[BaseException] = []
 
@@ -599,15 +591,16 @@ def test_redeclaring_under_a_running_server_is_noticed(tmp_path):
     """
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE
+    )
     try:
         a_only, _, _ = the_columns_of(run)
         assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
 
-        again = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                           name="live", piece=PIECE,
-                                           bake=True)
+        again = declare_a_governed_picture(
+            run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+        )
         assert again == store
         run.replace_a_position("posA", some_specimen(2200))
         assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None
@@ -621,8 +614,7 @@ def test_redeclaring_under_a_running_server_is_noticed(tmp_path):
     )
 
 
-def test_an_unreadable_picture_description_fails_closed(tmp_path,
-                                                        monkeypatch):
+def test_an_unreadable_picture_description_fails_closed(tmp_path, monkeypatch):
     """Review finding D3: classification failure must not open the file door.
 
     A store whose description cannot be read — damage, or this machine's
@@ -634,8 +626,9 @@ def test_an_unreadable_picture_description_fails_closed(tmp_path,
     """
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     served.forget(store)
 
     the_real_read = served._what_it_was_built_from
@@ -647,8 +640,7 @@ def test_an_unreadable_picture_description_fails_closed(tmp_path,
             raise OSError("endpoint protection holds the file")
         return the_real_read(path)
 
-    monkeypatch.setattr(served, "_what_it_was_built_from",
-                        a_read_that_stumbles_once)
+    monkeypatch.setattr(served, "_what_it_was_built_from", a_read_that_stumbles_once)
     try:
         assert served.a_manifest_governs(store), (
             "a picture that cannot be classified must be treated as "
@@ -657,8 +649,7 @@ def test_an_unreadable_picture_description_fails_closed(tmp_path,
         monkeypatch.setattr(served, "_REFUSED_FOR_SECONDS", 0.0)
         a_only, _, _ = the_columns_of(run)
         assert served.built_bytes_behind(store, f"0/c/0/0/{a_only}") is not None, (
-            "one transient stumble must not be remembered as 'ordinary "
-            "image' forever"
+            "one transient stumble must not be remembered as 'ordinary image' forever"
         )
     finally:
         served.forget(store)
@@ -684,10 +675,10 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
-    server = make_server(port=0, data_dir=run.folder / "views" / "shown",
-                         store=[store.name])
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
+    server = make_server(port=0, data_dir=run.folder / "views" / "shown", store=[store.name])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -699,8 +690,8 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
 
         def over_http(path: str) -> bytes:
             with urllib.request.urlopen(
-                    f"http://127.0.0.1:{port}/data/0/{store.name}/{path}",
-                    timeout=30) as answer:
+                f"http://127.0.0.1:{port}/data/0/{store.name}/{path}", timeout=30
+            ) as answer:
                 return answer.read()
 
         run.replace_a_position("posA", some_specimen(2200))
@@ -733,8 +724,9 @@ def test_a_baked_picture_still_warms_the_composer_for_its_patcher(tmp_path):
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     try:
         composer = governed.composer()
@@ -754,11 +746,10 @@ def test_an_empty_run_bakes_nothing_because_absence_means_fill(tmp_path):
     run = a_governed_run(tmp_path)
     run.write_the_view()
     run.write_the_layout()
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
-    assert not every_baked_file(store), (
-        "an empty picture's bake must write no pixel files at all"
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
     )
+    assert not every_baked_file(store), "an empty picture's bake must write no pixel files at all"
 
 
 def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
@@ -773,21 +764,21 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
     padding included.
     """
     import numpy as np
+
     from zmart_viewer.building import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
     run.write_and_publish("posB", some_specimen(4242))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE, bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE, bake=True
+    )
     try:
         baked = GovernedRun(run.folder, piece=PIECE, store=store)
         read_back = baked.composer()
         read_back.stop_warming()
         read_back.warm_the_coarse_levels()
-        assert read_back.coarse_levels_are_warm, (
-            "the file-fed warm must fill every pinned slab"
-        )
+        assert read_back.coarse_levels_are_warm, "the file-fed warm must fill every pinned slab"
 
         composing = GovernedRun(run.folder, piece=PIECE).composer()
         composing.stop_warming()
@@ -796,8 +787,7 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
         # Pinned keys carry the full frame address (moment, channel) first;
         # a flat survey lives at frame (0, 0).
         for (moment, channel, level, low_z, row, column), slab in held.items():
-            built = composing._slab_for(level, low_z, row, column,
-                                        moment=moment, channel=channel)
+            built = composing._slab_for(level, low_z, row, column, moment=moment, channel=channel)
             assert np.array_equal(slab, built), (
                 f"the slab read back for level {level} piece "
                 f"({row}, {column}) differs from the composed one — the "
@@ -805,4 +795,5 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
             )
     finally:
         from zmart_viewer import pieces as served
+
         served.forget(store)

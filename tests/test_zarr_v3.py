@@ -34,12 +34,12 @@ import urllib.request
 
 import numpy as np
 import pytest
-from zmart_viewer import library as stores
 import zarr
-from zmart_viewer.library import Library
 from pixels import colour_spread, fraction_lit, image_middle
-from zmart_viewer.server import make_server
+
+from zmart_viewer import library as stores
 from zmart_viewer.library import (
+    Library,
     axis_names,
     declared_channels,
     is_store,
@@ -48,6 +48,7 @@ from zmart_viewer.library import (
     written_timepoints,
     zarr_scheme,
 )
+from zmart_viewer.server import make_server
 
 # How wide the full-resolution copy of these stores is, in voxels.
 #
@@ -168,13 +169,9 @@ def _v3_store(
             dtype="uint16",
         )
         array[:] = (
-            _specimen(wide, len(channels))
-            if structure
-            else np.full(shape, 1200, dtype=np.uint16)
+            _specimen(wide, len(channels)) if structure else np.full(shape, 1200, dtype=np.uint16)
         )
-    group.attrs.update(
-        {"ome": _ome(unit=unit, channels=describes or channels, levels=levels)}
-    )
+    group.attrs.update({"ome": _ome(unit=unit, channels=describes or channels, levels=levels)})
     return path
 
 

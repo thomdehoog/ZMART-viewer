@@ -18,6 +18,7 @@ import time
 import numpy as np
 import pytest
 import zarr
+
 from zmart_viewer.server import make_server
 
 
@@ -40,7 +41,7 @@ def _serve_tree(tmp_path, *, live: bool = True):
     (data / "demo.zarr" / "chunk").write_bytes(b"\x01\x02\x03\x04")
     (tmp_path / "outside.txt").write_text("secret", encoding="utf-8")
 
-    server = make_server(port=0, data_dir=data, site_dir=site, live=live)
+    server = make_server(port=0, data_dir=data, site_dir=site, store="demo.zarr", live=live)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
@@ -61,8 +62,13 @@ def serving(tmp_path):
         stop()
 
 
-def request(port: int, path: str, method: str = "GET", body: bytes | None = None,
-            extra: dict[str, str] | None = None):
+def request(
+    port: int,
+    path: str,
+    method: str = "GET",
+    body: bytes | None = None,
+    extra: dict[str, str] | None = None,
+):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
         headers = {"Content-Length": str(len(body))} if body is not None else {}
@@ -186,9 +192,7 @@ def test_tiles_of_one_channel_merge_into_a_single_layer(tmp_path):
         "Mag5_Tile0_Ch647_FltEmpty_Sh1_Rot0.ome.zarr",
         "Mag5_Tile1_Ch488_FltEmpty_Sh1_Rot0.ome.zarr",
     ]
-    config = config_from(
-        data_dir=tmp_path, site_dir=site, store=names, window=(0.0, 100.0)
-    )
+    config = config_from(data_dir=tmp_path, site_dir=site, store=names, window=(0.0, 100.0))
     layers = config["layers"]
     # Two channels across three stores, so two rows.
     assert [layer["name"] for layer in layers] == ["Ch488", "Ch647"]
@@ -300,7 +304,7 @@ def test_serves_data_from_an_unresolved_directory(tmp_path):
     (data / "chunk").write_bytes(b"\xaa\xbb")
     unresolved = tmp_path / "data" / ".." / "data"
 
-    server = make_server(port=0, data_dir=unresolved, site_dir=tmp_path)
+    server = make_server(port=0, data_dir=unresolved, site_dir=tmp_path, store="chunk")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -380,7 +384,8 @@ def test_image_is_revalidated_by_the_browser_during_a_run(serving, tmp_path):
     assert validator, "a live piece must carry a validator to revalidate against"
 
     status, headers, body = request(
-        serving, "/data/0/demo.zarr/chunk",
+        serving,
+        "/data/0/demo.zarr/chunk",
         extra={"If-None-Match": validator},
     )
     assert status == 304, "an unchanged piece should be answered without a body"
@@ -425,7 +430,8 @@ def test_a_patched_piece_fails_revalidation_and_arrives_fresh(serving, tmp_path)
     chunk.write_bytes(b"\x09\x0a\x0b\x0c")
     _a_settled_file(chunk, later=True)
     status, headers, body = request(
-        serving, "/data/0/demo.zarr/chunk",
+        serving,
+        "/data/0/demo.zarr/chunk",
         extra={"If-None-Match": held},
     )
     assert status == 200, "a patched piece answered 304 would freeze a stale picture"
@@ -506,20 +512,33 @@ class TestClosingGivesTheMemoryBack:
             store.mkdir()
             group = zarr.open_group(str(store), mode="w", zarr_format=2)
             pixels = np.full((1, 2, 16, 16), 700, dtype=np.uint16)
-            group.create_array("0", shape=pixels.shape, chunks=(1, 1, 16, 16),
-                               dtype="uint16")[:] = pixels
+            group.create_array("0", shape=pixels.shape, chunks=(1, 1, 16, 16), dtype="uint16")[
+                :
+            ] = pixels
             (store / ".zattrs").write_text(
-                json.dumps({
-                    "multiscales": [{
-                        "version": "0.4",
-                        "axes": [{"name": "c", "type": "channel"},
-                                 {"name": "z", "type": "space", "unit": "micrometer"},
-                                 {"name": "y", "type": "space", "unit": "micrometer"},
-                                 {"name": "x", "type": "space", "unit": "micrometer"}],
-                        "datasets": [{"path": "0", "coordinateTransformations": [
-                            {"type": "scale", "scale": [1.0, 1.0, 0.5, 0.5]}]}],
-                    }],
-                }),
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "version": "0.4",
+                                "axes": [
+                                    {"name": "c", "type": "channel"},
+                                    {"name": "z", "type": "space", "unit": "micrometer"},
+                                    {"name": "y", "type": "space", "unit": "micrometer"},
+                                    {"name": "x", "type": "space", "unit": "micrometer"},
+                                ],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0, 0.5, 0.5]}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
                 encoding="utf-8",
             )
         return site, data
@@ -531,7 +550,9 @@ class TestClosingGivesTheMemoryBack:
         # Two acquisitions means two loads: one load is one dataset, so opening
         # both together would make them a single thing with nothing to close.
         server = make_server(
-            port=0, data_dir=data, site_dir=site,
+            port=0,
+            data_dir=data,
+            site_dir=site,
             loads=[
                 {"stores": ["overview_pos001.ome.zarr"], "name": "overview"},
                 {"stores": ["targetscan_cell001.ome.zarr"], "name": "targetscan"},
@@ -554,7 +575,9 @@ class TestClosingGivesTheMemoryBack:
 
     def _close(self, port, group):
         status, _, body = request(
-            port, "/api/stores/close", method="POST",
+            port,
+            "/api/stores/close",
+            method="POST",
             body=json.dumps({"group": group}).encode("utf-8"),
         )
         assert status == 200
@@ -609,69 +632,6 @@ class TestClosingGivesTheMemoryBack:
         assert [root for _, root, _ in closed] == [data.resolve()]
 
 
-def test_the_record_of_where_a_run_imaged_is_reachable_from_the_page(tmp_path):
-    """A browser must be able to fetch the coverage record with one plain request.
-
-    ``oldwriter`` writes down which parts of a run's canvas actually hold
-    picture, so that the viewer can stop asking for the far larger room the run
-    merely declared. That is only useful if the page can read it, and the page
-    can only read what this server hands out — it has no way to list a folder and
-    go looking. So the record has to sit at a path the page can work out for
-    itself from the run it already knows about, and this checks that it does.
-    """
-    import sys
-    from pathlib import Path
-
-    import numpy as np
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from oldwriter import Channel, TileCanvases
-
-    run = tmp_path / "run"
-    canvases = TileCanvases.create(
-        run,
-        name="overview",
-        canvas_shape=(2, 2048, 2048),
-        tile_shape=(2, 128, 128),
-        tile_step=(2, 128, 128),
-        voxel_size_um=(2.0, 0.35, 0.35),
-        channels=[Channel("488")],
-        levels=2,
-        chunk=64,
-    )
-    for col in range(3):
-        canvases.write(np.full((2, 128, 128), 1000 + col, "uint16"),
-                       origin=(0, 0, col * 128), tile_index=(0, 0, col))
-    canvases.close()
-
-    site = tmp_path / "site"
-    site.mkdir()
-    (site / "index.html").write_text("<!doctype html><title>page</title>", encoding="utf-8")
-    server = make_server(port=0, data_dir=run, site_dir=site)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        port = server.server_address[1]
-        status, _, body = request(
-            port, "/data/0/zmart-coverage/overview.ome.zarr/regions.json"
-        )
-        assert status == 200
-        summary = json.loads(body)
-        assert summary["regions"] == [{"z": [0, 2], "y": [0, 128], "x": [0, 384]}]
-        assert summary["tiles_written"] == 3
-
-        # And the tile-by-tile record beside it, for anything wanting the detail.
-        status, _, body = request(
-            port, "/data/0/zmart-coverage/overview.ome.zarr/tiles.jsonl"
-        )
-        assert status == 200
-        lines = [json.loads(line) for line in body.decode().splitlines() if line.strip()]
-        assert [line["origin"]["x"] for line in lines] == [0, 128, 256]
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
-
-
 def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
     """A reload must fetch today's viewer, not the one the browser kept.
 
@@ -690,23 +650,21 @@ def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
     site = tmp_path / "site"
     site.mkdir()
     (site / "index.html").write_text(
-        "<!doctype html><script src=/assets/index-abc.js></script>",
-        encoding="utf-8")
+        "<!doctype html><script src=/assets/index-abc.js></script>", encoding="utf-8"
+    )
     assets = site / "assets"
     assets.mkdir()
     (assets / "index-abc.js").write_text("console.log(1)", encoding="utf-8")
     data = tmp_path / "data"
     (data / "demo.zarr").mkdir(parents=True)
-    (data / "demo.zarr" / ".zattrs").write_text('{"multiscales": []}',
-                                                encoding="utf-8")
+    (data / "demo.zarr" / ".zattrs").write_text('{"multiscales": []}', encoding="utf-8")
 
     server = make_server(port=0, data_dir=data, site_dir=site)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    address = f"http://127.0.0.1:{server.server_address[1]}"
+
     def headers_for(path: str) -> str:
-        connection = http.client.HTTPConnection("127.0.0.1",
-                                                server.server_address[1])
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1])
         try:
             connection.request("GET", path)
             answer = connection.getresponse()

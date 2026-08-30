@@ -61,6 +61,7 @@ def _remove_existing_store(path: Path, attempts: int = 5) -> None:
                 raise
             time.sleep(0.05 * (attempt + 1))
 
+
 # The three channels, in order, and the false colours the viewer will give
 # them by default — chosen to read clearly when overlaid (white anatomy, then
 # a green and a magenta marker), the same palette the rest of ZMART uses.
@@ -119,11 +120,7 @@ def _paint_blobs(volume: np.ndarray, centres: np.ndarray, radius_um: float) -> N
     rz, ry, rx = (radius_um / vx for vx in _VOXEL_UM)
     zz, yy, xx = np.ogrid[0 : volume.shape[0], 0 : volume.shape[1], 0 : volume.shape[2]]
     for cz, cy, cx in centres:
-        dist2 = (
-            ((zz - cz) / rz) ** 2
-            + ((yy - cy) / ry) ** 2
-            + ((xx - cx) / rx) ** 2
-        )
+        dist2 = ((zz - cz) / rz) ** 2 + ((yy - cy) / ry) ** 2 + ((xx - cx) / rx) ** 2
         volume += np.exp(-0.5 * dist2)
 
 
@@ -403,9 +400,7 @@ def write_demo_zarr(
     # not know about OME-Zarr, so we attach the standard blocks ourselves.
     attrs = {
         "multiscales": [
-            _multiscales_metadata(
-                len(levels), timelapse=timelapse, channel_axis=not single_channel
-            )
+            _multiscales_metadata(len(levels), timelapse=timelapse, channel_axis=not single_channel)
         ],
         "omero": _omero_metadata(single=single_channel),
     }
@@ -421,7 +416,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "path",
         nargs="?",
-        default="zmart-viewer/testdata/demo_store/demo.zarr",
+        default="demo_store/demo.zarr",
         help="Where to write the .zarr store.",
     )
     parser.add_argument("--seed", type=int, default=7)

@@ -56,19 +56,24 @@ def a_deep_run_whose_levels_halve_z(tmp_path):
         topology="grid",
         overlap_pixels={"y": 16, "x": 16},
         levels=(
-            LevelGeometry(level=0, downsampling={"z": 1, "y": 1, "x": 1},
-                          inner_chunk={"z": 1, "y": 128, "x": 128}),
-            LevelGeometry(level=1, downsampling={"z": 2, "y": 2, "x": 2},
-                          inner_chunk={"z": 1, "y": 64, "x": 64}),
+            LevelGeometry(
+                level=0,
+                downsampling={"z": 1, "y": 1, "x": 1},
+                inner_chunk={"z": 1, "y": 128, "x": 128},
+            ),
+            LevelGeometry(
+                level=1,
+                downsampling={"z": 2, "y": 2, "x": 2},
+                inner_chunk={"z": 1, "y": 64, "x": 64},
+            ),
         ),
         channels=("gfp",),
     )
-    profile = replace(
-        profile, profile_id=name_for_a_profile(profile, readable_prefix="deep")
-    )
+    profile = replace(profile, profile_id=name_for_a_profile(profile, readable_prefix="deep"))
     return LivePublisher(
         tmp_path / "experiment" / "acquisitions" / "deep",
-        profile, run_id="deep-halving-run",
+        profile,
+        run_id="deep-halving-run",
         cells={GridCell(0, 0): "p00"},
     )
 
@@ -97,9 +102,7 @@ def test_the_writer_and_the_world_frame_agree_on_the_ceiling(
     # cache-poisoning fix of 2026-08-19); the geometry itself still comes
     # from the layout and profile alone.
     frame = TheWorldFrame([], run.layout, run.profile, run=run.folder)
-    assert frame.shape(1) == ceiling, (
-        "the world frame disagrees with the ceiling rule"
-    )
+    assert frame.shape(1) == ceiling, "the world frame disagrees with the ceiling rule"
 
 
 def test_the_rule_has_exactly_one_definition():
@@ -112,7 +115,6 @@ def test_the_rule_has_exactly_one_definition():
     function object, not a lookalike.
     """
     from zmart_viewer import building as governed
-
     from zmart_viewer.record import coordinator, gateway, model
 
     assert coordinator.rounded_up is model.rounded_up

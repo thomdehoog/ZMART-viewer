@@ -114,9 +114,10 @@ sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
-import measure_the_frame_rate_of_a_linked_view as watching  # noqa: E402
-from zmart_viewer.building import declare_a_built_picture  # noqa: E402
+import watching  # noqa: E402
 from measure_scaling import write_a_transfer  # noqa: E402
+
+from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
 # The generations. Each is named for a channel the panel already knows how to
@@ -165,17 +166,17 @@ def which_generation_is_this(image_bytes: bytes, middle: dict) -> str:
     import numpy as np
     from PIL import Image
 
-    whole = np.asarray(Image.open(io.BytesIO(image_bytes)).convert("RGB"),
-                       dtype=np.float64)
-    pixels = whole[middle["top"]:middle["top"] + middle["side"],
-                   middle["left"]:middle["left"] + middle["side"]]
+    whole = np.asarray(Image.open(io.BytesIO(image_bytes)).convert("RGB"), dtype=np.float64)
+    pixels = whole[
+        middle["top"] : middle["top"] + middle["side"],
+        middle["left"] : middle["left"] + middle["side"],
+    ]
     brightness = pixels.max(axis=2)
     lit = brightness > FLOOR
     if lit.mean() < 0.5:
         return "blank"
     hue = pixels[lit] / brightness[lit][:, None]
-    named = [(name, np.array(colour) / max(colour))
-             for name, _, colour, _ in SETS]
+    named = [(name, np.array(colour) / max(colour)) for name, _, colour, _ in SETS]
     apart = np.stack([np.abs(hue - wanted).sum(axis=1) for _, wanted in named])
     counts = np.bincount(apart.argmin(axis=0), minlength=len(named))
     return named[int(counts.argmax())][0]
@@ -205,16 +206,19 @@ class WatchingTheScreen:
         self._latest: str | None = None
         self._session = page.context.new_cdp_session(page)
         self._session.on("Page.screencastFrame", self._one_frame)
-        self._session.send("Page.startScreencast", {
-            "format": "png", "everyNthFrame": 1,
-        })
+        self._session.send(
+            "Page.startScreencast",
+            {
+                "format": "png",
+                "everyNthFrame": 1,
+            },
+        )
 
     def _one_frame(self, told) -> None:
         import base64
-        self._frames.append((float(told["metadata"]["timestamp"]),
-                             base64.b64decode(told["data"])))
-        self._session.send("Page.screencastFrameAck",
-                           {"sessionId": told["sessionId"]})
+
+        self._frames.append((float(told["metadata"]["timestamp"]), base64.b64decode(told["data"])))
+        self._session.send("Page.screencastFrameAck", {"sessionId": told["sessionId"]})
 
     def seen_since(self, moment: float) -> list[tuple[float, str]]:
         """Every (when, generation) painted since ``moment``, classified.
@@ -265,8 +269,10 @@ def write_the_generations(work: Path, positions: int) -> list[Path]:
         declare_a_built_picture(folder, transfer, name=f"gen{number:02d}_Ch{wavelength}")
         declare_a_built_picture(folder, dark, name=f"gen{number:02d}_Ch999")
         generations.append(folder)
-        print(f"  {name:<8} {positions} positions written and declared "
-              f"under {folder.name}", flush=True)
+        print(
+            f"  {name:<8} {positions} positions written and declared under {folder.name}",
+            flush=True,
+        )
     return generations
 
 
@@ -287,9 +293,16 @@ def groups_in(config: dict) -> set[str]:
     return {layer.get("group") or "" for layer in config.get("layers", [])}
 
 
-def swap_to(page, watching_the_screen: WatchingTheScreen, port: int,
-            generation: Path, expect: str, was_showing: str,
-            asked: dict, patience: float = 60.0) -> dict:
+def swap_to(
+    page,
+    watching_the_screen: WatchingTheScreen,
+    port: int,
+    generation: Path,
+    expect: str,
+    was_showing: str,
+    asked: dict,
+    patience: float = 60.0,
+) -> dict:
     """Replace the open generation with this one, and time what is seen.
 
     The three POSTs are the whole intervention; everything after them is the
@@ -344,15 +357,18 @@ def a_page_on(browser, dist: Path, opening: Path):
     the page has made — read at each end of a swap, which is what turns it into
     the cost of that swap.
     """
-    server = make_server(port=0, data_dir=opening, site_dir=dist,
-                         loads=[{"path": str(opening), "name": opening.name}])
+    server = make_server(
+        port=0,
+        data_dir=opening,
+        site_dir=dist,
+        loads=[{"path": str(opening), "name": opening.name}],
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 900, "height": 700})
     asked = {"requests": 0}
     page.on("request", lambda _: asked.update(requests=asked["requests"] + 1))
-    page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-              wait_until="domcontentloaded")
+    page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
     page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
     page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=300_000)
     page.wait_for_function(watching.EVERY_SOURCE_RESOLVED, timeout=600_000)
@@ -362,17 +378,26 @@ def a_page_on(browser, dist: Path, opening: Path):
 
 def main() -> int:
     parsing = argparse.ArgumentParser(description=__doc__)
-    parsing.add_argument("--positions", type=int, default=100,
-                         help="how many positions each generation holds")
-    parsing.add_argument("--swaps", type=int, default=12,
-                         help="how many times to replace the view with the next one")
-    parsing.add_argument("--headed", action="store_true",
-                         help="open a visible window, which on Windows is the only "
-                              "way the browser reaches the graphics card")
-    parsing.add_argument("--dwell", type=float, default=0.0,
-                         help="seconds to hold each generation on screen before "
-                              "the next swap, so a person can watch; outside "
-                              "every timing")
+    parsing.add_argument(
+        "--positions", type=int, default=100, help="how many positions each generation holds"
+    )
+    parsing.add_argument(
+        "--swaps", type=int, default=12, help="how many times to replace the view with the next one"
+    )
+    parsing.add_argument(
+        "--headed",
+        action="store_true",
+        help="open a visible window, which on Windows is the only "
+        "way the browser reaches the graphics card",
+    )
+    parsing.add_argument(
+        "--dwell",
+        type=float,
+        default=0.0,
+        help="seconds to hold each generation on screen before "
+        "the next swap, so a person can watch; outside "
+        "every timing",
+    )
     asked_for = parsing.parse_args()
 
     dist = _VIZ / "app" / "page" / "dist"
@@ -393,11 +418,14 @@ def main() -> int:
         page, server, thread, asked = a_page_on(browser, dist, generations[0])
         port = server.server_address[1]
         canvas = page.locator("canvas").first.bounding_box()
-        watcher = WatchingTheScreen(page, {
-            "left": int(canvas["x"] + canvas["width"] / 2 - PATCH / 2),
-            "top": int(canvas["y"] + canvas["height"] / 2 - PATCH / 2),
-            "side": PATCH,
-        })
+        watcher = WatchingTheScreen(
+            page,
+            {
+                "left": int(canvas["x"] + canvas["width"] / 2 - PATCH / 2),
+                "top": int(canvas["y"] + canvas["height"] / 2 - PATCH / 2),
+                "side": PATCH,
+            },
+        )
         waited = time.time()
         while watcher.showing is None and time.time() - waited < 15:
             page.wait_for_timeout(100)
@@ -411,66 +439,75 @@ def main() -> int:
                 "wavelength in a store's name; check the names and "
                 "_CHANNEL_COLORS still agree."
             )
-        heap_first = page.evaluate(
-            "() => performance.memory?.usedJSHeapSize || 0")
+        heap_first = page.evaluate("() => performance.memory?.usedJSHeapSize || 0")
 
-        print(f"\n  {'swap':>4} {'generation':>10} {'open':>8} {'close':>8} "
-              f"{'gone':>8} {'shown':>8} {'blank':>8} {'requests':>9}")
+        print(
+            f"\n  {'swap':>4} {'generation':>10} {'open':>8} {'close':>8} "
+            f"{'gone':>8} {'shown':>8} {'blank':>8} {'requests':>9}"
+        )
         print("  " + "-" * 72)
         showing = SETS[0][0]
         rows = []
         for number in range(asked_for.swaps):
             which = (number + 1) % len(SETS)
             name = SETS[which][0]
-            row = swap_to(page, watcher, port, generations[which], name,
-                          showing, asked)
+            row = swap_to(page, watcher, port, generations[which], name, showing, asked)
             row["generation"] = name
             rows.append(row)
             if row["shown_ms"] is not None:
                 showing = name
+
             def say(key, row=row):
-                return (f"{row[key]:>6.0f}ms" if row[key] is not None
-                        else "     --")
-            print(f"  {number + 1:>4} {name:>10} {say('opened_ms')} "
-                  f"{say('closed_ms')} {say('gone_ms')} "
-                  f"{say('shown_ms')} {say('blank_ms')} {row['requests']:>9}"
-                  + ("  <- never appeared" if row["shown_ms"] is None else "")
-                  + ("  <- camera moved" if row["drifted"] else ""),
-                  flush=True)
+                return f"{row[key]:>6.0f}ms" if row[key] is not None else "     --"
+
+            print(
+                f"  {number + 1:>4} {name:>10} {say('opened_ms')} "
+                f"{say('closed_ms')} {say('gone_ms')} "
+                f"{say('shown_ms')} {say('blank_ms')} {row['requests']:>9}"
+                + ("  <- never appeared" if row["shown_ms"] is None else "")
+                + ("  <- camera moved" if row["drifted"] else ""),
+                flush=True,
+            )
             if asked_for.dwell:
                 page.wait_for_timeout(int(asked_for.dwell * 1000))
-        heap_last = page.evaluate(
-            "() => performance.memory?.usedJSHeapSize || 0")
+        heap_last = page.evaluate("() => performance.memory?.usedJSHeapSize || 0")
 
         arrived = [one for one in rows if one["shown_ms"] is not None]
         print()
         if not arrived:
-            print("  No swap ever put the new generation on screen. The swap "
-                  "route is broken\n  somewhere between the API and the panel — "
-                  "that is a finding about the\n  viewer, not about the "
-                  "workaround. Nothing here says what a swap costs.")
+            print(
+                "  No swap ever put the new generation on screen. The swap "
+                "route is broken\n  somewhere between the API and the panel — "
+                "that is a finding about the\n  viewer, not about the "
+                "workaround. Nothing here says what a swap costs."
+            )
         else:
             middles = sorted(one["shown_ms"] for one in arrived)
-            blanks = sorted(one["blank_ms"] for one in arrived
-                            if one["blank_ms"] is not None)
-            print(f"  {len(arrived)} of {len(rows)} swaps put the new "
-                  "generation on screen.")
-            print(f"  shown: middling {middles[len(middles) // 2]:.0f} ms, "
-                  f"quickest {middles[0]:.0f}, slowest {middles[-1]:.0f}")
+            blanks = sorted(one["blank_ms"] for one in arrived if one["blank_ms"] is not None)
+            print(f"  {len(arrived)} of {len(rows)} swaps put the new generation on screen.")
+            print(
+                f"  shown: middling {middles[len(middles) // 2]:.0f} ms, "
+                f"quickest {middles[0]:.0f}, slowest {middles[-1]:.0f}"
+            )
             if blanks:
-                print(f"  blank: middling {blanks[len(blanks) // 2]:.0f} ms — "
-                      "what opening the new generation before closing the old "
-                      "would remove")
+                print(
+                    f"  blank: middling {blanks[len(blanks) // 2]:.0f} ms — "
+                    "what opening the new generation before closing the old "
+                    "would remove"
+                )
             first_few = [one["shown_ms"] for one in arrived[:3]]
             last_few = [one["shown_ms"] for one in arrived[-3:]]
-            drift = ((sum(last_few) / len(last_few))
-                     / max(1e-9, sum(first_few) / len(first_few)))
-            print(f"  the last swaps against the first: {drift:.2f}x — a "
-                  "number well above 1.0\n  means discarded generations are "
-                  "not being let go of")
+            drift = (sum(last_few) / len(last_few)) / max(1e-9, sum(first_few) / len(first_few))
+            print(
+                f"  the last swaps against the first: {drift:.2f}x — a "
+                "number well above 1.0\n  means discarded generations are "
+                "not being let go of"
+            )
         if heap_first and heap_last:
-            print(f"  heap: {heap_first / 1e6:.0f} MB at the start, "
-                  f"{heap_last / 1e6:.0f} MB after {len(rows)} swaps")
+            print(
+                f"  heap: {heap_first / 1e6:.0f} MB at the start, "
+                f"{heap_last / 1e6:.0f} MB after {len(rows)} swaps"
+            )
     except KeyboardInterrupt:
         print("\nStopped. Everything above is measured.")
     finally:

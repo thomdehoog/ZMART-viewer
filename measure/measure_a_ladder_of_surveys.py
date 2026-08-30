@@ -58,21 +58,19 @@ HERE = Path(__file__).resolve().parent
 
 #: One rung per power of two: the side length whose square lands closest.
 LADDER = {
-    6: 8,      # 64
-    7: 11,     # 121
-    8: 16,     # 256
-    9: 23,     # 529
-    10: 32,    # 1,024
-    11: 45,    # 2,025
-    12: 64,    # 4,096
-    13: 91,    # 8,281
-    14: 128,   # 16,384
-    15: 181,   # 32,761
+    6: 8,  # 64
+    7: 11,  # 121
+    8: 16,  # 256
+    9: 23,  # 529
+    10: 32,  # 1,024
+    11: 45,  # 2,025
+    12: 64,  # 4,096
+    13: 91,  # 8,281
+    14: 128,  # 16,384
+    15: 181,  # 32,761
 }
 
-A_ROW = re.compile(
-    r"^\s+(land|replace)\s+\S+\s+(\d+)ms\s+(\d+)ms\s+(\d+)\s+(\d+|nan)ms\s*$"
-)
+A_ROW = re.compile(r"^\s+(land|replace)\s+\S+\s+(\d+)ms\s+(\d+)ms\s+(\d+)\s+(\d+|nan)ms\s*$")
 ONE_TIMERS = {
     "wrote_fixture_s": re.compile(r"written in (\d+) s"),
     "baked_s": re.compile(r"declared baked in ([\d.]+) s"),
@@ -98,18 +96,23 @@ def spread(values: list[float]) -> dict:
         "min": round(ordered[0], 1),
         "median": round(statistics.median(ordered), 1),
         "mean": round(statistics.fmean(ordered), 1),
-        "p90": round(ordered[min(len(ordered) - 1,
-                                 int(0.9 * (len(ordered) - 1)))], 1),
+        "p90": round(ordered[min(len(ordered) - 1, int(0.9 * (len(ordered) - 1)))], 1),
         "max": round(ordered[-1], 1),
     }
 
 
-def one_rung(power: int, across: int, churn: int, fixtures: str | None,
-             tidy: bool) -> dict:
+def one_rung(power: int, across: int, churn: int, fixtures: str | None, tidy: bool) -> dict:
     """Run the full churn at one survey size and distill its numbers."""
-    order = [sys.executable, str(HERE / "measure_a_governed_run_at_scale.py"),
-             "--across", str(across), "--churn", str(churn),
-             "--bake", "--warm-first"]
+    order = [
+        sys.executable,
+        str(HERE / "measure_a_governed_run_at_scale.py"),
+        "--across",
+        str(across),
+        "--churn",
+        str(churn),
+        "--bake",
+        "--warm-first",
+    ]
     if fixtures:
         order += ["--fixtures", fixtures]
     began = time.time()
@@ -118,33 +121,31 @@ def one_rung(power: int, across: int, churn: int, fixtures: str | None,
     sys.stdout.write(out)
     if ran.returncode != 0:
         sys.stdout.write(ran.stderr[-4000:])
-        raise RuntimeError(f"the {across}x{across} rung failed "
-                           f"(exit {ran.returncode})")
+        raise RuntimeError(f"the {across}x{across} rung failed (exit {ran.returncode})")
 
     changes = []
     for line in out.splitlines():
         matched = A_ROW.match(line)
         if matched:
             kind, writer, derive, read, visible = matched.groups()
-            changes.append({
-                "kind": kind,
-                "writer_ms": float(writer),
-                "derive_ms": float(derive),
-                "tiles_read": int(read),
-                "visible_ms": None if visible == "nan" else float(visible),
-            })
+            changes.append(
+                {
+                    "kind": kind,
+                    "writer_ms": float(writer),
+                    "derive_ms": float(derive),
+                    "tiles_read": int(read),
+                    "visible_ms": None if visible == "nan" else float(visible),
+                }
+            )
     record = {
         "power": power,
         "positions": across * across,
         "across": across,
         "wall_s": round(time.time() - began, 1),
-        "writer_land_ms": spread([c["writer_ms"] for c in changes
-                                  if c["kind"] == "land"]),
-        "writer_replace_ms": spread([c["writer_ms"] for c in changes
-                                     if c["kind"] == "replace"]),
+        "writer_land_ms": spread([c["writer_ms"] for c in changes if c["kind"] == "land"]),
+        "writer_replace_ms": spread([c["writer_ms"] for c in changes if c["kind"] == "replace"]),
         "derive_ms": spread([c["derive_ms"] for c in changes]),
-        "visible_ms": spread([c["visible_ms"] for c in changes
-                              if c["visible_ms"] is not None]),
+        "visible_ms": spread([c["visible_ms"] for c in changes if c["visible_ms"] is not None]),
         "tiles_read_total": sum(c["tiles_read"] for c in changes),
     }
     for name, pattern in ONE_TIMERS.items():
@@ -163,18 +164,19 @@ def the_table_so_far(records: list[dict]) -> str:
     """Every rung measured so far, one line each, medians with the spread."""
     lines = [
         "",
-        "== the ladder so far "
-        "(median [p90/max] ms; one-time costs in seconds) ==",
+        "== the ladder so far (median [p90/max] ms; one-time costs in seconds) ==",
         f"{'positions':>9} {'land':>16} {'replace':>16} {'derive':>16} "
         f"{'visible':>16} {'read':>5} {'bake':>7} {'warm':>7} {'finish':>7} "
         f"{'trans':>6}",
     ]
     for r in records:
+
         def told(name, r=r):
             s = r.get(name) or {}
             if not s:
                 return "-"
             return f"{s['median']:.0f} [{s['p90']:.0f}/{s['max']:.0f}]"
+
         lines.append(
             f"{r['positions']:>9} {told('writer_land_ms'):>16} "
             f"{told('writer_replace_ms'):>16} {told('derive_ms'):>16} "
@@ -190,38 +192,47 @@ def the_table_so_far(records: list[dict]) -> str:
 
 def main() -> int:
     parsing = argparse.ArgumentParser(description=__doc__)
-    parsing.add_argument("--powers", default="6-15",
-                         help="which rungs, as a range of powers of two "
-                              "(default 6-15: 64 up to 32,768 positions)")
-    parsing.add_argument("--churn", type=int, default=40,
-                         help="watched changes per rung, half landings and "
-                              "half replacements (the harness's default 40)")
-    parsing.add_argument("--fixtures", default=None,
-                         help="where the fixtures live, passed through to "
-                              "the harness")
-    parsing.add_argument("--tidy", action="store_true",
-                         help="delete each rung's fixture after measuring "
-                              "it, for machines without room for them all")
+    parsing.add_argument(
+        "--powers",
+        default="6-15",
+        help="which rungs, as a range of powers of two (default 6-15: 64 up to 32,768 positions)",
+    )
+    parsing.add_argument(
+        "--churn",
+        type=int,
+        default=40,
+        help="watched changes per rung, half landings and "
+        "half replacements (the harness's default 40)",
+    )
+    parsing.add_argument(
+        "--fixtures", default=None, help="where the fixtures live, passed through to the harness"
+    )
+    parsing.add_argument(
+        "--tidy",
+        action="store_true",
+        help="delete each rung's fixture after measuring "
+        "it, for machines without room for them all",
+    )
     asked = parsing.parse_args()
     low, high = (int(part) for part in asked.powers.split("-"))
 
-    results = (Path(asked.fixtures) if asked.fixtures else HERE) \
-        / "ladder_results.json"
+    results = (Path(asked.fixtures) if asked.fixtures else HERE) / "ladder_results.json"
     records: list[dict] = []
     if results.is_file():
         records = json.loads(results.read_text(encoding="utf-8"))
         done = {r["power"] for r in records}
-        print(f"picking up: rungs {sorted(done)} already measured "
-              f"in {results}")
+        print(f"picking up: rungs {sorted(done)} already measured in {results}")
 
     for power in range(low, high + 1):
         if any(r["power"] == power for r in records):
             continue
         across = LADDER[power]
-        print(f"\n#### rung 2^{power}: {across * across} positions "
-              f"({across} across), churn {asked.churn}", flush=True)
-        record = one_rung(power, across, asked.churn, asked.fixtures,
-                          asked.tidy)
+        print(
+            f"\n#### rung 2^{power}: {across * across} positions "
+            f"({across} across), churn {asked.churn}",
+            flush=True,
+        )
+        record = one_rung(power, across, asked.churn, asked.fixtures, asked.tidy)
         records.append(record)
         records.sort(key=lambda r: r["power"])
         results.parent.mkdir(parents=True, exist_ok=True)

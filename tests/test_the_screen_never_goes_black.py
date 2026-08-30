@@ -80,10 +80,10 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
+from record_fixtures import a_live_run, some_specimen  # noqa: E402
+
 from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
-
-from record_fixtures import a_live_run, some_specimen  # noqa: E402
 
 # --------------------------------------------------------------------------
 # The numbers this test depends on, and why each one is what it is.
@@ -313,6 +313,7 @@ _STOP_WATCHING = """() => {
 # Reading the recording.
 # --------------------------------------------------------------------------
 
+
 def _read_the_frame_recording(recording: dict) -> dict:
     """Turn a list of per-frame readings into the story of what was seen.
 
@@ -328,24 +329,28 @@ def _read_the_frame_recording(recording: dict) -> dict:
     too short or too empty to say anything comes back with ``usable`` set to
     false and a sentence saying why, and the caller decides what to do about it.
     """
-    frames = [one for one in (recording.get("frames") or [])
-              if one.get("lit") is not None]
+    frames = [one for one in (recording.get("frames") or []) if one.get("lit") is not None]
     fired_at = recording.get("invalidatedAt")
 
     if fired_at is None:
-        return {"usable": False,
-                "why": "the invalidation was never recorded, so before and "
-                       "after cannot be told apart",
-                "frames": len(frames)}
+        return {
+            "usable": False,
+            "why": "the invalidation was never recorded, so before and after cannot be told apart",
+            "frames": len(frames),
+        }
 
     before = [one for one in frames if one["t"] < fired_at]
     after = [one for one in frames if one["t"] >= fired_at]
     if len(before) < 3 or len(after) < 3:
-        return {"usable": False,
-                "why": (f"only {len(before)} frames were drawn before the "
-                        f"invalidation and {len(after)} after it, which is too "
-                        "few to compare"),
-                "frames": len(frames)}
+        return {
+            "usable": False,
+            "why": (
+                f"only {len(before)} frames were drawn before the "
+                f"invalidation and {len(after)} after it, which is too "
+                "few to compare"
+            ),
+            "frames": len(frames),
+        }
 
     # The middle value rather than the average, because the last frames before
     # the invalidation are the ones most likely to hold a stray reading, and a
@@ -360,8 +365,7 @@ def _read_the_frame_recording(recording: dict) -> dict:
     # the first healthy one after it, or the end of the recording. That is the
     # honest span, because a frame stays on screen until the next one replaces
     # it, so a single collapsed frame is still one frame's worth of darkness.
-    longest = {"frames": 0, "ms": 0.0, "began_at": None, "deepest": None,
-               "recovered": True}
+    longest = {"frames": 0, "ms": 0.0, "began_at": None, "deepest": None, "recovered": True}
     running: list[dict] = []
 
     def close_the_run(ended_at: float | None) -> None:
@@ -378,13 +382,15 @@ def _read_the_frame_recording(recording: dict) -> dict:
         recovered = ended_at is not None
         last_moment = ended_at if recovered else running[-1]["t"]
         if len(running) > longest["frames"]:
-            longest.update({
-                "frames": len(running),
-                "ms": last_moment - running[0]["t"],
-                "began_at": running[0]["t"] - fired_at,
-                "deepest": min(one["lit"] for one in running),
-                "recovered": recovered,
-            })
+            longest.update(
+                {
+                    "frames": len(running),
+                    "ms": last_moment - running[0]["t"],
+                    "began_at": running[0]["t"] - fired_at,
+                    "deepest": min(one["lit"] for one in running),
+                    "recovered": recovered,
+                }
+            )
 
     for one in after:
         if one["lit"] < collapsed_below:
@@ -397,9 +403,9 @@ def _read_the_frame_recording(recording: dict) -> dict:
     # How long a frame took, measured as the gap between one frame and the
     # next. The last frame has no successor, which is why the two lists being
     # paired here are deliberately of different lengths.
-    intervals = [b["t"] - a["t"]
-                 for a, b in zip(frames, frames[1:], strict=False)
-                 if b["t"] > a["t"]]
+    intervals = [
+        b["t"] - a["t"] for a, b in zip(frames, frames[1:], strict=False) if b["t"] > a["t"]
+    ]
 
     return {
         "usable": True,
@@ -417,8 +423,7 @@ def _read_the_frame_recording(recording: dict) -> dict:
         "watched_after_ms": after[-1]["t"] - fired_at,
         "frames_before": len(before),
         "frames_after": len(after),
-        "typical_frame_ms": (statistics.median(intervals)
-                             if intervals else None),
+        "typical_frame_ms": (statistics.median(intervals) if intervals else None),
         "chunks_before": (before[-1]["needed"], before[-1]["available"]),
     }
 
@@ -438,13 +443,14 @@ def _describe_what_was_seen(found: dict) -> str:
     else:
         frame_cost = f"{found['typical_frame_ms']:.1f} ms, typically"
     if found["picture_came_back"]:
-        recovery = ("The picture did come back on its own once the pieces had "
-                    "been fetched again.")
+        recovery = "The picture did come back on its own once the pieces had been fetched again."
     else:
-        recovery = ("The picture had still not come back "
-                    f"{found['watched_after_ms']:.0f} ms later, when the "
-                    "watching stopped, so the flash lasted at least as long as "
-                    "the figure above and possibly longer.")
+        recovery = (
+            "The picture had still not come back "
+            f"{found['watched_after_ms']:.0f} ms later, when the "
+            "watching stopped, so the flash lasted at least as long as "
+            "the figure above and possibly longer."
+        )
 
     lines = [
         f"the screen dropped from {found['baseline']:.0%} lit to "
@@ -480,6 +486,7 @@ def _describe_what_was_seen(found: dict) -> str:
 # The optional recording of what the compositor really showed.
 # --------------------------------------------------------------------------
 
+
 def _start_recording_the_screen(page, into: Path):
     """Ask the browser to send us every frame it composites, and save them.
 
@@ -501,44 +508,42 @@ def _start_recording_the_screen(page, into: Path):
         number = len(caught)
         name = f"frame_{number:05d}.jpg"
         (into / name).write_bytes(base64.b64decode(payload["data"]))
-        caught.append({
-            "file": name,
-            "browser_timestamp": payload.get("metadata", {}).get("timestamp"),
-            "captured_at": time.perf_counter(),
-        })
+        caught.append(
+            {
+                "file": name,
+                "browser_timestamp": payload.get("metadata", {}).get("timestamp"),
+                "captured_at": time.perf_counter(),
+            }
+        )
         try:
-            session.send("Page.screencastFrameAck",
-                         {"sessionId": payload["sessionId"]})
+            session.send("Page.screencastFrameAck", {"sessionId": payload["sessionId"]})
         except Exception:
             # The page is closing and the acknowledgement has nowhere to go.
             # Losing the tail of a debugging recording is not worth an error.
             pass
 
     session.on("Page.screencastFrame", keep_one_frame)
-    session.send("Page.startScreencast",
-                 {"format": "jpeg", "quality": 60, "everyNthFrame": 1})
+    session.send("Page.startScreencast", {"format": "jpeg", "quality": 60, "everyNthFrame": 1})
     return session, caught
 
 
-def _stop_recording_the_screen(session, caught: list[dict], into: Path,
-                               found: dict) -> None:
+def _stop_recording_the_screen(session, caught: list[dict], into: Path, found: dict) -> None:
     """Stop the recording and write the timeline beside the saved frames."""
     try:
         session.send("Page.stopScreencast")
     except Exception:
         pass
     (into / "timeline.json").write_text(
-        json.dumps({"findings": found, "frames": caught}, indent=2),
-        encoding="utf-8")
+        json.dumps({"findings": found, "frames": caught}, indent=2), encoding="utf-8"
+    )
 
 
 # --------------------------------------------------------------------------
 # The test itself.
 # --------------------------------------------------------------------------
 
-def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
-    browser, built_dist, tmp_path
-):
+
+def test_the_screen_never_goes_black_when_the_cache_is_invalidated(browser, built_dist, tmp_path):
     """A complete, settled picture must survive being told its data changed.
 
     The scenario is deliberately as quiet as it can be made. A modest survey is
@@ -559,17 +564,20 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
         harness.fast_publish(run, position_id)
 
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
 
     site = Path(os.environ.get("ZMART_STORM_BUILT_DIST", built_dist))
-    server = make_server(port=0, data_dir=shown, site_dir=site,
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    server = make_server(
+        port=0, data_dir=shown, site_dir=site, store=[store.name], window=harness.BRIGHT, live=True
+    )
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
 
-    recording_into = (Path(os.environ["ZMART_FLICKER_SCREENCAST"])
-                      if os.environ.get("ZMART_FLICKER_SCREENCAST") else None)
+    recording_into = (
+        Path(os.environ["ZMART_FLICKER_SCREENCAST"])
+        if os.environ.get("ZMART_FLICKER_SCREENCAST")
+        else None
+    )
 
     page = browser.new_page(viewport={"width": 1000, "height": 780})
     screencast = None
@@ -590,10 +598,8 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
         page.add_init_script("globalThis.zmartLiveCheckMs = 60_000")
 
         page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                               timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         # Every piece the view wants is in hand. This is the page's own account
         # of itself, and it is what "the picture is complete" means here.
         page.wait_for_function(
@@ -616,15 +622,13 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
         page.wait_for_timeout(SETTLE_MS)
 
         if recording_into is not None:
-            screencast, caught_frames = _start_recording_the_screen(
-                page, recording_into)
+            screencast, caught_frames = _start_recording_the_screen(page, recording_into)
 
-        started = page.evaluate(_WATCH_EVERY_FRAME,
-                                [SAMPLE_GRID, MIDDLE_SHARE, LIT_FLOOR])
+        started = page.evaluate(_WATCH_EVERY_FRAME, [SAMPLE_GRID, MIDDLE_SHARE, LIT_FLOOR])
         if not started.get("started"):
             raise TheMeasurementCouldNotBeMade(
-                "the per-frame watcher could not be installed: "
-                f"{started.get('why')}")
+                f"the per-frame watcher could not be installed: {started.get('why')}"
+            )
 
         # Collect a stretch of steady frames first. This is what "before" means,
         # and it is also a check that the page is drawing at all — a page that
@@ -632,8 +636,7 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
         # whose picture never went dark.
         gathering_until = time.monotonic() + 10
         while time.monotonic() < gathering_until:
-            so_far = page.evaluate(
-                "() => window.zmartFlickerWatch.frames.length")
+            so_far = page.evaluate("() => window.zmartFlickerWatch.frames.length")
             if so_far >= STEADY_FRAMES_WANTED:
                 break
             page.wait_for_timeout(100)
@@ -641,7 +644,8 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
             raise TheMeasurementCouldNotBeMade(
                 "the page did not draw "
                 f"{STEADY_FRAMES_WANTED} frames in ten seconds, so there is no "
-                "steady picture to compare anything against")
+                "steady picture to compare anything against"
+            )
 
         # From here on, count the piece requests the page makes. A refresh that
         # never asks for anything can never flicker either, so the pixel check
@@ -650,51 +654,64 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
         # request it sees was caused by it — the picture was settled and the
         # live poll was pushed a minute away before the watching began.
         refetches: list[str] = []
-        page.on("request",
-                lambda asked: refetches.append(asked.url)
-                if "/data/" in asked.url and "/c/" in asked.url else None)
+        page.on(
+            "request",
+            lambda asked: (
+                refetches.append(asked.url)
+                if "/data/" in asked.url and "/c/" in asked.url
+                else None
+            ),
+        )
 
         fired = page.evaluate(_FIRE_THE_WHOLE_SOURCE_INVALIDATION)
         if not fired.get("asked"):
             raise TheMeasurementCouldNotBeMade(
                 "no chunk source in the page accepted a whole-source "
-                "invalidation, so the thing this test is about never happened")
+                "invalidation, so the thing this test is about never happened"
+            )
 
         page.wait_for_timeout(WATCH_AFTER_MS)
         recording = page.evaluate(_STOP_WATCHING)
         if recording is None:
             raise TheMeasurementCouldNotBeMade(
-                "the per-frame watcher disappeared from the page before it "
-                "could be read back")
+                "the per-frame watcher disappeared from the page before it could be read back"
+            )
         if recording.get("trouble"):
             raise TheMeasurementCouldNotBeMade(
                 "the drawing surface could not be read back: "
                 f"{recording['trouble']}. This usually means the browser threw "
                 "the drawn pixels away after compositing them, which the "
                 "preserveDrawingBuffer override at the top of this file is "
-                "meant to prevent")
+                "meant to prevent"
+            )
 
         found = _read_the_frame_recording(recording)
         if not found["usable"]:
             raise TheMeasurementCouldNotBeMade(
-                f"the frame recording cannot be read: {found['why']}")
+                f"the frame recording cannot be read: {found['why']}"
+            )
         if found["baseline"] < BASELINE_MUST_BE_LIT:
             raise TheMeasurementCouldNotBeMade(
                 f"the settled picture was only {found['baseline']:.1%} lit, "
                 f"below the {BASELINE_MUST_BE_LIT:.0%} this test needs before "
                 "it can tell a collapse from an already-empty window. The "
-                "survey did not draw, so nothing was measured")
+                "survey did not draw, so nothing was measured"
+            )
 
-        print("FLICKER WATCH:", json.dumps({
-            key: value for key, value in found.items()
-            if key not in ("usable", "why")
-        }, default=float), flush=True)
+        print(
+            "FLICKER WATCH:",
+            json.dumps(
+                {key: value for key, value in found.items() if key not in ("usable", "why")},
+                default=float,
+            ),
+            flush=True,
+        )
 
         if recording_into is not None:
-            _stop_recording_the_screen(screencast, caught_frames,
-                                       recording_into, found)
+            _stop_recording_the_screen(screencast, caught_frames, recording_into, found)
             (recording_into / "frames.json").write_text(
-                json.dumps(recording["frames"], indent=2), encoding="utf-8")
+                json.dumps(recording["frames"], indent=2), encoding="utf-8"
+            )
             screencast = None
             print("FLICKER RECORDING:", recording_into, flush=True)
 
@@ -710,14 +727,13 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
         )
         # Second: at no drawn frame may the picture have collapsed. This is
         # what the operator experiences as the absence of the black flash.
-        assert found["deepest"] >= found["collapsed_below"], (
-            _describe_what_was_seen(found))
-        print(f"REFRESH CONFIRMED: {len(refetches)} piece requests after the "
-              "invalidation", flush=True)
+        assert found["deepest"] >= found["collapsed_below"], _describe_what_was_seen(found)
+        print(
+            f"REFRESH CONFIRMED: {len(refetches)} piece requests after the invalidation", flush=True
+        )
     finally:
         if screencast is not None and recording_into is not None:
-            _stop_recording_the_screen(screencast, caught_frames,
-                                       recording_into, {})
+            _stop_recording_the_screen(screencast, caught_frames, recording_into, {})
         page.close()
         server.shutdown()
         serving.join(timeout=5)
@@ -733,9 +749,7 @@ def test_the_screen_never_goes_black_when_the_cache_is_invalidated(
 LANDING_BASELINE_MUST_BE_LIT = 0.10
 
 
-def test_the_screen_never_goes_black_when_a_position_lands(
-    browser, built_dist, tmp_path
-):
+def test_the_screen_never_goes_black_when_a_position_lands(browser, built_dist, tmp_path):
     """A position landing must add to the picture without ever taking it away.
 
     This is the road the operator actually drives: a live run is open on
@@ -786,11 +800,10 @@ def test_the_screen_never_goes_black_when_a_position_lands(
         page.add_init_script("globalThis.zmartLiveCheckMs = 500")
 
         page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         page.wait_for_function(
-            """() => window.zmartConfig?.liveState?.runs?.[0]?.revision >= 1""",
-            timeout=60_000)
+            """() => window.zmartConfig?.liveState?.runs?.[0]?.revision >= 1""", timeout=60_000
+        )
         # Every piece the view wants is in hand — the first position has
         # fully arrived and drawn before anything else is allowed to happen.
         page.wait_for_function(
@@ -812,17 +825,15 @@ def test_the_screen_never_goes_black_when_a_position_lands(
         )
         page.wait_for_timeout(SETTLE_MS)
 
-        started = page.evaluate(_WATCH_EVERY_FRAME,
-                                [SAMPLE_GRID, MIDDLE_SHARE, LIT_FLOOR])
+        started = page.evaluate(_WATCH_EVERY_FRAME, [SAMPLE_GRID, MIDDLE_SHARE, LIT_FLOOR])
         if not started.get("started"):
             raise TheMeasurementCouldNotBeMade(
-                "the per-frame watcher could not be installed: "
-                f"{started.get('why')}")
+                f"the per-frame watcher could not be installed: {started.get('why')}"
+            )
 
         gathering_until = time.monotonic() + 10
         while time.monotonic() < gathering_until:
-            so_far = page.evaluate(
-                "() => window.zmartFlickerWatch.frames.length")
+            so_far = page.evaluate("() => window.zmartFlickerWatch.frames.length")
             if so_far >= STEADY_FRAMES_WANTED:
                 break
             page.wait_for_timeout(100)
@@ -830,94 +841,99 @@ def test_the_screen_never_goes_black_when_a_position_lands(
             raise TheMeasurementCouldNotBeMade(
                 "the page did not draw "
                 f"{STEADY_FRAMES_WANTED} frames in ten seconds, so there is no "
-                "steady picture to compare anything against")
+                "steady picture to compare anything against"
+            )
 
         refetches: list[str] = []
-        page.on("request",
-                lambda asked: refetches.append(asked.url)
-                if "/data/" in asked.url else None)
+        page.on(
+            "request", lambda asked: refetches.append(asked.url) if "/data/" in asked.url else None
+        )
 
         # Mark the moment, then land the second position. Every frame drawn
         # from here on is "after the landing" for the reading below.
-        page.evaluate(
-            "() => { window.zmartFlickerWatch.invalidatedAt ="
-            " performance.now(); }")
+        page.evaluate("() => { window.zmartFlickerWatch.invalidatedAt = performance.now(); }")
         run.write_and_publish("posB", some_specimen(3000))
 
         # Wait until the page has heard the news and drawn itself complete
         # again, then a moment longer, so the whole refresh — including any
         # collapse it might cause — is inside the recording.
         page.wait_for_function(
-            """() => window.zmartConfig?.liveState?.runs?.[0]?.revision >= 2""",
-            timeout=60_000)
+            """() => window.zmartConfig?.liveState?.runs?.[0]?.revision >= 2""", timeout=60_000
+        )
         page.wait_for_timeout(WATCH_AFTER_MS)
 
         recording = page.evaluate(_STOP_WATCHING)
         if recording is None:
             raise TheMeasurementCouldNotBeMade(
-                "the per-frame watcher disappeared from the page before it "
-                "could be read back")
+                "the per-frame watcher disappeared from the page before it could be read back"
+            )
         if recording.get("trouble"):
             raise TheMeasurementCouldNotBeMade(
-                "the drawing surface could not be read back: "
-                f"{recording['trouble']}")
+                f"the drawing surface could not be read back: {recording['trouble']}"
+            )
 
         found = _read_the_frame_recording(recording)
         if not found["usable"]:
             raise TheMeasurementCouldNotBeMade(
-                f"the frame recording cannot be read: {found['why']}")
+                f"the frame recording cannot be read: {found['why']}"
+            )
         if found["baseline"] < LANDING_BASELINE_MUST_BE_LIT:
             raise TheMeasurementCouldNotBeMade(
                 f"the settled picture was only {found['baseline']:.1%} lit, "
                 f"below the {LANDING_BASELINE_MUST_BE_LIT:.0%} this test "
                 "needs before it can tell a collapse from an already-empty "
                 "window. The first position did not draw, so nothing was "
-                "measured")
+                "measured"
+            )
 
-        print("LANDING WATCH:", json.dumps({
-            key: value for key, value in found.items()
-            if key not in ("usable", "why")
-        }, default=float), flush=True)
+        print(
+            "LANDING WATCH:",
+            json.dumps(
+                {key: value for key, value in found.items() if key not in ("usable", "why")},
+                default=float,
+            ),
+            flush=True,
+        )
 
         # The landing must genuinely have happened: the revision moved (waited
         # on above), the refresh road fired, and pieces were fetched. Without
         # these, a page that quietly ignored the landing would pass the picture
         # checks for free while showing the operator a stale picture.
-        assert page.evaluate(
-            "() => window.zmartSourceRefreshing.sources.length") > 0, (
+        assert page.evaluate("() => window.zmartSourceRefreshing.sources.length") > 0, (
             "the landing advanced the revision but the refresh road never "
-            "fired — the picture on screen is silently stale")
+            "fired — the picture on screen is silently stale"
+        )
         assert refetches, (
             "the landing caused no piece requests at all — the screen stayed "
             "lit only because nothing was refreshed, which trades a visible "
-            "flash for a silently stale picture")
+            "flash for a silently stale picture"
+        )
 
         # The picture may never collapse on any drawn frame. This is the
         # assertion that failed — 0% lit for 100–300 ms per landing — before
         # the refresh became pixels-only.
-        assert found["deepest"] >= found["collapsed_below"], (
-            _describe_what_was_seen(found))
+        assert found["deepest"] >= found["collapsed_below"], _describe_what_was_seen(found)
 
         # And the drawing layers themselves must survive the landing. This is
         # the mechanism behind the collapse, asserted directly so a future
         # rebuild that happens to refill within one frame — too fast for the
         # pixel check to see, but a stutter the operator can still feel — is
         # caught all the same.
-        frames = [one for one in (recording.get("frames") or [])
-                  if one.get("lit") is not None]
+        frames = [one for one in (recording.get("frames") or []) if one.get("lit") is not None]
         fired_at = recording["invalidatedAt"]
-        drawing_before = statistics.median(
-            one["layers"] for one in frames if one["t"] < fired_at)
-        fewest_after = min(
-            one["layers"] for one in frames if one["t"] >= fired_at)
+        drawing_before = statistics.median(one["layers"] for one in frames if one["t"] < fired_at)
+        fewest_after = min(one["layers"] for one in frames if one["t"] >= fired_at)
         assert fewest_after >= drawing_before, (
             f"the page was drawing with {drawing_before:.0f} layers before "
             f"the landing and only {fewest_after} at some frame after it — "
             "the landing tore drawing layers down and rebuilt them, which is "
             "the very mechanism that blacked out the picture on 2026-08-23"
         )
-        print(f"LANDING CONFIRMED: {len(refetches)} piece requests, layers "
-              f"held at {drawing_before:.0f}", flush=True)
+        print(
+            f"LANDING CONFIRMED: {len(refetches)} piece requests, layers "
+            f"held at {drawing_before:.0f}",
+            flush=True,
+        )
     finally:
         page.close()
         server.shutdown()

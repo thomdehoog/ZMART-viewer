@@ -408,7 +408,7 @@ class SceneImage:
     which committed revision it is showing, and it is the record that a view really
     does cover the positions it claims to.
 
-"""
+    """
 
     image_id: str
     role: str

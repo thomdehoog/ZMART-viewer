@@ -80,8 +80,7 @@ def _check_the_cell_is_a_forward_grid_index(cell: GridCell) -> None:
     """Keep external grid coordinates out of Python's negative-slice semantics."""
     coordinates = (cell.row, cell.column)
     if any(
-        not isinstance(index, int) or isinstance(index, bool) or index < 0
-        for index in coordinates
+        not isinstance(index, int) or isinstance(index, bool) or index < 0 for index in coordinates
     ):
         raise TopologyRefused(
             f"Grid cells are non-negative whole-number row/column indexes from "
@@ -91,8 +90,9 @@ def _check_the_cell_is_a_forward_grid_index(cell: GridCell) -> None:
         )
 
 
-def _shared_along(profile: AcquisitionProfile, axis: str,
-                  mine: dict[str, int], theirs: dict[str, int]) -> int:
+def _shared_along(
+    profile: AcquisitionProfile, axis: str, mine: dict[str, int], theirs: dict[str, int]
+) -> int:
     """How much ground two positions share along one axis, in pixels.
 
     Nought where they do not reach each other. Both origins are in the run's
@@ -104,8 +104,12 @@ def _shared_along(profile: AcquisitionProfile, axis: str,
     return max(0, high - low)
 
 
-def _touching(profile: AcquisitionProfile, tiled: tuple[str, ...],
-              mine: dict[str, int], theirs: dict[str, int]) -> bool:
+def _touching(
+    profile: AcquisitionProfile,
+    tiled: tuple[str, ...],
+    mine: dict[str, int],
+    theirs: dict[str, int],
+) -> bool:
     """Do these two positions actually share ground?
 
     Every tiled axis has to overlap. Two tiles that meet along one axis while
@@ -157,8 +161,11 @@ def plan_one_position(
     neighbours: dict[str, str] = {}
     outermost: dict[str, bool] = {}
 
-    beside = {name: where for name, where in others.items()
-              if name != position_id and _touching(profile, laid_out, origin, where)}
+    beside = {
+        name: where
+        for name, where in others.items()
+        if name != position_id and _touching(profile, laid_out, origin, where)
+    }
 
     for axis in laid_out:
         frame = profile.frame_shape[axis]
@@ -166,10 +173,16 @@ def plan_one_position(
         # Who reaches this position from each side along this axis, and how far
         # in. Taken from where the positions are rather than from a pattern, so
         # an arrangement nobody laid out reads the same as one somebody did.
-        before = {name: _shared_along(profile, axis, origin, where)
-                  for name, where in beside.items() if where[axis] < origin[axis]}
-        beyond = {name: _shared_along(profile, axis, origin, where)
-                  for name, where in beside.items() if where[axis] > origin[axis]}
+        before = {
+            name: _shared_along(profile, axis, origin, where)
+            for name, where in beside.items()
+            if where[axis] < origin[axis]
+        }
+        beyond = {
+            name: _shared_along(profile, axis, origin, where)
+            for name, where in beside.items()
+            if where[axis] > origin[axis]
+        }
 
         outermost[f"{axis}_low"] = not before
         outermost[f"{axis}_high"] = not beyond
@@ -183,9 +196,9 @@ def plan_one_position(
         # produce the same answer.
         def _pick(candidates: dict[str, int], _axis: str = axis) -> str:
             def order(one: str) -> tuple:
-                askew = sum(1 for other in laid_out
-                            if beside[one][other] != origin[other])
+                askew = sum(1 for other in laid_out if beside[one][other] != origin[other])
                 return (-candidates[one], askew, one)
+
             return min(candidates, key=order)
 
         if before:
@@ -211,8 +224,7 @@ def plan_one_position(
         # that two neighbours never disagree about it.
         share_low = max(before.values(), default=0)
         share_high = max(beyond.values(), default=0)
-        counted[axis] = Interval(share_low // 2,
-                                 frame - (share_high - share_high // 2))
+        counted[axis] = Interval(share_low // 2, frame - (share_high - share_high // 2))
 
     # Axes that are not tiled -- colour, depth, time -- are not divided at all.
     # A position owns everything it recorded on those, and saying so explicitly
@@ -269,8 +281,7 @@ def plan_one_tile(
         return f"{component_id}:{one.row},{one.column}"
 
     def placed(one: GridCell) -> dict[str, int]:
-        return {axis: _cell_index(one, axis) * _step_on(profile, axis)
-                for axis in tiled}
+        return {axis: _cell_index(one, axis) * _step_on(profile, axis) for axis in tiled}
 
     return plan_one_position(
         profile,
@@ -349,7 +360,8 @@ def place_the_positions(
 
 
 def places_on_a_grid(
-    profile: AcquisitionProfile, cells: dict[GridCell, str],
+    profile: AcquisitionProfile,
+    cells: dict[GridCell, str],
 ) -> dict[str, dict[str, int]]:
     """Where each of these grid squares puts its position, in run pixels.
 
@@ -360,8 +372,7 @@ def places_on_a_grid(
     """
     tiled = profile.tiled_axes
     return {
-        name: {axis: _cell_index(cell, axis) * _step_on(profile, axis)
-               for axis in tiled}
+        name: {axis: _cell_index(cell, axis) * _step_on(profile, axis) for axis in tiled}
         for cell, name in cells.items()
     }
 

@@ -144,7 +144,7 @@ def test_turning_a_channel_down_never_darkens_the_one_beneath(viewer_page):
         page.click(f"[aria-label='toggle {hidden}']")
     page.wait_for_timeout(1500)
 
-    upper, lower = channels[1], channels[0]
+    upper = channels[1]
     _choose(page, upper)
     _set_range(page, f"opacity {upper}", 1.0)
     both = image_middle(page).mean()

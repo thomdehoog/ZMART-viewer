@@ -5,18 +5,16 @@ from __future__ import annotations
 import http.client
 import threading
 
-from zmart_viewer.server import make_server
+from record_fixtures import FRAME, some_specimen  # noqa: E402
 
 from zmart_viewer.record.coordinator import LivePublisher
 from zmart_viewer.record.gateway import answer_from_a_live_run
 from zmart_viewer.record.model import GridCell
 from zmart_viewer.record.profiles import plan_the_writing
-from record_fixtures import FRAME, some_specimen  # noqa: E402
+from zmart_viewer.server import make_server
 
 
-def ask(
-    port: int, path: str, *, headers: dict[str, str] | None = None
-) -> tuple[int, bytes]:
+def ask(port: int, path: str, *, headers: dict[str, str] | None = None) -> tuple[int, bytes]:
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
     try:
         connection.request("GET", path, headers=headers or {})

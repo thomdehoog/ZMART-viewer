@@ -36,8 +36,8 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
+
+from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 # Wide enough that the picture has extended pyramid levels to keep true --
 # they are where the per-landing rebuilding lived -- and small enough that
@@ -60,13 +60,12 @@ def test_a_landing_costs_the_change_not_the_survey(tmp_path):
     """After the first landing, the bake patcher reuses all its scaffolding."""
     harness.FIXTURES = tmp_path
     run, order = harness.the_run(SURVEY_ACROSS)
-    landings = order[-(STEADY_LANDINGS + 1):]
-    for position_id in order[:-(STEADY_LANDINGS + 1)]:
+    landings = order[-(STEADY_LANDINGS + 1) :]
+    for position_id in order[: -(STEADY_LANDINGS + 1)]:
         harness.fast_publish(run, position_id)
 
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
     opened = GovernedRun(run.folder, store=store)
     try:
         # The cold open, and then one landing that is allowed to build
@@ -139,13 +138,12 @@ def test_a_landing_rehalves_with_pixel_work_not_library_machinery(tmp_path):
     """
     harness.FIXTURES = tmp_path
     run, order = harness.the_run(SURVEY_ACROSS)
-    landings = order[-(STEADY_LANDINGS + 1):]
-    for position_id in order[:-(STEADY_LANDINGS + 1)]:
+    landings = order[-(STEADY_LANDINGS + 1) :]
+    for position_id in order[: -(STEADY_LANDINGS + 1)]:
         harness.fast_publish(run, position_id)
 
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
     opened = GovernedRun(run.folder, store=store)
     try:
         opened.composer()
@@ -198,12 +196,11 @@ def test_the_rehalved_level_reads_back_true(tmp_path):
 
     harness.FIXTURES = tmp_path
     run, order = harness.the_run(SURVEY_ACROSS)
-    landings = order[-(STEADY_LANDINGS + 1):]
-    for position_id in order[:-(STEADY_LANDINGS + 1)]:
+    landings = order[-(STEADY_LANDINGS + 1) :]
+    for position_id in order[: -(STEADY_LANDINGS + 1)]:
         harness.fast_publish(run, position_id)
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
     opened = GovernedRun(run.folder, store=store)
     try:
         opened.composer()
@@ -214,8 +211,8 @@ def test_the_rehalved_level_reads_back_true(tmp_path):
         opened.close()
 
     rehalved_levels = sorted(
-        int(folder.name.split("-")[1])
-        for folder in Path(store).glob(".patching-*"))
+        int(folder.name.split("-")[1]) for folder in Path(store).glob(".patching-*")
+    )
     assert rehalved_levels, (
         "no extended level was re-halved, so this oracle checked nothing -- "
         "the survey is too small for this instrument. Grow SURVEY_ACROSS."
@@ -223,15 +220,17 @@ def test_the_rehalved_level_reads_back_true(tmp_path):
     import numpy as np
 
     for level in rehalved_levels:
-        below = zarr.open_array(str(Path(store) / str(level - 1)),
-                                mode="r")[:]
+        below = zarr.open_array(str(Path(store) / str(level - 1)), mode="r")[:]
         served = zarr.open_array(str(Path(store) / str(level)), mode="r")[:]
         deep, height, width = served.shape
-        evened = np.pad(below,
-                        ((0, 0), (0, 2 * height - below.shape[1]),
-                         (0, 2 * width - below.shape[2])), mode="edge")
-        expected = (evened.reshape(deep, height, 2, width, 2)
-                    .mean(axis=(2, 4)).round().astype(served.dtype))
+        evened = np.pad(
+            below,
+            ((0, 0), (0, 2 * height - below.shape[1]), (0, 2 * width - below.shape[2])),
+            mode="edge",
+        )
+        expected = (
+            evened.reshape(deep, height, 2, width, 2).mean(axis=(2, 4)).round().astype(served.dtype)
+        )
         differing = int((expected != served).sum())
         assert differing == 0, (
             f"extended level {level} disagrees with the 2x2 mean of level "

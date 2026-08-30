@@ -33,6 +33,7 @@ import threading
 import numpy as np
 import pytest
 import zarr
+
 from zmart_viewer.server import make_server
 
 # Where the window's edges are meant to land along the histogram, and how far
@@ -43,8 +44,7 @@ SITS_AT = (0.15, 0.85)
 NEAR_ENOUGH = 0.01
 
 
-def _a_channel_with_a_window(path, *, start, end, floor=200, ceiling=6000,
-                             planes=4):
+def _a_channel_with_a_window(path, *, start, end, floor=200, ceiling=6000, planes=4):
     """One channel whose run declares the window it wants shown.
 
     The pixels climb evenly from ``floor`` to ``ceiling`` so that the
@@ -55,23 +55,42 @@ def _a_channel_with_a_window(path, *, start, end, floor=200, ceiling=6000,
     group = zarr.open_group(str(path), mode="w", zarr_format=2)
     climbing = np.linspace(floor, ceiling, 64 * 64, dtype=np.float64)
     data = np.tile(climbing.reshape(1, 1, 64, 64), (1, planes, 1, 1)).astype("uint16")
-    group.create_array("0", shape=data.shape, chunks=(1, 1, 64, 64),
-                       dtype="uint16")[:] = data
-    (path / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 2.0, 0.35, 0.35]}]}],
-        }],
-        "omero": {"channels": [{
-            "label": "ch0", "color": "00FF66",
-            "window": {"min": 0, "max": 65535, "start": start, "end": end},
-        }]},
-    }), encoding="utf-8")
+    group.create_array("0", shape=data.shape, chunks=(1, 1, 64, 64), dtype="uint16")[:] = data
+    (path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 2.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {
+                            "label": "ch0",
+                            "color": "00FF66",
+                            "window": {"min": 0, "max": 65535, "start": start, "end": end},
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -84,14 +103,14 @@ def opened_on(browser, built_dist, tmp_path):
         data = tmp_path / name
         data.mkdir()
         _a_channel_with_a_window(data / f"{name}_pos001.ome.zarr", start=start, end=end)
-        server = make_server(port=0, data_dir=data, site_dir=built_dist,
-                             store=f"{name}_pos001.ome.zarr")
+        server = make_server(
+            port=0, data_dir=data, site_dir=built_dist, store=f"{name}_pos001.ome.zarr"
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         servers.append((server, thread))
         page = browser.new_page(viewport={"width": 1300, "height": 1000})
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         page.wait_for_selector("[aria-label^='histogram']", timeout=30_000)
         page.wait_for_timeout(1500)
@@ -122,9 +141,7 @@ def test_the_window_a_run_declared_sits_across_the_middle(opened_on, tmp_path):
     page = opened_on("bright", start=2000, end=4000)
     page.screenshot(path=str(tmp_path / "a_window_across_the_middle.png"))
     seen = _the_picture(page)
-    assert len(seen["marks"]) == 2, (
-        f"the window should be drawn as two marks; saw {seen['marks']}"
-    )
+    assert len(seen["marks"]) == 2, f"the window should be drawn as two marks; saw {seen['marks']}"
     for mark, meant in zip(seen["marks"], SITS_AT):
         assert abs(mark - meant) < NEAR_ENOUGH, (
             f"the window's marks are at {[round(one, 3) for one in seen['marks']]} "

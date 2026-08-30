@@ -24,6 +24,7 @@ appear with no navigation, no reload, and no help — and then require the held
 page to show no less than a freshly reloaded one, so F5 can never quietly
 become a repair tool again.
 """
+
 from __future__ import annotations
 
 import io
@@ -38,10 +39,11 @@ import numpy as np
 VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 
-from zmart_viewer import pieces as served  # noqa: E402
-from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from PIL import Image  # noqa: E402
 from test_a_transfer_is_built_into_one_picture import PIECE, STEP_UM, _write_a_tile  # noqa: E402
+
+from zmart_viewer import pieces as served  # noqa: E402
+from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 
 sys.path.insert(0, str(VIZ))
 from zmart_viewer.server import make_server  # noqa: E402
@@ -62,7 +64,8 @@ def _announced(port: int) -> int:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/api/announce",
         data=json.dumps({"wrote_image_in_place": True}).encode(),
-        headers={"Content-Type": "application/json"})
+        headers={"Content-Type": "application/json"},
+    )
     with urllib.request.urlopen(request, timeout=5) as answer:
         return json.load(answer).get("told", 0)
 
@@ -76,20 +79,25 @@ def test_a_landing_appears_at_a_held_view(browser, built_dist, tmp_path):
     # first frame -- asked about, answered, and held. Exactly the ground the
     # 404 branded unaskable.
     for number, (row, column) in [(0, (0, 0)), (2, (1, 0)), (3, (1, 1))]:
-        _write_a_tile(transfer / f"Tile{number}.ome.zarr", number,
-                      (row * STEP_UM, column * STEP_UM))
+        _write_a_tile(
+            transfer / f"Tile{number}.ome.zarr", number, (row * STEP_UM, column * STEP_UM)
+        )
     shown = tmp_path / "shown"
-    picture = declare_a_built_picture(shown, transfer, name="grown",
-                                      piece=PIECE)
-    server = make_server(port=0, data_dir=shown, site_dir=built_dist,
-                         store=[picture.name], window=(0.0, 4000.0), live=True)
+    picture = declare_a_built_picture(shown, transfer, name="grown", piece=PIECE)
+    server = make_server(
+        port=0,
+        data_dir=shown,
+        site_dir=built_dist,
+        store=[picture.name],
+        window=(0.0, 4000.0),
+        live=True,
+    )
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     page = browser.new_page(viewport={"width": 800, "height": 700})
     try:
         page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=30_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=30_000)
         # Settled: every piece the view needs has been asked and answered.
         page.wait_for_function(
             """() => {
@@ -102,7 +110,9 @@ def test_a_landing_appears_at_a_held_view(browser, built_dist, tmp_path):
                            available += p.numVisibleChunksAvailable; }
                 }
               return needed > 0 && available >= needed;
-            }""", timeout=30_000)
+            }""",
+            timeout=30_000,
+        )
         page.wait_for_timeout(1_500)
         before = _lit_fraction(page.screenshot())
 
@@ -132,8 +142,7 @@ def test_a_landing_appears_at_a_held_view(browser, built_dist, tmp_path):
         # back to reloading as a repair tool.
         warm = np.asarray(Image.open(io.BytesIO(page.screenshot())).convert("L"))
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=30_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=30_000)
         page.wait_for_function(
             """() => {
               const v = window.zmartViewer;
@@ -145,7 +154,9 @@ def test_a_landing_appears_at_a_held_view(browser, built_dist, tmp_path):
                            available += p.numVisibleChunksAvailable; }
                 }
               return needed > 0 && available >= needed;
-            }""", timeout=30_000)
+            }""",
+            timeout=30_000,
+        )
         page.wait_for_timeout(1_500)
         fresh = np.asarray(Image.open(io.BytesIO(page.screenshot())).convert("L"))
         warm_lit = float((warm > 40).mean())

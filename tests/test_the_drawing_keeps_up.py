@@ -38,11 +38,12 @@ from __future__ import annotations
 import threading
 
 import pytest
-from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
+from test_many_positions_arrive import HELD, write_folder
+from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
+
 from zmart_viewer.server import make_server
-from test_many_positions_arrive import HELD, write_folder
 
 # How many positions to compare. Ten times as many is the same shape of comparison
 # as the hundred-against-a-thousand that found the fault, and these two open in
@@ -121,9 +122,7 @@ def frames_drawn_with(browser, built_dist, folder, count: int) -> int:
     thread.start()
     page = browser.new_page(viewport={"width": 900, "height": 700})
     try:
-        page.goto(
-            f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-        )
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         # Every position handed over, and nothing left queued. Counting frames while
         # stores are still arriving would measure the loading, which is a different

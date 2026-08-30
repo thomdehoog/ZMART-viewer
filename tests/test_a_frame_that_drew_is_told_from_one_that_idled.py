@@ -35,7 +35,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
+from watching import (  # noqa: E402
     how_long_a_drawing_frame_took,
 )
 

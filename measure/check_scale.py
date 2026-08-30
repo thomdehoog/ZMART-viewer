@@ -259,6 +259,7 @@ def write_folder(root: Path, positions: int) -> None:
 def look(positions: int, budget: int) -> dict:
     """Open the viewer on a folder of ``positions`` positions and see what happens."""
     from playwright.sync_api import sync_playwright
+
     from zmart_viewer.server import make_server
 
     root = Path(tempfile.mkdtemp(prefix=f"zmart-scale-{positions}-"))
@@ -310,9 +311,7 @@ def look(positions: int, budget: int) -> dict:
                     }
                 )
                 result["frames"] = page.evaluate(HOW_FAST_IT_DRAWS, {"seconds": 5})
-                result["contrastMs"] = round(
-                    page.evaluate(ONE_CONTRAST_STEP, {"high": 3500}), 1
-                )
+                result["contrastMs"] = round(page.evaluate(ONE_CONTRAST_STEP, {"high": 3500}), 1)
                 result["refusals"] = Counter(refusals).most_common(2)
             finally:
                 page.close()

@@ -51,9 +51,10 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
+from test_a_commit_storm_under_zooming import _announce, _dirty_for  # noqa: E402
+
 from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
-from test_a_commit_storm_under_zooming import _announce, _dirty_for  # noqa: E402
 
 ACROSS = int(os.environ.get("ZMART_SPIRAL_ACROSS", "12"))
 SEED_RINGS = int(os.environ.get("ZMART_SPIRAL_SEED_RINGS", "2"))
@@ -62,6 +63,7 @@ SEED_RINGS = int(os.environ.get("ZMART_SPIRAL_SEED_RINGS", "2"))
 # ---------------------------------------------------------------------------
 # The spiral, as arithmetic
 # ---------------------------------------------------------------------------
+
 
 def _layer_marks(page) -> list:
     """Which layer objects are on screen, by an identity we stamp ourselves.
@@ -125,9 +127,12 @@ def ring_of(row: int, column: int, across: int) -> int:
 
 def one_ring_walk(ring: int, across: int) -> list[tuple[int, int]]:
     """The cells of one ring, walked contiguously clockwise from its top-left."""
-    cells = [(row, column)
-             for row in range(across) for column in range(across)
-             if ring_of(row, column, across) == ring]
+    cells = [
+        (row, column)
+        for row in range(across)
+        for column in range(across)
+        if ring_of(row, column, across) == ring
+    ]
     if not cells:
         return []
     top = min(row for row, _ in cells)
@@ -192,8 +197,8 @@ class TestTheSpiralItself:
 # only ever adds files, the record and the walk agree moment by moment, and
 # the declared picture carries the grown (t, c) axes.
 
-class TestTheSpiralWithColoursAndMoments:
 
+class TestTheSpiralWithColoursAndMoments:
     ACROSS = 4  # rings 0..1: a seeded 2x2 centre and one spiral ring
 
     def a_two_colour_timelapse(self, folder):
@@ -202,16 +207,24 @@ class TestTheSpiralWithColoursAndMoments:
         from zmart_viewer.record.profiles import plan_the_writing
 
         profile, _ = plan_the_writing(
-            "overview", frame=harness.FRAME, z_planes=1,
-            channels=("green", "red"), timepoints=2,
+            "overview",
+            frame=harness.FRAME,
+            z_planes=1,
+            channels=("green", "red"),
+            timepoints=2,
         )
         width = len(str(self.ACROSS - 1))
-        cells = {GridCell(row, column): f"p{row:0{width}d}{column:0{width}d}"
-                 for row in range(self.ACROSS) for column in range(self.ACROSS)}
+        cells = {
+            GridCell(row, column): f"p{row:0{width}d}{column:0{width}d}"
+            for row in range(self.ACROSS)
+            for column in range(self.ACROSS)
+        }
         run = LivePublisher(
             folder / "experiment" / "acquisitions" / "spiral",
-            profile, run_id="spiral-colours",
-            cells=cells, channels=("green", "red"),
+            profile,
+            run_id="spiral-colours",
+            cells=cells,
+            channels=("green", "red"),
         )
         return run, width
 
@@ -223,29 +236,28 @@ class TestTheSpiralWithColoursAndMoments:
         import zarr
 
         run, width = self.a_two_colour_timelapse(tmp_path)
-        spiral = [f"p{row:0{width}d}{column:0{width}d}"
-                  for row, column in the_spiral(self.ACROSS)]
+        spiral = [f"p{row:0{width}d}{column:0{width}d}" for row, column in the_spiral(self.ACROSS)]
         for number, position_id in enumerate(spiral):
-            run.write_and_publish(position_id,
-                                  self.coloured_frame(1000 + number * 10),
-                                  timepoint=0)
+            run.write_and_publish(position_id, self.coloured_frame(1000 + number * 10), timepoint=0)
 
         # Every byte moment zero owns, photographed before moment one lands.
         # The chunk files of a published moment are the immutable science;
         # the contract says a new moment only ever ADDS files.
         def moment_zero_files(store):
-            return {path: path.read_bytes()
-                    for path in store.rglob("*")
-                    if path.is_file() and "/c/0/" in str(path).replace("\\", "/")}
+            return {
+                path: path.read_bytes()
+                for path in store.rglob("*")
+                if path.is_file() and "/c/0/" in str(path).replace("\\", "/")
+            }
 
-        before = {position_id: moment_zero_files(run.position_store(position_id))
-                  for position_id in spiral}
+        before = {
+            position_id: moment_zero_files(run.position_store(position_id))
+            for position_id in spiral
+        }
         assert all(before.values()), "moment zero wrote no chunk files at all?"
 
         for number, position_id in enumerate(spiral):
-            run.write_and_publish(position_id,
-                                  self.coloured_frame(3000 + number * 10),
-                                  timepoint=1)
+            run.write_and_publish(position_id, self.coloured_frame(3000 + number * 10), timepoint=1)
 
         for position_id in spiral:
             after = moment_zero_files(run.position_store(position_id))
@@ -257,8 +269,7 @@ class TestTheSpiralWithColoursAndMoments:
 
         # Both colours, both moments, read back through plain zarr: each kept
         # exactly the pixels it was given, nobody's copy of anybody else's.
-        source = zarr.open_array(str(run.position_store(spiral[0]) / "0"),
-                                 mode="r")
+        source = zarr.open_array(str(run.position_store(spiral[0]) / "0"), mode="r")
         assert source.shape[:3] == (2, 2, 1)
         assert set(np.unique(source[0, 0])) == {1000}
         assert set(np.unique(source[0, 1])) == {1001}
@@ -269,20 +280,16 @@ class TestTheSpiralWithColoursAndMoments:
         from zmart_viewer.record.gateway import _LiveRun
 
         run, width = self.a_two_colour_timelapse(tmp_path)
-        spiral = [f"p{row:0{width}d}{column:0{width}d}"
-                  for row, column in the_spiral(self.ACROSS)]
+        spiral = [f"p{row:0{width}d}{column:0{width}d}" for row, column in the_spiral(self.ACROSS)]
         for moment in (0, 1):
             for position_id in spiral:
-                run.write_and_publish(position_id,
-                                      self.coloured_frame(1000 + moment),
-                                      timepoint=moment)
+                run.write_and_publish(
+                    position_id, self.coloured_frame(1000 + moment), timepoint=moment
+                )
 
-        committed = [(event.position_id, event.timepoint)
-                     for event in run.manifest.events()]
-        assert committed == ([(one, 0) for one in spiral]
-                             + [(one, 1) for one in spiral]), (
-            "the manifest's commit order is not the spiral walk repeated "
-            "per moment"
+        committed = [(event.position_id, event.timepoint) for event in run.manifest.events()]
+        assert committed == ([(one, 0) for one in spiral] + [(one, 1) for one in spiral]), (
+            "the manifest's commit order is not the spiral walk repeated per moment"
         )
         reader = _LiveRun(run.folder)
         published = reader._published_units()
@@ -290,9 +297,7 @@ class TestTheSpiralWithColoursAndMoments:
             assert (position_id, 0, 0) in published
             assert (position_id, 1, 0) in published
 
-    def test_a_run_with_colours_and_moments_declares_as_a_grown_picture(
-        self, tmp_path
-    ):
+    def test_a_run_with_colours_and_moments_declares_as_a_grown_picture(self, tmp_path):
         """The refusals retired the day the grown serving stood its gates.
 
         A run recording several colours or moments was refused at this
@@ -306,11 +311,9 @@ class TestTheSpiralWithColoursAndMoments:
         import json
 
         run, width = self.a_two_colour_timelapse(tmp_path)
-        store = declare_a_governed_picture(run.folder / "views" / "empty",
-                                           run.folder, name="live")
+        store = declare_a_governed_picture(run.folder / "views" / "empty", run.folder, name="live")
         described = json.loads((store / "zarr.json").read_text())
-        axes = [axis["name"] for axis in
-                described["attributes"]["ome"]["multiscales"][0]["axes"]]
+        axes = [axis["name"] for axis in described["attributes"]["ome"]["multiscales"][0]["axes"]]
         assert axes == ["t", "c", "z", "y", "x"]
         level = json.loads((store / "0" / "zarr.json").read_text())
         assert level["shape"][:2] == [2, 2], (
@@ -322,10 +325,12 @@ class TestTheSpiralWithColoursAndMoments:
         # bake landed (its own gates live in
         # test_a_grown_run_is_baked_per_commit; here we only pin that the
         # door is open and leaves the stamp of a finished bake).
-        run.write_and_publish(f"p{0:0{width}d}{0:0{width}d}",
-                              self.coloured_frame(1000), timepoint=0)
-        baked = declare_a_governed_picture(run.folder / "views" / "baked",
-                                           run.folder, name="live", bake=True)
+        run.write_and_publish(
+            f"p{0:0{width}d}{0:0{width}d}", self.coloured_frame(1000), timepoint=0
+        )
+        baked = declare_a_governed_picture(
+            run.folder / "views" / "baked", run.folder, name="live", bake=True
+        )
         assert (baked / "baked.json").is_file(), (
             "a grown run's bake must finish and stamp itself like a flat one"
         )
@@ -334,6 +339,7 @@ class TestTheSpiralWithColoursAndMoments:
 # ---------------------------------------------------------------------------
 # The growth on screen, under both invalidations
 # ---------------------------------------------------------------------------
+
 
 def _lit_geometry(page, floor: int = 40) -> dict:
     """One photograph of the canvas, distilled to where the light is.
@@ -356,12 +362,10 @@ def _lit_geometry(page, floor: int = 40) -> dict:
     height, width = lit.shape
     area = float((rows.max() - rows.min() + 1) * (columns.max() - columns.min() + 1))
     centre = ((rows.min() + rows.max()) / 2, (columns.min() + columns.max()) / 2)
-    offset = float(np.hypot(centre[0] - height / 2, centre[1] - width / 2)
-                   / np.hypot(height, width))
-    return {"fraction": float(lit.mean()),
-            "area": area / (height * width),
-            "centre_offset": offset}
-
+    offset = float(
+        np.hypot(centre[0] - height / 2, centre[1] - width / 2) / np.hypot(height, width)
+    )
+    return {"fraction": float(lit.mean()), "area": area / (height * width), "centre_offset": offset}
 
 
 def test_the_spiral_growth_is_visible(browser, built_dist, tmp_path):
@@ -381,23 +385,24 @@ def test_the_spiral_growth_is_visible(browser, built_dist, tmp_path):
 
     shown = run.folder / "views" / "shown"
     store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
-    pictured = len(json.loads((store / "zarr.json").read_text(
-        encoding="utf-8"))["attributes"]["ome"]["multiscales"][0]["datasets"])
+    pictured = len(
+        json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["ome"][
+            "multiscales"
+        ][0]["datasets"]
+    )
     site = Path(os.environ.get("ZMART_STORM_BUILT_DIST", built_dist))
-    server = make_server(port=0, data_dir=shown, site_dir=site,
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    server = make_server(
+        port=0, data_dir=shown, site_dir=site, store=[store.name], window=harness.BRIGHT, live=True
+    )
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
     try:
         port = server.server_address[1]
         page.add_init_script("globalThis.zmartLiveCheckMs = 150")
-        page.goto(f"http://127.0.0.1:{port}",
-                  wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                               timeout=90_000)
+        page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_000)
 
         opening = _lit_geometry(page)
@@ -446,8 +451,7 @@ def test_the_spiral_growth_is_visible(browser, built_dist, tmp_path):
             # spiral fills in as fast as the writer can land -- which is not
             # far past twenty a second anyway, and exactly the cadence the
             # viewer has to keep up with in real acquisition.
-            for cell in [one for one in landing
-                         if ring_of(*one, ACROSS) == ring]:
+            for cell in [one for one in landing if ring_of(*one, ACROSS) == ring]:
                 harness.fast_publish(run, named_for(cell))
                 _announce(port, _dirty_for(run, pictured, named_for(cell)))
             # The ring has landed; the page now has to show it. Poll until
@@ -470,28 +474,30 @@ def test_the_spiral_growth_is_visible(browser, built_dist, tmp_path):
                         answers_at_the_fall = dict(answers)
                         held_at_the_fall = _chunks_held(page)
                 high_water = max(high_water, seen["fraction"])
-                if (seen["fraction"] >= story[-1]["fraction"] + 0.005
-                        and seen["area"] >= story[-1]["area"]):
+                if (
+                    seen["fraction"] >= story[-1]["fraction"] + 0.005
+                    and seen["area"] >= story[-1]["area"]
+                ):
                     grown = seen
                     break
                 page.wait_for_timeout(300)
             assert grown is not None, (
-                f"ring {ring} landed but never became visible; "
-                f"story so far: {json.dumps(story)}"
+                f"ring {ring} landed but never became visible; story so far: {json.dumps(story)}"
             )
             story.append(dict(grown, ring=ring))
 
-        print("SPIRAL GROWTH:", json.dumps({"story": story}),
-              flush=True)
-        kept = (marks_at_the_fall is not None
-                and [one["mark"] for one in marks_at_the_fall]
-                == [one["mark"] for one in marks_before])
+        print("SPIRAL GROWTH:", json.dumps({"story": story}), flush=True)
+        kept = marks_at_the_fall is not None and [one["mark"] for one in marks_at_the_fall] == [
+            one["mark"] for one in marks_before
+        ]
         assert never_regressed, (
             f"the lit canvas fell by {worst:.3f} of the frame, to {darkest:.3f} "
             f"lit, and the layers were "
-            + ("THE SAME OBJECTS (so the chunks went, not the layer): "
-               if kept else "REPLACED (a landing rebuilt a layer, which "
-               "8713483c forbids): ")
+            + (
+                "THE SAME OBJECTS (so the chunks went, not the layer): "
+                if kept
+                else "REPLACED (a landing rebuilt a layer, which 8713483c forbids): "
+            )
             + f"{marks_before} -> {marks_at_the_fall}; pieces answered by then "
             + f"{answers_at_the_fall}; chunks held {held_before} -> "
             + f"{held_at_the_fall} -- ground "
@@ -505,16 +511,14 @@ def test_the_spiral_growth_is_visible(browser, built_dist, tmp_path):
         # and the centre staying put is what says the growth was outward
         # around the seed rather than a drift.
         assert story[-1]["fraction"] > story[0]["fraction"] * 3, (
-            "the lit ground barely grew -- the spiral filled almost nothing "
-            "beyond the seeded block"
+            "the lit ground barely grew -- the spiral filled almost nothing beyond the seeded block"
         )
         assert story[-1]["area"] > story[0]["area"], (
             "the lit region's box never widened -- nothing landed outside "
             "the seeded block's footprint"
         )
         assert story[-1]["centre_offset"] <= story[0]["centre_offset"] + 0.05, (
-            "the lit region drifted off the seeded centre -- growth was not "
-            "the outward spiral"
+            "the lit region drifted off the seeded centre -- growth was not the outward spiral"
         )
 
         # The record agrees with the walk: what the manifest committed, in

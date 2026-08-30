@@ -22,8 +22,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
-from zmart_viewer.server import make_server
+
 from zmart_viewer.library import declared_channels, discover
+from zmart_viewer.server import make_server
 
 REAL_STORE_ENV = "ZMART_TEST_STORE"
 
@@ -106,7 +107,7 @@ def test_webgl_is_hardware_accelerated(gpu_browser):
     finally:
         page.close()
 
-    print(f"\nWebGL renderer: {renderer}")   # visible with `pytest -s`
+    print(f"\nWebGL renderer: {renderer}")  # visible with `pytest -s`
     assert drew["ok"], f"{renderer} reports a GPU but cannot draw: {drew.get('why')}"
     assert drew["pixel"] == [0, 255, 0, 255], (
         f"{renderer} drew {drew['pixel']} where a plain green fill was asked for, "
@@ -118,12 +119,15 @@ def test_webgl_is_hardware_accelerated(gpu_browser):
 # A real OME-Zarr store
 # --------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def real_store() -> Path:
     """The store named by ``ZMART_TEST_STORE``, or skip if it is not set."""
     raw = os.environ.get(REAL_STORE_ENV)
     if not raw:
-        pytest.skip(f"set {REAL_STORE_ENV}=/path/to/acquisition.ome.zarr to run the real-data tests")
+        pytest.skip(
+            f"set {REAL_STORE_ENV}=/path/to/acquisition.ome.zarr to run the real-data tests"
+        )
     path = Path(raw)
     if not path.exists():
         pytest.skip(f"{REAL_STORE_ENV} points at a path that does not exist: {path}")
@@ -165,7 +169,9 @@ def test_real_store_channels_become_layers(real_server):
         conn.close()
     assert len(config["layers"]) == expected
     for layer in config["layers"]:
-        assert layer["window"]["low"] < layer["window"]["high"]   # a usable window, measured from the data
+        assert (
+            layer["window"]["low"] < layer["window"]["high"]
+        )  # a usable window, measured from the data
 
 
 def test_real_store_renders(real_server, browser):

@@ -19,8 +19,9 @@ import json
 import threading
 import time
 
-from zmart_viewer import live as announcements_mod
 import pytest
+
+from zmart_viewer import live as announcements_mod
 from zmart_viewer.live import Announcements, FolderWatcher
 from zmart_viewer.server import make_server
 
@@ -188,15 +189,19 @@ def _serving(tmp_path, **kwargs):
             json.dumps(
                 {
                     "multiscales": [
-                        {"version": "0.4", "axes": [{"name": a} for a in "zyx"],
-                         "datasets": [{"path": "0"}]}
+                        {
+                            "version": "0.4",
+                            "axes": [{"name": a} for a in "zyx"],
+                            "datasets": [{"path": "0"}],
+                        }
                     ]
                 }
             ),
             encoding="utf-8",
         )
-    server = make_server(port=0, data_dir=data, site_dir=site,
-                         store="overview_pos001.ome.zarr", **kwargs)
+    server = make_server(
+        port=0, data_dir=data, site_dir=site, store="overview_pos001.ome.zarr", **kwargs
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -224,8 +229,9 @@ class TestTheConnectionAPageHolds:
             # Wait until the server agrees somebody is there, so this is not a race.
             for _ in range(100):
                 telling = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-                telling.request("POST", "/api/announce", body=b"{}",
-                                headers={"Content-Length": "2"})
+                telling.request(
+                    "POST", "/api/announce", body=b"{}", headers={"Content-Length": "2"}
+                )
                 told = json.loads(telling.getresponse().read())["told"]
                 telling.close()
                 if told:
@@ -277,9 +283,7 @@ class TestTheConnectionAPageHolds:
         """
         monkeypatch.setattr(announcements_mod, "QUIET_HEARTBEAT_S", 0.1)
         server, thread = _serving(tmp_path)
-        listening = http.client.HTTPConnection(
-            "127.0.0.1", server.server_address[1], timeout=10
-        )
+        listening = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
         try:
             listening.request("GET", "/api/events")
             response = listening.getresponse()
@@ -328,9 +332,17 @@ class TestTheConnectionAPageHolds:
             appeared = tmp_path / "data" / "prescan_pos001.ome.zarr"
             appeared.mkdir()
             (appeared / ".zattrs").write_text(
-                json.dumps({"multiscales": [{"version": "0.4",
-                                             "axes": [{"name": a} for a in "zyx"],
-                                             "datasets": [{"path": "0"}]}]}),
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "version": "0.4",
+                                "axes": [{"name": a} for a in "zyx"],
+                                "datasets": [{"path": "0"}],
+                            }
+                        ]
+                    }
+                ),
                 encoding="utf-8",
             )
             time.sleep(1.5)

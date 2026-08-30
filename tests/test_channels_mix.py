@@ -28,6 +28,7 @@ import threading
 import numpy as np
 import pytest
 import zarr
+
 from zmart_viewer.server import make_server
 
 # Well below the window's top, so four channels can be added without any of
@@ -50,30 +51,54 @@ def _a_picture(path, values, colours, declare=None):
     data = np.zeros((len(values), 2, 64, 64), dtype=np.uint16)
     for index, value in enumerate(values):
         data[index] = value
-    group.create_array("0", shape=data.shape, chunks=(1, 1, 64, 64),
-                       dtype="uint16")[:] = data
-    (path / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 2.0, 0.35, 0.35]}]}],
-        }],
-        "omero": {"channels": [
-            {"label": name, "color": colour,
-             # A window the run asked for, so these gates do not also depend
-             # on what a measurement of a flat picture happens to return.
-             "window": {"min": 0, "max": 65535,
-                        "start": WINDOW[0], "end": WINDOW[1]},
-             # Anything else this particular run declares about the channel.
-             **((declare or [{}] * len(values))[index])}
-            for index, (name, colour)
-            in enumerate(zip(_names(len(values)), colours, strict=True))
-        ]},
-    }), encoding="utf-8")
+    group.create_array("0", shape=data.shape, chunks=(1, 1, 64, 64), dtype="uint16")[:] = data
+    (path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 2.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {
+                            "label": name,
+                            "color": colour,
+                            # A window the run asked for, so these gates do not also depend
+                            # on what a measurement of a flat picture happens to return.
+                            "window": {
+                                "min": 0,
+                                "max": 65535,
+                                "start": WINDOW[0],
+                                "end": WINDOW[1],
+                            },
+                            # Anything else this particular run declares about the channel.
+                            **((declare or [{}] * len(values))[index]),
+                        }
+                        for index, (name, colour) in enumerate(
+                            zip(_names(len(values)), colours, strict=True)
+                        )
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -83,18 +108,15 @@ def _names(count):
 
 def _serve(folder, built_dist, browser, store):
     """A page on one picture, settled and framed."""
-    server = make_server(port=0, data_dir=folder, site_dir=built_dist,
-                         store=store)
+    server = make_server(port=0, data_dir=folder, site_dir=built_dist, store=store)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 900, "height": 700})
-    page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-              wait_until="domcontentloaded")
-    page.wait_for_function("() => window.zmartConfig !== undefined",
-                           timeout=30_000)
+    page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
     page.wait_for_function(
-        "() => window.zmartSourcesWaiting && window.zmartSourcesWaiting() === 0",
-        timeout=60_000)
+        "() => window.zmartSourcesWaiting && window.zmartSourcesWaiting() === 0", timeout=60_000
+    )
     page.wait_for_timeout(1_200)
     return page, server, thread
 
@@ -140,11 +162,12 @@ def four_channels(browser, built_dist, tmp_path):
     folder.mkdir()
     # Three different values, so a gate below can tell whether each channel
     # is reading its OWN data: one, two and three parts of the window.
-    _a_picture(folder / "overview_pos001.ome.zarr",
-               [DIM, 2 * DIM, 3 * DIM, 0],
-               ["FF0000", "00FF00", "0000FF", "FFFFFF"])
-    page, server, thread = _serve(folder, built_dist, browser,
-                                  "overview_pos001.ome.zarr")
+    _a_picture(
+        folder / "overview_pos001.ome.zarr",
+        [DIM, 2 * DIM, 3 * DIM, 0],
+        ["FF0000", "00FF00", "0000FF", "FFFFFF"],
+    )
+    page, server, thread = _serve(folder, built_dist, browser, "overview_pos001.ome.zarr")
     try:
         yield page
     finally:
@@ -228,7 +251,8 @@ def test_a_channel_fades_in_step_with_its_opacity(four_channels):
             HTMLInputElement.prototype, 'value').set;
           setter.call(element, '0.5');
           element.dispatchEvent(new Event('input', { bubbles: true }));
-        }""")
+        }"""
+    )
     page.wait_for_timeout(900)
     halved = _on_screen(page)[0]
 
@@ -252,7 +276,8 @@ def test_recolouring_leaves_the_drawing_program_alone(four_channels):
     programs = lambda: page.evaluate(  # noqa: E731 -- a tiny page probe
         """() => window.zmartViewer.layerManager.managedLayers
              .filter((managed) => managed.layer?.type === 'image')
-             .map((managed) => managed.layer.fragmentMain.value)""")
+             .map((managed) => managed.layer.fragmentMain.value)"""
+    )
     before = programs()
     _recolour(page, "chB", "cyan")
     after = programs()
@@ -264,7 +289,8 @@ def test_recolouring_leaves_the_drawing_program_alone(four_channels):
         """() => window.zmartViewer.layerManager.managedLayers
              .filter((managed) => managed.layer?.type === 'image')
              .map((managed) => JSON.stringify(
-                managed.layer.shaderControlState.toJSON() || {}))""")
+                managed.layer.shaderControlState.toJSON() || {}))"""
+    )
     # Cyan is (0.2, 0.8, 1) of full, which is how a colour is spelled on the
     # way to the engine's own control.
     assert any("#33ccff" in one for one in held), (
@@ -285,9 +311,9 @@ def written_as_positions(browser, built_dist, tmp_path):
     folder.mkdir()
     for name in ("survey_pos001.ome.zarr", "survey_pos002.ome.zarr"):
         _a_picture(folder / name, [DIM, DIM], ["FF0000", "00FF00"])
-    page, server, thread = _serve(folder, built_dist, browser,
-                                  ["survey_pos001.ome.zarr",
-                                   "survey_pos002.ome.zarr"])
+    page, server, thread = _serve(
+        folder, built_dist, browser, ["survey_pos001.ome.zarr", "survey_pos002.ome.zarr"]
+    )
     try:
         yield page
     finally:
@@ -296,20 +322,23 @@ def written_as_positions(browser, built_dist, tmp_path):
         thread.join(timeout=5)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "A picture written as overlapping positions cannot mix its channels, and "
-    "the engine is what says so. Adding is a property of a LAYER, so a layer "
-    "fed by several stores adds those stores to each other as well, drawing a "
-    "bright seam along every join -- such a picture keeps the covering rule "
-    "and shows only its topmost channel. Reading several channels inside ONE "
-    "program would settle it, and cannot be done here: a brightness control "
-    "binds to a CHANNEL dimension, while an OME-Zarr c axis arrives as a "
-    "LOCAL one (measured 2026-08-20 -- the layer reports a channel rank of "
-    "nought and `channel=[1]` will not parse). The cure is the composed "
-    "picture the server already builds, which is one store and mixes "
-    "properly; this gate stands so the day the limit lifts is not missed."))
-def test_a_picture_written_as_positions_still_mixes_its_channels(
-        written_as_positions):
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "A picture written as overlapping positions cannot mix its channels, and "
+        "the engine is what says so. Adding is a property of a LAYER, so a layer "
+        "fed by several stores adds those stores to each other as well, drawing a "
+        "bright seam along every join -- such a picture keeps the covering rule "
+        "and shows only its topmost channel. Reading several channels inside ONE "
+        "program would settle it, and cannot be done here: a brightness control "
+        "binds to a CHANNEL dimension, while an OME-Zarr c axis arrives as a "
+        "LOCAL one (measured 2026-08-20 -- the layer reports a channel rank of "
+        "nought and `channel=[1]` will not parse). The cure is the composed "
+        "picture the server already builds, which is one store and mixes "
+        "properly; this gate stands so the day the limit lifts is not missed."
+    ),
+)
+def test_a_picture_written_as_positions_still_mixes_its_channels(written_as_positions):
     """Both rules at once: the channels mix while the positions cover.
 
     The case the arrangement cannot yet satisfy, kept as a measurement
@@ -331,8 +360,7 @@ def test_a_picture_written_as_positions_still_mixes_its_channels(
     )
 
 
-def test_positions_of_one_picture_still_cover_each_other(browser, built_dist,
-                                                         tmp_path):
+def test_positions_of_one_picture_still_cover_each_other(browser, built_dist, tmp_path):
     """Two positions on the same ground draw as one, not as double.
 
     Channels add; positions do not. A run is written as many positions that
@@ -344,8 +372,7 @@ def test_positions_of_one_picture_still_cover_each_other(browser, built_dist,
     alone = tmp_path / "alone"
     alone.mkdir()
     _a_picture(alone / "overview_pos001.ome.zarr", [DIM], ["FF0000"])
-    page, server, thread = _serve(alone, built_dist, browser,
-                                  "overview_pos001.ome.zarr")
+    page, server, thread = _serve(alone, built_dist, browser, "overview_pos001.ome.zarr")
     try:
         single = _on_screen(page)[0]
     finally:
@@ -357,9 +384,9 @@ def test_positions_of_one_picture_still_cover_each_other(browser, built_dist,
     twice.mkdir()
     _a_picture(twice / "overview_pos001.ome.zarr", [DIM], ["FF0000"])
     _a_picture(twice / "overview_pos002.ome.zarr", [DIM], ["FF0000"])
-    page, server, thread = _serve(twice, built_dist, browser,
-                                  ["overview_pos001.ome.zarr",
-                                   "overview_pos002.ome.zarr"])
+    page, server, thread = _serve(
+        twice, built_dist, browser, ["overview_pos001.ome.zarr", "overview_pos002.ome.zarr"]
+    )
     try:
         stacked = _on_screen(page)[0]
     finally:
@@ -391,9 +418,7 @@ def test_each_channel_draws_its_own_data(four_channels):
         f"green stands at {green / red:.2f} times red, not the two times its "
         "data says -- the channels are not being read as their own"
     )
-    assert 2.7 < blue / red < 3.3, (
-        f"blue stands at {blue / red:.2f} times red, not three times"
-    )
+    assert 2.7 < blue / red < 3.3, f"blue stands at {blue / red:.2f} times red, not three times"
 
 
 @pytest.fixture
@@ -410,12 +435,10 @@ def as_the_run_declared(browser, built_dist, tmp_path):
             # the ordinary case and not what the number type would say. The
             # window sits inside that range, as a real run's does.
             {"window": {"min": 0, "max": 4095, "start": 0, "end": 3000}},
-            {"window": {"min": 0, "max": 4095, "start": 0, "end": 3000},
-             "active": False},
+            {"window": {"min": 0, "max": 4095, "start": 0, "end": 3000}, "active": False},
         ],
     )
-    page, server, thread = _serve(folder, built_dist, browser,
-                                  "overview_pos001.ome.zarr")
+    page, server, thread = _serve(folder, built_dist, browser, "overview_pos001.ome.zarr")
     try:
         yield page
     finally:
@@ -424,8 +447,7 @@ def as_the_run_declared(browser, built_dist, tmp_path):
         thread.join(timeout=5)
 
 
-def test_the_range_a_run_declares_bounds_both_the_window_and_the_axis(
-        as_the_run_declared):
+def test_the_range_a_run_declares_bounds_both_the_window_and_the_axis(as_the_run_declared):
     """A twelve-bit camera cannot produce 9000, so nothing on the panel goes there.
 
     The declared range reaches the viewer and bounds every mover on the
@@ -454,8 +476,7 @@ def test_the_range_a_run_declares_bounds_both_the_window_and_the_axis(
     box.fill("9000")
     box.press("Enter")
     page.wait_for_timeout(500)
-    reach = page.locator("[aria-label='max chA']").evaluate(
-        "(element) => Number(element.max)")
+    reach = page.locator("[aria-label='max chA']").evaluate("(element) => Number(element.max)")
     assert reach == 4095, (
         f"the axis was stretched to {reach}, past the 4095 the run says its "
         "numbers live in -- everything beyond it is empty by construction"
@@ -471,8 +492,7 @@ def test_the_range_a_run_declares_bounds_both_the_window_and_the_axis(
     # floating-point window on its way back to the slider, and a seventh of
     # a count is far below anything an eye could see.
     assert abs(float(high) - 4095) < 1, (
-        f"the white point was pushed to {high}, past the 4095 the run says "
-        "its numbers live in"
+        f"the white point was pushed to {high}, past the 4095 the run says its numbers live in"
     )
 
 

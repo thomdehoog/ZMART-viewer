@@ -33,7 +33,7 @@ pixels in two nested sizes, and telling them apart is the whole of this module.
   overnight run leaves millions of tiny files behind, and most disks, network
   shares and backup programs cope with that badly.
 
-The older linked view in the elder linked writer (``testdata/oldwriter/linked.py``) hands the viewer **whole
+The older linked view in the retired elder linked writer hands the viewer **whole
 files**, so for a bundled position it measures everything in whole bundles: a
 position had to land on a bundle boundary, and the trimmed strip at a seam had to
 be a whole number of bundles. That is a much harsher rule than it sounds, and it
@@ -177,8 +177,7 @@ class Claim:
         """The bytes this claim would hand over, or ``None`` for absence."""
         grid = self._stored.bundling.chunks_in_array
         if any(
-            index >= extent
-            for index, extent in zip(self.inside_the_position, grid, strict=True)
+            index >= extent for index, extent in zip(self.inside_the_position, grid, strict=True)
         ):
             # The position does not reach that far — most often a moment it has
             # not been asked to record yet.
@@ -447,7 +446,7 @@ def _refuse_a_placement_that_does_not_land_on_whole_chunks(
     scale that would not keep up with the microscope.
 
     The unit here is the **chunk**, and that is the difference between this route
-    and the whole-file one in the elder linked writer (``testdata/oldwriter/linked.py``). A position may bundle
+    and the whole-file one in the retired elder linked writer. A position may bundle
     many chunks into one file, and its share of the view is still allowed to begin
     and end in the middle of such a bundle; only the chunks inside it have to line
     up. The message says so, because an operator who has met the whole-file rule
@@ -612,9 +611,7 @@ class ViewRoute:
                 found.append(
                     (
                         block,
-                        tuple(
-                            block.low[axis] + within[axis] for axis in range(3)
-                        ),  # type: ignore[arg-type]
+                        tuple(block.low[axis] + within[axis] for axis in range(3)),  # type: ignore[arg-type]
                     )
                 )
         found.sort(key=lambda entry: entry[0].arrival, reverse=True)
@@ -650,9 +647,7 @@ class ViewRoute:
             )
 
         leading, spatial = wanted[:-3], wanted[-3:]
-        if any(
-            spatial[axis] >= self.chunks_in_view[axis] for axis in range(3)
-        ):
+        if any(spatial[axis] >= self.chunks_in_view[axis] for axis in range(3)):
             return ()
         return tuple(
             Claim(
@@ -723,9 +718,7 @@ class ViewRoute:
         if len(wanted) != len(self.storage.chunk) or any(index < 0 for index in wanted):
             return False
         spatial = wanted[-3:]
-        if any(
-            spatial[axis] >= self.chunks_in_view[axis] for axis in range(3)
-        ):
+        if any(spatial[axis] >= self.chunks_in_view[axis] for axis in range(3)):
             return False
         return bool(self._positions_covering(spatial))
 
@@ -794,9 +787,7 @@ def route_the_view(
         # Shown whole means "everything from where we start to the far edge",
         # rather than "the whole position", so that a position taken from an
         # offset needs no second number to say the obvious.
-        size = tidy.size or tuple(
-            shape[axis] - tidy.taken_from[axis] for axis in range(3)
-        )
+        size = tidy.size or tuple(shape[axis] - tidy.taken_from[axis] for axis in range(3))
         _refuse_a_part_that_is_not_there(tidy, stored, size)  # type: ignore[arg-type]
         _refuse_a_placement_that_does_not_land_on_whole_chunks(tidy, stored, size)  # type: ignore[arg-type]
 
@@ -815,9 +806,7 @@ def route_the_view(
 
     inner = first.bundling.inner_chunk[-3:]
     reaches = tuple(
-        max(
-            (block.begins[axis] + block.extent[axis]) * inner[axis] for block in blocks
-        )
+        max((block.begins[axis] + block.extent[axis]) * inner[axis] for block in blocks)
         for axis in range(3)
     )
     shape = tuple(_whole_numbers(view_shape, "view shape")) if view_shape else reaches

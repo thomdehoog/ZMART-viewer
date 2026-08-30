@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from zmart_viewer.library import (
     channel_color,
     channel_of,
@@ -190,44 +191,76 @@ def test_channels_with_no_declared_colours_open_distinct(tmp_path):
 
     store = tmp_path / "plate_field.ome.zarr"
     store.mkdir()
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 0.35, 0.35]}]}],
-        }],
-    }), encoding="utf-8")
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     level = store / "0"
     level.mkdir()
-    (level / ".zarray").write_text(json.dumps({
-        "zarr_format": 2, "shape": [4, 8, 8], "chunks": [1, 8, 8],
-        "dtype": "<u2", "compressor": None, "fill_value": 0,
-        "filters": None, "order": "C",
-    }), encoding="utf-8")
+    (level / ".zarray").write_text(
+        json.dumps(
+            {
+                "zarr_format": 2,
+                "shape": [4, 8, 8],
+                "chunks": [1, 8, 8],
+                "dtype": "<u2",
+                "compressor": None,
+                "fill_value": 0,
+                "filters": None,
+                "order": "C",
+            }
+        ),
+        encoding="utf-8",
+    )
     told = channels(store)
     colours = [tuple(one["color"]) for one in told if one["color"]]
-    assert len(colours) == 4, (
-        f"every channel of several must wear a colour; got {told}"
-    )
+    assert len(colours) == 4, f"every channel of several must wear a colour; got {told}"
     assert len(set(colours)) == 4, f"the colours must be distinct: {colours}"
 
     lonely = tmp_path / "single.ome.zarr"
     lonely.mkdir()
     (lonely / ".zattrs").write_text(
-        (store / ".zattrs").read_text(encoding="utf-8"), encoding="utf-8")
+        (store / ".zattrs").read_text(encoding="utf-8"), encoding="utf-8"
+    )
     single = lonely / "0"
     single.mkdir()
-    (single / ".zarray").write_text(json.dumps({
-        "zarr_format": 2, "shape": [1, 8, 8], "chunks": [1, 8, 8],
-        "dtype": "<u2", "compressor": None, "fill_value": 0,
-        "filters": None, "order": "C",
-    }), encoding="utf-8")
-    assert channels(lonely)[0]["color"] is None, (
-        "one channel alone keeps its honest greyscale"
+    (single / ".zarray").write_text(
+        json.dumps(
+            {
+                "zarr_format": 2,
+                "shape": [1, 8, 8],
+                "chunks": [1, 8, 8],
+                "dtype": "<u2",
+                "compressor": None,
+                "fill_value": 0,
+                "filters": None,
+                "order": "C",
+            }
+        ),
+        encoding="utf-8",
     )
+    assert channels(lonely)[0]["color"] is None, "one channel alone keeps its honest greyscale"
 
 
 def test_a_run_that_declares_its_display_settings_is_believed(tmp_path):
@@ -244,29 +277,64 @@ def test_a_run_that_declares_its_display_settings_is_believed(tmp_path):
 
     store = tmp_path / "declared_pos001.ome.zarr"
     store.mkdir()
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 0.35, 0.35]}]}],
-        }],
-        "omero": {"channels": [
-            {"label": "DAPI", "color": "0000FF", "active": True,
-             "window": {"min": 0, "max": 4095, "start": 100, "end": 900}},
-            {"label": "GFP", "color": "00FF00", "active": False,
-             "window": {"min": 0, "max": 4095, "start": 50, "end": 700}},
-        ]},
-    }), encoding="utf-8")
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {
+                            "label": "DAPI",
+                            "color": "0000FF",
+                            "active": True,
+                            "window": {"min": 0, "max": 4095, "start": 100, "end": 900},
+                        },
+                        {
+                            "label": "GFP",
+                            "color": "00FF00",
+                            "active": False,
+                            "window": {"min": 0, "max": 4095, "start": 50, "end": 700},
+                        },
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     level = store / "0"
     level.mkdir()
-    (level / ".zarray").write_text(json.dumps({
-        "zarr_format": 2, "shape": [2, 8, 8], "chunks": [1, 8, 8],
-        "dtype": "<u2", "compressor": None, "fill_value": 0,
-        "filters": None, "order": "C",
-    }), encoding="utf-8")
+    (level / ".zarray").write_text(
+        json.dumps(
+            {
+                "zarr_format": 2,
+                "shape": [2, 8, 8],
+                "chunks": [1, 8, 8],
+                "dtype": "<u2",
+                "compressor": None,
+                "fill_value": 0,
+                "filters": None,
+                "order": "C",
+            }
+        ),
+        encoding="utf-8",
+    )
 
     told = channels(store)
     assert [one["name"] for one in told] == ["DAPI", "GFP"]
@@ -277,9 +345,7 @@ def test_a_run_that_declares_its_display_settings_is_believed(tmp_path):
         "is that and not whatever the number type could hold"
     )
     assert told[0]["active"] is True
-    assert told[1]["active"] is False, (
-        "a channel the run switched off must open switched off"
-    )
+    assert told[1]["active"] is False, "a channel the run switched off must open switched off"
 
 
 def test_a_channel_that_says_nothing_keeps_its_own_answers(tmp_path):
@@ -288,23 +354,48 @@ def test_a_channel_that_says_nothing_keeps_its_own_answers(tmp_path):
 
     store = tmp_path / "quiet_pos001.ome.zarr"
     store.mkdir()
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 0.35, 0.35]}]}],
-        }],
-    }), encoding="utf-8")
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     level = store / "0"
     level.mkdir()
-    (level / ".zarray").write_text(json.dumps({
-        "zarr_format": 2, "shape": [2, 8, 8], "chunks": [1, 8, 8],
-        "dtype": "<u2", "compressor": None, "fill_value": 0,
-        "filters": None, "order": "C",
-    }), encoding="utf-8")
+    (level / ".zarray").write_text(
+        json.dumps(
+            {
+                "zarr_format": 2,
+                "shape": [2, 8, 8],
+                "chunks": [1, 8, 8],
+                "dtype": "<u2",
+                "compressor": None,
+                "fill_value": 0,
+                "filters": None,
+                "order": "C",
+            }
+        ),
+        encoding="utf-8",
+    )
 
     told = channels(store)
     assert all(one["window"] is None for one in told)

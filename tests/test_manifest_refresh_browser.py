@@ -11,16 +11,20 @@ from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 import numpy as np
-from zmart_viewer import live as live_config
-from zmart_viewer import server as server_module
+from driving import pick_colormap  # noqa: E402
 from pixels import fraction_lit, image_middle
-from zmart_viewer.server import make_server
+from record_fixtures import (  # noqa: E402
+    FRAME,
+    a_live_run,
+    prepare_without_publishing,
+    some_specimen,
+)
 
+from zmart_viewer import live as live_config
 from zmart_viewer.record.coordinator import LivePublisher
 from zmart_viewer.record.model import GridCell
 from zmart_viewer.record.profiles import plan_the_writing
-from record_fixtures import FRAME, a_live_run, prepare_without_publishing, some_specimen  # noqa: E402
-from driving import pick_colormap  # noqa: E402
+from zmart_viewer.server import make_server
 
 _SETTLED = """() => {
   const v = window.zmartViewer;
@@ -142,9 +146,7 @@ def _operator_state(page):
 
 
 def _tune(page):
-    page.locator(
-        "[aria-label='toggle live (linked) channel 0']"
-    ).locator("xpath=../..").click()
+    page.locator("[aria-label='toggle live (linked) channel 0']").locator("xpath=../..").click()
     _set_range(page, "min live (linked) channel 0", 100)
     _set_range(page, "max live (linked) channel 0", 3500)
     _set_range(page, "opacity live (linked) channel 0", 0.83)
@@ -215,7 +217,8 @@ def test_positions_and_replacement_appear_from_commits_and_keep_operator_state(
             a_lit = fraction_lit(page)
             assert a_lit > 0.04
             stable_urls = [
-                url for row in page.evaluate("() => window.zmartConfig.layers")
+                url
+                for row in page.evaluate("() => window.zmartConfig.layers")
                 for url in row["sources"]
             ]
 
@@ -241,7 +244,8 @@ def test_positions_and_replacement_appear_from_commits_and_keep_operator_state(
             }
             _assert_operator_state(before, _operator_state(page))
             assert [
-                url for row in page.evaluate("() => window.zmartConfig.layers")
+                url
+                for row in page.evaluate("() => window.zmartConfig.layers")
                 for url in row["sources"]
             ] == stable_urls
             affected = [path for path in requests[commit_mark:] if path.startswith("/data/")]
@@ -254,7 +258,8 @@ def test_positions_and_replacement_appear_from_commits_and_keep_operator_state(
             _wait_for_picture(page)
             assert float(image_middle(page).mean()) > mean_before + 1.0
             assert [
-                url for row in page.evaluate("() => window.zmartConfig.layers")
+                url
+                for row in page.evaluate("() => window.zmartConfig.layers")
                 for url in row["sources"]
             ] == stable_urls
             _assert_operator_state(before, _operator_state(page))
@@ -262,9 +267,7 @@ def test_positions_and_replacement_appear_from_commits_and_keep_operator_state(
             page.close()
 
 
-def test_time_is_never_offered_on_a_single_moment_run(
-    browser, built_dist, tmp_path
-):
+def test_time_is_never_offered_on_a_single_moment_run(browser, built_dist, tmp_path):
     """A run with one moment of room has no time axis anywhere on screen.
 
     Not offered goes further than a missing slider: the engine's own space
@@ -300,9 +303,7 @@ def test_time_is_never_offered_on_a_single_moment_run(
             page.close()
 
 
-def test_one_run_commit_makes_no_requests_for_an_unrelated_live_run(
-    browser, built_dist, tmp_path
-):
+def test_one_run_commit_makes_no_requests_for_an_unrelated_live_run(browser, built_dist, tmp_path):
     one = _run(tmp_path / "one", "run-one")
     two = _run(tmp_path / "two", "run-two")
     one.write_and_publish("posA", some_specimen(1200))

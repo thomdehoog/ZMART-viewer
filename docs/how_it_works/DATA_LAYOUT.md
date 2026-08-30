@@ -337,7 +337,7 @@ further is deliberate: below that a copy has stopped being an overview of the sp
 become a thumbnail, and the reading it saves is no longer worth the writing it costs on
 every tile.
 
-`copies_for_a_canvas` in `testdata/oldwriter/canvas.py` is the rule. A writer with a reason of
+`copies_for_a_canvas` in the retired elder writer was the rule. A writer with a reason of
 its own can still state a number outright, and it is used as asked.
 
 **An `omero` block** naming each channel, giving it a colour, and giving a starting
@@ -548,7 +548,7 @@ whose alignment must be computed, which can only happen once every tile exists.
 
 The writer enforces this at the moment the images are created rather than letting a run
 discover it later from a picture that looks subtly wrong — see
-`testdata/oldwriter/canvas.py`, and the refusal is pinned by
+the retired elder writer, and the refusal is pinned by
 `test_a_run_with_overlapping_tiles_is_refused`.
 
 **What follows for the tile size.** Since there is no overlap, the step can be chosen freely,
@@ -644,7 +644,7 @@ more than the storage actually requires. One smaller point travels with it: what
 piece is the *shard* when the image is sharded — several chunks bundled into one file — since
 it is the bundle that gets read and written back whole.
 
-The fault and its fix both live in `_measure_the_pieces_of` in `testdata/oldwriter/canvas.py`,
+The fault and its fix both live in `_measure_the_pieces_of` in the retired elder writer,
 where the reasoning is recorded next to the code. Three tests in
 the elder writer’s own canvas tests hold it in place, each by writing tiles at the same
 moment from several threads and then checking every tile is still whole:
@@ -655,7 +655,7 @@ the ordinary one. Nothing `TileCanvases.create` produces is arranged the dangero
 every geometry it can make was tried — so this is about the generality the writer claims
 rather than about the runs it writes today.
 
-The elder writer is `testdata/oldwriter/canvas.py`. It once lived outside the viewer; the
+The elder writer is the retired elder writer. It once lived outside the viewer; the
 record machinery now lives inside it (`zmart_viewer/record/`), so the whole story of a
 run — writing its record and every way of reading it — is one codebase, and a controller
 drives instruments through this same package rather than through a copy that could drift.
@@ -742,7 +742,7 @@ planes, with the specimen in the middle of the canvas, which is where a run puts
 Past that point every sampled plane misses the specimen, every value read is zero, and
 the volume window, the histogram and the contrast slider's Auto button all come back as
 `(0, 1)` — which is not a window that is slightly wrong, but no usable range at all. The
-script is `zmart-viewer/measure_declared_room.py`, and it confirms the reassuring half of
+script was `measure_declared_room.py` (retired with the elder writer), and it confirmed the reassuring half of
 the story in the same table: the bytes on disk are **identical** across every row of it.
 Declaring generously really is free of everything except this.
 
@@ -865,7 +865,7 @@ which is the question an operator checking coverage is actually asking.
 The record is an addition rather than standard metadata, because OME-NGFF has nothing that
 says which parts of an array hold data and neither does zarr. It is kept deliberately out of
 the way: a folder with a name nothing else uses, not one byte of any image changed, and a
-viewer that has never heard of it opens the run exactly as before. `testdata/oldwriter/coverage.py`
+viewer that has never heard of it opens the run exactly as before. the retired elder writer’s coverage record
 has the whole of it, and `imaged_regions` reads it back.
 
 ### What this buys
@@ -1359,11 +1359,11 @@ That sounds obvious and was not there: the viewer spent weeks opening on an empt
 rectangle with three hundred tests passing, because every one of them asked the engine
 about itself and an engine can hold all its data and still draw nothing.
 
-**Built since this said it was not:** a writer. `testdata/oldwriter/canvas.py` (the elder
+**Built since this said it was not:** a writer. the retired elder writer (the elder
 writer, formerly `zmart_storage`) declares a run's images up front and writes each tile
 into its place as it arrives, keeping the smaller copies in step, refusing a run whose
 tiles overlap, and holding two tiles apart when they would otherwise land in one piece of
-image at the same moment; `oldwriter/coverage.py` records where the run actually imaged.
+image at the same moment; its coverage record records where the run actually imaged.
 Its successor for live runs is `zmart_viewer/record/`, the manifest-governed publisher.
 
 What is genuinely still open is **where the writer belongs in the pipeline**, which is a

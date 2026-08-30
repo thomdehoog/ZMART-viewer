@@ -52,7 +52,6 @@ from .live import SourceRegistry, live_rows
 
 _HERE = Path(__file__).resolve().parent
 _FRONTEND_DIST = (_HERE.parent / "app" / "page" / "dist").resolve()
-_DEMO_STORE = (_HERE.parent / "testdata" / "demo_store").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
@@ -1298,9 +1297,9 @@ def ask_this_machine_for_a_folder() -> str | None:
 def make_server(
     port: int = 8848,
     *,
-    data_dir: Path = _DEMO_STORE,
+    data_dir: Path | None = None,
     site_dir: Path = _FRONTEND_DIST,
-    store: str | list[str] = "demo.zarr",
+    store: str | list[str] | None = None,
     loads: list[dict] | None = None,
     window: tuple[float, float] | None = None,
     depth_samples: int = 256,
@@ -1312,11 +1311,16 @@ def make_server(
     panel_side: str = "right",
     open_from: Path | None = None,
 ) -> ThreadingHTTPServer:
-    """Create (but do not start) the viewer's web server."""
-    data_dir = Path(data_dir).resolve()
-    names = [store] if isinstance(store, str) else list(store)
+    """Create (but do not start) the viewer's web server.
+
+    Given nothing to open, it serves an empty studio: no store, no demo,
+    just the open door. ``data_dir`` then only says where the open dialog
+    starts and where drawn targets are saved.
+    """
+    data_dir = Path(data_dir).resolve() if data_dir is not None else Path.cwd()
+    names = [store] if isinstance(store, str) else list(store or [])
     library = Library()
-    wanted = loads if loads is not None else [{"stores": names}]
+    wanted = loads if loads is not None else ([{"stores": names}] if names else [])
 
     for spec in wanted:
         library.open(

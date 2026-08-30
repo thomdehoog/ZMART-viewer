@@ -31,7 +31,6 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-
 from zmart_viewer.record.model import GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
@@ -41,8 +40,7 @@ FRAME = 384
 
 def the_descriptions_of(store: Path) -> dict[str, bytes]:
     return {
-        str(path.relative_to(store)): path.read_bytes()
-        for path in sorted(store.rglob("zarr.json"))
+        str(path.relative_to(store)): path.read_bytes() for path in sorted(store.rglob("zarr.json"))
     }
 
 
@@ -52,26 +50,30 @@ def test_declare_land_redeclare_leaves_every_description_byte_identical(tmp_path
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
     run = LivePublisher(
         tmp_path / "experiment" / "acquisitions" / "deep",
-        profile, run_id="deep-room",
+        profile,
+        run_id="deep-room",
         cells={GridCell(0, 0): "p00", GridCell(0, 1): "p01"},
     )
 
     # Declared on the EMPTY run: the room exists before any pixels do.
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="live", bake=False)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", bake=False
+    )
     before = the_descriptions_of(store)
     assert before, "the declaration wrote no descriptions at all"
 
     stack = np.full((DEPTH, FRAME, FRAME), 1200, "uint16")
     run.write_and_publish("p00", stack)
 
-    again = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="live", bake=False)
+    again = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", bake=False
+    )
     assert again == store
     after = the_descriptions_of(store)
     assert after == before, (
         "re-declaring after a landing changed these descriptions: "
-        + ", ".join(sorted(name for name in set(before) | set(after)
-                           if before.get(name) != after.get(name)))
+        + ", ".join(
+            sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
+        )
         + " -- the declared room moved under a browser that already read it"
     )

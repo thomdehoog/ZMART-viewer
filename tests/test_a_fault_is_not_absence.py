@@ -31,6 +31,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
+
 from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
@@ -77,11 +78,15 @@ def _serving(tmp_path: Path):
     for position_id in order:
         harness.fast_publish(run, position_id)
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
-    server = make_server(port=0, data_dir=shown,
-                         site_dir=_VIZ / "app" / "page" / "dist",
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
+    server = make_server(
+        port=0,
+        data_dir=shown,
+        site_dir=_VIZ / "app" / "page" / "dist",
+        store=[store.name],
+        window=harness.BRIGHT,
+        live=True,
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return run, store, server, thread, server.server_address[1]

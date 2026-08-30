@@ -30,9 +30,10 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
+from pixels import fraction_lit, image_middle  # noqa: E402
+
 from zmart_viewer import server as server_module  # noqa: E402
 from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from pixels import fraction_lit, image_middle  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
 
@@ -47,8 +48,7 @@ def _fraction_lit_across_canvas(page, floor: int = 40) -> float:
     return float((pixels.max(axis=2) > floor).mean())
 
 
-def _save_middle_and_measure(page, path: Path | None = None,
-                             floor: int = 40):
+def _save_middle_and_measure(page, path: Path | None = None, floor: int = 40):
     """Take one oracle photograph and optionally preserve its exact pixels."""
     from PIL import Image
 
@@ -126,9 +126,9 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
     width = len(str(across - 1))
     low = (across - core) // 2
     committed_first = [
-        one for one in order
-        if low <= int(one[1:1 + width]) < low + core
-        and low <= int(one[1 + width:]) < low + core
+        one
+        for one in order
+        if low <= int(one[1 : 1 + width]) < low + core and low <= int(one[1 + width :]) < low + core
     ]
     landing_later = [one for one in order if one not in set(committed_first)]
     for position_id in committed_first:
@@ -136,8 +136,11 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
 
     shown = run.folder / "views" / "shown"
     store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
-    pictured = len(json.loads((store / "zarr.json").read_text(
-        encoding="utf-8"))["attributes"]["ome"]["multiscales"][0]["datasets"])
+    pictured = len(
+        json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["ome"][
+            "multiscales"
+        ][0]["datasets"]
+    )
 
     slow_chunks = threading.Event()
     reject_one_chunk = threading.Event()
@@ -150,10 +153,12 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
     def serve_one_wave_slowly(handler) -> None:
         is_chunk = "/c/" in handler.path
         if is_chunk:
-            server_attempts[handler.path] = (
-                server_attempts.get(handler.path, 0) + 1)
-        if (reject_one_chunk.is_set() and is_chunk
-                and handler.path.endswith(rejected_target["suffix"] or "")):
+            server_attempts[handler.path] = server_attempts.get(handler.path, 0) + 1
+        if (
+            reject_one_chunk.is_set()
+            and is_chunk
+            and handler.path.endswith(rejected_target["suffix"] or "")
+        ):
             reject_one_chunk.clear()
             dropped["path"] = handler.path
             handler.send_response(503, "deliberate refresh rejection")
@@ -166,12 +171,12 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
             time.sleep(2.6)
         ordinary_serve(handler)
 
-    monkeypatch.setattr(
-        server_module._Handler, "_serve_from_data", serve_one_wave_slowly)
+    monkeypatch.setattr(server_module._Handler, "_serve_from_data", serve_one_wave_slowly)
 
     site = Path(os.environ.get("ZMART_STORM_BUILT_DIST", built_dist))
-    server = make_server(port=0, data_dir=shown, site_dir=site,
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    server = make_server(
+        port=0, data_dir=shown, site_dir=site, store=[store.name], window=harness.BRIGHT, live=True
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
@@ -189,27 +194,28 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         if "/c/" not in request.url:
             return
         began = request_began.pop(id(request), time.perf_counter())
-        failed.append({
-            "url": request.url,
-            "elapsed": time.perf_counter() - began,
-            "reason": request.failure,
-        })
+        failed.append(
+            {
+                "url": request.url,
+                "elapsed": time.perf_counter() - began,
+                "reason": request.failure,
+            }
+        )
 
     page.on("request", request_started)
     page.on("requestfinished", request_finished)
     page.on("requestfailed", request_failed)
-    debug_folder = (Path(os.environ["ZMART_STORM_DEBUG"])
-                    if os.environ.get("ZMART_STORM_DEBUG") else None)
+    debug_folder = (
+        Path(os.environ["ZMART_STORM_DEBUG"]) if os.environ.get("ZMART_STORM_DEBUG") else None
+    )
     if debug_folder is not None:
         debug_folder.mkdir(parents=True, exist_ok=True)
     try:
         port = server.server_address[1]
         page.add_init_script("globalThis.zmartLiveCheckMs = 150")
         page.goto(_the_page_address(port), wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                              timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                              timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_000)
         opening = _fraction_lit_across_canvas(page)
         if debug_folder is not None:
@@ -218,12 +224,10 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         dirty = {str(level): set() for level in range(pictured)}
         for position_id in landing_later:
             harness.fast_publish(run, position_id)
-            for level, pieces in _dirty_for(
-                    run, pictured, position_id).items():
+            for level, pieces in _dirty_for(run, pictured, position_id).items():
                 dirty[level].update(tuple(piece) for piece in pieces)
         whole_wave = {
-            level: [list(piece) for piece in sorted(pieces)]
-            for level, pieces in dirty.items()
+            level: [list(piece) for piece in sorted(pieces)] for level, pieces in dirty.items()
         }
 
         slow_chunks.set()
@@ -238,30 +242,31 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         deadline = time.monotonic() + 20
         baked = 0
         while time.monotonic() < deadline:
-            baked = int(json.loads((store / "baked.json").read_text(
-                encoding="utf-8"))["events"])
+            baked = int(json.loads((store / "baked.json").read_text(encoding="utf-8"))["events"])
             if baked == len(order):
                 break
             time.sleep(0.1)
-        assert baked == len(order), (
-            f"the retry fixture's bake stopped at {baked}/{len(order)}")
+        assert baked == len(order), f"the retry fixture's bake stopped at {baked}/{len(order)}"
         baked_after_recovery = time.perf_counter() - recovered_at
         coverage_timeline: list[dict] = []
         quiet_until = time.perf_counter() + 6
         while time.perf_counter() < quiet_until:
-            coverage_timeline.append({
-                "after_recovery": time.perf_counter() - recovered_at,
-                "lit": _fraction_lit_across_canvas(page),
-            })
+            coverage_timeline.append(
+                {
+                    "after_recovery": time.perf_counter() - recovered_at,
+                    "lit": _fraction_lit_across_canvas(page),
+                }
+            )
             page.wait_for_timeout(250)
         warm = _fraction_lit_across_canvas(page)
-        coverage_timeline.append({
-            "after_recovery": time.perf_counter() - recovered_at,
-            "lit": warm,
-        })
+        coverage_timeline.append(
+            {
+                "after_recovery": time.perf_counter() - recovered_at,
+                "lit": warm,
+            }
+        )
         if debug_folder is not None:
-            page.screenshot(path=str(
-                debug_folder / "timeout_warm_after_quiet.png"))
+            page.screenshot(path=str(debug_folder / "timeout_warm_after_quiet.png"))
 
         def coarsest_refresh_probe() -> dict:
             return page.evaluate(
@@ -282,7 +287,8 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
                   sources.sort((a, b) => Math.max(...a.bound) -
                     Math.max(...b.bound));
                   return sources[0];
-                }""")
+                }"""
+            )
 
         # A retryable HTTP response is different from a slow response.  Reject
         # one request for a coarse chunk the page certainly holds and announce
@@ -301,16 +307,16 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         drop_deadline = time.monotonic() + 8
         while time.monotonic() < drop_deadline:
             path = dropped["path"]
-            if (path is not None and server_attempts.get(path, 0) >= (
-                    attempts_by_path_before_drop.get(path, 0) + 2)):
+            if path is not None and server_attempts.get(path, 0) >= (
+                attempts_by_path_before_drop.get(path, 0) + 2
+            ):
                 break
             page.wait_for_timeout(100)
         dropped_path = dropped["path"]
-        assert dropped_path is not None, (
-            "the deliberate connection drop never intercepted a chunk")
+        assert dropped_path is not None, "the deliberate connection drop never intercepted a chunk"
         assert server_attempts.get(dropped_path, 0) >= (
-                attempts_by_path_before_drop.get(dropped_path, 0) + 2), (
-            f"the dropped request for {dropped_path} was never retried")
+            attempts_by_path_before_drop.get(dropped_path, 0) + 2
+        ), f"the dropped request for {dropped_path} was never retried"
         page.wait_for_timeout(500)
         retry_after = coarsest_refresh_probe()
         after_real_retry = _fraction_lit_across_canvas(page)
@@ -320,12 +326,11 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
               zoom: window.zmartViewer.navigationState.zoomFactor.value,
               position: Array.from(
                 window.zmartViewer.navigationState.position.value),
-            })""")
+            })"""
+        )
         page.goto(_the_page_address(port), wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                              timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                              timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.evaluate(
             """(saved) => {
               const state = window.zmartViewer.navigationState;
@@ -341,61 +346,76 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
               zoom: window.zmartViewer.navigationState.zoomFactor.value,
               position: Array.from(
                 window.zmartViewer.navigationState.position.value),
-            })""")
+            })"""
+        )
         if debug_folder is not None:
-            page.screenshot(path=str(
-                debug_folder / "timeout_fresh_after_reload.png"))
+            page.screenshot(path=str(debug_folder / "timeout_fresh_after_reload.png"))
 
-        first_repaired = next((
-            sample["after_recovery"] for sample in coverage_timeline
-            if sample["lit"] >= fresh - 0.03
-        ), None)
-        minimum_during_recovery = min(
-            sample["lit"] for sample in coverage_timeline)
+        first_repaired = next(
+            (
+                sample["after_recovery"]
+                for sample in coverage_timeline
+                if sample["lit"] >= fresh - 0.03
+            ),
+            None,
+        )
+        minimum_during_recovery = min(sample["lit"] for sample in coverage_timeline)
 
-        print("TIMEOUT RETRY:", json.dumps({
-            "opening": opening, "warm_after_quiet": warm,
-            "fresh_after_reload": fresh, "failed_chunk_requests": len(failed),
-            "slow_requests_completed": slow_serves["count"],
-            "failed_before_deliberate_drop": failed_before_drop,
-            "deliberately_dropped_path": dropped_path,
-            "attempts_after_drop": (
-                sum(server_attempts.values()) - attempts_before_drop),
-            "retry_probe_before": retry_before,
-            "retry_probe_after": retry_after,
-            "coverage_after_real_retry": after_real_retry,
-            "baked": baked,
-            "bake_complete_after_recovery_s": baked_after_recovery,
-            "first_observed_repaired_after_recovery_s": first_repaired,
-            "minimum_during_recovery": minimum_during_recovery,
-            "warm_navigation": navigation,
-            "fresh_navigation": fresh_navigation,
-        }), flush=True)
-        assert slow_serves["count"] > 0, (
-            "no request was held beyond the former two-second deadline")
-        deadline_failures = [one for one in failed[:failed_before_drop]
-                             if 1.8 <= one["elapsed"] <= 2.2]
+        print(
+            "TIMEOUT RETRY:",
+            json.dumps(
+                {
+                    "opening": opening,
+                    "warm_after_quiet": warm,
+                    "fresh_after_reload": fresh,
+                    "failed_chunk_requests": len(failed),
+                    "slow_requests_completed": slow_serves["count"],
+                    "failed_before_deliberate_drop": failed_before_drop,
+                    "deliberately_dropped_path": dropped_path,
+                    "attempts_after_drop": (sum(server_attempts.values()) - attempts_before_drop),
+                    "retry_probe_before": retry_before,
+                    "retry_probe_after": retry_after,
+                    "coverage_after_real_retry": after_real_retry,
+                    "baked": baked,
+                    "bake_complete_after_recovery_s": baked_after_recovery,
+                    "first_observed_repaired_after_recovery_s": first_repaired,
+                    "minimum_during_recovery": minimum_during_recovery,
+                    "warm_navigation": navigation,
+                    "fresh_navigation": fresh_navigation,
+                }
+            ),
+            flush=True,
+        )
+        assert slow_serves["count"] > 0, "no request was held beyond the former two-second deadline"
+        deadline_failures = [
+            one for one in failed[:failed_before_drop] if 1.8 <= one["elapsed"] <= 2.2
+        ]
         assert not deadline_failures, (
             "slow requests are still being manufactured into failures near "
-            f"the old two-second deadline: {deadline_failures}")
-        assert retry_after["refresh"]["failures"] == (
-                retry_before["refresh"]["failures"]), (
+            f"the old two-second deadline: {deadline_failures}"
+        )
+        assert retry_after["refresh"]["failures"] == (retry_before["refresh"]["failures"]), (
             "the HTTP reader should absorb and retry a transient 503; the "
-            "outer ZMART refresh promise unexpectedly rejected")
+            "outer ZMART refresh promise unexpectedly rejected"
+        )
         assert warm >= fresh - 0.03, (
             f"after the server recovered and the run went quiet, the warm "
             f"client still showed {warm:.1%} where F5 showed {fresh:.1%}; "
-            "the timed-out dirty wave was forgotten instead of retried")
+            "the timed-out dirty wave was forgotten instead of retried"
+        )
         assert first_repaired is not None, (
             "the warm client never visibly matched the F5 oracle during the "
-            "six-second recovery observation")
+            "six-second recovery observation"
+        )
         assert minimum_during_recovery >= opening - 0.03, (
             f"the retry repaired the final picture but flashed through "
             f"{minimum_during_recovery:.1%} coverage after opening at "
-            f"{opening:.1%}")
+            f"{opening:.1%}"
+        )
         assert after_real_retry >= warm - 0.03, (
             f"the genuine-failure retry made the picture fall from "
-            f"{warm:.1%} to {after_real_retry:.1%}")
+            f"{warm:.1%} to {after_real_retry:.1%}"
+        )
     finally:
         slow_chunks.clear()
         reject_one_chunk.clear()
@@ -404,28 +424,32 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         thread.join(timeout=5)
 
 
-def test_tiles_advance_before_a_commit_storm_quiets(
-    browser, built_dist, tmp_path
-):
+def test_tiles_advance_before_a_commit_storm_quiets(browser, built_dist, tmp_path):
     """The live picture advances in batches; it must not appear only at EOF."""
     harness.FIXTURES = tmp_path
     run, order = harness.the_run(12)
     width = len(str(12 - 1))
     middle = (12 - 1) / 2
-    committed_first = [one for one in order
-                       if abs(int(one[1:1 + width]) - middle) <= 3.5
-                       and abs(int(one[1 + width:]) - middle) <= 3.5]
+    committed_first = [
+        one
+        for one in order
+        if abs(int(one[1 : 1 + width]) - middle) <= 3.5
+        and abs(int(one[1 + width :]) - middle) <= 3.5
+    ]
     landing_later = [one for one in order if one not in set(committed_first)]
     for position_id in committed_first:
         harness.fast_publish(run, position_id)
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
-    pictured = len(json.loads((store / "zarr.json").read_text(
-        encoding="utf-8"))["attributes"]["ome"]["multiscales"][0]["datasets"])
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
+    pictured = len(
+        json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["ome"][
+            "multiscales"
+        ][0]["datasets"]
+    )
     site = Path(os.environ.get("ZMART_STORM_BUILT_DIST", built_dist))
-    server = make_server(port=0, data_dir=shown, site_dir=site,
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    server = make_server(
+        port=0, data_dir=shown, site_dir=site, store=[store.name], window=harness.BRIGHT, live=True
+    )
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
@@ -437,10 +461,8 @@ def test_tiles_advance_before_a_commit_storm_quiets(
         port = server.server_address[1]
         page.add_init_script("globalThis.zmartLiveCheckMs = 150")
         page.goto(_the_page_address(port), wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                               timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_000)
         opening = _fraction_lit_across_canvas(page)
 
@@ -461,8 +483,9 @@ def test_tiles_advance_before_a_commit_storm_quiets(
         stamp_path = store / "baked.json"
         while not finished.is_set():
             stamp = json.loads(stamp_path.read_text(encoding="utf-8"))
-            samples.append((landed["count"], int(stamp["events"]),
-                            _fraction_lit_across_canvas(page)))
+            samples.append(
+                (landed["count"], int(stamp["events"]), _fraction_lit_across_canvas(page))
+            )
             page.wait_for_timeout(200)
         publishing.join(timeout=30)
         assert not publishing.is_alive(), "the live-progress storm did not finish"
@@ -476,18 +499,22 @@ def test_tiles_advance_before_a_commit_storm_quiets(
             if lit >= high + 0.01:
                 visible_steps += 1
                 high = lit
-        print("LIVE PROGRESS:", json.dumps({
-            "opening": opening,
-            "positions": len(landing_later),
-            "samples": [(n, stamp, round(lit, 4))
-                        for n, stamp, lit in samples],
-            "visible_steps": visible_steps,
-        }), flush=True)
+        print(
+            "LIVE PROGRESS:",
+            json.dumps(
+                {
+                    "opening": opening,
+                    "positions": len(landing_later),
+                    "samples": [(n, stamp, round(lit, 4)) for n, stamp, lit in samples],
+                    "visible_steps": visible_steps,
+                }
+            ),
+            flush=True,
+        )
         assert visible_steps >= 2, (
             "the acquisition made no visible progress before it went quiet; "
             "published/stamped/lit timeline: "
-            + ", ".join(f"{n}/{stamp}/{lit:.1%}"
-                        for n, stamp, lit in samples)
+            + ", ".join(f"{n}/{stamp}/{lit:.1%}" for n, stamp, lit in samples)
         )
     finally:
         page.close()
@@ -495,9 +522,7 @@ def test_tiles_advance_before_a_commit_storm_quiets(
         serving.join(timeout=5)
 
 
-def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
-    browser, built_dist, tmp_path
-):
+def test_every_zoom_shows_the_survey_after_a_storm_of_landings(browser, built_dist, tmp_path):
     """Twenty landings a second, a zooming viewer, and no level left behind.
 
     This is the operator's 2026-08-15 reproduction: a 40x40 survey with a
@@ -517,27 +542,35 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
     width = len(str(across - 1))
     low = (across - core) // 2
     committed_first = [
-        one for one in order
-        if low <= int(one[1:1 + width]) < low + core
-        and low <= int(one[1 + width:]) < low + core
+        one
+        for one in order
+        if low <= int(one[1 : 1 + width]) < low + core and low <= int(one[1 + width :]) < low + core
     ]
     landing_later = [one for one in order if one not in set(committed_first)]
     for position_id in committed_first:
         harness.fast_publish(run, position_id)
     shown = run.folder / "views" / "shown"
     store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
-    pictured = len(json.loads((store / "zarr.json").read_text(
-        encoding="utf-8"))["attributes"]["ome"]["multiscales"][0]["datasets"])
+    pictured = len(
+        json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["ome"][
+            "multiscales"
+        ][0]["datasets"]
+    )
 
     site = Path(os.environ.get("ZMART_STORM_BUILT_DIST", built_dist))
-    server = make_server(port=0, data_dir=shown, site_dir=site,
-                         store=[store.name], window=harness.BRIGHT, live=True)
+    server = make_server(
+        port=0, data_dir=shown, site_dir=site, store=[store.name], window=harness.BRIGHT, live=True
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
     import os as os_module
-    debug_folder = (Path(os_module.environ["ZMART_STORM_DEBUG"])
-                    if os_module.environ.get("ZMART_STORM_DEBUG") else None)
+
+    debug_folder = (
+        Path(os_module.environ["ZMART_STORM_DEBUG"])
+        if os_module.environ.get("ZMART_STORM_DEBUG")
+        else None
+    )
     if debug_folder is not None:
         debug_folder.mkdir(parents=True, exist_ok=True)
     trace_zero = time.perf_counter()
@@ -567,16 +600,19 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
         network_open[token] = (path, now)
         network_requests[path] = network_requests.get(path, 0) + 1
         network_current[path] = network_current.get(path, 0) + 1
-        network_maximum[path] = max(
-            network_maximum.get(path, 0), network_current[path])
+        network_maximum[path] = max(network_maximum.get(path, 0), network_current[path])
         network_global["current"] += 1
-        network_global["maximum"] = max(
-            network_global["maximum"], network_global["current"])
-        network_events.append({
-            "t": round(now - trace_zero, 6), "event": "request",
-            "path": path, "method": request.method,
-            "resource": request.resource_type, "phase": network_phase["name"],
-        })
+        network_global["maximum"] = max(network_global["maximum"], network_global["current"])
+        network_events.append(
+            {
+                "t": round(now - trace_zero, 6),
+                "event": "request",
+                "path": path,
+                "method": request.method,
+                "resource": request.resource_type,
+                "phase": network_phase["name"],
+            }
+        )
 
     def _response_arrived(response) -> None:
         path = _network_path(response.url)
@@ -586,16 +622,19 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             headers = response.headers
         except Exception:
             headers = {}
-        network_events.append({
-            "t": round(time.perf_counter() - trace_zero, 6),
-            "event": "response", "path": path,
-            "status": response.status,
-            "phase": network_phase["name"],
-            "etag": headers.get("etag"),
-            "bytes": headers.get("content-length"),
-            "cache": headers.get("cache-control"),
-            "service_worker": response.from_service_worker,
-        })
+        network_events.append(
+            {
+                "t": round(time.perf_counter() - trace_zero, 6),
+                "event": "response",
+                "path": path,
+                "status": response.status,
+                "phase": network_phase["name"],
+                "etag": headers.get("etag"),
+                "bytes": headers.get("content-length"),
+                "cache": headers.get("cache-control"),
+                "service_worker": response.from_service_worker,
+            }
+        )
 
     def _request_ended(request, outcome: str) -> None:
         held = network_open.pop(id(request), None)
@@ -606,10 +645,10 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
         network_global["current"] = max(0, network_global["current"] - 1)
         event = {
             "t": round(time.perf_counter() - trace_zero, 6),
-            "event": outcome, "path": path,
+            "event": outcome,
+            "path": path,
             "phase": network_phase["name"],
-            "elapsed": (round(time.perf_counter() - held[1], 6)
-                        if held is not None else None),
+            "elapsed": (round(time.perf_counter() - held[1], 6) if held is not None else None),
         }
         if outcome == "failed":
             event["failure"] = request.failure
@@ -617,10 +656,8 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
 
     page.on("request", _request_started)
     page.on("response", _response_arrived)
-    page.on("requestfinished",
-            lambda request: _request_ended(request, "finished"))
-    page.on("requestfailed",
-            lambda request: _request_ended(request, "failed"))
+    page.on("requestfinished", lambda request: _request_ended(request, "finished"))
+    page.on("requestfailed", lambda request: _request_ended(request, "failed"))
     if os_module.environ.get("ZMART_STORM_NO_HTTP_CACHE"):
         session = page.context.new_cdp_session(page)
         session.send("Network.enable")
@@ -630,16 +667,13 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
     # catch-ups, and the regime under test is the loud one.
     page.add_init_script("globalThis.zmartLiveCheckMs = 150")
     troubles: list[str] = []
-    page.on("console", lambda told: troubles.append(told.text)
-            if told.type in ("error",) else None)
+    page.on("console", lambda told: troubles.append(told.text) if told.type in ("error",) else None)
     page.on("pageerror", lambda told: troubles.append(str(told)))
     try:
         port = server.server_address[1]
         page.goto(_the_page_address(port), wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                              timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                              timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_000)
         page.evaluate(
             """() => {
@@ -728,8 +762,7 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                 }"""
             )
             print("RAISED MEMORY:", json.dumps(raised), flush=True)
-        opening_zoom = page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value")
+        opening_zoom = page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
 
         # The storm: the rest of the survey lands at twenty a second while the view is
         # driven through the zoom bands, the way a hand on the wheel does it.
@@ -784,22 +817,25 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     if step % 9 == 8:
                         dx, dy = drifts[(step // 9) % len(drifts)]
                         page.mouse.down()
-                        page.mouse.move(centre_x + dx, centre_y + dy,
-                                        steps=4)
+                        page.mouse.move(centre_x + dx, centre_y + dy, steps=4)
                         page.mouse.up()
                     now = time.perf_counter()
                     if debug_folder is not None and now >= next_picture:
                         elapsed = now - trace_zero
                         lit, _ = _save_middle_and_measure(
-                            page, debug_folder /
-                            f"during_{elapsed:07.2f}s_{step:05d}.png")
-                        visual_trace.append({
-                            "t": round(elapsed, 6), "step": step,
-                            "landed": len(landed_at), "lit": lit,
-                            "zoom": page.evaluate(
-                                "() => window.zmartViewer.navigationState"
-                                ".zoomFactor.value"),
-                        })
+                            page, debug_folder / f"during_{elapsed:07.2f}s_{step:05d}.png"
+                        )
+                        visual_trace.append(
+                            {
+                                "t": round(elapsed, 6),
+                                "step": step,
+                                "landed": len(landed_at),
+                                "lit": lit,
+                                "zoom": page.evaluate(
+                                    "() => window.zmartViewer.navigationState.zoomFactor.value"
+                                ),
+                            }
+                        )
                         next_picture = now + 1.0
                 except Exception as problem:
                     storm_failures.append(problem)
@@ -819,20 +855,19 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     completed = time.perf_counter()
                     landed_at.append(completed)
                     record = {
-                        "number": number + 1, "position": position_id,
+                        "number": number + 1,
+                        "position": position_id,
                         "due": round(due - trace_zero, 6),
                         "completed": round(completed - trace_zero, 6),
                         "late_ms": round((completed - due) * 1000, 3),
-                        "dirty": {level: len(keys)
-                                  for level, keys in dirty.items()},
+                        "dirty": {level: len(keys) for level, keys in dirty.items()},
                     }
                     if number % 20 == 0 or number + 1 == len(landing_later):
                         try:
-                            record["manifest_events"] = len(
-                                run.manifest.events())
+                            record["manifest_events"] = len(run.manifest.events())
                             record["baked"] = json.loads(
-                                (store / "baked.json").read_text(
-                                    encoding="utf-8"))
+                                (store / "baked.json").read_text(encoding="utf-8")
+                            )
                         except (OSError, ValueError) as problem:
                             record["stamp_read_error"] = str(problem)
                     landing_trace.append(record)
@@ -850,10 +885,8 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             stop_zooming.set()
         assert not landing.is_alive(), "the landing storm did not finish"
         assert not storm_failures, f"the wheel-and-landing storm failed: {storm_failures!r}"
-        achieved = ((len(landed_at) - 1) /
-                    (landed_at[-1] - landed_at[0]))
-        print(f"LANDING RATE: {achieved:.2f}/s over "
-              f"{len(landed_at)} commits", flush=True)
+        achieved = (len(landed_at) - 1) / (landed_at[-1] - landed_at[0])
+        print(f"LANDING RATE: {achieved:.2f}/s over {len(landed_at)} commits", flush=True)
         if not 19.5 <= achieved <= 20.5:
             # A machine that cannot hold the landing rate has not run the
             # regime this gate exists to test -- but that is a fact about the
@@ -907,14 +940,17 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             page.wait_for_timeout(2_000)
             before_heal = fraction_lit(page)
             answered: list[tuple[int, str]] = []
-            page.on("response",
-                    lambda told: answered.append((told.status, told.url))
-                    if "/data/" in told.url else None)
+            page.on(
+                "response",
+                lambda told: (
+                    answered.append((told.status, told.url)) if "/data/" in told.url else None
+                ),
+            )
             everything = {}
             for level in range(pictured):
                 described = json.loads(
-                    (store / str(level) / "zarr.json").read_text(
-                        encoding="utf-8"))
+                    (store / str(level) / "zarr.json").read_text(encoding="utf-8")
+                )
                 depth, height, wide = described["shape"]
                 everything[str(level)] = [
                     [0, r, c]
@@ -924,17 +960,27 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             _announce(port, everything)
             page.wait_for_timeout(6_000)
             after_heal = fraction_lit(page)
-            print(f"HEAL TEST at 1.0x: before {before_heal:.1%} "
-                  f"after full-dirty {after_heal:.1%}", flush=True)
+            print(
+                f"HEAL TEST at 1.0x: before {before_heal:.1%} after full-dirty {after_heal:.1%}",
+                flush=True,
+            )
             from collections import Counter
+
             statuses = Counter(status for status, _ in answered)
-            print(f"HEAL NETWORK: {len(answered)} /data/ responses, "
-                  f"statuses {dict(statuses)}", flush=True)
-            print("SWAP LEDGER:", json.dumps(page.evaluate(
-                "() => globalThis.zmartSwapLedger ?? 'never touched'")),
-                flush=True)
-            print("FRONTEND SOURCES:", json.dumps(page.evaluate(
-                """() => {
+            print(
+                f"HEAL NETWORK: {len(answered)} /data/ responses, statuses {dict(statuses)}",
+                flush=True,
+            )
+            print(
+                "SWAP LEDGER:",
+                json.dumps(page.evaluate("() => globalThis.zmartSwapLedger ?? 'never touched'")),
+                flush=True,
+            )
+            print(
+                "FRONTEND SOURCES:",
+                json.dumps(
+                    page.evaluate(
+                        """() => {
                   const out = [];
                   const registry =
                     window.zmartViewer.chunkManager.rpc.objects;
@@ -945,9 +991,16 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     }
                   }
                   return out;
-                }""")), flush=True)
-            print("CHUNK DATA MEANS:", json.dumps(page.evaluate(
-                """() => {
+                }"""
+                    )
+                ),
+                flush=True,
+            )
+            print(
+                "CHUNK DATA MEANS:",
+                json.dumps(
+                    page.evaluate(
+                        """() => {
                   const out = [];
                   const registry =
                     window.zmartViewer.chunkManager.rpc.objects;
@@ -970,12 +1023,22 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     }
                   }
                   return out.slice(0, 12);
-                }""")), flush=True)
-            print("LAYERS NOW:", json.dumps(page.evaluate(
-                """() => window.zmartViewer.layerManager.managedLayers
+                }"""
+                    )
+                ),
+                flush=True,
+            )
+            print(
+                "LAYERS NOW:",
+                json.dumps(
+                    page.evaluate(
+                        """() => window.zmartViewer.layerManager.managedLayers
                      .map((m) => ({ name: m.name,
-                                    ready: m.isReady ?? null }))""")),
-                flush=True)
+                                    ready: m.isReady ?? null }))"""
+                    )
+                ),
+                flush=True,
+            )
             for status, url in answered[:10]:
                 print(f"   {status} {url.split('/data/')[-1]}", flush=True)
 
@@ -1080,25 +1143,29 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             while True:
                 page.wait_for_timeout(1_500)
                 _, pixels = _save_middle_and_measure(page)
-                quiet = (page.evaluate(
-                    "() => window.zmartSourcesWaiting()") == 0
+                quiet = (
+                    page.evaluate("() => window.zmartSourcesWaiting()") == 0
                     and refresh_flights_still_out() == 0
-                    and the_view_is_fully_loaded())
-                if (resting is not None and quiet
-                        and pixels.tobytes() == resting.tobytes()):
+                    and the_view_is_fully_loaded()
+                )
+                if resting is not None and quiet and pixels.tobytes() == resting.tobytes():
                     break
                 if time.perf_counter() > deadline:
                     break
                 resting = pixels
-            seen[multiple], storm_pixels[multiple] = \
-                _save_middle_and_measure(
-                    page,
-                    (debug_folder / f"storm_band_{multiple:.2f}x.png"
-                     if debug_folder is not None else None))
+            seen[multiple], storm_pixels[multiple] = _save_middle_and_measure(
+                page,
+                (
+                    debug_folder / f"storm_band_{multiple:.2f}x.png"
+                    if debug_folder is not None
+                    else None
+                ),
+            )
             zoom_to(1.0)
             page.wait_for_timeout(2_500)
-            page.screenshot(path=str(Path(os_module.environ["ZMART_STORM_DEBUG"])
-                                     / "storm_probe_page_1x.png"))
+            page.screenshot(
+                path=str(Path(os_module.environ["ZMART_STORM_DEBUG"]) / "storm_probe_page_1x.png")
+            )
             wanting = page.evaluate(
                 """() => {
                   const out = [];
@@ -1206,6 +1273,7 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
 
         if os_module.environ.get("ZMART_STORM_HEAL"):
             probe_piece = f"http://127.0.0.1:{port}/data/0/{store.name}/0/c/0/0/8"
+
             def _bytes_now() -> bytes:
                 request = urllib.request.Request(probe_piece)
                 try:
@@ -1213,19 +1281,24 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                         return answer.read()
                 except urllib.error.HTTPError:
                     return b""
+
             first_look = _bytes_now()
             time.sleep(6)
             second_look = _bytes_now()
-            print(f"BAKE LAG PROBE: piece 0/c/0/0/8 "
-                  f"{len(first_look)}B then {len(second_look)}B, "
-                  f"{'CHANGED while quiet' if first_look != second_look else 'identical'}",
-                  flush=True)
+            print(
+                f"BAKE LAG PROBE: piece 0/c/0/0/8 "
+                f"{len(first_look)}B then {len(second_look)}B, "
+                f"{'CHANGED while quiet' if first_look != second_look else 'identical'}",
+                flush=True,
+            )
             _announce(port, {"0": [[0, 0, 8]]})
             time.sleep(4)
             third_look = _bytes_now()
-            print(f"AFTER A POKE DERIVE: {len(third_look)}B, "
-                  f"{'CHANGED — the composer was behind' if third_look != second_look else 'still identical'}",
-                  flush=True)
+            print(
+                f"AFTER A POKE DERIVE: {len(third_look)}B, "
+                f"{'CHANGED — the composer was behind' if third_look != second_look else 'still identical'}",
+                flush=True,
+            )
 
         # The oracle is the operator's own cure: a reload builds a fresh
         # client over the very same server, so whatever a reload would fix
@@ -1235,15 +1308,12 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
         # which is how this gate's first draft fooled itself.
         before_reload_truth = {
             "manifest_events": len(run.manifest.events()),
-            "baked": json.loads((store / "baked.json").read_text(
-                encoding="utf-8")),
+            "baked": json.loads((store / "baked.json").read_text(encoding="utf-8")),
         }
         network_phase["name"] = "reload"
         page.goto(_the_page_address(port), wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                              timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                              timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_000)
         fresh = {}
         fresh_pixels = {}
@@ -1256,29 +1326,39 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             while True:
                 page.wait_for_timeout(1_500)
                 _, pixels = _save_middle_and_measure(page)
-                quiet = (page.evaluate(
-                    "() => window.zmartSourcesWaiting()") == 0
+                quiet = (
+                    page.evaluate("() => window.zmartSourcesWaiting()") == 0
                     and refresh_flights_still_out() == 0
-                    and the_view_is_fully_loaded())
-                if (resting is not None and quiet
-                        and pixels.tobytes() == resting.tobytes()):
+                    and the_view_is_fully_loaded()
+                )
+                if resting is not None and quiet and pixels.tobytes() == resting.tobytes():
                     break
                 if time.perf_counter() > deadline:
                     break
                 resting = pixels
-            fresh[multiple], fresh_pixels[multiple] = \
-                _save_middle_and_measure(
-                    page,
-                    (debug_folder / f"fresh_band_{multiple:.2f}x.png"
-                     if debug_folder is not None else None))
+            fresh[multiple], fresh_pixels[multiple] = _save_middle_and_measure(
+                page,
+                (
+                    debug_folder / f"fresh_band_{multiple:.2f}x.png"
+                    if debug_folder is not None
+                    else None
+                ),
+            )
         fresh_census = scale_census()
-        print("SCALES stormed:", json.dumps(stormed_census),
-              " fresh:", json.dumps(fresh_census), flush=True)
+        print(
+            "SCALES stormed:",
+            json.dumps(stormed_census),
+            " fresh:",
+            json.dumps(fresh_census),
+            flush=True,
+        )
         if os_module.environ.get("ZMART_STORM_HEAL"):
             after_reload = _bytes_now()
-            print(f"PIECE AFTER RELOAD'S DERIVE: {len(after_reload)}B, "
-                  f"{'CHANGED — the reload derive caught the composer up' if after_reload != second_look else 'STILL the same bytes'}",
-                  flush=True)
+            print(
+                f"PIECE AFTER RELOAD'S DERIVE: {len(after_reload)}B, "
+                f"{'CHANGED — the reload derive caught the composer up' if after_reload != second_look else 'STILL the same bytes'}",
+                flush=True,
+            )
 
         # The strongest measurement this gate makes, computed for every run
         # rather than only when a debug folder is set: the warm picture and
@@ -1299,8 +1379,7 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             storm_lit = storm_image.max(axis=2) > 40
             fresh_lit = fresh_image.max(axis=2) > 40
             missing = fresh_lit & ~storm_lit
-            apart = np.abs(fresh_image.astype(np.int16) -
-                           storm_image.astype(np.int16))
+            apart = np.abs(fresh_image.astype(np.int16) - storm_image.astype(np.int16))
             difference_masks[multiple] = missing
             image_differences[str(multiple)] = {
                 "shape": list(missing.shape),
@@ -1324,40 +1403,48 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     for grid_x in range(8):
                         left = grid_x * width // 8
                         right = (grid_x + 1) * width // 8
-                        row.append(round(float(missing[
-                            top:bottom, left:right].mean()), 6))
+                        row.append(round(float(missing[top:bottom, left:right].mean()), 6))
                     grid.append(row)
-                image_differences[str(multiple)].update({
-                    "missing_bbox": ([int(xs.min()), int(ys.min()),
-                                      int(xs.max()), int(ys.max())]
-                                     if len(xs) else None),
-                    "missing_by_8x8_screen_grid": grid,
-                    "row_missing_peaks": [
-                        [int(index), round(float(value), 6)]
-                        for index, value in sorted(
-                            enumerate(missing.mean(axis=1)),
-                            key=lambda one: one[1], reverse=True)[:12]
-                    ],
-                    "column_missing_peaks": [
-                        [int(index), round(float(value), 6)]
-                        for index, value in sorted(
-                            enumerate(missing.mean(axis=0)),
-                            key=lambda one: one[1], reverse=True)[:12]
-                    ],
-                })
+                image_differences[str(multiple)].update(
+                    {
+                        "missing_bbox": (
+                            [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())]
+                            if len(xs)
+                            else None
+                        ),
+                        "missing_by_8x8_screen_grid": grid,
+                        "row_missing_peaks": [
+                            [int(index), round(float(value), 6)]
+                            for index, value in sorted(
+                                enumerate(missing.mean(axis=1)),
+                                key=lambda one: one[1],
+                                reverse=True,
+                            )[:12]
+                        ],
+                        "column_missing_peaks": [
+                            [int(index), round(float(value), 6)]
+                            for index, value in sorted(
+                                enumerate(missing.mean(axis=0)),
+                                key=lambda one: one[1],
+                                reverse=True,
+                            )[:12]
+                        ],
+                    }
+                )
                 Image.fromarray((missing * 255).astype(np.uint8)).save(
-                    debug_folder / f"missing_after_storm_{multiple:.2f}x.png")
+                    debug_folder / f"missing_after_storm_{multiple:.2f}x.png"
+                )
 
             phase_counts = {}
             for event in network_events:
                 key = f"{event.get('phase')}:{event.get('event')}"
                 phase_counts[key] = phase_counts.get(key, 0) + 1
-            most_requested = sorted(
-                network_requests.items(), key=lambda one: one[1],
-                reverse=True)[:50]
-            most_concurrent = sorted(
-                network_maximum.items(), key=lambda one: one[1],
-                reverse=True)[:50]
+            most_requested = sorted(network_requests.items(), key=lambda one: one[1], reverse=True)[
+                :50
+            ]
+            most_concurrent = sorted(network_maximum.items(), key=lambda one: one[1], reverse=True)[
+                :50
+            ]
             last_pre_reload_200 = {}
             last_reload_200 = {}
             two_second_failures = {}
@@ -1368,12 +1455,13 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     reason = event.get("failure") or "unknown"
                     failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
                     elapsed = event.get("elapsed")
-                    if (path.startswith("/data/") and elapsed is not None
-                            and 1.8 <= elapsed <= 2.2):
-                        two_second_failures[path] = (
-                            two_second_failures.get(path, 0) + 1)
-                if (event.get("event") != "response"
-                        or event.get("status") != 200 or "/c/" not in path):
+                    if path.startswith("/data/") and elapsed is not None and 1.8 <= elapsed <= 2.2:
+                        two_second_failures[path] = two_second_failures.get(path, 0) + 1
+                if (
+                    event.get("event") != "response"
+                    or event.get("status") != 200
+                    or "/c/" not in path
+                ):
                     continue
                 try:
                     size = int(event.get("bytes"))
@@ -1387,26 +1475,29 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
             for path, reloaded_size in last_reload_200.items():
                 previous_size = last_pre_reload_200.get(path)
                 if previous_size is not None and reloaded_size > previous_size:
-                    reload_byte_growth.append({
-                        "path": path, "before": previous_size,
-                        "after_reload": reloaded_size,
-                        "growth": reloaded_size - previous_size,
-                        "two_second_failures": two_second_failures.get(path, 0),
-                    })
-            reload_byte_growth.sort(
-                key=lambda one: one["growth"], reverse=True)
+                    reload_byte_growth.append(
+                        {
+                            "path": path,
+                            "before": previous_size,
+                            "after_reload": reloaded_size,
+                            "growth": reloaded_size - previous_size,
+                            "two_second_failures": two_second_failures.get(path, 0),
+                        }
+                    )
+            reload_byte_growth.sort(key=lambda one: one["growth"], reverse=True)
             diagnostics = {
                 "recipe": {
-                    "across": across, "core": core,
+                    "across": across,
+                    "core": core,
                     "initial_commits": len(committed_first),
                     "storm_commits": len(landing_later),
-                    "target_rate": 20.0, "achieved_rate": achieved,
+                    "target_rate": 20.0,
+                    "achieved_rate": achieved,
                 },
                 "truth_before_reload": before_reload_truth,
                 "storm_lit": {str(k): v for k, v in seen.items()},
                 "fresh_lit": {str(k): v for k, v in fresh.items()},
                 "image_differences": image_differences,
-
                 "network": {
                     "events": len(network_events),
                     "phase_counts": phase_counts,
@@ -1415,21 +1506,25 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                     "most_concurrent_paths": most_concurrent,
                     "failure_reasons": failure_reasons,
                     "two_second_failure_paths": sorted(
-                        two_second_failures.items(),
-                        key=lambda one: one[1], reverse=True)[:100],
+                        two_second_failures.items(), key=lambda one: one[1], reverse=True
+                    )[:100],
                     "reload_byte_growth": reload_byte_growth,
                 },
                 "visual_trace": visual_trace,
                 "console_errors": troubles,
             }
             (debug_folder / "diagnostics.json").write_text(
-                json.dumps(diagnostics, indent=2), encoding="utf-8")
+                json.dumps(diagnostics, indent=2), encoding="utf-8"
+            )
             (debug_folder / "landings.json").write_text(
-                json.dumps(landing_trace, indent=2), encoding="utf-8")
+                json.dumps(landing_trace, indent=2), encoding="utf-8"
+            )
             (debug_folder / "browser_timeline.json").write_text(
-                json.dumps(browser_timeline, indent=2), encoding="utf-8")
+                json.dumps(browser_timeline, indent=2), encoding="utf-8"
+            )
             (debug_folder / "network_events.json").write_text(
-                json.dumps(network_events, indent=2), encoding="utf-8")
+                json.dumps(network_events, indent=2), encoding="utf-8"
+            )
             print("STORM DIAGNOSTICS:", debug_folder, flush=True)
 
         for multiple in seen:
@@ -1439,9 +1534,8 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                 f"where a fresh client over the same server shows "
                 f"{reloaded:.1%} — the difference is exactly what a reload "
                 "cures, which is to say: stale pieces. All bands, storm vs "
-                "fresh: " + ", ".join(
-                    f"{m:.2f}x {seen[m]:.1%} vs {fresh[m]:.1%}"
-                    for m in sorted(seen))
+                "fresh: "
+                + ", ".join(f"{m:.2f}x {seen[m]:.1%} vs {fresh[m]:.1%}" for m in sorted(seen))
             )
         # And beyond the amount of picture: the same picture. The tolerances
         # sit far below what one stale 512-pixel piece would register, so
@@ -1449,9 +1543,11 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
         # of rendering noise can never flake an honest run.
         for multiple in seen:
             found = image_differences[str(multiple)]
-            assert (found["missing_fraction"] <= 0.002
-                    and found["changed_fraction"] <= 0.005
-                    and found["mean_absolute_error"] <= 0.5), (
+            assert (
+                found["missing_fraction"] <= 0.002
+                and found["changed_fraction"] <= 0.005
+                and found["mean_absolute_error"] <= 0.5
+            ), (
                 f"at {multiple:.2f}x the warm picture is not the same picture "
                 f"a fresh client sees: {found['missing_fraction']:.3%} of "
                 f"pixels lit fresh but dark warm, {found['changed_fraction']:.3%} "
@@ -1460,10 +1556,12 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(
                 "above cannot see this — an older generation at equal "
                 "brightness, or withdrawn ground the warm client still shows, "
                 "both count as lit — so pixel identity is asserted in its own "
-                "right. Every band: " + ", ".join(
+                "right. Every band: "
+                + ", ".join(
                     f"{m:.2f}x missing {image_differences[str(m)]['missing_fraction']:.3%}"
                     f" changed {image_differences[str(m)]['changed_fraction']:.3%}"
-                    for m in sorted(seen))
+                    for m in sorted(seen)
+                )
             )
     finally:
         page.close()

@@ -423,9 +423,9 @@ wants to know which one to open.
      manifest.py ──── signed commits; what is published, in order      │
      profiles.py ──── how one kind of acquisition is written           ┘
      gateway.py ───── which bytes may answer for a published piece
-     (the elder writers — canvas, linked, cropped, positions — live on
-      as testdata/oldwriter/, because the viewer promises to read what
-      they wrote and its gates write those fixtures with the real thing)
+     (the elder writers are retired; the formats they wrote are pinned
+      by hand-written fixtures in tests/pointed_by_hand.py, against the
+      viewer's own reading contracts)
 
               writes ↓                          ↑ read by linking.py
 

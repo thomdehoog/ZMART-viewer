@@ -25,8 +25,9 @@ import threading
 
 import numpy as np
 import zarr
-from zmart_viewer.server import make_server
+
 from zmart_viewer.library import normalise_units
+from zmart_viewer.server import make_server
 
 
 def _described(unit: str) -> bytes:
@@ -159,21 +160,15 @@ class TestTheRepairReachesTheBrowser:
         site = tmp_path / "site"
         site.mkdir()
         (site / "index.html").write_text("<!doctype html>", encoding="utf-8")
-        server = make_server(
-            port=0, data_dir=data, site_dir=site, store="acquisition.ome.zarr"
-        )
+        server = make_server(port=0, data_dir=data, site_dir=site, store="acquisition.ome.zarr")
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            body = self._fetch(
-                server.server_address[1], "/data/0/acquisition.ome.zarr/.zattrs"
-            )
+            body = self._fetch(server.server_address[1], "/data/0/acquisition.ome.zarr/.zattrs")
         finally:
             server.shutdown()
             thread.join(timeout=5)
-        return [
-            axis["unit"] for axis in json.loads(body)["multiscales"][0]["axes"]
-        ]
+        return [axis["unit"] for axis in json.loads(body)["multiscales"][0]["axes"]]
 
     def test_a_store_saying_um_is_served_saying_micrometer(self, tmp_path):
         assert self._served_units(tmp_path, "um") == ["micrometer"] * 3

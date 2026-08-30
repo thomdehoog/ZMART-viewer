@@ -22,7 +22,6 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
 from zmart_viewer.building import GovernedRun  # noqa: E402
-
 from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
 from zmart_viewer.record.model import GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
@@ -32,11 +31,9 @@ FRAME = 384
 
 def _a_run(folder: Path, positions: int) -> LivePublisher:
     """A grown run named exactly like every other run this fixture makes."""
-    across = int(round(positions ** 0.5))
-    cells = {GridCell(*divmod(number, across)): f"p{number:04d}"
-             for number in range(positions)}
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  timepoints=8)
+    across = int(round(positions**0.5))
+    cells = {GridCell(*divmod(number, across)): f"p{number:04d}" for number in range(positions)}
+    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=8)
     run = LivePublisher(folder, profile, run_id="landing", cells=cells)
     frame = np.full((1, 1, FRAME, FRAME), 1200, "uint16")
     for name in sorted(cells.values()):

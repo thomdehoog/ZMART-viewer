@@ -28,8 +28,10 @@ from pathlib import Path
 # Beside the code it measures, so it finds it without being told where.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.compose import Composer  # noqa: E402
-from zmart_viewer.compose import read_the_transfer  # noqa: E402
+from zmart_viewer.compose import (
+    Composer,  # noqa: E402
+    read_the_transfer,  # noqa: E402
+)
 
 # The transfer to lay out again, and where to put the result. Both are given
 # on the command line; these are only what this was developed against.
@@ -43,11 +45,11 @@ DOWN = 2
 
 def _junction(link: Path, target: Path) -> None:
     """A directory junction, which Windows allows without any special privilege."""
-    done = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
-                          capture_output=True, text=True)
+    done = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True
+    )
     if done.returncode != 0:
-        raise RuntimeError(f"could not link {link} -> {target}: "
-                           f"{done.stdout} {done.stderr}")
+        raise RuntimeError(f"could not link {link} -> {target}: {done.stdout} {done.stderr}")
 
 
 def lay_it_out_four_times() -> Path:
@@ -60,8 +62,7 @@ def lay_it_out_four_times() -> Path:
     _, height, width = original.shape(0)
     voxel = original.voxel_um(0)
     step_y, step_x = height * voxel[1], width * voxel[2]
-    print(f"  one mosaic is {height} x {width} voxels "
-          f"({step_y:.1f} x {step_x:.1f} um)")
+    print(f"  one mosaic is {height} x {width} voxels ({step_y:.1f} x {step_x:.1f} um)")
 
     made = 0
     for down in range(DOWN):
@@ -69,8 +70,7 @@ def lay_it_out_four_times() -> Path:
             for tile in original.tiles:
                 where = FOUR / f"r{down}c{across}_{tile.name}"
                 where.mkdir()
-                described = json.loads(
-                    (tile.store / "zarr.json").read_text(encoding="utf-8"))
+                described = json.loads((tile.store / "zarr.json").read_text(encoding="utf-8"))
                 multiscale = described["attributes"]["ome"]["multiscales"][0]
                 for dataset in multiscale["datasets"]:
                     for transform in dataset["coordinateTransformations"]:
@@ -79,10 +79,8 @@ def lay_it_out_four_times() -> Path:
                             moved[-2] += down * step_y
                             moved[-1] += across * step_x
                             transform["translation"] = moved
-                    _junction(where / str(dataset["path"]),
-                              tile.store / str(dataset["path"]))
-                (where / "zarr.json").write_text(json.dumps(described),
-                                                 encoding="utf-8")
+                    _junction(where / str(dataset["path"]), tile.store / str(dataset["path"]))
+                (where / "zarr.json").write_text(json.dumps(described), encoding="utf-8")
                 made += 1
     print(f"  {made} tiles written, sharing every pixel with the original\n")
     return FOUR
@@ -93,8 +91,13 @@ def main() -> None:
 
     global THY1  # noqa: PLW0603 - the transfer to measure
     parsed = argparse.ArgumentParser(description=__doc__)
-    parsed.add_argument("transfer", nargs="?", type=Path, default=THY1,
-                        help="the folder holding one OME-Zarr per tile")
+    parsed.add_argument(
+        "transfer",
+        nargs="?",
+        type=Path,
+        default=THY1,
+        help="the folder holding one OME-Zarr per tile",
+    )
     given = parsed.parse_args()
     THY1 = given.transfer
 
@@ -115,8 +118,10 @@ def main() -> None:
     apparent = height * width * deep * 2 / 1e9
 
     print(f"  {len(mosaic.tiles)} tiles, {mosaic.levels} resolutions")
-    print(f"  picture    {height:,} x {width:,} voxels, {deep} planes "
-          f"({height * voxel[1] / 1000:.1f} x {width * voxel[2] / 1000:.1f} mm)")
+    print(
+        f"  picture    {height:,} x {width:,} voxels, {deep} planes "
+        f"({height * voxel[1] / 1000:.1f} x {width * voxel[2] / 1000:.1f} mm)"
+    )
     print(f"  that is    {apparent:.0f} GB of specimen, from 36 GB on disk")
     print(f"  pieces     {down} x {across} = {down * across:,} a plane")
     print(f"  opening    {opening:.0f} ms   ({opening / len(mosaic.tiles):.2f} ms a tile)")
@@ -125,22 +130,24 @@ def main() -> None:
     index = composer._tiles_in_each_piece(0)
     meeting = [len(index.get((r, c), ())) for r in range(down) for c in range(across)]
     covered = [one for one in meeting if one]
-    print(f"  a piece meets {min(covered)}-{max(meeting)} tiles "
-          f"({100 * (1 - len(covered) / len(meeting)):.0f}% of pieces are empty)\n")
+    print(
+        f"  a piece meets {min(covered)}-{max(meeting)} tiles "
+        f"({100 * (1 - len(covered) / len(meeting)):.0f}% of pieces are empty)\n"
+    )
 
     # What a screenful costs, in the middle where four mosaics meet.
-    for level, label in ((0, "full resolution"), (2, "quarter size"),
-                         (4, "sixteenth size")):
+    for level, label in ((0, "full resolution"), (2, "quarter size"), (4, "sixteenth size")):
         deep_here, down_here, across_here = composer.grid(level)
         plane = deep_here // 2
         fresh = Composer(mosaic)
         began = time.perf_counter()
         for row in range(down_here // 2, min(down_here, down_here // 2 + 4)):
-            for column in range(across_here // 2,
-                                min(across_here, across_here // 2 + 4)):
+            for column in range(across_here // 2, min(across_here, across_here // 2 + 4)):
                 fresh._build_slab(level, plane, row, column)
-        print(f"  {label:<16} a screenful of up to 16 pieces: "
-              f"{(time.perf_counter() - began) * 1000:>7.0f} ms")
+        print(
+            f"  {label:<16} a screenful of up to 16 pieces: "
+            f"{(time.perf_counter() - began) * 1000:>7.0f} ms"
+        )
     print()
 
 

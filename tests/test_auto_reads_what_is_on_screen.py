@@ -42,18 +42,32 @@ def a_picture(tmp_path):
     values[0, :32, :32] = rng.integers(DIM - 40, DIM + 40, (32, 32))
     values[0, 32:, 32:] = rng.integers(BRIGHT - 400, BRIGHT + 400, (32, 32))
     group = zarr.open_group(str(store), mode="w", zarr_format=2)
-    group.create_array("0", shape=values.shape, chunks=(1, 64, 64),
-                       dtype="uint16")[:] = values
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 0.35, 0.35]}]}],
-        }],
-    }), encoding="utf-8")
+    group.create_array("0", shape=values.shape, chunks=(1, 64, 64), dtype="uint16")[:] = values
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     return store
 
 
@@ -63,12 +77,10 @@ def test_the_window_follows_the_part_being_looked_at(a_picture):
     bright = measure_here(a_picture, channel=0, box=((0.5, 0.5), (1.0, 1.0)))
 
     assert DIM - 60 < dim["window"][0] < DIM + 60, (
-        f"the dim quarter was windowed at {dim['window']}, nowhere near its "
-        f"own {DIM}"
+        f"the dim quarter was windowed at {dim['window']}, nowhere near its own {DIM}"
     )
     assert BRIGHT - 600 < bright["window"][1] < BRIGHT + 600, (
-        f"the bright quarter was windowed at {bright['window']}, nowhere near "
-        f"its own {BRIGHT}"
+        f"the bright quarter was windowed at {bright['window']}, nowhere near its own {BRIGHT}"
     )
     assert bright["window"][0] > dim["window"][1], (
         "the two quarters were given overlapping windows, so the measurement "
@@ -139,32 +151,45 @@ def test_auto_windows_the_well_being_looked_at(browser, built_dist, tmp_path):
     values[0, :32, :32] = rng.integers(DIM - 40, DIM + 40, (32, 32))
     values[0, 32:, 32:] = rng.integers(BRIGHT - 400, BRIGHT + 400, (32, 32))
     group = zarr.open_group(str(store), mode="w", zarr_format=2)
-    group.create_array("0", shape=values.shape, chunks=(1, 64, 64),
-                       dtype="uint16")[:] = values
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 0.35, 0.35]}]}],
-        }],
-    }), encoding="utf-8")
+    group.create_array("0", shape=values.shape, chunks=(1, 64, 64), dtype="uint16")[:] = values
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 0.35, 0.35]}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    server = make_server(port=0, data_dir=folder, site_dir=built_dist,
-                         store="quarters_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=folder, site_dir=built_dist, store="quarters_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 800})
     try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=30_000)
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         page.wait_for_function(
-            "() => window.zmartSourcesWaiting && window.zmartSourcesWaiting() === 0",
-            timeout=60_000)
+            "() => window.zmartSourcesWaiting && window.zmartSourcesWaiting() === 0", timeout=60_000
+        )
         page.wait_for_timeout(1_500)
 
         # Sit on the bright quarter: the middle of the bottom-right of the
@@ -210,25 +235,42 @@ def test_auto_windows_the_well_being_looked_at(browser, built_dist, tmp_path):
 
 # -- and it must read a copy of the picture that can still answer -----------
 
+
 def _write_pyramid(store, levels, *, scale=0.325):
     """A store of pre-computed levels, coarsest last, as a run writes them."""
     group = zarr.open_group(str(store), mode="w", zarr_format=2)
     datasets = []
     for at, plane in enumerate(levels):
-        group.create_array(str(at), shape=plane.shape, chunks=(1, 64, 64),
-                           dtype="uint16")[:] = plane
-        step = 2 ** at
-        datasets.append({"path": str(at), "coordinateTransformations": [
-            {"type": "scale", "scale": [1.0, scale * step, scale * step]}]})
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "c", "type": "channel"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": datasets,
-        }],
-    }), encoding="utf-8")
+        group.create_array(str(at), shape=plane.shape, chunks=(1, 64, 64), dtype="uint16")[:] = (
+            plane
+        )
+        step = 2**at
+        datasets.append(
+            {
+                "path": str(at),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, scale * step, scale * step]}
+                ],
+            }
+        )
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": datasets,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _coarser(plane, by):
@@ -259,12 +301,13 @@ def test_auto_reads_a_copy_that_can_still_answer(tmp_path):
     rng = np.random.default_rng(4)
     fine = np.full((1, 512, 512), 20, dtype=np.uint16)
     rows, cols = np.mgrid[0:512, 0:512]
-    inside = (rows - 256) ** 2 + (cols - 256) ** 2 < 150 ** 2
+    inside = (rows - 256) ** 2 + (cols - 256) ** 2 < 150**2
     # Speckle, as fluorescence is: the detail lives between 150 and 300 and
     # averages away to a flat ~225 the moment the picture is halved.
     fine[0][inside] = rng.integers(150, 300, inside.sum())
-    _write_pyramid(store, [fine, _coarser(fine, 2), _coarser(fine, 4),
-                           _coarser(fine, 8), _coarser(fine, 16)])
+    _write_pyramid(
+        store, [fine, _coarser(fine, 2), _coarser(fine, 4), _coarser(fine, 8), _coarser(fine, 16)]
+    )
 
     middle = ((0.4375, 0.4375), (0.5625, 0.5625))
     found = measure_here(store, channel=0, box=middle)
@@ -296,8 +339,9 @@ def test_the_whole_picture_is_still_measured_from_a_small_copy(tmp_path):
     store.mkdir()
     rng = np.random.default_rng(5)
     fine = rng.integers(40, 900, (1, 512, 512)).astype(np.uint16)
-    _write_pyramid(store, [fine, _coarser(fine, 2), _coarser(fine, 4),
-                           _coarser(fine, 8), _coarser(fine, 16)])
+    _write_pyramid(
+        store, [fine, _coarser(fine, 2), _coarser(fine, 4), _coarser(fine, 8), _coarser(fine, 16)]
+    )
 
     read = []
     original = zarr.open_group

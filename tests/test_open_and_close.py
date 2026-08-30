@@ -16,12 +16,12 @@ import pytest
 import zarr
 from driving import open_through_the_window
 from pixels import fraction_lit
-from zmart_viewer.server import make_server
 
 # Importing the server put the building folder on ``sys.path``; the naming
 # rule below is the one every built view follows, so no test spells the
 # ``.zmartview.zarr`` suffix by hand.
 from zmart_viewer.building import the_scene_folder_name  # noqa: E402
+from zmart_viewer.server import make_server
 
 
 def _store(path, *, value=4000, channels=2):
@@ -54,8 +54,11 @@ def _store(path, *, value=4000, channels=2):
                 ],
                 "omero": {
                     "channels": [
-                        {"label": f"ch{i}", "color": "00FF66",
-                         "window": {"min": 0, "max": 65535, "start": 0, "end": 8000}}
+                        {
+                            "label": f"ch{i}",
+                            "color": "00FF66",
+                            "window": {"min": 0, "max": 65535, "start": 0, "end": 8000},
+                        }
                         for i in range(channels)
                     ]
                 },
@@ -121,9 +124,7 @@ def test_the_viewer_starts_on_the_run_it_was_given(live):
 def test_opening_adds_an_acquisition_and_its_channels(live):
     page, _, _ = live
     _open_the_second_through_the_window(page)
-    page.wait_for_function(
-        "() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000
-    )
+    page.wait_for_function("() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000)
     assert _groups(page) == ["overview", "targetscan"]
     # Both channels of the newly opened store became rows.
     added = page.evaluate(
@@ -151,9 +152,7 @@ def test_the_newly_opened_images_actually_render(live):
     """
     page, _, _ = live
     _open_the_second_through_the_window(page)
-    page.wait_for_function(
-        "() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000
-    )
+    page.wait_for_function("() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000)
     # The precondition: everything the newly opened images need has been fetched
     # and decoded, so there is nothing left to wait for and the panel can be
     # photographed. This says when to look, not what will be there.
@@ -208,9 +207,7 @@ def test_the_newly_opened_images_actually_render(live):
 def test_closing_removes_it_again(live):
     page, _, _ = live
     _open_the_second_through_the_window(page)
-    page.wait_for_function(
-        "() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000
-    )
+    page.wait_for_function("() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000)
     page.get_by_label("close targetscan").click()
     page.wait_for_function(
         "() => !window.zmartConfig.groups.includes('targetscan')", timeout=20_000
@@ -230,9 +227,7 @@ def test_settings_on_what_stays_open_are_not_reset(live):
     page.get_by_label("toggle ch0").first.click()
     page.wait_for_timeout(500)
     _open_the_second_through_the_window(page)
-    page.wait_for_function(
-        "() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000
-    )
+    page.wait_for_function("() => window.zmartConfig.groups.includes('targetscan')", timeout=20_000)
     page.wait_for_timeout(800)
     hidden = page.evaluate(
         """() => window.zmartViewer.layerManager.managedLayers
@@ -334,9 +329,7 @@ def test_the_bar_of_controls_can_be_put_on_the_left(browser, built_dist, demo_st
 
     from zmart_viewer.server import make_server
 
-    server = make_server(
-        port=0, data_dir=demo_store, site_dir=built_dist, panel_side="left"
-    )
+    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist, panel_side="left")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
@@ -405,12 +398,8 @@ def test_finished_data_opens_no_listening_connection(browser, built_dist, demo_s
     started: list[str] = []
     settled: list[str] = []
     page.on("request", lambda r: started.append(r.url) if "/api/events" in r.url else None)
-    page.on(
-        "requestfinished", lambda r: settled.append(r.url) if "/api/events" in r.url else None
-    )
-    page.on(
-        "requestfailed", lambda r: settled.append(r.url) if "/api/events" in r.url else None
-    )
+    page.on("requestfinished", lambda r: settled.append(r.url) if "/api/events" in r.url else None)
+    page.on("requestfailed", lambda r: settled.append(r.url) if "/api/events" in r.url else None)
     try:
         page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
@@ -557,15 +546,11 @@ class TestTheLoadWindow:
         assert row.get_attribute("aria-pressed") == "true", (
             "the clicked row must show as the selection"
         )
-        assert page.get_by_label(
-            "open overview_pos001.ome.zarr", exact=True).count() == 1
+        assert page.get_by_label("open overview_pos001.ome.zarr", exact=True).count() == 1
         page.get_by_label("open positions sequentially", exact=True).click()
-        assert page.get_by_label(
-            "open overview_pos001.ome.zarr", exact=True).count() == 0
+        assert page.get_by_label("open overview_pos001.ome.zarr", exact=True).count() == 0
 
-    def test_raw_data_opens_through_the_default_door_leaving_no_trace(
-        self, no_chooser
-    ):
+    def test_raw_data_opens_through_the_default_door_leaving_no_trace(self, no_chooser):
         """A raw run opens with one plain press, and nothing lands on disk.
 
         Raw positions are always shown through a composed view, but an
@@ -586,16 +571,12 @@ class TestTheLoadWindow:
         window = page.get_by_role("dialog", name="load data")
         window.get_by_label("targetscan", exact=True).wait_for(timeout=10_000)
         window.get_by_label("targetscan", exact=True).click()
-        mosaic = page.get_by_label(
-            "build the low-resolution mosaic and keep the view")
+        mosaic = page.get_by_label("build the low-resolution mosaic and keep the view")
         mosaic.wait_for(timeout=10_000)
-        assert not mosaic.is_checked(), (
-            "keeping a view is asked for, never imposed"
-        )
+        assert not mosaic.is_checked(), "keeping a view is asked for, never imposed"
         page.get_by_label("open targetscan", exact=True).click()
         page.wait_for_function(
-            "() => window.zmartConfig.groups.includes('targetscan')",
-            timeout=30_000
+            "() => window.zmartConfig.groups.includes('targetscan')", timeout=30_000
         )
         assert page.get_by_role("dialog", name="load data").count() == 0, (
             "opening is finished; the window should close itself"
@@ -628,16 +609,15 @@ class TestTheLoadWindow:
         run.mkdir()
         _store(first / "overview_pos001.ome.zarr", channels=1)
         _store(run / "surveyrun_pos001.ome.zarr", channels=2)
-        server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                             store="overview_pos001.ome.zarr")
+        server = make_server(
+            port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         page = browser.new_page(viewport={"width": 1300, "height": 1000})
         try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
             page.get_by_label("open images").click()
             page.get_by_role("dialog", name="load data").wait_for(timeout=10_000)
             box = page.get_by_label("folder path")
@@ -646,8 +626,7 @@ class TestTheLoadWindow:
             window = page.get_by_role("dialog", name="load data")
             window.get_by_label("surveyrun", exact=True).wait_for(timeout=10_000)
             window.get_by_label("surveyrun", exact=True).click()
-            page.get_by_label(
-                "build the low-resolution mosaic and keep the view").check()
+            page.get_by_label("build the low-resolution mosaic and keep the view").check()
             # Ticking the box is what asks where the kept view should live,
             # and the answer comes suggested: a scenes folder by the run.
             destination = page.get_by_label("scene folder")
@@ -659,21 +638,21 @@ class TestTheLoadWindow:
             store = run / "scenes" / the_scene_folder_name("surveyrun")
             page.wait_for_function(
                 "(name) => window.zmartConfig.groups.includes(name)",
-                arg=store.name, timeout=30_000,
+                arg=store.name,
+                timeout=30_000,
             )
             assert (store / "zarr.json").exists()
-            assert any(any((store / str(level)).glob("**/*"))
-                       for level in range(4) if (store / str(level)).is_dir()), (
-                "a prebaked picture keeps its pieces as real files"
-            )
+            assert any(
+                any((store / str(level)).glob("**/*"))
+                for level in range(4)
+                if (store / str(level)).is_dir()
+            ), "a prebaked picture keeps its pieces as real files"
         finally:
             page.close()
             server.shutdown()
             thread.join(timeout=5)
 
-    def test_a_build_can_be_stopped_from_the_window(
-        self, browser, built_dist, tmp_path
-    ):
+    def test_a_build_can_be_stopped_from_the_window(self, browser, built_dist, tmp_path):
         """A Stop button stands beside a running build, and pressing it works.
 
         The build ends at its next step, the half-made view is removed
@@ -690,27 +669,24 @@ class TestTheLoadWindow:
         first.mkdir()
         _store(first / "overview_pos001.ome.zarr", channels=1)
         _a_grid_scan(tmp_path / "big", across=8)
-        server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                             store="overview_pos001.ome.zarr")
+        server = make_server(
+            port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         page = browser.new_page(viewport={"width": 1300, "height": 1000})
         try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
             page.get_by_label("open images").click()
-            page.get_by_role("dialog", name="load data").wait_for(
-                timeout=10_000)
+            page.get_by_role("dialog", name="load data").wait_for(timeout=10_000)
             box = page.get_by_label("folder path")
             box.fill(str(tmp_path))
             box.press("Enter")
             window = page.get_by_role("dialog", name="load data")
             window.get_by_label("big", exact=True).wait_for(timeout=10_000)
             window.get_by_label("big", exact=True).click()
-            page.get_by_label(
-                "build the low-resolution mosaic and keep the view").check()
+            page.get_by_label("build the low-resolution mosaic and keep the view").check()
             page.get_by_label("open big", exact=True).click()
             stop = page.get_by_label("stop the build")
             scene = tmp_path / "big" / "scenes" / the_scene_folder_name("big")
@@ -718,21 +694,17 @@ class TestTheLoadWindow:
                 stop.wait_for(timeout=10_000)
                 stop.click()
             except Exception:
-                if page.evaluate(
-                        "(name) => window.zmartConfig.groups.includes(name)",
-                        scene.name):
-                    pytest.skip("the build finished before a stop could "
-                                "land on this machine")
+                if page.evaluate("(name) => window.zmartConfig.groups.includes(name)", scene.name):
+                    pytest.skip("the build finished before a stop could land on this machine")
                 raise
             # The stop takes hold at the build's next step; the Stop button
             # leaves with the build it was stopping.
             page.wait_for_function(
                 """() => !document.querySelector(
                        '[aria-label="stop the build"]')""",
-                timeout=30_000)
-            assert not scene.exists(), (
-                "a stopped build must keep nothing"
+                timeout=30_000,
             )
+            assert not scene.exists(), "a stopped build must keep nothing"
             assert page.get_by_label("open big", exact=True).is_enabled(), (
                 "after a stop, building again must be one press away"
             )
@@ -787,9 +759,7 @@ class TestTheLoadWindow:
         assert page.get_by_role("dialog", name="load data").count() == 0
         assert _groups(page) == ["overview"]
 
-    def test_the_listing_is_not_served_when_opening_is_off(
-        self, browser, built_dist, tmp_path
-    ):
+    def test_the_listing_is_not_served_when_opening_is_off(self, browser, built_dist, tmp_path):
         """The window walks the server's folders, so it obeys the same gate.
 
         A run-mode server (allow_open off) offers no way to open data by hand;
@@ -798,15 +768,17 @@ class TestTheLoadWindow:
         """
         _store(tmp_path / "overview_pos001.ome.zarr")
         server = make_server(
-            port=0, data_dir=tmp_path, site_dir=built_dist,
-            store="overview_pos001.ome.zarr", allow_open=False,
+            port=0,
+            data_dir=tmp_path,
+            site_dir=built_dist,
+            store="overview_pos001.ome.zarr",
+            allow_open=False,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         page = browser.new_page()
         try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
             page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
             status = page.evaluate(
                 """() => fetch('/api/stores/list', {
@@ -816,8 +788,7 @@ class TestTheLoadWindow:
                 }).then((r) => r.status)"""
             )
             assert status in (403, 404), (
-                f"the folder listing answered {status} on a server that "
-                "does not allow opening"
+                f"the folder listing answered {status} on a server that does not allow opening"
             )
         finally:
             page.close()
@@ -838,17 +809,15 @@ class TestRelinking:
         from zmart_viewer.building import declare_a_built_picture
 
         store = declare_a_built_picture(run / "views", run, name="surveyrun")
-        shutil.move(str(run / "surveyrun_pos001.ome.zarr"),
-                    str(tmp_path / "elsewhere.ome.zarr"))
+        shutil.move(str(run / "surveyrun_pos001.ome.zarr"), str(tmp_path / "elsewhere.ome.zarr"))
         moved_to = tmp_path / "moved"
         moved_to.mkdir()
-        shutil.move(str(tmp_path / "elsewhere.ome.zarr"),
-                    str(moved_to / "surveyrun_pos001.ome.zarr"))
+        shutil.move(
+            str(tmp_path / "elsewhere.ome.zarr"), str(moved_to / "surveyrun_pos001.ome.zarr")
+        )
         return run, store, moved_to
 
-    def test_opening_it_answers_with_a_relink_ask(
-        self, browser, built_dist, tmp_path, demo_store
-    ):
+    def test_opening_it_answers_with_a_relink_ask(self, browser, built_dist, tmp_path, demo_store):
         """The miss is caught at open, with a plain answer naming the miss.
 
         Without this the open succeeds and every piece fails later, one
@@ -857,16 +826,19 @@ class TestRelinking:
         is what lets the window prompt for where it is now.
         """
         run, store, moved_to = self._a_viewer_with_moved_data(tmp_path)
-        server = make_server(port=0, data_dir=tmp_path, site_dir=built_dist,
-                             store=[], loads=[{"path": str(demo_store)}])
+        server = make_server(
+            port=0,
+            data_dir=tmp_path,
+            site_dir=built_dist,
+            store=[],
+            loads=[{"path": str(demo_store)}],
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         page = browser.new_page()
         try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
             answer = page.evaluate(
                 """async (path) => {
                      const r = await fetch('/api/stores/open', {
@@ -880,8 +852,7 @@ class TestRelinking:
             )
             assert answer["status"] == 409, answer
             assert answer["body"]["relink"]["was"].endswith("surveyrun"), (
-                "the answer must say where the data was, so the window can "
-                "ask where it is now"
+                "the answer must say where the data was, so the window can ask where it is now"
             )
         finally:
             page.close()
@@ -892,16 +863,19 @@ class TestRelinking:
         self, browser, built_dist, tmp_path, demo_store
     ):
         run, store, moved_to = self._a_viewer_with_moved_data(tmp_path)
-        server = make_server(port=0, data_dir=tmp_path, site_dir=built_dist,
-                             store=[], loads=[{"path": str(demo_store)}])
+        server = make_server(
+            port=0,
+            data_dir=tmp_path,
+            site_dir=built_dist,
+            store=[],
+            loads=[{"path": str(demo_store)}],
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         page = browser.new_page(viewport={"width": 1300, "height": 1000})
         try:
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
-            page.wait_for_function("() => window.zmartConfig !== undefined",
-                                   timeout=30_000)
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
             page.get_by_label("open images").click()
             page.get_by_role("dialog", name="load data").wait_for(timeout=10_000)
             # Walk to the viewer's files and open them; the window already
@@ -910,8 +884,7 @@ class TestRelinking:
             box.fill(str(run / "views"))
             box.press("Enter")
             window = page.get_by_role("dialog", name="load data")
-            window.get_by_label(store.name, exact=True).wait_for(
-                timeout=10_000)
+            window.get_by_label(store.name, exact=True).wait_for(timeout=10_000)
             window.get_by_label(store.name, exact=True).click()
             page.get_by_label(f"open {store.name}", exact=True).click()
             # The window asks for the data instead of failing black.
@@ -923,7 +896,8 @@ class TestRelinking:
             page.get_by_label("show the scene").click()
             page.wait_for_function(
                 "(name) => window.zmartConfig.groups.includes(name)",
-                arg=store.name, timeout=30_000,
+                arg=store.name,
+                timeout=30_000,
             )
         finally:
             page.close()

@@ -55,8 +55,7 @@ def test_axes_are_channel_plus_three_spatial_in_micrometres(attrs):
 def test_voxel_size_doubles_at_each_level(attrs):
     """z is sampled coarser than x/y, and every level halves the resolution."""
     scales = [
-        d["coordinateTransformations"][0]["scale"]
-        for d in attrs["multiscales"][0]["datasets"]
+        d["coordinateTransformations"][0]["scale"] for d in attrs["multiscales"][0]["datasets"]
     ]
     assert scales == [
         [1.0, 2.0, 0.35, 0.35],

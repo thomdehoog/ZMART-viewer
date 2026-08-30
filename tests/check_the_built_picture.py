@@ -33,8 +33,10 @@ from zarr.core.buffer import cpu
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.compose import Composer  # noqa: E402
-from zmart_viewer.compose import read_the_transfer  # noqa: E402
+from zmart_viewer.compose import (
+    Composer,  # noqa: E402
+    read_the_transfer,  # noqa: E402
+)
 
 # Which plane to check. Middle of the stack, so it is specimen rather than the
 # empty ground at either end of a light-sheet acquisition.
@@ -56,16 +58,20 @@ def decode(body: bytes | None, piece: int, dtype: str, axes) -> np.ndarray:
     """
     store = zarr.storage.MemoryStore()
     array = zarr.create_array(
-        store=store, shape=(1, piece, piece), chunks=(1, piece, piece),
-        dtype=dtype, zarr_format=3, dimension_names=list(axes), overwrite=True,
+        store=store,
+        shape=(1, piece, piece),
+        chunks=(1, piece, piece),
+        dtype=dtype,
+        zarr_format=3,
+        dimension_names=list(axes),
+        overwrite=True,
     )
     if body is not None:
         store._store_dict["c/0/0/0"] = cpu.Buffer.from_bytes(body)
     return np.asarray(array[0])
 
 
-def truth_for(mosaic, level: int, plane: int, top: int, left: int,
-              piece: int) -> np.ndarray:
+def truth_for(mosaic, level: int, plane: int, top: int, left: int, piece: int) -> np.ndarray:
     """The same ground, laid out straight from the tiles and nothing else.
 
     Deliberately written the long way — no shared helper with the composer — so
@@ -85,10 +91,8 @@ def truth_for(mosaic, level: int, plane: int, top: int, left: int,
         to_x = min(min(left + piece, width), at[2] + held.shape[2])
         if from_y >= to_y or from_x >= to_x:
             continue
-        ground[from_y - top:to_y - top, from_x - left:to_x - left] = np.asarray(
-            held[plane - at[0],
-                 from_y - at[1]:to_y - at[1],
-                 from_x - at[2]:to_x - at[2]]
+        ground[from_y - top : to_y - top, from_x - left : to_x - left] = np.asarray(
+            held[plane - at[0], from_y - at[1] : to_y - at[1], from_x - at[2] : to_x - at[2]]
         )
     return ground
 
@@ -98,13 +102,14 @@ def main() -> None:
     mosaic = read_the_transfer(folder)
     composer = Composer(mosaic)
 
-    print(f"\n{len(mosaic.tiles)} tiles, {mosaic.levels} resolutions, "
-          f"{mosaic.dtype}, axes {' '.join(mosaic.axes)}")
+    print(
+        f"\n{len(mosaic.tiles)} tiles, {mosaic.levels} resolutions, "
+        f"{mosaic.dtype}, axes {' '.join(mosaic.axes)}"
+    )
     print(f"corner {tuple(round(n, 1) for n in mosaic.corner_um)} um\n")
 
     print("  where each tile lands, in voxels of each resolution:")
-    print(f"    {'tile':<8}" + "".join(f"{'L' + str(n):>18}"
-                                       for n in range(mosaic.levels)))
+    print(f"    {'tile':<8}" + "".join(f"{'L' + str(n):>18}" for n in range(mosaic.levels)))
     for tile in mosaic.tiles:
         row = f"    {tile.name.split('_')[1]:<8}"
         for level in range(mosaic.levels):
@@ -117,9 +122,11 @@ def main() -> None:
         shape = mosaic.shape(level)
         deep, down, across = composer.grid(level)
         voxel = mosaic.voxel_um(level)
-        print(f"    L{level}  {str(shape):>22} voxels of "
-              f"{voxel[0]:>5.2f} x {voxel[1]:>5.2f} x {voxel[2]:>5.2f} um"
-              f"   {down} x {across} pieces, {deep} planes")
+        print(
+            f"    L{level}  {str(shape):>22} voxels of "
+            f"{voxel[0]:>5.2f} x {voxel[1]:>5.2f} x {voxel[2]:>5.2f} um"
+            f"   {down} x {across} pieces, {deep} planes"
+        )
 
     # -- 2 and 3: the pieces, and the bytes ---------------------------------
     print("\n  checking every piece of one band, at every resolution:")
@@ -139,12 +146,12 @@ def main() -> None:
             # That is what makes this a check of the encoding and the description
             # together, and not merely of the arithmetic.
             got = decode(body, composer.piece, mosaic.dtype, mosaic.axes)
-            want = truth_for(mosaic, level, plane, row * composer.piece,
-                             column * composer.piece, composer.piece)
+            want = truth_for(
+                mosaic, level, plane, row * composer.piece, column * composer.piece, composer.piece
+            )
             differing += int((got != want).sum())
         wrong += differing
-        print(f"    L{level}  plane {plane:>4}, {across:>3} pieces   "
-              f"wrong voxels: {differing}")
+        print(f"    L{level}  plane {plane:>4}, {across:>3} pieces   wrong voxels: {differing}")
 
     print(f"\n  {'PASS' if wrong == 0 else 'FAIL'} — {wrong} wrong voxels in all\n")
 
@@ -160,11 +167,9 @@ def main() -> None:
     for level in range(min(3, mosaic.levels)):
         deep, down, across = composer.grid(level)
         plane = int(deep * SHARE_OF_THE_DEPTH)
-        places = [(row, column)
-                  for row in range(min(3, down)) for column in range(min(4, across))]
+        places = [(row, column) for row in range(min(3, down)) for column in range(min(4, across))]
         one_at_a_time = {
-            place: Composer(mosaic).bytes_for(level, plane, *place)
-            for place in places
+            place: Composer(mosaic).bytes_for(level, plane, *place) for place in places
         }
         together: dict = {}
         keeping = threading.Lock()
@@ -182,8 +187,10 @@ def main() -> None:
             thread.join()
         muddled = [one for one in places if together[one] != one_at_a_time[one]]
         wrong += len(muddled)
-        print(f"    L{level}  {len(places):>3} pieces at once   "
-              f"handed the wrong piece: {len(muddled)}")
+        print(
+            f"    L{level}  {len(places):>3} pieces at once   "
+            f"handed the wrong piece: {len(muddled)}"
+        )
 
     print(f"\n  {'PASS' if wrong == 0 else 'FAIL'} — {wrong} wrong in all\n")
 

@@ -96,7 +96,8 @@ def test_the_keystrokes_really_do_reach_the_engine(viewer_page):
     press(viewer_page, "Period")
     press(viewer_page, "ArrowRight")
     assert viewer_page.evaluate("() => window.zmartKeysSeen") == [
-        "Period", "ArrowRight",
+        "Period",
+        "ArrowRight",
     ], (
         "keystrokes are not reaching the engine's element at all, so nothing "
         "else in this file means anything"
@@ -150,9 +151,7 @@ def test_the_help_panel_does_not_open(viewer_page):
     """It describes controls that are not on screen, so it can only confuse."""
     press(viewer_page, "h")
     assert (
-        viewer_page.evaluate(
-            "() => document.querySelectorAll('.neuroglancer-help-body').length"
-        )
+        viewer_page.evaluate("() => document.querySelectorAll('.neuroglancer-help-body').length")
         == 0
     )
 
@@ -183,18 +182,20 @@ def test_the_statistics_panel_does_not_open(viewer_page):
 
 _POSITION = "() => Array.from(window.zmartViewer.navigationState.position.value)"
 _ZOOM = "() => window.zmartViewer.navigationState.zoomFactor.value"
-_FACING = (
-    "() => Array.from("
-    "window.zmartViewer.navigationState.pose.orientation.orientation)"
-)
+_FACING = "() => Array.from(window.zmartViewer.navigationState.pose.orientation.orientation)"
 
 
 @pytest.mark.parametrize(
     "key",
     [
-        "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",  # panned x and y
-        "Comma", "Period",                                  # stepped z
-        "BracketLeft", "BracketRight",                      # stepped time
+        "ArrowLeft",
+        "ArrowRight",
+        "ArrowUp",
+        "ArrowDown",  # panned x and y
+        "Comma",
+        "Period",  # stepped z
+        "BracketLeft",
+        "BracketRight",  # stepped time
     ],
 )
 def test_no_key_moves_the_position(viewer_page, key):
@@ -263,7 +264,8 @@ def test_the_right_button_does_not_recentre(viewer_page):
     before = viewer_page.evaluate(_POSITION)
     box = viewer_page.locator(".neuroglancer-panel").first.bounding_box()
     viewer_page.mouse.click(
-        box["x"] + box["width"] * 0.75, box["y"] + box["height"] * 0.25,
+        box["x"] + box["width"] * 0.75,
+        box["y"] + box["height"] * 0.25,
         button="right",
     )
     viewer_page.wait_for_timeout(400)
@@ -279,8 +281,21 @@ def test_navigation_still_works_after_all_of_them(viewer_page):
     The two gestures that remain are the two docs/how_it_works/CONTROLS.md promises: the plain
     wheel zooms, and a drag pans.
     """
-    for key in ["Space", "Digit1", "b", "a", "v", "s", "o", "h", "n",
-                "ArrowRight", "Period", "r", "Control+Equal"]:
+    for key in [
+        "Space",
+        "Digit1",
+        "b",
+        "a",
+        "v",
+        "s",
+        "o",
+        "h",
+        "n",
+        "ArrowRight",
+        "Period",
+        "r",
+        "Control+Equal",
+    ]:
         press(viewer_page, key)
 
     box = viewer_page.locator(".neuroglancer-panel").first.bounding_box()
