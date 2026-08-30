@@ -143,10 +143,32 @@ def a_fabricated_run(folder: Path, profile, origins: dict) -> LivePublisher:
         )
         began = time.time()
 
-        for number, name in enumerate(origins):
+        pattern = json.loads((master / "zarr.json").read_text())
+        scale_y, scale_x = pattern["attributes"]["ome"]["multiscales"][0]["datasets"][0][
+            "coordinateTransformations"
+        ][0]["scale"][-2:]
+
+        for number, (name, origin) in enumerate(origins.items()):
             subprocess.run(
                 ["cp", "-al", str(master), str(survey / name)], check=True
             ) if number else shutil.copytree(master, survey / name)
+
+            # The pixels are the master's, but the corner is this position's
+            # own: the viewer checks a store's stamped corner against the
+            # layout and refuses a drifted record, exactly as it should. The
+            # replacement goes through a fresh file -- writing into the
+            # hard-linked one would restamp the master and every sibling.
+            stamped = json.loads(json.dumps(pattern))
+            about = stamped["attributes"]["ome"]["multiscales"][0]
+            about["name"] = name
+
+            for dataset in about["datasets"]:
+                translation = dataset["coordinateTransformations"][1]["translation"]
+                translation[-2] = origin["y"] * scale_y
+                translation[-1] = origin["x"] * scale_x
+            fresh = survey / name / "zarr.json.fresh"
+            fresh.write_text(json.dumps(stamped))
+            os.replace(fresh, survey / name / "zarr.json")
 
             if (number + 1) % 20000 == 0:
                 print(f"      {number + 1} stores linked ({time.time() - began:.0f}s)", flush=True)
