@@ -135,16 +135,17 @@ mean a generous default room (hundreds), not the profile's minimum: an
 open-ended experiment then never hits the wall, and nothing is allocated
 for moments that never come.
 
-**The gateway answers one piece at O(events).** `answer_from_a_live_run`
-costs ~9 ms per answer at 400 committed positions, ~261 ms at 2,500 and
-~5.9 s at 10,000 (measured in the viewer's
-`measure/measure_the_four_ways_of_serving.py`): each call walks the run's
-whole history. An external reader of a big run's linked view pays that on
-every chunk request. The viewer's own governed serving is unaffected (a
-non-live path answers `None` in ~1 ms), but the linked view's promise —
-outside tools read it cheaply — inverts at scale. An incremental reader
-(the manifest's own `events()` already reads only what is new; the
-gateway's per-call state could be held the same way) restores it.
+**The gateway's cold open is O(events).** `answer_from_a_live_run`'s
+first answer over a freshly linked run costs ~0.5 s at 400 committed
+positions, ~5.5 s at 2,500 and ~60–73 s at 10,000; answers after that
+are 1–3 ms (measured in the viewer's `measure/measure_the_relinked_row.py`
+and `measure_the_four_ways_of_serving.py`). The whole-history walk is
+paid once per reader process, so a long-lived server is fine — but every
+short-lived reader of a big run's linked view pays the full minute, and
+a run whose manifest keeps moving keeps re-paying it. The viewer's own
+governed serving is unaffected (a non-live path answers `None` in ~1 ms).
+An incremental cold path (the manifest's own `events()` already reads
+only what is new) would take the minute down to the tail.
 
 **What one more landing costs, measured.** The viewer's derive after a
 landing is O(change): at most one tile read, never a survey re-read
@@ -156,5 +157,5 @@ members list per commit. `manifest.events()` parses incrementally, so
 these are pure in-memory sweeps plus one O(positions) JSON write — but
 they run on every landing. If landing cost is found to grow with the
 survey (measured numbers live in the viewer's
-`docs/open/PLAN_positions_land_wherever_they_are_put.md` growth note),
-this is the place to look first.
+`docs/open/MEASURED_the_four_ways_of_serving.md`), this is the place to
+look first.

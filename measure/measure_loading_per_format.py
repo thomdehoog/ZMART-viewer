@@ -11,6 +11,7 @@ every case -- nothing big is generated.
 
 import json
 import os
+import shutil
 import statistics
 import sys
 import time
@@ -125,7 +126,17 @@ def main() -> None:
         return
 
     for awkward in sorted(AWKWARD.iterdir()):
-        if awkward.is_dir():
+        if not awkward.is_dir():
+            continue
+
+        if any(child.name in ("zarr.json", ".zattrs") for child in awkward.iterdir()):
+            # A lone store: the door takes a folder of images, so it gets one.
+            wrapper = WORK / "wrapped" / awkward.name
+            if not wrapper.is_dir():
+                wrapper.mkdir(parents=True)
+                shutil.copytree(awkward, wrapper / awkward.name)
+            one_case(awkward.name, wrapper)
+        else:
             one_case(awkward.name, awkward)
 
 
