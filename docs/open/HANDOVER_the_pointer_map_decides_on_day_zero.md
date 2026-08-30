@@ -101,6 +101,14 @@ The patch, against the branch as installed here:
  
 ```
 
+> The larger boundary these items live inside is drawn in
+> `PLAN_the_writer_keeps_the_record.md` beside this file: the writer keeps
+> the record, the viewer owns every way of reading it. The viewer now
+> makes and serves its own zero-copy linked view
+> (`zmart_viewer.pieces.link_a_finished_run`), so the writer's
+> `write_the_view` / `write_the_link_map` / gateway-serving half is on a
+> path to retirement — see that plan's microscopy steps.
+
 ## The growth items, same branch
 
 A live experiment grows two ways the writer does not yet allow, and both
