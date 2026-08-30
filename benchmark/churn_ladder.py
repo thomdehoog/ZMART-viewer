@@ -453,15 +453,41 @@ def the_physical_look(browser, store: Path, label: str) -> dict:
                 break
             page.wait_for_timeout(500)
         first_picture_s = time.perf_counter() - opening
-        page.wait_for_timeout(1000)
+
+        # "Sources resolved and something lit" is not "picture finished": at ten
+        # positions the first look already caught a mosaic photographed while
+        # still refining -- one channel, coarse level. The picture is settled
+        # when it stops changing, and how long that takes is itself the number
+        # an operator feels as time-to-sharp.
+        settled, before = False, image_middle(page)
+
+        for _ in range(240):
+            page.wait_for_timeout(500)
+            now = image_middle(page)
+
+            if np.array_equal(now, before):
+                settled = True
+                break
+            before = now
+        settled_s = time.perf_counter() - opening
         shot = SHOTS / f"{label}.png"
         page.screenshot(path=str(shot))
         # A photograph that cannot lie: a lit canvas that is one flat colour --
         # blank white, blank anything -- is not the specimen, and must not pass.
-        variety = colour_spread(image_middle(page))
+        settled_view = image_middle(page)
+        variety = colour_spread(settled_view)
         assert variety["distinct"] > 50, (
             f"the canvas is lit but flat ({variety['distinct']} distinct colours) -- "
             f"whatever {label} is showing, it is not the specimen"
+        )
+        # Both channels must be in the photograph: DAPI is drawn green and GFP
+        # magenta, so each must dominate somewhere. A mosaic with a channel
+        # missing is exactly what an unsettled look once photographed.
+        greenish = float((settled_view[:, :, 1].astype(int) - settled_view[:, :, 0] > 30).mean())
+        magentaish = float((settled_view[:, :, 0].astype(int) - settled_view[:, :, 1] > 30).mean())
+        assert greenish > 0.01 and magentaish > 0.01, (
+            f"a channel is missing from the settled picture of {label}: "
+            f"{greenish:.3f} of it is green, {magentaish:.3f} magenta"
         )
 
         asked_opening = asked["requests"]
@@ -476,6 +502,8 @@ def the_physical_look(browser, store: Path, label: str) -> dict:
         return {
             "resolved_s": round(resolved_s, 2),
             "first_picture_s": round(first_picture_s, 2),
+            "settled_s": round(settled_s, 2),
+            "settled": settled,
             "lit": round(lit, 3),
             "distinct_colours": variety["distinct"],
             "frame_ms": round(gaps[len(gaps) // 2], 1) if gaps else None,
