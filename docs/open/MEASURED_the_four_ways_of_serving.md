@@ -7,12 +7,27 @@
 > `measure_the_relinked_row.py`, `measure_loading_per_format.py`. Fixtures
 > are written once and reused; storm replacements reuse the fixture's own
 > folders, sentinel-filled so every storm ends with a freshness assertion
-> against served pixels.
+> against served pixels. A probe that answers absent is counted, never
+> averaged in.
+
+## The short answer
+
+Correctness never degrades: at every size and rate the picture stayed
+provably current (the freshness sentinel served after every storm), and
+bursts coalesce into single derives instead of queueing. **New landings**
+— the case smart microscopy lives in — are flat to 10,000 and cheap.
+**Full-frame replacement storms** are where latency is bought: fine at
+400, noticeable at 2,500, and at 10,000 the baked live picture stalls for
+tens of seconds per derive while the unbaked one degrades to
+half-a-second answers. The recipe that falls out: serve a live run
+unbaked (`linked_view="at_run_end"`), bake once at run end (53 s at
+10,000), and treat mid-run bake as a cold-open optimisation for quiet
+runs, never for churning ones.
 
 ## One more landing, 400 to 10,000: flat where it must be
 
 One position landing on a warm survey, five real writer landings per rung,
-medians:
+medians (`measure_one_more_position.py`):
 
 | positions | writer landing | derive | tiles re-read | sweep counter |
 |---:|---:|---:|---:|---:|
@@ -24,67 +39,100 @@ The writer's landing cost is **flat**: landing onto 10,000 costs what it
 costs onto 400. The derive re-reads **zero** tiles at every size — gated
 count-wise in `test_one_more_landing_reads_one_tile_no_matter_the_survey`.
 What grows is bookkeeping only: ~7 µs per position per derive (the world
-frame is rebuilt each derive), 76 ms at 10,000. Nothing anyone notices per
-landing; it matters only multiplied by a sustained commit rate, below.
+frame is rebuilt each derive). Per landing nobody notices; it matters only
+multiplied by a sustained commit rate, below.
+
+## Serving a quiet survey (static rows)
+
+Through the door's own functions, per piece:
+
+| positions | mode | cold first | warm median | declare |
+|---:|---|---:|---:|---:|
+| 10,000 | baked (files) | 3.4 s | **0.15 ms** | 53 s fresh bake, once |
+| 10,000 | unbaked (composed) | 13.1 s | 4.1 ms | 3.8 s |
+| 10,000 | linked (gateway byte ranges) | 60–73 s | **3.0 ms** | re-link 11.6 s |
+| 2,500 | linked | 5.5 s | 1.4 ms | re-link 2.6 s |
+| 400 | linked | 0.5 s | 1.0 ms | re-link 0.3 s |
+
+The gateway's cold cost is O(events) paid **once per reader**, then warm
+answers are milliseconds; the re-link (the finish-the-run cost) is O(N)
+and honest. A run that has grown past its recorded link map is refused by
+the gateway until re-linked — governance failing closed, by design — and
+the governed picture serves it meanwhile.
 
 ## The storm: 10 commits a second, a viewer watching the whole time
 
-Full-frame **replacements** at 10/s for 30 s — deliberately harsher than
-reality (the real writer lands one position per ~2.3 s; this is the
-manifest pressed ~25× harder while every commit changes every pixel of a
-frame). One thread commits, one thread asks the door for a coarse and a
-level-0 piece. Every storm asserted freshness: the last sentinel really
-served.
+Full-frame **replacements** at 10/s for 300 commits — deliberately harsher
+than reality: the real writer lands one position per ~2.3 s, so this is
+the manifest pressed ~25× harder while every commit changes every pixel of
+a frame. One thread commits, one thread asks the door for a coarse and a
+level-0 piece. Every storm asserted freshness
+(`measure_the_four_ways_of_serving.py`).
 
-| positions | mode | coarse piece median (p90 / max) | level-0 median | derive under fire | commits absorbed per derive |
+| positions | mode | coarse median (p90 / max) | level-0 median | derive under fire | commits absorbed per derive |
 |---:|---|---|---:|---:|---:|
 | 400 | baked | 44 ms (53 / 155) | 5.3 ms | 44 ms | 1.0 |
 | 400 | unbaked | 4.3 ms (18 / 145) | 3.3 ms | 5.4 ms | 1.0 |
 | 2,500 | baked | 138 ms (265 / 3,910) | 172 ms | 113 ms | 4.8 |
 | 2,500 | unbaked | 180 ms (2,038 / 4,769) | 160 ms | 445 ms | 3.7 |
-| 10,000 | baked | (see matrix log) | | | |
-| 10,000 | unbaked | (see matrix log) | | | |
+| 10,000 | baked | 3.5 s (7.0 / 7.0) | 15.8 s | 31.1 s | 150 |
+| 10,000 | unbaked | 480 ms (1,906 / 7,401) | 487 ms | 410 ms | 2.5 |
 
 What the numbers say:
 
-- **Correctness never degrades.** At every size and rate the picture is
-  current — coalescing absorbs a burst into one derive (4.8 commits each at
-  2,500), and the freshness sentinel is served every time.
-- **Latency does degrade under full-frame churn.** At 2,500 positions and
-  10 full replacements a second, piece answers slow to ~150–180 ms with
-  multi-second spikes. The spikes are the pyramid's top: a full-frame
-  replacement dirties one piece at *every* baked level, and the top piece
-  spans the whole canvas, so patching it recomposes survey-wide ground.
-- **Baking is for quiet data, not churn.** Under storm, the baked picture
-  pays the patch on every derive; unbaked serving pays only the pieces
-  actually asked for. Baked coarse reads when quiet: ~0.2 ms. Unbaked
-  coarse when quiet: ~3–12 ms warm, seconds cold. The settled recipe
-  stands: serve live runs unbaked (`linked_view="at_run_end"`), bake once
-  at run end — mid-run bake buys cold-open speed and costs churn speed.
-- **New landings are not replacements.** A landing composes only its own
-  footprint (the gates above); sustained 10/s *landings* are writer-bound
-  long before the viewer notices (the writer needs ~2.3 s per landing).
+- **The system never falls over.** Even the 31-second derive at the
+  10,000-baked corner absorbed 150 coalesced commits and came back
+  current; the ingest thread kept committing throughout. Falling behind
+  makes the next derive absorb more, never queue more.
+- **The spikes are the pyramid's top.** A full-frame replacement dirties
+  one piece at *every* baked level, and the top piece spans the whole
+  canvas, so the per-commit bake patch recomposes survey-wide ground.
+  That is why baked-under-churn inverts: the mode with the fastest quiet
+  reads (0.15 ms) has the slowest churn.
+- **Unbaked live serving is the churn mode.** At 10,000 positions and a
+  replacement rate 25× beyond the writer's real cadence it still answered
+  in ~0.5 s median. At the real cadence (one landing per ~2.3 s, each
+  touching only its own footprint) the derive is 76 ms and the answers
+  are milliseconds.
+- **Ingest throttles honestly under overload**: the unbaked 10,000 storm
+  sustained ~3.2 commits/s, not 10 — compose work and commits share one
+  process. A real deployment separates writer and viewer processes.
 
-## The zero-copy linked row, and the gateway's price
+## If sustained replacement churn at 10,000 becomes a real workload
 
-The writer's linked plain-file view (`live.ome.zarr` + links) refuses once
-the run has grown past its recorded link map — governance failing closed,
-by design; the governed picture serves such a run. After an honest re-link
-the byte-range door serves again (`measure_the_relinked_row.py`).
-
-Two writer-side scale findings, handed over in
-`HANDOVER_the_pointer_map_decides_on_day_zero.md`:
-
-- `answer_from_a_live_run` costs **O(events) per request**: ~9 ms at 400,
-  ~261 ms at 2,500, ~5.9 s at 10,000 per piece answer. External readers of
-  a big run's linked view pay it on every chunk. The viewer's own governed
-  serving does **not** pay this (a governed piece answers in ~1 ms).
-- The real writer's per-landing ~2.3 s is flat but rate-limiting: ten
-  landings a second needs parallel writers or a leaner publish
-  (`publish()` walks the full event history three times per commit).
+Two viewer-side improvements are known and scoped, in order of value:
+move the per-commit bake patch off the derive (or bake all levels except
+the top few), and reuse the installed world frame across derives when the
+layout has not moved so the ~7 µs/position sweep becomes O(change).
+Writer-side, ten commits a second needs parallel writers or a leaner
+publish — `publish()` walks the full event history three times per commit
+(handed over).
 
 ## Loading per format (static; live is the writer's own format)
 
-See `measure_loading_per_format.py` — 0.4, 0.5, grown (t, c), uint8, and
-every awkward store, each declared linked and baked through the one door,
-cold and warm serving sampled. Results recorded beside the matrix log.
+`measure_loading_per_format.py` — nine scattered, overlapping positions
+per case, three stamped bodies reused; every awkward store through the
+same door:
+
+| case | declare | linked cold | linked warm | bake | baked warm |
+|---|---:|---:|---:|---:|---:|
+| 0.4 scattered | 17 ms | 81 ms | 2.6 ms | 53 ms | 0.07 ms |
+| 0.5 scattered | 12 ms | 67 ms | 2.6 ms | 46 ms | 0.07 ms |
+| 0.5 grown (t, c) | 13 ms | 63 ms | 2.5 ms | 100 ms | 0.07 ms |
+| 0.4 uint8 | 14 ms | 70 ms | 2.5 ms | 52 ms | 0.07 ms |
+
+All sixteen loadable awkward stores (t-of-one, no pyramid, one channel
+kept, one plane, uint8, float32 — each in both generations — plus
+undressed, wrapped group, spaces and unicode in names) declare in 3–4 ms
+and serve at ~2.5 ms composed / ~0.07 ms baked. The one refusal is the
+flat two-axis store, refused **in words** at the built-picture door (it
+still opens as a single source) — the honest refusal the free-placement
+gate installed.
+
+## What building this found
+
+The benchmark's own crashes were fixture damage from killed harness
+processes (partial generation copies), not viewer faults — and the viewer
+refused every damaged store loudly, with the exact path, rather than
+serving wrong pixels. The harness now verifies copies by file list, never
+by the folder existing.
