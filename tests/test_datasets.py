@@ -222,7 +222,7 @@ def test_a_dataset_knows_its_channels_from_the_filenames(tmp_path):
 def test_a_dataset_takes_the_names_a_store_gives_its_own_channels(tmp_path):
     """Where a store names its channels inside itself, those are the names shown.
 
-    The other shape, and the one a run written by `zmart_storage` produces: the
+    The other shape, and the one a run written by `oldwriter` produces: the
     channels live along an axis of a single image, and the store's own description
     says what each is called. Those names are what the microscopist chose —
     "marker-a", "nuclei" — so they are taken whole rather than worked out from

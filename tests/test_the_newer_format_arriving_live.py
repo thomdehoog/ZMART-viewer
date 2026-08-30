@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pixels import image_middle
 from zmart_viewer.server import make_server
 
-from zmart_storage.canvas import Channel, TileCanvases
+from oldwriter.canvas import Channel, TileCanvases
 
 # A canvas a quarter of which one tile fills, so a tile landing is plainly visible
 # in a photograph rather than being a few pixels somebody has to squint at.

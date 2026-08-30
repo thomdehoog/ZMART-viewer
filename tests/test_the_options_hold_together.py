@@ -1029,7 +1029,7 @@ def test_the_picture_does_not_blink_when_new_tiles_are_announced(
     """
     import acquisitions
 
-    from zmart_storage import Channel, TileCanvases
+    from oldwriter import Channel, TileCanvases
 
     # A run of its own, so that writing into it while this check watches cannot
     # disturb the acquisitions the other checks in this file read.

@@ -337,7 +337,7 @@ further is deliberate: below that a copy has stopped being an overview of the sp
 become a thumbnail, and the reading it saves is no longer worth the writing it costs on
 every tile.
 
-`copies_for_a_canvas` in `zmart_storage/canvas.py` is the rule. A writer with a reason of
+`copies_for_a_canvas` in `testdata/oldwriter/canvas.py` is the rule. A writer with a reason of
 its own can still state a number outright, and it is used as asked.
 
 **An `omero` block** naming each channel, giving it a colour, and giving a starting
@@ -548,7 +548,7 @@ whose alignment must be computed, which can only happen once every tile exists.
 
 The writer enforces this at the moment the images are created rather than letting a run
 discover it later from a picture that looks subtly wrong — see
-`zmart_storage/canvas.py`, and the refusal is pinned by
+`testdata/oldwriter/canvas.py`, and the refusal is pinned by
 `test_a_run_with_overlapping_tiles_is_refused`.
 
 **What follows for the tile size.** Since there is no overlap, the step can be chosen freely,
@@ -644,9 +644,9 @@ more than the storage actually requires. One smaller point travels with it: what
 piece is the *shard* when the image is sharded — several chunks bundled into one file — since
 it is the bundle that gets read and written back whole.
 
-The fault and its fix both live in `_measure_the_pieces_of` in `zmart_storage/canvas.py`,
+The fault and its fix both live in `_measure_the_pieces_of` in `testdata/oldwriter/canvas.py`,
 where the reasoning is recorded next to the code. Three tests in
-`zmart_storage/tests/test_canvas.py` hold it in place, each by writing tiles at the same
+the elder writer’s own canvas tests hold it in place, each by writing tiles at the same
 moment from several threads and then checking every tile is still whole:
 `test_tiles_sharing_a_piece_of_a_full_size_copy_wait_for_each_other` builds exactly the
 64-and-50 arrangement above, `test_tiles_sharing_a_bundle_survive_being_written_at_once`
@@ -655,9 +655,10 @@ the ordinary one. Nothing `TileCanvases.create` produces is arranged the dangero
 every geometry it can make was tried — so this is about the generality the writer claims
 rather than about the runs it writes today.
 
-The writer is `zmart_storage/canvas.py`, deliberately outside the viewer: the drivers know
-instruments, the viewer knows pictures, and neither should have to know how a run is laid
-out on disk.
+The elder writer is `testdata/oldwriter/canvas.py`. It once lived outside the viewer; the
+record machinery now lives inside it (`zmart_viewer/record/`), so the whole story of a
+run — writing its record and every way of reading it — is one codebase, and a controller
+drives instruments through this same package rather than through a copy that could drift.
 
 ### Why a canvas can be declared at all
 
@@ -864,7 +865,7 @@ which is the question an operator checking coverage is actually asking.
 The record is an addition rather than standard metadata, because OME-NGFF has nothing that
 says which parts of an array hold data and neither does zarr. It is kept deliberately out of
 the way: a folder with a name nothing else uses, not one byte of any image changed, and a
-viewer that has never heard of it opens the run exactly as before. `zmart_storage/coverage.py`
+viewer that has never heard of it opens the run exactly as before. `testdata/oldwriter/coverage.py`
 has the whole of it, and `imaged_regions` reads it back.
 
 ### What this buys
@@ -1358,11 +1359,12 @@ That sounds obvious and was not there: the viewer spent weeks opening on an empt
 rectangle with three hundred tests passing, because every one of them asked the engine
 about itself and an engine can hold all its data and still draw nothing.
 
-**Built since this said it was not:** a writer. `zmart_storage/canvas.py` declares a run's
-images up front and writes each tile into its place as it arrives, keeping the smaller
-copies in step, refusing a run whose tiles overlap, and holding two tiles apart when they
-would otherwise land in one piece of image at the same moment. `zmart_storage/coverage.py`
-records where the run actually imaged.
+**Built since this said it was not:** a writer. `testdata/oldwriter/canvas.py` (the elder
+writer, formerly `zmart_storage`) declares a run's images up front and writes each tile
+into its place as it arrives, keeping the smaller copies in step, refusing a run whose
+tiles overlap, and holding two tiles apart when they would otherwise land in one piece of
+image at the same moment; `oldwriter/coverage.py` records where the run actually imaged.
+Its successor for live runs is `zmart_viewer/record/`, the manifest-governed publisher.
 
 What is genuinely still open is **where the writer belongs in the pipeline**, which is a
 different question. The mesoSPIM writes its own OME-Zarr today and our driver copies the

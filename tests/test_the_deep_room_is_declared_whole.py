@@ -32,8 +32,8 @@ sys.path.insert(0, str(_VIZ))
 
 from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 
-from zmart_live.model import GridCell  # noqa: E402
-from zmart_live.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.record.model import GridCell  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 DEPTH = 13  # ragged, per the depth test plan's fixture rule
 FRAME = 384
@@ -47,7 +47,7 @@ def the_descriptions_of(store: Path) -> dict[str, bytes]:
 
 
 def test_declare_land_redeclare_leaves_every_description_byte_identical(tmp_path):
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
     run = LivePublisher(

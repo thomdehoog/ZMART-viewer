@@ -33,8 +33,8 @@ from zmart_viewer.library import channels
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.positions import start_a_run  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.positions import start_a_run  # noqa: E402
 
 TILE = (1, 256, 256)
 PIECE = 128

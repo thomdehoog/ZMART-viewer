@@ -3,7 +3,7 @@
 The description — axes, sizes, levels, voxel size, provenance — is an
 OME-Zarr holding no pixels; ``bake`` computes coarse levels once and
 keeps them as files. For a manifest-governed live run, what may be shown
-is the gateway's decision (zmart_live) and the served picture is patched
+is the gateway's decision (zmart_viewer.record) and the served picture is patched
 per commit: the cost of a change is the change.
 """
 
@@ -23,9 +23,9 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_live.gateway import _LiveRun
-from zmart_live.model import rounded_up
-from zmart_live.shardlink import how_the_array_is_stored
+from zmart_viewer.record.gateway import _LiveRun
+from zmart_viewer.record.model import rounded_up
+from zmart_viewer.record.shardlink import how_the_array_is_stored
 
 from .compose import (
     OURS,

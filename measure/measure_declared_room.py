@@ -67,7 +67,7 @@ from zmart_viewer import contrast  # noqa: E402
 import numpy as np  # noqa: E402
 import zarr  # noqa: E402
 
-from zmart_storage.canvas import Channel, TileCanvases  # noqa: E402
+from oldwriter.canvas import Channel, TileCanvases  # noqa: E402
 
 # One tile, sized so it begins and ends on whole pieces of image -- which is what
 # docs/how_it_works/DATA_LAYOUT.md asks for, and what lets tiles be written side by side safely.

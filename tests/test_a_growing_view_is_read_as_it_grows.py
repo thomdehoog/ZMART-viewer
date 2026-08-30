@@ -27,8 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from zmart_viewer import pieces as linking  # noqa: E402
 
-from zmart_storage.canvas import Channel, _declare_one  # noqa: E402
-from zmart_storage.linked import (  # noqa: E402
+from oldwriter.canvas import Channel, _declare_one  # noqa: E402
+from oldwriter.linked import (  # noqa: E402
     PlacedTile,
     start_a_growing_view,
 )

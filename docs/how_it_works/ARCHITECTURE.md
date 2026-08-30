@@ -415,14 +415,17 @@ wants to know which one to open.
                              reads the pixels that came out
 
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE BACK — what is written            zmart_storage/
+   THE BACK — what is written            zmart_viewer/record/
  ══════════════════════════════════════════════════════════════════════════════
 
-     positions.py ── writes a run, one position at a time          ┐
-     canvas.py ───── the image writer; _write_smaller_copies is the shrink     ├ writers
-     cropped.py ──── tiles plus a trimmed canvas (the older way)   │
-     linked.py ───── builds a view: pointers, and no pixels        ┘
-     coverage.py ─── where the run has actually imaged
+     coordinator.py ─ the publisher: pixels, pyramids, one commit each ┐
+     ownership.py ─── who owns which piece of shared ground            ├ the record
+     manifest.py ──── signed commits; what is published, in order      │
+     profiles.py ──── how one kind of acquisition is written           ┘
+     gateway.py ───── which bytes may answer for a published piece
+     (the elder writers — canvas, linked, cropped, positions — live on
+      as testdata/oldwriter/, because the viewer promises to read what
+      they wrote and its gates write those fixtures with the real thing)
 
               writes ↓                          ↑ read by linking.py
 

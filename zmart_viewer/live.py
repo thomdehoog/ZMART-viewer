@@ -6,7 +6,7 @@ truth. A run's atomic publication marker is watched directly; ordinary
 folders get the generic watcher. The browser is handed the run's
 governed baked picture as its one live source, with state documents
 naming each source's URL and revisions. Imports go one way: this package
-may import zmart_live, never the reverse.
+may import zmart_viewer.record, never the reverse.
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from zmart_live.gateway import live_run_holding
-from zmart_live.live_state import LiveStateSnapshot, LiveStateTracker
-from zmart_live.model import ZmartLiveError
-from zmart_live.omezarr import the_channels_described
+from zmart_viewer.record.gateway import live_run_holding
+from zmart_viewer.record.live_state import LiveStateSnapshot, LiveStateTracker
+from zmart_viewer.record.model import ZmartLiveError
+from zmart_viewer.record.omezarr import the_channels_described
 
 from .building import declare_a_governed_picture, the_scene_folder_name
 from .contrast import intensity_histogram
@@ -280,7 +280,7 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
 
 def _the_run_is_grown(run_root: Path) -> bool:
     """Whether this run's picture carries the (t, c) axes."""
-    from zmart_live.gateway import _LiveRun
+    from zmart_viewer.record.gateway import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
 
@@ -536,7 +536,7 @@ def live_state_document(
 
 def the_runs_channels(run_root: Path) -> list[dict]:
     """What this run says about its colours: their names, tints and windows."""
-    from zmart_live.gateway import _LiveRun
+    from zmart_viewer.record.gateway import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
     return described_channels(

@@ -37,7 +37,6 @@ The focused non-browser path for the live publication integration is:
 ../.venv/bin/pytest -q \
   tests/test_manifest_driven_refresh.py \
   tests/test_frontend_live_refresh_contract.py \
-  ../zmart_live/tests/test_live_state.py \
   tests/test_live_publication_gateway.py
 ```
 
@@ -63,8 +62,8 @@ gapped time availability, damaged-state handling, source revision comparison,
 stable URLs and selective cache invalidation:
 
 ```bash
-(cd .. && .venv/bin/python -m \
-  zmart_live.tests.check_the_live_refresh_tests_can_fail)
+# ran from the microscopy checkout while the record machinery lived there;
+# its guard now belongs beside zmart_viewer/record's own tests
 ```
 
 It first proves each unmodified target is green, accepts only pytest's ordinary

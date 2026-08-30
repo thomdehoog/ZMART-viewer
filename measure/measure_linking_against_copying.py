@@ -11,12 +11,12 @@ separate positions draw at twenty-four frames in five seconds where one image
 manages several hundred. There are two ways to produce that one image, and this
 compares them over exactly the same tiles.
 
-**Copying** — what :mod:`zmart_storage.cropped` already does, and the control here.
+**Copying** — what :mod:`oldwriter.cropped` already does, and the control here.
 Every tile is written twice: once whole into the archive, and once again into a
 canvas that holds the whole run as a single picture. It works, it is measured, and
 it costs a second copy of every voxel.
 
-**Pointing** — what :mod:`zmart_storage.linked` does, and the thing being tested. No
+**Pointing** — what :mod:`oldwriter.linked` does, and the thing being tested. No
 voxel of the full-size picture is copied anywhere. The view is a list saying which
 piece of the picture is which piece of which tile, and the viewer's server answers
 a request for a piece by handing over the tile's own file, byte for byte. Only the
@@ -98,9 +98,9 @@ sys.path.insert(0, str(VIZ.parent))
 
 from measure_the_overlapping_run import _a_tile, look_at_it  # noqa: E402
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.cropped import TilesAndCanvas  # noqa: E402
-from zmart_storage.linked import PlacedTile, link_the_tiles  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.cropped import TilesAndCanvas  # noqa: E402
+from oldwriter.linked import PlacedTile, link_the_tiles  # noqa: E402
 
 # One acquired tile, and how far the stage steps between them. They are the same
 # number here: **the tiles butt up against one another**, which is the case pointing

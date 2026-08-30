@@ -1,9 +1,9 @@
 # Showing the run without copying it
 
 Written 5 August 2026, and revised since. **This is now built**, in two halves:
-`zmart_storage/linked.py` writes a view, and `app/server/linking.py`
+`testdata/oldwriter/linked.py` writes a view, and `app/server/linking.py`
 answers for it while the viewer is open. The older arrangement that copies —
-`zmart_storage/cropped.py`, measured in `docs/open/HANDOVER_overlapping_runs.md` — still
+`testdata/oldwriter/cropped.py`, measured in `docs/open/HANDOVER_overlapping_runs.md` — still
 exists and is still the one that has been measured end to end.
 
 **Read the section "The condition, and what it costs us" before building on this.**
@@ -99,7 +99,7 @@ implementation, it is a property of the format, and it is the one point on which
 every review of this plan has agreed.
 
 **What the code does today.** It refuses.
-`_refuse_a_placement_that_does_not_land_on_whole_pieces` in `zmart_storage/linked.py`
+`_refuse_a_placement_that_does_not_land_on_whole_pieces` in `testdata/oldwriter/linked.py`
 raises rather than build the view, and the message says what to change. That was
 the right first move — a refusal with a clear explanation is far better than a view
 that silently draws a tile two voxels out of place — but it means **the tool does
@@ -184,7 +184,7 @@ Not free, because the pixels genuinely change:
 
 - ~~**the zoomed-out copies**, because shrinking averages across the join between
   tiles and no existing piece holds that answer~~ — **this was wrong.** The
-  shrinking does not average: `TileCanvases._write_smaller_copies` in `zmart_storage/canvas.py` is `image[:, ::factor, ::factor]`,
+  shrinking does not average: `TileCanvases._write_smaller_copies` in `testdata/oldwriter/canvas.py` is `image[:, ::factor, ::factor]`,
   which takes every second voxel and discards the rest, so a zoomed-out voxel comes
   from exactly one tile and there is no join to average across. A tile that carries
   its own zoomed-out copies can therefore be pointed at at every zoom, and a view
@@ -383,7 +383,7 @@ says where it sits.
 **2. Say where each one lands in the picture**, in voxels:
 
 ```python
-from zmart_storage.linked import PlacedTile, link_the_tiles
+from oldwriter.linked import PlacedTile, link_the_tiles
 
 tiles = [PlacedTile(store=folder / f"Tile{i}.ome.zarr", lands_at=(0, y, x))
          for i, (y, x) in enumerate(corners)]

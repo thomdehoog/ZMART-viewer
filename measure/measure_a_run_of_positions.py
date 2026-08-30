@@ -1,6 +1,6 @@
 """How a run of positions draws, as the number of positions climbs.
 
-This measures the arrangement :mod:`zmart_storage.positions` writes: one zarr per
+This measures the arrangement :mod:`oldwriter.positions` writes: one zarr per
 run, the positions inside it each with their own zoomed-out copies, and a map in
 the picture's description saying which piece of the picture is which piece of
 which position. **The picture the viewer opens holds no full-size voxels of its
@@ -83,8 +83,8 @@ from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
 from pixels import fraction_lit  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.positions import start_a_run  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.positions import start_a_run  # noqa: E402
 
 # One position, and how its picture is cut up. Five hundred and twelve voxels
 # across is small for a real camera and large enough that a position carries its

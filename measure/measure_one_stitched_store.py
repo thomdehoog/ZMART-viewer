@@ -7,7 +7,7 @@ one store that stands for the whole specimen, with every position written into i
 inside it.
 
 The second shape is the one this project aims for, and it is reached by writing into it
-from the start rather than by joining a finished folder together afterwards. `zmart_storage`
+from the start rather than by joining a finished folder together afterwards. `oldwriter`
 declares the image before the first tile is taken and the microscope writes each tile
 straight into its place, so the single store exists from the very first tile. Copying a
 finished run into one image is a different route to the same shape, and it is not offered

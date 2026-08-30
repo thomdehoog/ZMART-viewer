@@ -1,6 +1,6 @@
 """Does the cropped canvas of an overlapping run actually appear on screen?
 
-:mod:`zmart_storage.cropped` writes an overlapping acquisition twice: every tile
+:mod:`oldwriter.cropped` writes an overlapping acquisition twice: every tile
 whole, in a small image of its own, and every tile trimmed where it meets its
 neighbours into one canvas. The whole reason for the second artefact is the viewer — one image draws
 quickly where thousands of separate positions do not — so the arrangement is only
@@ -37,8 +37,8 @@ from zmart_viewer.server import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from zmart_storage.canvas import Channel
-from zmart_storage.cropped import TilesAndCanvas
+from oldwriter.canvas import Channel
+from oldwriter.cropped import TilesAndCanvas
 
 # An overlapping acquisition small enough to write and open in a few seconds, and
 # large enough that the specimen fills a good part of the window.
@@ -47,7 +47,7 @@ from zmart_storage.cropped import TilesAndCanvas
 # a shallow stack gives a ray almost nothing to accumulate. The tiles overlap by a
 # quarter across the specimen and not at all in depth, and a trimmed tile comes to
 # 96 voxels, which is exactly one piece of the canvas — the rule
-# ``zmart_storage.cropped`` refuses a run for breaking.
+# ``oldwriter.cropped`` refuses a run for breaking.
 TILE = (8, 128, 128)
 STEP = (8, 96, 96)
 CHUNK = 96

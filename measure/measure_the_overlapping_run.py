@@ -1,6 +1,6 @@
 """What an overlapping run costs, from one tile to ten thousand.
 
-`zmart_storage/cropped.py` writes an acquisition whose tiles overlap twice over:
+`oldwriter/cropped.py` writes an acquisition whose tiles overlap twice over:
 every tile whole, in a small image of its own, and every tile trimmed where it
 meets its neighbours into one canvas for the viewer. The point of the arrangement
 is that nothing the camera recorded is thrown away and the viewer still has a
@@ -87,8 +87,8 @@ VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.cropped import TilesAndCanvas  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.cropped import TilesAndCanvas  # noqa: E402
 
 # One acquired tile, and how far the stage steps between them. The difference is
 # the overlap: a quarter of a tile, which is more than most runs use and therefore
@@ -102,7 +102,7 @@ TILE = (2, 128, 128)
 STEP = (2, 96, 96)
 
 # How large a piece of the canvas is. Ninety-six is exactly what a trimmed tile
-# comes to, which is the rule `zmart_storage.cropped` refuses a run for breaking.
+# comes to, which is the rule `oldwriter.cropped` refuses a run for breaking.
 CHUNK = 96
 
 VOXEL_UM = (2.0, 0.35, 0.35)

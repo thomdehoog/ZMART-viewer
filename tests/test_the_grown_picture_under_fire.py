@@ -22,8 +22,8 @@ sys.path.insert(0, str(_VIZ))
 from check_the_built_picture import decode  # noqa: E402
 from zmart_viewer.building import GovernedRun  # noqa: E402
 
-from zmart_live.model import GridCell  # noqa: E402
-from zmart_live.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.record.model import GridCell  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 FRAME = 384
 PLANES = 3
@@ -44,7 +44,7 @@ def a_stack(moment: int, *, retaken: bool = False) -> np.ndarray:
 
 
 def a_grown_run(folder, *, timepoints=3):
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=PLANES,
                                   timepoints=timepoints,

@@ -11,27 +11,15 @@ requires-python = ">=3.10,<3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 
-# What the viewer needs to run, and nothing else.
-#
-# ``zmart-microscopy`` is here because the viewer is a viewer OF something: to
-# follow a run while a microscope writes it, it has to read that run's manifest
-# and ask its gateway which pieces are current, and neither can be guessed from
-# the files alone. It is a genuine runtime dependency, not an inconvenience --
-# a viewer that could not follow a live run would be beside the point.
-#
-# The writer (``zmart_storage``) is NOT a runtime dependency: nothing under
-# ``app/`` imports it. It appears under ``dev`` because the tests use it to make
-# data to look at, and it arrives with zmart-microscopy anyway.
+# What the viewer needs to run, and nothing else. The record machinery --
+# how an acquisition writes itself and what that means -- lives inside this
+# package (``zmart_viewer.record``), so a viewer install is self-contained:
+# it opens anything, follows live runs, and its tests exercise the same
+# writer a microscope controller drives.
 dependencies = [
     "zarr>=3,<4",
     "numpy>=1.24",
     "pywebview>=5",
-    # Pinned to the branch, not to the default one, and that is a debt
-    # rather than a design: the writer and run control this viewer needs
-    # -- including zmart_live.fixtures, which its tests import -- live on
-    # claude/thy1-linked-spiral until that branch reaches main. Drop the
-    # suffix the day it does.
-    "zmart-microscopy @ git+https://github.com/thomdehoog/ZMART-microscopy@claude/thy1-linked-spiral",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +34,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["zmart_viewer"]
+packages = ["zmart_viewer", "zmart_viewer.record"]
 
 [tool.ruff]
 target-version = "py310"

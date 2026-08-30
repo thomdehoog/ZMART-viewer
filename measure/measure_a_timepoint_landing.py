@@ -53,9 +53,9 @@ def _one_rung(browser_kind, built, positions: int, keep: Path) -> dict:
     from zmart_viewer.server import make_server
     from test_manifest_refresh_browser import _open, _wait_for_picture
 
-    from zmart_live.coordinator import LivePublisher
-    from zmart_live.model import GridCell
-    from zmart_live.profiles import plan_the_writing
+    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.record.model import GridCell
+    from zmart_viewer.record.profiles import plan_the_writing
 
     across = int(round(positions ** 0.5))
     cells = {GridCell(*divmod(number, across)): f"p{number:04d}"
