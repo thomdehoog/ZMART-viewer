@@ -565,8 +565,19 @@ def main() -> None:
                     folder = LADDER / label
                     print(f"  -- {placement}, {'baked' if bake else 'unbaked'}", flush=True)
                     origins = origins_for(count, scattered)
-                    cell = a_cell(folder, profile, origins, bake=bake, browser=browser, label=label)
-                    cell["rss_mb"] = resident_mb()
+
+                    try:
+                        cell = a_cell(
+                            folder, profile, origins, bake=bake, browser=browser, label=label
+                        )
+                        cell["rss_mb"] = resident_mb()
+                    except Exception as wrong:
+                        # A failed cell is a result too: recorded loudly, and the
+                        # night's remaining cells still get measured.
+                        import traceback
+
+                        traceback.print_exc()
+                        cell = {"failed": f"{type(wrong).__name__}: {wrong}"[:300]}
                     record.write(
                         json.dumps(
                             {"positions": count, "placement": placement, "baked": bake, **cell}
