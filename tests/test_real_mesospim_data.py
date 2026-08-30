@@ -177,7 +177,7 @@ def test_the_viewer_reads_it_from_where_it_was_written(tile, transfer, built_dis
     low, high = display_window(tile)
 
     served_from = tile.parent if tile != transfer else transfer.parent
-    server = make_server(port=0, data_dir=served_from, site_dir=built_dist)
+    server = make_server(port=0, data_dir=served_from, site_dir=built_dist, loads=[{}])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"

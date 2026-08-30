@@ -391,7 +391,9 @@ def test_finished_data_opens_no_listening_connection(browser, built_dist, demo_s
 
     from zmart_viewer.server import make_server
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist, live=False)
+    server = make_server(
+        port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, live=False
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page()

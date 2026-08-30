@@ -37,7 +37,7 @@ sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 from demo_data import write_demo_zarr  # noqa: E402
 
-from zmart_viewer.server import _DEMO_STORE, _FRONTEND_DIST, make_server  # noqa: E402
+from zmart_viewer.server import _FRONTEND_DIST, make_server  # noqa: E402
 
 # Where the screenshot lands, and how long we allow for a cold start (the engine
 # must boot, spawn its workers, fetch the chunks, and decode them).
@@ -137,15 +137,16 @@ def run_check() -> int:
         )
         return 2
 
-    # 2. Make sure there is a volume to render — generate the demo one if a
-    # fresh checkout has none, so the test is self-contained.
-    demo = _DEMO_STORE / "demo.zarr"
-    if not (demo / ".zattrs").exists():
-        print("Generating the demo volume for the test...")
-        write_demo_zarr(demo)
+    # 2. Make sure there is a volume to render. The viewer ships no demo of
+    # its own -- empty means empty -- so this check generates one for itself.
+    import tempfile
+
+    demo = Path(tempfile.mkdtemp(prefix="zmart-browsercheck-")) / "demo.zarr"
+    print("Generating the demo volume for the test...")
+    write_demo_zarr(demo)
 
     _OUT.mkdir(exist_ok=True)
-    server = make_server(port=0)
+    server = make_server(port=0, data_dir=demo.parent, store="demo.zarr")
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{port}"
