@@ -49,7 +49,7 @@ from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 LADDER = Path(os.environ.get("ZMART_CHURN_LADDER", "/tmp/zmart-churn"))
 FRAME = 384
 STEP = 320  # chunk-aligned: 320 is five whole 64-pixel chunks
-JITTER = (7, 13)  # off every chunk, overlapping the grid neighbours
+STREWN = STEP // 3  # how far a scattered position may land from its grid seat
 RUNGS = [
     int(n) for n in os.environ.get("ZMART_CHURN_RUNGS", "1,10,100,1000,10000,100000").split(",")
 ]
@@ -89,16 +89,28 @@ def the_specimen(moment: int) -> np.ndarray:
 
 
 def origins_for(count: int, scattered: bool) -> dict[str, dict[str, int]]:
+    """Where the positions land: a neat grid, or genuinely strewn about.
+
+    Scattered means what an operator means by it: every position lands its
+    own way off its grid seat -- overlapping some neighbours, leaving gaps by
+    others, nothing tiled. The strewing is deterministic so a rung's fixture
+    is reproducible, and any position that happens to land back on the chunk
+    lattice is nudged off it, so the whole placement stays unlinkable.
+    """
     across = max(1, int(count**0.5))
+    strewn = np.random.default_rng(7).integers(-STREWN, STREWN + 1, size=(count, 2))
     named = {}
 
     for index in range(count):
         row, column = divmod(index, across)
-        jitter = JITTER if scattered else (0, 0)
-        named[f"p{index:06d}"] = {
-            "y": row * STEP + jitter[0],
-            "x": column * STEP + jitter[1],
-        }
+        y, x = row * STEP, column * STEP
+
+        if scattered:
+            y = max(0, y + int(strewn[index, 0]))
+            x = max(0, x + int(strewn[index, 1]))
+            y += 7 if y % 64 == 0 else 0
+            x += 13 if x % 64 == 0 else 0
+        named[f"p{index:06d}"] = {"y": y, "x": x}
     return named
 
 
