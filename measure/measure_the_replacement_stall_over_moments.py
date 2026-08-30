@@ -47,9 +47,9 @@ sys.path.insert(0, str(_BUILDING))
 import numpy as np  # noqa: E402
 from zmart_viewer.building import GovernedRun  # noqa: E402
 
-from zmart_live.coordinator import LivePublisher  # noqa: E402
-from zmart_live.model import CommitEvent, GridCell  # noqa: E402
-from zmart_live.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
+from zmart_viewer.record.model import CommitEvent, GridCell  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 FRAME = 384
 RUNGS = (50, 200, 500)

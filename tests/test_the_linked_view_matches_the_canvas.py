@@ -1,6 +1,6 @@
 """Does a picture that was never written down show the same thing as one that was?
 
-:mod:`zmart_storage.linked` presents a folder of tiles to the viewer as one image
+:mod:`oldwriter.linked` presents a folder of tiles to the viewer as one image
 without copying any of the full-size picture into it. A piece of that image *is* a
 piece of one tile, byte for byte, and the viewer's server hands the tile's own file
 over unchanged.
@@ -40,9 +40,9 @@ from zmart_viewer.server import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.cropped import TilesAndCanvas  # noqa: E402
-from zmart_storage.linked import PlacedTile, link_the_tiles  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.cropped import TilesAndCanvas  # noqa: E402
+from oldwriter.linked import PlacedTile, link_the_tiles  # noqa: E402
 
 # A small run whose tiles butt up against one another — the stage stepping by a
 # whole tile, so nothing is trimmed and nothing overlaps. This is the arrangement

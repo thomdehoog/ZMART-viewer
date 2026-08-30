@@ -1,6 +1,6 @@
 """Does a picture that was never written down actually appear on screen?
 
-:mod:`zmart_storage.linked` presents a folder of tiles to the viewer as one image
+:mod:`oldwriter.linked` presents a folder of tiles to the viewer as one image
 without copying any of the full-size picture into it. Its companion test file,
 ``test_the_linked_view_matches_the_canvas.py``, compares the two arrangements voxel
 by voxel and is the stricter check by a long way. What it cannot say is whether the
@@ -26,9 +26,9 @@ from zmart_viewer.server import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.cropped import TilesAndCanvas  # noqa: E402
-from zmart_storage.linked import PlacedTile, link_the_tiles  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.cropped import TilesAndCanvas  # noqa: E402
+from oldwriter.linked import PlacedTile, link_the_tiles  # noqa: E402
 
 # A raster whose tiles butt up, deep enough to be worth looking at and small enough
 # to write and open twice inside a test.

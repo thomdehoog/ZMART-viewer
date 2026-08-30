@@ -1,9 +1,17 @@
 # Handover: the pointer map's fate is decided on day zero
 
 > For the ZMART-microscopy checkout (`zmart_live`), branch
-> `claude/thy1-linked-spiral` — the branch this viewer's pyproject pins.
-> Written 2026-08-29, validated end to end against this viewer's
-> free-placement gate with the patch applied to the installed package.
+> `claude/thy1-linked-spiral`. Written 2026-08-29, validated end to end
+> against this viewer's free-placement gate.
+>
+> **Standing of this document since 2026-08-31:** the record machinery now
+> lives inside this repository as `zmart_viewer/record/`, with every patch
+> below already applied as first-class code and gated. The microscopy
+> repo's migration is therefore not "apply these patches" but "delete your
+> copy of `zmart_live` (and `zmart_storage`'s canvas bits) and drive the
+> hardware through `zmart_viewer.record`". The patches remain here for one
+> case only: if that repo keeps its copy alive for a transition period, it
+> should carry them.
 
 A run's placements are known at the publisher's construction, so whether
 the pointer-linked view can ever be written is known then too. Today that

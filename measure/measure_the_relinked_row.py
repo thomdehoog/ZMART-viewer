@@ -21,7 +21,7 @@ sys.path.insert(0, str(_VIZ.parent))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
 from measure_the_four_ways_of_serving import middle_of_factory, piece_path  # noqa: E402
-from zmart_live.gateway import answer_from_a_live_run  # noqa: E402
+from zmart_viewer.record.gateway import answer_from_a_live_run  # noqa: E402
 
 from zmart_viewer.pieces import (  # noqa: E402
     forget_pointers,

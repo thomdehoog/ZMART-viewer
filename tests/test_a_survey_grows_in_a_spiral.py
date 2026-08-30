@@ -197,9 +197,9 @@ class TestTheSpiralWithColoursAndMoments:
     ACROSS = 4  # rings 0..1: a seeded 2x2 centre and one spiral ring
 
     def a_two_colour_timelapse(self, folder):
-        from zmart_live.coordinator import LivePublisher
-        from zmart_live.model import GridCell
-        from zmart_live.profiles import plan_the_writing
+        from zmart_viewer.record.coordinator import LivePublisher
+        from zmart_viewer.record.model import GridCell
+        from zmart_viewer.record.profiles import plan_the_writing
 
         profile, _ = plan_the_writing(
             "overview", frame=harness.FRAME, z_planes=1,
@@ -266,7 +266,7 @@ class TestTheSpiralWithColoursAndMoments:
         assert set(np.unique(source[1, 1])) == {3001}
 
     def test_the_record_and_the_walk_agree_moment_by_moment(self, tmp_path):
-        from zmart_live.gateway import _LiveRun
+        from zmart_viewer.record.gateway import _LiveRun
 
         run, width = self.a_two_colour_timelapse(tmp_path)
         spiral = [f"p{row:0{width}d}{column:0{width}d}"

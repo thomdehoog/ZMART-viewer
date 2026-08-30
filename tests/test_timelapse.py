@@ -358,7 +358,7 @@ def test_a_store_that_lengthens_its_own_array_is_read_again(browser, built_dist,
 
     There are two shapes a timelapse can take on disk and the viewer meets both.
     One declares all its moments up front and fills them in, which is what
-    `zmart_storage` writes; the slider is then held back by the count the server
+    `oldwriter` writes; the slider is then held back by the count the server
     reads off the disk, and the engine never has to change its mind about anything.
     The other **grows**: the array is written with one moment, and its declared
     length is raised as the run goes. `docs/how_it_works/DATA_LAYOUT.md` records a real instrument

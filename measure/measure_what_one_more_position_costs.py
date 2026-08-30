@@ -44,8 +44,8 @@ import numpy as np
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ.parent))
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.positions import start_a_run  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.positions import start_a_run  # noqa: E402
 
 # Small on purpose. The pixel-writing part of the cost is the same whatever the run
 # already holds, so it is the *bookkeeping* that this is watching for — and a

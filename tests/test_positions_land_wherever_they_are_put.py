@@ -400,15 +400,15 @@ def test_the_real_door_serves_the_scattered_picture(tmp_path):
 
 
 def _writer_decides_on_day_zero() -> bool:
-    """Does the installed zmart_live carry the day-zero pointer-map decision?"""
-    import zmart_live.coordinator as coordinator
+    """Does the installed zmart_viewer.record carry the day-zero pointer-map decision?"""
+    import zmart_viewer.record.coordinator as coordinator
 
     return "pointer_linkable" in Path(coordinator.__file__).read_text(encoding="utf-8")
 
 
 needs_day_zero_writer = pytest.mark.skipif(
     not _writer_decides_on_day_zero(),
-    reason="the installed zmart_live does not yet decide the pointer map at "
+    reason="the installed zmart_viewer.record does not yet decide the pointer map at "
     "construction -- apply docs/open/HANDOVER_the_pointer_map_decides_on_day_zero.md",
 )
 
@@ -422,7 +422,7 @@ SCATTERED_ORIGINS = {
 
 
 def _live_profile():
-    from zmart_live.profiles import plan_the_writing
+    from zmart_viewer.record.profiles import plan_the_writing
 
     return plan_the_writing("overview", frame=FRAME, channels=("channel 0",))[0]
 
@@ -456,7 +456,7 @@ def _committed_reference(run: Path) -> tuple[np.ndarray, dict[str, tuple[int, in
 
 
 def _publish_scattered(run: Path, *, linked_view: str = "at_run_end"):
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     publisher = LivePublisher(
         run,
@@ -475,7 +475,7 @@ def _publish_scattered(run: Path, *, linked_view: str = "at_run_end"):
 def test_live_scattered_landings_place_and_overlap_by_commit(tmp_path):
     """Sequential, unbaked: every landing sits at its manifest origin, later
     commit winning where landings share ground — checked after every commit."""
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     run = tmp_path / "run"
     publisher = LivePublisher(
@@ -540,8 +540,8 @@ def test_the_pointer_map_refuses_off_chunk_placements_on_day_zero(tmp_path):
     """The one honest refusal, said at construction: the places are known
     before the first pixel, so a per-publish run that can never be linked
     is refused before anything is written."""
-    from zmart_live.coordinator import LivePublisher
-    from zmart_live.model import ZmartLiveError
+    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.record.model import ZmartLiveError
 
     with pytest.raises(ZmartLiveError, match="whole chunks"):
         LivePublisher(
@@ -618,7 +618,7 @@ def test_a_scattered_dataset_replays_where_it_sits(tmp_path):
 
 def _a_running_survey(folder: Path, across: int):
     """A committed survey of across-squared scattered positions, one held back."""
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     origins = {
         f"pos{row:02d}{column:02d}": {"y": row * 300 + 7, "x": column * 300 + 13}
@@ -669,15 +669,15 @@ def test_one_more_landing_reads_one_tile_no_matter_the_survey(tmp_path):
 
 
 def _writer_can_add_a_position() -> bool:
-    """Does the installed zmart_live let a position join a running run?"""
-    from zmart_live.coordinator import LivePublisher
+    """Does the installed zmart_viewer.record let a position join a running run?"""
+    from zmart_viewer.record.coordinator import LivePublisher
 
     return hasattr(LivePublisher, "add_a_position")
 
 
 needs_growing_writer = pytest.mark.skipif(
     not _writer_can_add_a_position(),
-    reason="the installed zmart_live cannot yet add a position to a running "
+    reason="the installed zmart_viewer.record cannot yet add a position to a running "
     "run -- see the growth items in "
     "docs/open/HANDOVER_the_pointer_map_decides_on_day_zero.md",
 )
@@ -687,7 +687,7 @@ needs_growing_writer = pytest.mark.skipif(
 def test_a_position_joins_a_running_survey_where_it_is_put(tmp_path):
     """Growth in space: a position the day-zero layout never named joins a
     running survey and lands exactly at the origin it was given."""
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     run = tmp_path / "run"
     publisher = LivePublisher(
@@ -724,7 +724,7 @@ ALIGNED_ORIGINS = {
 
 
 def _an_aligned_run(folder):
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     publisher = LivePublisher(
         folder,

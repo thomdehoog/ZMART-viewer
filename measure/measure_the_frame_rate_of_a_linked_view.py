@@ -11,7 +11,7 @@ part in every frame, so the cost is paid on every draw for as long as the run is
 open. Slow *loading* ends; this does not. `docs/open/NEXT_STEPS.md` calls the fix
 architectural: the engine has to be holding fewer positions.
 
-A linked view — :mod:`zmart_storage.linked` — hands the viewer **one** store no
+A linked view — :mod:`oldwriter.linked` — hands the viewer **one** store no
 matter how many tiles are underneath it. If the cost really is paid per position,
 then a run shown that way should keep its drawing rate whatever its size, and the
 architectural fix is a thing that already exists.
@@ -70,8 +70,8 @@ sys.path.insert(0, str(_VIZ.parent))
 
 from zmart_viewer.server import make_server  # noqa: E402
 
-from zmart_storage.canvas import Channel, _declare_one  # noqa: E402
-from zmart_storage.linked import PlacedTile, link_the_tiles  # noqa: E402
+from oldwriter.canvas import Channel, _declare_one  # noqa: E402
+from oldwriter.linked import PlacedTile, link_the_tiles  # noqa: E402
 
 # Deliberately tiny. What is being measured is the cost of *how many* things are
 # open, not how much picture there is, and small tiles keep the writing quick

@@ -1,10 +1,17 @@
 # The writer keeps the record; the viewer owns every way of reading it
 
-> Written 2026-08-31, agreed with the operator: the smart writer in the
-> microscopy repo does two jobs, and only one of them is the microscope's.
-> This plan draws the boundary, names what moves, and records what the
-> viewer builds now so the microscopy side can shed its half the moment
-> that repo is editable.
+> Written 2026-08-31, agreed with the operator — and then taken one step
+> further the same day, at the operator's word: the viewer is now
+> **self-contained**. The record machinery lives inside this repository as
+> `zmart_viewer/record/` (formerly the `zmart_live` package), the three
+> small utilities it needed from `zmart_storage` are folded into
+> `record/model.py`, the run fixtures live with the tests
+> (`tests/record_fixtures.py`), and the elder writers the compatibility
+> gates exercise live in `testdata/oldwriter/`. The external
+> `zmart-microscopy` dependency is gone from `pyproject.toml`. The plan
+> below is kept as the reasoning; its "microscopy steps" now read as the
+> other repo's migration: delete its copy of this machinery and drive the
+> hardware through this package instead.
 
 ## The boundary
 

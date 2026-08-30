@@ -40,8 +40,8 @@ from zmart_viewer.server import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from zmart_storage.canvas import Channel, _declare_one  # noqa: E402
-from zmart_storage.linked import PlacedTile, link_the_tiles  # noqa: E402
+from oldwriter.canvas import Channel, _declare_one  # noqa: E402
+from oldwriter.linked import PlacedTile, link_the_tiles  # noqa: E402
 
 # How large one piece of storage is, across y and x. This is the number an
 # acquisition has to choose, and it is what everything here turns on: a tile has to

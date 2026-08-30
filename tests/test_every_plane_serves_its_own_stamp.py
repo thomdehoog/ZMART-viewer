@@ -42,8 +42,8 @@ sys.path.insert(0, str(_VIZ))
 from check_the_built_picture import decode  # noqa: E402
 from zmart_viewer.building import GovernedRun  # noqa: E402
 
-from zmart_live.model import GridCell  # noqa: E402
-from zmart_live.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.record.model import GridCell  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 DEPTH = 13     # ragged on purpose
 STAMP = 1000   # plane k carries the value STAMP + k, everywhere, exactly
@@ -88,7 +88,7 @@ def every_plane_matches(composer, *, depth: int) -> None:
 
 def test_the_governed_door_serves_the_stamp_one_plane_per_block(tmp_path):
     """The writer's own packing: inner chunks one plane deep, z never halved."""
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
     run = LivePublisher(
@@ -273,7 +273,7 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
     """
     from zmart_viewer.building import GovernedRun
 
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     frame = 384
     profile, _ = plan_the_writing(

@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from zmart_live.gateway import live_run_holding
+from zmart_viewer.record.gateway import live_run_holding
 
 from .library import DESCRIPTION_FILES, is_store
 from .live import LIVE_PICTURE, the_live_picture_declared

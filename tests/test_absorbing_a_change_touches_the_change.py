@@ -109,9 +109,9 @@ def test_the_fold_today_sweeps_every_published_moment(tmp_path):
     """
     import numpy as np
 
-    from zmart_live.coordinator import LivePublisher
-    from zmart_live.model import GridCell
-    from zmart_live.profiles import plan_the_writing
+    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.record.model import GridCell
+    from zmart_viewer.record.profiles import plan_the_writing
 
     moments = 8
     profile, _ = plan_the_writing("overview", frame=harness.FRAME, z_planes=1,

@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import zarr
-from zmart_live.coordinator import LivePublisher
-from zmart_live.profiles import DEFAULTS, plan_the_writing
+from zmart_viewer.record.coordinator import LivePublisher
+from zmart_viewer.record.profiles import DEFAULTS, plan_the_writing
 
 from .compose import read_the_transfer, the_front_axes
 

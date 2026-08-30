@@ -8,7 +8,7 @@ the real one they were developed on is 36 GB on a particular disk.
 
 The tiles here are placed at **fractional** voxel offsets, which is the whole
 point of building rather than pointing: a transfer arranged by nobody does not
-land on a grid of whole files, and :mod:`zmart_storage.linked` correctly refuses
+land on a grid of whole files, and :mod:`oldwriter.linked` correctly refuses
 such a run. Nothing here would work if the offsets were tidy.
 
 Three of these tests exist because something got through that should not have:

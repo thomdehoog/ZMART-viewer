@@ -7,7 +7,7 @@ position can be replaced by a later generation, and the record of what may be
 shown is the run's manifest ("files existing means nothing; this record means
 everything"). These are the tests that hold the composer to that record.
 
-Everything here runs against a real governed run made by ``zmart_live``'s own
+Everything here runs against a real governed run made by ``zmart_viewer.record``'s own
 writing machinery — the same ``LivePublisher`` the gateway tests use — because
 a mock manifest would let the composer agree with a simplification instead of
 with the thing that rules the microscope.
@@ -33,9 +33,9 @@ sys.path.insert(0, str(VIZ.parent))
 from check_the_built_picture import decode  # noqa: E402
 from zmart_viewer.building import GovernedRun  # noqa: E402
 
-from zmart_live.model import GridCell  # noqa: E402
-from zmart_live.profiles import plan_the_writing  # noqa: E402
-from zmart_live.fixtures import FRAME, some_specimen  # noqa: E402
+from zmart_viewer.record.model import GridCell  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
+from record_fixtures import FRAME, some_specimen  # noqa: E402
 
 # Small pieces, so the picture is several pieces across and posA-only ground,
 # shared ground, and posB-only ground all fall in different pieces.
@@ -51,7 +51,7 @@ def a_governed_run(folder: Path, *, timepoints: int = 1, third: bool = False):
     chosen per test so that whose pixels ended up on screen is readable from
     the bytes.
     """
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1)
     cells = {GridCell(0, 0): "posA", GridCell(0, 1): "posB"}
@@ -515,7 +515,7 @@ def test_a_run_of_several_channels_declares_with_its_colour_axis(tmp_path):
 
     from zmart_viewer.building import declare_a_governed_picture
 
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
                                   channels=("488", "561"))

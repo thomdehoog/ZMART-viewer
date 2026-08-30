@@ -16,10 +16,10 @@ from zmart_viewer import server as server_module
 from pixels import fraction_lit, image_middle
 from zmart_viewer.server import make_server
 
-from zmart_live.coordinator import LivePublisher
-from zmart_live.model import GridCell
-from zmart_live.profiles import plan_the_writing
-from zmart_live.fixtures import FRAME, a_live_run, prepare_without_publishing, some_specimen  # noqa: E402
+from zmart_viewer.record.coordinator import LivePublisher
+from zmart_viewer.record.model import GridCell
+from zmart_viewer.record.profiles import plan_the_writing
+from record_fixtures import FRAME, a_live_run, prepare_without_publishing, some_specimen  # noqa: E402
 from driving import pick_colormap  # noqa: E402
 
 _SETTLED = """() => {
@@ -233,7 +233,7 @@ def test_positions_and_replacement_appear_from_commits_and_keep_operator_state(
             assert fraction_lit(page) > still_lit + 0.05
             # The one view a commit advances under the current scene model: a
             # run publishes positions and its single linked overview, served
-            # from the baked picture (see VIEW_ROLES in zmart_live/scene.py).
+            # from the baked picture (see VIEW_ROLES in zmart_viewer.record/scene.py).
             # The earlier model's seamless and non_seamless pair, which this
             # set once named, no longer exists.
             assert set(page.evaluate("() => window.zmartSourceRefreshing.sources")) == {
@@ -328,7 +328,7 @@ def test_one_run_commit_makes_no_requests_for_an_unrelated_live_run(
             assert all(path.startswith("/data/0/") for path in after)
             # The one view a commit advances under the current scene model: a
             # run publishes positions and its single linked overview (see
-            # VIEW_ROLES in zmart_live/scene.py), so run-one's commit refreshes
+            # VIEW_ROLES in zmart_viewer.record/scene.py), so run-one's commit refreshes
             # exactly that identity and nothing of run-two. The earlier model's
             # seamless and non_seamless pair, which this set once named, no
             # longer exists.

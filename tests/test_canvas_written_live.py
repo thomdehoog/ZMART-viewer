@@ -1,4 +1,4 @@
-"""Does a run written by `zmart_storage` actually appear in the viewer, as it goes?
+"""Does a run written by `oldwriter` actually appear in the viewer, as it goes?
 
 Everything in the storage decision rests on this working, so it is checked against
 the real writer and against the picture on screen — not against what the engine
@@ -51,7 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pixels import colour_spread, image_middle
 from zmart_viewer.server import make_server
 
-from zmart_storage.canvas import Channel, TileCanvases
+from oldwriter.canvas import Channel, TileCanvases
 
 # A canvas a quarter of which one tile fills, so a landing is plainly visible in a
 # photograph rather than being a few pixels somebody has to squint at.

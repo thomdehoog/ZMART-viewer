@@ -7,11 +7,11 @@ import threading
 
 from zmart_viewer.server import make_server
 
-from zmart_live.coordinator import LivePublisher
-from zmart_live.gateway import answer_from_a_live_run
-from zmart_live.model import GridCell
-from zmart_live.profiles import plan_the_writing
-from zmart_live.fixtures import FRAME, some_specimen  # noqa: E402
+from zmart_viewer.record.coordinator import LivePublisher
+from zmart_viewer.record.gateway import answer_from_a_live_run
+from zmart_viewer.record.model import GridCell
+from zmart_viewer.record.profiles import plan_the_writing
+from record_fixtures import FRAME, some_specimen  # noqa: E402
 
 
 def ask(

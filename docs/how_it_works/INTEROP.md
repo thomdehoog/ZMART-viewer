@@ -38,13 +38,13 @@ project's convention rather than the format's.
 ## 1. Our files are mispositioned by a large part of the ecosystem — **fixed**
 
 **This was the finding with the widest blast radius. It is now fixed, and the
-description below is what it used to do.** `zmart_storage/canvas.py` writes the
+description below is what it used to do.** `testdata/oldwriter/canvas.py` writes the
 translation beside each resolution, which is the place the format makes
 compulsory, and no longer writes one beside the multiscale block. Images written
 from now on open correctly in `ngff-zarr`, and so in `multiview-stitcher` and the
 rest of the ecosystem built on it.
 
-`zmart_storage/tests/test_other_tools_can_read_us.py` holds it there. It writes a
+the elder writer’s interop tests holds it there. It writes a
 run at a known corner, reads it back with `ngff-zarr` rather than with our own
 reader, and fails if the corner comes back as anything else. Confirmed to fail
 against the old writer, reporting a corner of 0.0 where 10.0 was declared — which
@@ -80,7 +80,7 @@ So `ngff-zarr` has the exact mirror of the bug we just fixed. We read only the
 outer block; it reads only the inner one. **Neither composes, and the two fail on
 each other's files.**
 
-`zmart_storage/canvas.py` writes `scale` per dataset (line 1746) and
+`testdata/oldwriter/canvas.py` writes `scale` per dataset (line 1746) and
 `translation` at the multiscales level (line 1667). The consequence is concrete
 and it is ours, not theirs:
 
@@ -105,7 +105,7 @@ multiview-stitcher writes a **centre-of-pixel** translation per level —
 `fusion/_core.py:1012` echoes the convention by name.
 
 Our writer takes the other choice — one translation for every level, corner
-convention — and `zmart_storage/canvas.py:1654-1666` argues for it well: the
+convention — and `testdata/oldwriter/canvas.py:1654-1666` argues for it well: the
 copies nest perfectly, the format is genuinely ambiguous, and a file that shifts
 itself to suit one reader is wrong for every other.
 

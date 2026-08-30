@@ -394,7 +394,7 @@ def test_a_piece_the_clock_cannot_vouch_for_is_not_given_a_validator(serving, tm
     File identity leans on the modification stamp, and filesystems stamp files
     from a clock that ticks more coarsely than a writer writes — the same
     still-moving rule the table caches follow (see ``STAMPS_STILL_MOVING_NS``
-    in ``zmart_live/shardlink.py``). A piece patched twice in one tick at the
+    in ``zmart_viewer.record/shardlink.py``). A piece patched twice in one tick at the
     same size would carry the same identity, and a 304 against it would hand
     the browser exactly the stale picture all of this exists to prevent. So a
     piece still within the clock's reach of "now" gets no validator at all and
@@ -612,7 +612,7 @@ class TestClosingGivesTheMemoryBack:
 def test_the_record_of_where_a_run_imaged_is_reachable_from_the_page(tmp_path):
     """A browser must be able to fetch the coverage record with one plain request.
 
-    ``zmart_storage`` writes down which parts of a run's canvas actually hold
+    ``oldwriter`` writes down which parts of a run's canvas actually hold
     picture, so that the viewer can stop asking for the far larger room the run
     merely declared. That is only useful if the page can read it, and the page
     can only read what this server hands out — it has no way to list a folder and
@@ -625,7 +625,7 @@ def test_the_record_of_where_a_run_imaged_is_reachable_from_the_page(tmp_path):
     import numpy as np
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from zmart_storage import Channel, TileCanvases
+    from oldwriter import Channel, TileCanvases
 
     run = tmp_path / "run"
     canvases = TileCanvases.create(

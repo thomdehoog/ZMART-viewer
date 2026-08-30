@@ -28,8 +28,8 @@ import pytest
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-from zmart_live.coordinator import LivePublisher  # noqa: E402
-from zmart_live.model import AcquisitionProfile, GridCell, LevelGeometry  # noqa: E402
+from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
+from zmart_viewer.record.model import AcquisitionProfile, GridCell, LevelGeometry  # noqa: E402
 
 DEPTH = 13  # odd on purpose: the ceiling-versus-floor seam, and 13 // 2 != -(-13 // 2)
 
@@ -44,7 +44,7 @@ def a_deep_run_whose_levels_halve_z(tmp_path):
     """
     from dataclasses import replace
 
-    from zmart_live.identity import name_for_a_profile
+    from zmart_viewer.record.identity import name_for_a_profile
 
     profile = AcquisitionProfile(
         profile_id="deep-halving",
@@ -113,7 +113,7 @@ def test_the_rule_has_exactly_one_definition():
     """
     from zmart_viewer import building as governed
 
-    from zmart_live import coordinator, gateway, model
+    from zmart_viewer.record import coordinator, gateway, model
 
     assert coordinator.rounded_up is model.rounded_up
     assert gateway.rounded_up is model.rounded_up

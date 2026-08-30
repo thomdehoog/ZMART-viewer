@@ -60,7 +60,7 @@ from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
     frames_counted,
 )
 
-from zmart_storage.linked import link_the_tiles  # noqa: E402
+from oldwriter.linked import link_the_tiles  # noqa: E402
 
 # How many positions to compare. Two hundred is where the fault is already plain —
 # seventeen frames against ninety-five when this was measured — while still opening

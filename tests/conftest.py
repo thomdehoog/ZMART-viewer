@@ -2,7 +2,7 @@
 
 The backend is the ``zmart_viewer`` package at the repository root, so tests
 put that root on ``sys.path``; the checkout's parent is included as well
-because the live-publication gate is the installed ``zmart_live`` package in
+because the live-publication gate is the installed ``zmart_viewer.record`` package in
 production, while a source-tree test must be able to exercise it before the
 editable install has been made.
 

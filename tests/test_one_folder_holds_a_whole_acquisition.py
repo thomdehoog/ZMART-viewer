@@ -51,9 +51,9 @@ from zmart_viewer.library import discover
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from zmart_storage.canvas import Channel  # noqa: E402
-from zmart_storage.cropped import TilesAndCanvas  # noqa: E402
-from zmart_storage.linked import (  # noqa: E402
+from oldwriter.canvas import Channel  # noqa: E402
+from oldwriter.cropped import TilesAndCanvas  # noqa: E402
+from oldwriter.linked import (  # noqa: E402
     PlacedTile,
     link_the_tiles,
     start_a_growing_view,
@@ -168,7 +168,7 @@ def test_nothing_of_ours_is_left_inside_an_image_folder(tmp_path):
 
     Our own files live beside the images instead, in ``zmart-links`` and
     ``zmart-coverage``, where zarr has no opinion about them. The same reasoning
-    is set out in :mod:`zmart_storage.coverage`, which measured it first.
+    is set out in :mod:`oldwriter.coverage`, which measured it first.
     """
     placed, view = _a_plate_in_one_folder(tmp_path / "run")
 

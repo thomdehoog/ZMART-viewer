@@ -35,7 +35,7 @@ from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.building import GovernedRun  # noqa: E402
 from test_the_composer_obeys_the_manifest import PIECE, a_governed_run, the_columns_of  # noqa: E402
 
-from zmart_live.fixtures import some_specimen  # noqa: E402
+from record_fixtures import some_specimen  # noqa: E402
 
 
 def every_baked_file(store: Path) -> dict[str, bytes]:
@@ -498,10 +498,10 @@ def test_an_older_derive_cannot_regress_the_bake_behind_a_newer_one(
     regressed stamp, patches only its own footprint, and stamps the whole
     history current while B's hole survives forever.
     """
-    from zmart_live.coordinator import LivePublisher
-    from zmart_live.model import GridCell
-    from zmart_live.profiles import plan_the_writing
-    from zmart_live.fixtures import FRAME
+    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.record.model import GridCell
+    from zmart_viewer.record.profiles import plan_the_writing
+    from record_fixtures import FRAME
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1)
     cells = {

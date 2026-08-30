@@ -37,8 +37,8 @@ sys.path.insert(0, str(_VIZ))
 
 from zmart_viewer.building import GovernedRun  # noqa: E402
 
-from zmart_live.model import GridCell, rounded_up  # noqa: E402
-from zmart_live.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.record.model import GridCell, rounded_up  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 DEPTH = 13   # ragged, per the depth test plan's fixture rule
 FRAME = 384
@@ -54,7 +54,7 @@ def a_stamped_stack(base: int) -> np.ndarray:
 
 
 def a_deep_survey(folder):
-    from zmart_live.coordinator import LivePublisher
+    from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
     cells = {GridCell(row, column): f"p{row}{column}"
