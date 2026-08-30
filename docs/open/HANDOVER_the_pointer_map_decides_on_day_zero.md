@@ -155,13 +155,73 @@ governed serving is unaffected (a non-live path answers `None` in ~1 ms).
 An incremental cold path (the manifest's own `events()` already reads
 only what is new) would take the minute down to the tail.
 
-**Construction is quadratic in positions.** Building a `LivePublisher`
-over 10,000 planned positions spends minutes at full CPU inside
-`place_the_positions` → `plan_one_position` → `ownership._touching` —
-each position swept against its neighbours. A run is opened once per
-writer process, so this is start-up pain rather than steady-state, but
-minutes before the first pixel is real; an index over origins (the
-placements are on a grid or a declared canvas) makes the sweep local.
+**Construction was quadratic in positions — patch below, validated.**
+Building a `LivePublisher` over 10,000 planned positions spent 128 s at
+full CPU inside `place_the_positions`: every position was handed every
+other as a neighbour candidate (`others={all but me}`), and `_touching`
+swept a hundred million pairs. Two positions can only touch within one
+frame's reach, so the patch buckets origins into a frame-sized grid and
+hands each position only its 3×3 neighbourhood — a strict superset of
+anything that can touch, so `_touching` remains the one judge and the
+placements are **identical** (asserted against the unpatched module on a
+grid, a scattered overlapping set, duplicates with an outlier, a single
+position, and a touching row). The sweep drops 127 s → 0.8 s; full
+construction 128 s → 19 s at 10,000 (the rest is linear record work).
+Validated here against the installed package; the viewer's 31-gate
+free-placement suite is green on top of it.
+
+```diff
+--- a/zmart_live/ownership.py
++++ b/zmart_live/ownership.py
+@@ -28,6 +28,8 @@
+ 
+ from __future__ import annotations
+ 
++from itertools import product
++
+ from .model import (
+     AcquisitionProfile,
+     Box,
+@@ -309,13 +311,36 @@
+         origins,
+         key=lambda name: (tuple(sorted(origins[name].items())), name),
+     )
++
++    # Two positions can only touch within one frame's reach of each other, so
++    # the candidates for each position come from a coarse grid of frame-sized
++    # buckets rather than from everybody. :func:`_touching` stays the one
++    # judge of who is a neighbour; this only shrinks who it is asked about,
++    # from every position to the few that could possibly reach -- without it,
++    # planning ten thousand positions sweeps a hundred million pairs and a
++    # publisher takes minutes to construct.
++    axes = tuple(next(iter(origins.values()))) if origins else ()
++    strides = {axis: max(1, profile.frame_shape[axis]) for axis in axes}
++    buckets: dict[tuple[int, ...], list[str]] = {}
++    for name, where in origins.items():
++        at = tuple(where.get(axis, 0) // strides[axis] for axis in axes)
++        buckets.setdefault(at, []).append(name)
++
++    def _reachable(name: str, where: dict[str, int]) -> dict[str, dict[str, int]]:
++        mine = tuple(where.get(axis, 0) // strides[axis] for axis in axes)
++        found: dict[str, dict[str, int]] = {}
++        for shifted in product(*((at - 1, at, at + 1) for at in mine)):
++            for other in buckets.get(shifted, ()):
++                if other != name:
++                    found[other] = origins[other]
++        return found
++
+     return tuple(
+         plan_one_position(
+             profile,
+             position_id=name,
+             origin=origins[name],
+-            others={other: where for other, where in origins.items()
+-                    if other != name},
++            others=_reachable(name, origins[name]),
+             component_id=component_id,
+             cell=cells.get(name),
+         )
+```
 
 **What one more landing costs, measured.** The viewer's derive after a
 landing is O(change): at most one tile read, never a survey re-read
