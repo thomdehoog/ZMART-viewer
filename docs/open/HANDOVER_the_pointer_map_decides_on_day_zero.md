@@ -135,6 +135,17 @@ mean a generous default room (hundreds), not the profile's minimum: an
 open-ended experiment then never hits the wall, and nothing is allocated
 for moments that never come.
 
+**The gateway answers one piece at O(events).** `answer_from_a_live_run`
+costs ~9 ms per answer at 400 committed positions, ~261 ms at 2,500 and
+~5.9 s at 10,000 (measured in the viewer's
+`measure/measure_the_four_ways_of_serving.py`): each call walks the run's
+whole history. An external reader of a big run's linked view pays that on
+every chunk request. The viewer's own governed serving is unaffected (a
+non-live path answers `None` in ~1 ms), but the linked view's promise —
+outside tools read it cheaply — inverts at scale. An incremental reader
+(the manifest's own `events()` already reads only what is new; the
+gateway's per-call state could be held the same way) restores it.
+
 **What one more landing costs, measured.** The viewer's derive after a
 landing is O(change): at most one tile read, never a survey re-read
 (gated count-wise in `test_one_more_landing_reads_one_tile_no_matter_the_survey`).
