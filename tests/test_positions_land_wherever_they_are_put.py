@@ -447,9 +447,10 @@ def _committed_reference(run: Path) -> tuple[np.ndarray, dict[str, tuple[int, in
     width = max(left + FRAME for _, left in placed.values())
     pasted = np.zeros((height, width), dtype=np.uint16)
 
-    for name, _generation in order:
+    for name, generation in order:
         top, left = placed[name]
-        body = zarr.open_array(str(survey / name / "0"), mode="r")[...]
+        held_in = name if not generation else f"{name}.generation-{generation}"
+        body = zarr.open_array(str(survey / held_in / "0"), mode="r")[...]
         pasted[top : top + FRAME, left : left + FRAME] = body.reshape(body.shape[-2:])
     return pasted, placed
 
@@ -711,6 +712,108 @@ def test_a_position_joins_a_running_survey_where_it_is_put(tmp_path):
     finally:
         composer.close()
     assert np.array_equal(served[: expected.shape[0], : expected.shape[1]], expected)
+
+
+# -- the viewer's own linked row ------------------------------------------------
+
+ALIGNED_ORIGINS = {
+    "posA": {"y": 0, "x": 0},
+    "posB": {"y": 192, "x": 64},  # overlaps posA, committed later
+    "posC": {"y": 64, "x": 1280},  # a far outlier
+}
+
+
+def _an_aligned_run(folder):
+    from zmart_live.coordinator import LivePublisher
+
+    publisher = LivePublisher(
+        folder,
+        _live_profile(),
+        run_id="gate-linked",
+        positions=ALIGNED_ORIGINS,
+        linked_view="at_run_end",
+    )
+
+    for index, name in enumerate(sorted(ALIGNED_ORIGINS)):
+        publisher.write_and_publish(name, _stamped_body((1, FRAME, FRAME), 100 + index, np.uint16))
+    return publisher
+
+
+def _decoded_chunk(run, held) -> np.ndarray:
+    import numcodecs
+
+    raw = (run / held.path).read_bytes()[held.offset : held.offset + held.length]
+    return np.frombuffer(numcodecs.Zstd().decode(raw), dtype=np.uint16).reshape(64, 64)
+
+
+def test_the_viewer_links_a_finished_run_and_every_pointed_byte_is_true(tmp_path):
+    """The viewer's own zero-copy map: every level-0 chunk of the committed
+    ground answers with the winning tile's own bytes, absence stays absent,
+    and the whole canvas is swept, not sampled."""
+    from zmart_viewer.pieces import link_a_finished_run, pointed_bytes_behind
+
+    run = tmp_path / "run"
+    _an_aligned_run(run)
+    store = link_a_finished_run(run)
+    expected, _ = _committed_reference(run)
+
+    for chunk_row in range(expected.shape[0] // 64):
+        for chunk_column in range(expected.shape[1] // 64):
+            held = pointed_bytes_behind(store, f"0/c/0/{chunk_row}/{chunk_column}")
+            window = expected[
+                chunk_row * 64 : chunk_row * 64 + 64,
+                chunk_column * 64 : chunk_column * 64 + 64,
+            ]
+
+            if held is None:
+                assert not window.any(), (
+                    f"chunk ({chunk_row}, {chunk_column}) has committed ground "
+                    "but the map points at nothing"
+                )
+                continue
+
+            served = _decoded_chunk(run, held)
+            assert np.array_equal(served, window), (
+                f"chunk ({chunk_row}, {chunk_column}) from {held.path}: "
+                f"served {np.unique(served)[:4]} expected {np.unique(window)[:4]}"
+            )
+
+    # The ground both tiles cover came from the later commit's own store.
+    overlap = pointed_bytes_behind(store, "0/c/0/3/2")
+    assert overlap is not None and "posB" in overlap.path
+
+
+def test_a_commit_after_linking_makes_the_pointers_stand_aside(tmp_path):
+    """Staleness is honest: a replacement silences the map, the governed
+    picture serves the new truth, and re-linking points at the new store."""
+    from zmart_viewer.pieces import link_a_finished_run, pointed_bytes_behind
+
+    run = tmp_path / "run"
+    publisher = _an_aligned_run(run)
+    store = link_a_finished_run(run)
+    assert pointed_bytes_behind(store, "0/c/0/0/0") is not None
+
+    publisher.replace_a_position("posA", _stamped_body((1, FRAME, FRAME), 120, np.uint16))
+    assert pointed_bytes_behind(store, "0/c/0/0/0") is None, (
+        "the map kept answering for a run that moved past it"
+    )
+
+    relinked = link_a_finished_run(run)
+    held = pointed_bytes_behind(relinked, "0/c/0/0/0")
+    assert held is not None and ".generation-1" in held.path
+    expected, _ = _committed_reference(run)
+    assert np.array_equal(_decoded_chunk(run, held), expected[:64, :64])
+
+
+def test_off_chunk_placements_cannot_be_pointer_linked_by_the_viewer(tmp_path):
+    """The one honest refusal, in the viewer's own words this time."""
+    from zmart_viewer.pieces import link_a_finished_run
+
+    run = tmp_path / "run"
+    _publish_scattered(run)
+
+    with pytest.raises(ValueError, match="whole chunks"):
+        link_a_finished_run(run)
 
 
 # -- the plate row --------------------------------------------------------------
