@@ -148,7 +148,9 @@ def test_depth_samples_reach_the_engine(browser, built_dist, demo_store):
     """What actually sets 3-D resolution; the default of 64 stays coarse."""
     import threading
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist, depth_samples=512)
+    server = make_server(
+        port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, depth_samples=512
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
