@@ -100,3 +100,50 @@ The patch, against the branch as installed here:
          self.write_the_view()
  
 ```
+
+## The growth items, same branch
+
+A live experiment grows two ways the writer does not yet allow, and both
+are day-zero questions in the same sense as the pointer map: the canvas
+is declared upfront, what fills it is not.
+
+**A position may join a running run.** Today `positions` is fixed at
+construction and there is no way to add one; smart microscopy points a
+target scan mid-run at ground nobody declared. Wanted:
+
+```python
+publisher.add_a_position(position_id, {"y": ..., "x": ...})
+```
+
+recording a new layout revision (the machinery is already versioned —
+`record_the_layout` reuses a revision only for an unchanged arrangement),
+validating the place against the same whole-chunk rule at the same
+moment (an off-chunk addition to a `per_publish` run is refused in the
+day-zero words above; on an `at_run_end` run it simply keeps
+`pointer_linkable` honest), and leaving every published revision meaning
+what it meant. The viewer's gate is already in and waits on exactly this
+name: `test_a_position_joins_a_running_survey_where_it_is_put` in
+`tests/test_positions_land_wherever_they_are_put.py` skips while
+`LivePublisher` lacks `add_a_position` and runs the day it appears.
+
+**Time room should be roomy by default.** `timepoints=None` today means
+"the profile's count", and a write past it is refused. The viewer side
+has already proven that generous declared room is metadata-only — a room
+of 500 moments costs nothing until pixels arrive, and the slider follows
+`committed_time_ranges`, never the declared room. So let `timepoints=None`
+mean a generous default room (hundreds), not the profile's minimum: an
+open-ended experiment then never hits the wall, and nothing is allocated
+for moments that never come.
+
+**What one more landing costs, measured.** The viewer's derive after a
+landing is O(change): at most one tile read, never a survey re-read
+(gated count-wise in `test_one_more_landing_reads_one_tile_no_matter_the_survey`).
+The writer's own landing is where survey size can leak in: `publish()`
+walks the full event history three times (`_committed_units`,
+`next_revision`, `_declare_the_current_members`) and rewrites the whole
+members list per commit. `manifest.events()` parses incrementally, so
+these are pure in-memory sweeps plus one O(positions) JSON write — but
+they run on every landing. If landing cost is found to grow with the
+survey (measured numbers live in the viewer's
+`docs/open/PLAN_positions_land_wherever_they_are_put.md` growth note),
+this is the place to look first.

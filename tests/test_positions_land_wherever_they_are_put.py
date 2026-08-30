@@ -612,6 +612,107 @@ def test_a_scattered_dataset_replays_where_it_sits(tmp_path):
         composer.close()
 
 
+# -- growth: one more landing costs the same at any survey size -----------------
+
+
+def _a_running_survey(folder: Path, across: int):
+    """A committed survey of across-squared scattered positions, one held back."""
+    from zmart_live.coordinator import LivePublisher
+
+    origins = {
+        f"pos{row:02d}{column:02d}": {"y": row * 300 + 7, "x": column * 300 + 13}
+        for row in range(across)
+        for column in range(across)
+    }
+    publisher = LivePublisher(
+        folder,
+        _live_profile(),
+        run_id="gate-growth",
+        positions=origins,
+        linked_view="at_run_end",
+    )
+    names = sorted(origins)
+
+    for index, name in enumerate(names[:-1]):
+        body = _stamped_body((1, FRAME, FRAME), 100 + index % 40, np.uint16)
+        publisher.write_and_publish(name, body)
+    return publisher, names[-1]
+
+
+def test_one_more_landing_reads_one_tile_no_matter_the_survey(tmp_path):
+    """The cost of one more landing is counted, not timed: after a landing
+    onto a warm survey the derive reads at most one tile — never the survey —
+    and its only survey-sized work is the bookkeeping sweep the accounting
+    counter names. Checked at two sizes so a hidden slope shows as a count."""
+    read_after_landing = {}
+
+    for across in (2, 5):
+        publisher, held_back = _a_running_survey(tmp_path / f"survey{across}", across)
+        governed = GovernedRun(publisher.folder)
+        composer = governed.composer()
+        composer.stop_warming()
+
+        try:
+            governed.composer()
+            publisher.write_and_publish(held_back, _stamped_body((1, FRAME, FRAME), 99, np.uint16))
+            governed.request_catch_up()
+            governed.composer()
+            read_after_landing[across] = governed.accounting["last_tiles_read"]
+            drawn = across * across
+            assert governed.accounting["last_positions"] == drawn
+            assert governed.accounting["last_snapshot_swept"] == 5 * drawn
+        finally:
+            composer.close()
+
+    assert all(read <= 1 for read in read_after_landing.values()), read_after_landing
+
+
+def _writer_can_add_a_position() -> bool:
+    """Does the installed zmart_live let a position join a running run?"""
+    from zmart_live.coordinator import LivePublisher
+
+    return hasattr(LivePublisher, "add_a_position")
+
+
+needs_growing_writer = pytest.mark.skipif(
+    not _writer_can_add_a_position(),
+    reason="the installed zmart_live cannot yet add a position to a running "
+    "run -- see the growth items in "
+    "docs/open/HANDOVER_the_pointer_map_decides_on_day_zero.md",
+)
+
+
+@needs_growing_writer
+def test_a_position_joins_a_running_survey_where_it_is_put(tmp_path):
+    """Growth in space: a position the day-zero layout never named joins a
+    running survey and lands exactly at the origin it was given."""
+    from zmart_live.coordinator import LivePublisher
+
+    run = tmp_path / "run"
+    publisher = LivePublisher(
+        run,
+        _live_profile(),
+        run_id="gate-growth",
+        positions={"posA": {"y": 0, "x": 0}},
+        linked_view="at_run_end",
+    )
+    publisher.write_and_publish("posA", _stamped_body((1, FRAME, FRAME), 101, np.uint16))
+    publisher.add_a_position("posLate", {"y": 90, "x": 411})
+    publisher.write_and_publish("posLate", _stamped_body((1, FRAME, FRAME), 102, np.uint16))
+
+    expected, placed = _committed_reference(run)
+    assert placed["posLate"] == (90, 411)
+    governed = GovernedRun(run)
+    composer = governed.composer()
+    composer.stop_warming()
+
+    try:
+        served = served_level(composer, 0)
+    finally:
+        composer.close()
+    assert np.array_equal(served[: expected.shape[0], : expected.shape[1]], expected)
+
+
 # -- the plate row --------------------------------------------------------------
 
 
