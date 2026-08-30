@@ -12,6 +12,7 @@ import json
 import threading
 
 import pytest
+
 from zmart_viewer.server import make_server
 
 
@@ -99,9 +100,11 @@ class TestNamingATarget:
         saved = []
         details_page.on(
             "request",
-            lambda request: saved.append(request.post_data)
-            if request.url.endswith("/api/annotations") and request.method == "POST"
-            else None,
+            lambda request: (
+                saved.append(request.post_data)
+                if request.url.endswith("/api/annotations") and request.method == "POST"
+                else None
+            ),
         )
         add_box(details_page, "saved-name")
         details_page.get_by_label("description for target 1").fill("keep me")

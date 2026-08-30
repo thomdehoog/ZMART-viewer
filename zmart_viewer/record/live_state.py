@@ -76,8 +76,7 @@ class FrontendLiveSource:
             "revision": self.revision,
             "layout_revision": self.layout_revision,
             "committed_time_ranges": [
-                {"start": start, "stop": stop}
-                for start, stop in self.committed_time_ranges
+                {"start": start, "stop": stop} for start, stop in self.committed_time_ranges
             ],
         }
 
@@ -230,9 +229,7 @@ class LiveStateTracker:
         channels = tuple(profile.channels)
         if not channels:
             matching = [
-                event
-                for event in events
-                if event.acquisition_profile_id == profile.profile_id
+                event for event in events if event.acquisition_profile_id == profile.profile_id
             ]
             channels = matching[-1].channels if matching else ()
         scene = build_the_scene(profile, layout, channels=channels)

@@ -128,8 +128,7 @@ def _first_level(store: Path, attributes: dict) -> Path | None:
 
 def look_at(folder: Path) -> int:
     stores = sorted(
-        child for child in folder.iterdir()
-        if child.is_dir() and child.name.endswith(".zarr")
+        child for child in folder.iterdir() if child.is_dir() and child.name.endswith(".zarr")
     )
     if not stores and _described(folder) is not None:
         stores = [folder]
@@ -161,15 +160,20 @@ def look_at(folder: Path) -> int:
         chunks[chunk[-2:]] += 1
         if _is_sharded(described):
             sharded += 1
-        ways_stored[json.dumps({
-            "ome": version,
-            "dtype": str(described.get("dtype") or described.get("data_type")),
-            "chunk": list(chunk),
-            "compressor": json.dumps(
-                described.get("compressor") or described.get("codecs"), sort_keys=True
-            ),
-            "fill": described.get("fill_value"),
-        }, sort_keys=True)] += 1
+        ways_stored[
+            json.dumps(
+                {
+                    "ome": version,
+                    "dtype": str(described.get("dtype") or described.get("data_type")),
+                    "chunk": list(chunk),
+                    "compressor": json.dumps(
+                        described.get("compressor") or described.get("codecs"), sort_keys=True
+                    ),
+                    "fill": described.get("fill_value"),
+                },
+                sort_keys=True,
+            )
+        ] += 1
 
         at, voxel = _where_and_how_large(attributes)
         shape = tuple(int(n) for n in described["shape"])
@@ -179,10 +183,14 @@ def look_at(folder: Path) -> int:
     print("How they are stored")
     print("-" * 70)
     if unreadable:
-        print(f"  {len(unreadable)} store(s) could not be read: "
-              f"{', '.join(unreadable[:3])}{' ...' if len(unreadable) > 3 else ''}")
-    print(f"  pieces across y and x: "
-          f"{', '.join(f'{c} in {n} stores' for c, n in chunks.most_common())}")
+        print(
+            f"  {len(unreadable)} store(s) could not be read: "
+            f"{', '.join(unreadable[:3])}{' ...' if len(unreadable) > 3 else ''}"
+        )
+    print(
+        f"  pieces across y and x: "
+        f"{', '.join(f'{c} in {n} stores' for c, n in chunks.most_common())}"
+    )
     print(f"  sharded (pieces packed into larger files): {sharded} of {len(stores)}")
     if len(ways_stored) == 1:
         print("  every store is written the same way, so they could be one picture")
@@ -207,8 +215,7 @@ def look_at(folder: Path) -> int:
             continue
         # Where this tile begins, counted in voxels from the run's own corner.
         begins = tuple(
-            int(round((at[axis] - corner[axis]) / its_voxel[axis]))
-            if its_voxel[axis] else 0
+            int(round((at[axis] - corner[axis]) / its_voxel[axis])) if its_voxel[axis] else 0
             for axis in range(3)
         )
         phase = (begins[1] % piece[0], begins[2] % piece[1])
@@ -217,12 +224,9 @@ def look_at(folder: Path) -> int:
             aligned += 1
 
     print(f"  a piece is {piece[0]} x {piece[1]} voxels (y by x)")
-    print(f"  tiles beginning exactly on a piece boundary: {aligned} of "
-          f"{len(placements)}")
+    print(f"  tiles beginning exactly on a piece boundary: {aligned} of {len(placements)}")
     if aligned != len(placements):
-        worst = max(
-            max(p[0], p[1]) for p in phases
-        )
+        worst = max(max(p[0], p[1]) for p in phases)
         print(f"  the rest begin up to {worst} voxels past one, so no file of theirs")
         print("  holds the bytes a piece of the picture is asking for")
 

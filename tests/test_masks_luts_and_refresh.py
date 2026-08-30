@@ -15,9 +15,10 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from pixels import colour_spread, image_middle
-from zmart_viewer.server import make_server
 from driving import pick_colormap  # noqa: E402
+from pixels import colour_spread, image_middle
+
+from zmart_viewer.server import make_server
 
 
 def _image(path, *, channels=2, frames=1, written=None):
@@ -54,8 +55,11 @@ def _image(path, *, channels=2, frames=1, written=None):
                 ],
                 "omero": {
                     "channels": [
-                        {"label": f"ch{i}", "color": "00FF66",
-                         "window": {"min": 0, "max": 65535, "start": 0, "end": 8000}}
+                        {
+                            "label": f"ch{i}",
+                            "color": "00FF66",
+                            "window": {"min": 0, "max": 65535, "start": 0, "end": 8000},
+                        }
                         for i in range(channels)
                     ]
                 },
@@ -84,11 +88,17 @@ def _add_mask(image, name="nuclei"):
                 "multiscales": [
                     {
                         "version": "0.4",
-                        "axes": [{"name": a, "type": "space", "unit": "micrometer"}
-                                 for a in ("z", "y", "x")],
+                        "axes": [
+                            {"name": a, "type": "space", "unit": "micrometer"}
+                            for a in ("z", "y", "x")
+                        ],
                         "datasets": [
-                            {"path": "0", "coordinateTransformations": [
-                                {"type": "scale", "scale": [2.0, 0.35, 0.35]}]}
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [2.0, 0.35, 0.35]}
+                                ],
+                            }
                         ],
                     }
                 ],
@@ -106,7 +116,9 @@ def _serve(browser, built_dist, folder, store, name="overview"):
     # than inferred from a temporary folder's name.
     stores = [store] if isinstance(store, str) else list(store)
     server = make_server(
-        port=0, data_dir=folder, site_dir=built_dist,
+        port=0,
+        data_dir=folder,
+        site_dir=built_dist,
         loads=[{"stores": stores, "name": name}],
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)

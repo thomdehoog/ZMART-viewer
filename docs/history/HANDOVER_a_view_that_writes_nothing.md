@@ -1,5 +1,8 @@
 # Where this got to, and what to pick up next
 
+> **History (moved 2026-08-31).** The elder view-writer this handed over is retired; the record (`zmart_viewer/record`) and the viewer's own linking replaced it.
+
+
 Written 5 August 2026, for the next session. Everything described here is committed
 on `claude/frame-rate-stores-scaling-cngfct` and every test named passes on this
 sandbox.
@@ -60,7 +63,7 @@ mean nothing off this machine; the shapes do.
 
 **Drawing does not notice how many positions there are.**
 
-Measured with `zmart-viewer/measure_a_run_of_positions.py`, over runs written by
+Measured (2026, since retired with the elder writer) with `measure_a_run_of_positions.py`, over runs written by
 `zmart_storage.positions` — one zarr, the positions inside it with their own
 zoomed-out copies. Positions of 512 voxels, pieces of 128, one colour.
 
@@ -636,7 +639,7 @@ python -m pytest tests/test_the_linked_view_draws.py -q
 And, on a machine with a graphics card:
 
 ```
-python zmart-viewer/measure_the_frame_rate_of_a_linked_view.py --steps 100,1600,6400
+# the elder frame-rate harness, retired with the writer it measured
 ```
 
 Every drawing measurement in this repository came from a software renderer. **If

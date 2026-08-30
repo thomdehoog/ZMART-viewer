@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
+from watching import (  # noqa: E402
     BROWSER_ARGS,
     SOFTWARE_ARGS,
     is_drawn_in_software,
@@ -28,8 +28,9 @@ from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
 
 # Real strings, taken from this machine on 6 August 2026.
 A_CARD = "ANGLE (NVIDIA, NVIDIA T400 4GB (0x00001FF2) Direct3D11 vs_5_0 ps_5_0, D3D11)"
-SWIFTSHADER = ("ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) "
-               "(0x0000C0DE)), SwiftShader driver)")
+SWIFTSHADER = (
+    "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+)
 
 
 def test_a_real_card_is_not_called_software():

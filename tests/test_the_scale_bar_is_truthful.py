@@ -92,6 +92,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
+
 from zmart_viewer.server import make_server
 
 # The element the viewer labels its scale bar with, and the plain rectangle
@@ -408,9 +409,7 @@ class TestTheLabelAndTheDrawingAgree:
         bar = read_bar(viewer_page)
         assert bar["pixels"] > 10, f"the bar is drawn only {bar['pixels']} pixels wide"
 
-    def test_the_stated_length_is_the_length_that_is_drawn(
-        self, viewer_page, demo_voxel_metres
-    ):
+    def test_the_stated_length_is_the_length_that_is_drawn(self, viewer_page, demo_voxel_metres):
         """The whole point of the file, on the volume the viewer opens with.
 
         The demo volume records 0.35 µm to a pixel within a plane, and the viewer
@@ -422,9 +421,7 @@ class TestTheLabelAndTheDrawingAgree:
         per_pixel = metres_per_screen_pixel(viewer_page, demo_voxel_metres)
         assert_the_label_matches_the_drawing(bar, per_pixel, "as the viewer opens")
 
-    def test_the_bar_is_drawn_near_the_length_it_aims_for(
-        self, viewer_page, demo_voxel_metres
-    ):
+    def test_the_bar_is_drawn_near_the_length_it_aims_for(self, viewer_page, demo_voxel_metres):
         """The bar is meant to be about a hundred and twenty pixels long.
 
         It will never be exactly that, because the length is rounded to a round
@@ -436,8 +433,7 @@ class TestTheLabelAndTheDrawingAgree:
         """
         bar = read_bar(viewer_page)
         assert AIMED_AT_PIXELS / 2 < bar["pixels"] < AIMED_AT_PIXELS * 2, (
-            f"the bar aims for about {AIMED_AT_PIXELS} pixels and was drawn "
-            f"{bar['pixels']:.0f}"
+            f"the bar aims for about {AIMED_AT_PIXELS} pixels and was drawn {bar['pixels']:.0f}"
         )
 
 
@@ -470,9 +466,7 @@ class TestItFollowsTheZoom:
         for a nearly-right bar to hide in.
         """
         before = read_bar(viewer_page)
-        zoom = viewer_page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value"
-        )
+        zoom = viewer_page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
         set_zoom(viewer_page, zoom / 1000)
         after = read_bar(viewer_page)
 
@@ -486,7 +480,8 @@ class TestItFollowsTheZoom:
         )
         assert after["pixels"] == pytest.approx(before["pixels"], abs=1.5)
         assert_the_label_matches_the_drawing(
-            after, metres_per_screen_pixel(viewer_page, demo_voxel_metres),
+            after,
+            metres_per_screen_pixel(viewer_page, demo_voxel_metres),
             "after zooming in a thousandfold",
         )
 
@@ -500,22 +495,20 @@ class TestItFollowsTheZoom:
         and least often looked at. Fifty micrometres becomes fifty millimetres.
         """
         before = read_bar(viewer_page)
-        zoom = viewer_page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value"
-        )
+        zoom = viewer_page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
         set_zoom(viewer_page, zoom * 1000)
         after = read_bar(viewer_page)
 
         assert after["metres"] == pytest.approx(before["metres"] * 1000, rel=0.01), (
-            f"zoomed out a thousandfold, the bar went from {before['label']} to "
-            f"{after['label']}"
+            f"zoomed out a thousandfold, the bar went from {before['label']} to {after['label']}"
         )
         assert after["number"] == pytest.approx(before["number"], rel=0.01), (
             f"{before['label']} should have become the same number in the next unit "
             f"up, and instead reads {after['label']}"
         )
         assert_the_label_matches_the_drawing(
-            after, metres_per_screen_pixel(viewer_page, demo_voxel_metres),
+            after,
+            metres_per_screen_pixel(viewer_page, demo_voxel_metres),
             "after zooming out a thousandfold",
         )
 
@@ -530,9 +523,7 @@ class TestItFollowsTheZoom:
         at, and awkward magnifications — the ones that fall between two round
         lengths — are where an off-by-a-factor mistake shows up.
         """
-        opening = viewer_page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value"
-        )
+        opening = viewer_page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
         for factor in (1e-3, 1e-2, 0.1, 0.3, 3, 30, 300, 3000, 1e4):
             set_zoom(viewer_page, opening * factor)
             bar = read_bar(viewer_page)
@@ -578,9 +569,7 @@ class TestItReadsTheVoxelSizeFromTheData:
         assert coarse["voxel_metres"] == pytest.approx(fine["voxel_metres"] * 10), (
             "the two stores were not written ten times apart after all"
         )
-        assert coarse["bar"]["metres"] == pytest.approx(
-            fine["bar"]["metres"] * 10, rel=0.01
-        ), (
+        assert coarse["bar"]["metres"] == pytest.approx(fine["bar"]["metres"] * 10, rel=0.01), (
             "a store with ten times coarser voxels was given a bar reading "
             f"{coarse['bar']['label']} where the fine one reads "
             f"{fine['bar']['label']} — the bar is not reading the voxel size"
@@ -619,9 +608,7 @@ class TestTheNumberIsOneAPersonWouldWrite:
     caught, rather than quietly making the viewer harder to measure with.
     """
 
-    def test_the_length_is_always_one_of_the_round_numbers(
-        self, viewer_page, demo_voxel_metres
-    ):
+    def test_the_length_is_always_one_of_the_round_numbers(self, viewer_page, demo_voxel_metres):
         """Across nine decades of zoom, the number is a round one every time.
 
         The bar is allowed 1, 1.5, 2, 3, 5, 7.5 or 10 times a power of ten. With
@@ -630,13 +617,9 @@ class TestTheNumberIsOneAPersonWouldWrite:
         magnification.
         """
         allowed = {
-            round(significand * step, 6)
-            for significand in ROUND_LENGTHS
-            for step in (1, 10, 100)
+            round(significand * step, 6) for significand in ROUND_LENGTHS for step in (1, 10, 100)
         }
-        opening = viewer_page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value"
-        )
+        opening = viewer_page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
         seen = []
         for factor in (1e-3, 0.007, 0.1, 0.42, 3, 17, 300, 2600, 1e4):
             set_zoom(viewer_page, opening * factor)
@@ -650,9 +633,7 @@ class TestTheNumberIsOneAPersonWouldWrite:
         # a test of many labels rather than of one label nine times over.
         assert len(set(seen)) >= 5, f"the zoom walk barely moved the bar: {seen}"
 
-    def test_the_unit_changes_rather_than_the_number_becoming_a_fraction(
-        self, viewer_page
-    ):
+    def test_the_unit_changes_rather_than_the_number_becoming_a_fraction(self, viewer_page):
         """Zooming in walks millimetres down to micrometres down to nanometres.
 
         The alternative — keeping one unit and letting the number shrink — is what
@@ -661,9 +642,7 @@ class TestTheNumberIsOneAPersonWouldWrite:
         the unit does the moving, which is what every microscope's own scale bar
         does.
         """
-        opening = viewer_page.evaluate(
-            "() => window.zmartViewer.navigationState.zoomFactor.value"
-        )
+        opening = viewer_page.evaluate("() => window.zmartViewer.navigationState.zoomFactor.value")
         units = set()
         for factor in (1e-3, 0.1, 3, 300, 1e4):
             set_zoom(viewer_page, opening * factor)
@@ -706,9 +685,7 @@ def test_the_bar_is_honest_in_the_volume_view_too(viewer_page, demo_voxel_metres
         "() => window.zmartViewer.perspectiveNavigationState.zoomFactor.value"
     )
     per_pixel = volume_zoom / panel["height"] * demo_voxel_metres
-    assert_the_label_matches_the_drawing(
-        read_bar(viewer_page), per_pixel, "in the volume view"
-    )
+    assert_the_label_matches_the_drawing(read_bar(viewer_page), per_pixel, "in the volume view")
 
     # And it has to follow the volume's own zoom, for the same reason the flat
     # view's bar has to follow that view's zoom: a bar that stays put while the

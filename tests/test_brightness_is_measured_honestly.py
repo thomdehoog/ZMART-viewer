@@ -139,8 +139,7 @@ def test_a_run_still_writing_is_not_measured_as_black(store: Path) -> None:
     low, high = found["window"]
 
     assert (low, high) != (0.0, 1.0), (
-        "the window collapsed to (0, 1), which is what reading an unwritten copy "
-        "of the image gives"
+        "the window collapsed to (0, 1), which is what reading an unwritten copy of the image gives"
     )
     # The bright channel's signal has to be inside the window it is shown with.
     assert high > BRIGHT_PEAK / 2, f"window {(low, high)} does not reach the signal"
@@ -211,22 +210,37 @@ def _write_a_partially_imaged_deep_store(path: Path) -> Path:
 
     group = zarr.open_group(str(path), mode="w", zarr_format=2)
     array = group.create_array(
-        "0", shape=(13, 256, 256), chunks=(1, 256, 256), dtype="uint16",
+        "0",
+        shape=(13, 256, 256),
+        chunks=(1, 256, 256),
+        dtype="uint16",
         chunk_key_encoding={"name": "v2", "separator": "/"},
     )
     array[:6] = written  # planes 6..12 stay declared room: no files, fill zero
-    (path / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"},
-            ],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 1.0, 1.0]}]}],
-        }]
-    }))
+    (path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [1.0, 1.0, 1.0]}
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
     return path
 
 
@@ -257,8 +271,7 @@ def test_a_generously_declared_room_does_not_dilute_the_window(tmp_path: Path) -
 def test_counting_the_declared_emptiness_really_does_dilute(tmp_path: Path) -> None:
     """Proof that the gate above can fail — the fault, reproduced raw."""
     store = _write_a_partially_imaged_deep_store(tmp_path / "diluted.ome.zarr")
-    whole = np.asarray(zarr.open_group(str(store), mode="r")["0"][...],
-                       dtype=np.float64).ravel()
+    whole = np.asarray(zarr.open_group(str(store), mode="r")["0"][...], dtype=np.float64).ravel()
     low, _ = contrast._window(whole, volumetric=False)
     assert low == 0.0, (
         "measuring the whole declared room no longer gives a zero floor, so "
@@ -332,7 +345,10 @@ def test_a_store_without_a_channel_axis_is_unaffected(tmp_path: Path) -> None:
     data[:, 16:48, 16:48] = 5000
     group = zarr.open_group(str(store), mode="w", zarr_format=2)
     array = group.create_array(
-        "0", shape=data.shape, chunks=(1, 32, 32), dtype="uint16",
+        "0",
+        shape=data.shape,
+        chunks=(1, 32, 32),
+        dtype="uint16",
         chunk_key_encoding={"name": "v2", "separator": "/"},
     )
     array[...] = data

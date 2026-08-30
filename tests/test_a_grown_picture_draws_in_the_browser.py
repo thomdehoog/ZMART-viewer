@@ -48,32 +48,54 @@ def a_grown_picture(folder: Path) -> Path:
     for moment in range(MOMENTS):
         for channel in range(COLOURS):
             for plane in range(PLANES):
-                frames[moment, channel, plane] = the_brightness(
-                    moment, channel, plane)
+                frames[moment, channel, plane] = the_brightness(moment, channel, plane)
     made = zarr.create_array(
-        store=str(store / "0"), shape=frames.shape,
-        chunks=(1, 1, 1, SIDE, SIDE), dtype="uint16", fill_value=0,
-        overwrite=True)
+        store=str(store / "0"),
+        shape=frames.shape,
+        chunks=(1, 1, 1, SIDE, SIDE),
+        dtype="uint16",
+        fill_value=0,
+        overwrite=True,
+    )
     made[:] = frames
-    (store / "zarr.json").write_text(json.dumps({
-        "zarr_format": 3, "node_type": "group",
-        "attributes": {"ome": {"version": "0.5", "multiscales": [{
-            "axes": [
-                {"name": "t", "type": "time", "unit": "second"},
-                {"name": "c", "type": "channel"},
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"},
-            ],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0, 1.0]},
-                {"type": "translation",
-                 "translation": [0.0, 0.0, 0.0, 0.0, 0.0]},
-            ]}],
-        }]}},
-    }, indent=2))
-    return declare_a_built_picture(folder / "shown", folder / "stores",
-                                   name="grown")
+    (store / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "multiscales": [
+                            {
+                                "axes": [
+                                    {"name": "t", "type": "time", "unit": "second"},
+                                    {"name": "c", "type": "channel"},
+                                    {"name": "z", "type": "space", "unit": "micrometer"},
+                                    {"name": "y", "type": "space", "unit": "micrometer"},
+                                    {"name": "x", "type": "space", "unit": "micrometer"},
+                                ],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0, 1.0]},
+                                            {
+                                                "type": "translation",
+                                                "translation": [0.0, 0.0, 0.0, 0.0, 0.0],
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                },
+            },
+            indent=2,
+        )
+    )
+    return declare_a_built_picture(folder / "shown", folder / "stores", name="grown")
 
 
 def _mean_brightness(page) -> float:
@@ -86,18 +108,20 @@ def _mean_brightness(page) -> float:
 
 
 def _steer(page, axis: str, value: float) -> None:
-    page.evaluate("""([axis, value]) => {
+    page.evaluate(
+        """([axis, value]) => {
       const position = window.zmartViewer.navigationState.position;
       const names = position.coordinateSpace.value.names;
       const moved = Float32Array.from(position.value);
       moved[names.indexOf(axis)] = value;
       position.value = moved;
-    }""", [axis, value])
+    }""",
+        [axis, value],
+    )
 
 
 def _settled(page) -> None:
-    page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                           timeout=90_000)
+    page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
     page.wait_for_timeout(1_200)
 
 
@@ -105,22 +129,28 @@ def test_the_grown_picture_draws_and_steers(browser, built_dist, tmp_path):
     shots = tmp_path / "shots"
     shots.mkdir()
     picture = a_grown_picture(tmp_path)
-    server = make_server(port=0, data_dir=picture.parent, site_dir=built_dist,
-                         store=[picture.name], window=WINDOW, live=True)
+    server = make_server(
+        port=0,
+        data_dir=picture.parent,
+        site_dir=built_dist,
+        store=[picture.name],
+        window=WINDOW,
+        live=True,
+    )
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
     try:
         port = server.server_address[1]
         page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         _settled(page)
 
         names = page.evaluate(
             """() => Array.from(
               window.zmartViewer.navigationState.position.coordinateSpace.value.names
-            )""")
+            )"""
+        )
         assert "t" in names, (
             f"the engine's space is {names} -- the grown picture's time axis "
             "never reached the browser"
@@ -131,8 +161,7 @@ def test_the_grown_picture_draws_and_steers(browser, built_dist, tmp_path):
         opening = _mean_brightness(page)
         page.screenshot(path=str(shots / "1_t0.png"))
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         _settled(page)
         assert abs(_mean_brightness(page) - opening) < 12, (
             "F5 changed the opening frame -- warm and reload disagree"
@@ -160,8 +189,7 @@ def test_the_grown_picture_draws_and_steers(browser, built_dist, tmp_path):
         # Station 4: the F5 pair away from the origin — the operator's
         # protocol: navigate somewhere, reload, the picture must not move.
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         _settled(page)
         _steer(page, "t", 1)
         _steer(page, "z", 1)
@@ -181,8 +209,7 @@ def test_the_grown_picture_draws_and_steers(browser, built_dist, tmp_path):
         # silently a copy of channel 1 would still make two rows.
         rows = page.evaluate("() => (window.zmartConfig?.layers || []).length")
         assert rows >= COLOURS, (
-            f"only {rows} layer row(s) -- the second colour is not "
-            "reachable anywhere on this page"
+            f"only {rows} layer row(s) -- the second colour is not reachable anywhere on this page"
         )
         both = _mean_brightness(page)
         page.get_by_label("toggle channel 2").click()

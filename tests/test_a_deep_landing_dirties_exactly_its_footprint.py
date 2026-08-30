@@ -36,14 +36,13 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from zmart_viewer.building import GovernedRun  # noqa: E402
-
 from zmart_viewer.record.model import GridCell, rounded_up  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
-DEPTH = 13   # ragged, per the depth test plan's fixture rule
+DEPTH = 13  # ragged, per the depth test plan's fixture rule
 FRAME = 384
 PIECE = 128  # small pieces, so one landing's footprint is several columns
-             # of many, and "outside the footprint" genuinely exists
+# of many, and "outside the footprint" genuinely exists
 
 
 def a_stamped_stack(base: int) -> np.ndarray:
@@ -57,10 +56,13 @@ def a_deep_survey(folder):
     from zmart_viewer.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
-    cells = {GridCell(row, column): f"p{row}{column}"
-             for row in range(2) for column in range(2)}
-    return LivePublisher(folder / "experiment" / "acquisitions" / "deep",
-                         profile, run_id="deep-footprint", cells=cells)
+    cells = {GridCell(row, column): f"p{row}{column}" for row in range(2) for column in range(2)}
+    return LivePublisher(
+        folder / "experiment" / "acquisitions" / "deep",
+        profile,
+        run_id="deep-footprint",
+        cells=cells,
+    )
 
 
 def every_piece_of(composer) -> dict[tuple[int, int, int, int], bytes | None]:
@@ -71,7 +73,8 @@ def every_piece_of(composer) -> dict[tuple[int, int, int, int], bytes | None]:
             for row in range(rounded_up(height, PIECE)):
                 for column in range(rounded_up(width, PIECE)):
                     took[(level, plane, row, column)] = composer.bytes_for(
-                        level, plane, row, column)
+                        level, plane, row, column
+                    )
     return took
 
 
@@ -110,11 +113,11 @@ def test_a_deep_landing_changes_exactly_its_own_pieces(tmp_path):
 
         assert set(before) == set(after), "the picture's piece grid moved"
         footprint = the_footprint_of(run, "p11", opened.composer())
-        changed = {address for address in before
-                   if before[address] != after[address]}
+        changed = {address for address in before if before[address] != after[address]}
 
-        outside = {address for address in changed
-                   if (address[0], address[2], address[3]) not in footprint}
+        outside = {
+            address for address in changed if (address[0], address[2], address[3]) not in footprint
+        }
         assert not outside, (
             f"{len(outside)} pieces changed OUTSIDE the landing's footprint "
             f"(first few: {sorted(outside)[:4]}) -- a landing must never "
@@ -143,11 +146,9 @@ def test_pieces_asked_for_all_at_once_are_not_muddled(tmp_path):
         alone = every_piece_of(composer)
         addresses = list(alone)
         with ThreadPoolExecutor(max_workers=8) as pool:
-            answers = list(pool.map(
-                lambda address: composer.bytes_for(*address), addresses))
+            answers = list(pool.map(lambda address: composer.bytes_for(*address), addresses))
         together = dict(zip(addresses, answers, strict=True))
-        muddled = [address for address in addresses
-                   if alone[address] != together[address]]
+        muddled = [address for address in addresses if alone[address] != together[address]]
         assert not muddled, (
             f"{len(muddled)} pieces decode differently under concurrency "
             f"(first few: {muddled[:4]}) -- shared slab or encoder state is "

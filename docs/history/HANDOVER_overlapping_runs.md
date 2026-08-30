@@ -1,5 +1,8 @@
 # Runs whose tiles overlap: what was decided, what was measured, what to do next
 
+> **History (moved 2026-08-31).** Measured against the elder writers, since retired. Overlap is now the composer's later-wins rule and the record's seam ownership, gated in the free-placement suite.
+
+
 Written 5 August 2026, for whoever picks this up — and particularly for whoever
 first runs it on a machine with a graphics card, because that is the one thing this
 session could not do.
@@ -45,7 +48,7 @@ here as a fact about the viewer.
 Pull the branch onto a machine with a real graphics card and run:
 
 ```
-python zmart-viewer/measure_the_overlapping_run.py
+# the overlapping-run harness, retired with the elder writer it measured
 ```
 
 Everything measured in this repository about drawing was measured on a software

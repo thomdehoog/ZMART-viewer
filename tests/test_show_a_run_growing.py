@@ -13,7 +13,7 @@ from show_a_run_growing import spiral_order  # noqa: E402
 
 
 def coordinates(position_id: str, width: int) -> tuple[int, int]:
-    return (int(position_id[1:1 + width]), int(position_id[1 + width:]))
+    return (int(position_id[1 : 1 + width]), int(position_id[1 + width :]))
 
 
 @pytest.mark.parametrize("across", [3, 4, 39, 40])
@@ -24,13 +24,8 @@ def test_the_show_uses_one_true_spiral_without_jumps(across):
     visited = [coordinates(position_id, width) for position_id in order]
 
     assert len(visited) == across * across
-    assert set(visited) == {
-        (row, column)
-        for row in range(across)
-        for column in range(across)
-    }
+    assert set(visited) == {(row, column) for row in range(across) for column in range(across)}
     assert all(
         abs(row_a - row_b) + abs(column_a - column_b) == 1
-        for (row_a, column_a), (row_b, column_b)
-        in zip(visited[:-1], visited[1:], strict=True)
+        for (row_a, column_a), (row_b, column_b) in zip(visited[:-1], visited[1:], strict=True)
     )

@@ -39,13 +39,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import measure_a_governed_run_at_scale as harness  # noqa: E402,F401
 import numpy as np  # noqa: E402
 import zarr  # noqa: E402
+
 from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
 
-DEPTH = 13          # ragged on purpose
+DEPTH = 13  # ragged on purpose
 TILE_SIDE = 512
 LEVELS = 3
-STAMP_STEP = 400    # plane k is a flat field near 600 + k * STAMP_STEP
+STAMP_STEP = 400  # plane k is a flat field near 600 + k * STAMP_STEP
 WINDOW = (400.0, 600.0 + STAMP_STEP * DEPTH)
 
 
@@ -54,7 +55,7 @@ def write_the_deep_tile(folder: Path) -> Path:
     tile = folder / "tile.ome.zarr"
     datasets = []
     for level in range(LEVELS):
-        factor = 2 ** level
+        factor = 2**level
         side = TILE_SIDE // factor
         planes = np.empty((DEPTH, side, side), dtype="uint16")
         for plane in range(DEPTH):
@@ -62,30 +63,44 @@ def write_the_deep_tile(folder: Path) -> Path:
             planes[plane] = value
             # A dark grid so misplacement is visible to an eye, not only to
             # arithmetic: every 64th row and column dimmed.
-            planes[plane, ::64 // factor or 1, :] = value // 2
-            planes[plane, :, ::64 // factor or 1] = value // 2
+            planes[plane, :: 64 // factor or 1, :] = value // 2
+            planes[plane, :, :: 64 // factor or 1] = value // 2
         stored = zarr.create_array(
-            store=str(tile / str(level)), shape=planes.shape,
-            chunks=(1, side, side), dtype="uint16", fill_value=0,
-            overwrite=True)
+            store=str(tile / str(level)),
+            shape=planes.shape,
+            chunks=(1, side, side),
+            dtype="uint16",
+            fill_value=0,
+            overwrite=True,
+        )
         stored[:] = planes
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, float(factor), float(factor)]},
-                {"type": "translation", "translation": [0.0, 0.0, 0.0]},
-            ],
-        })
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, float(factor), float(factor)]},
+                    {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+                ],
+            }
+        )
     described = {
-        "zarr_format": 3, "node_type": "group",
-        "attributes": {"ome": {"version": "0.5", "multiscales": [{
-            "axes": [
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"},
-            ],
-            "datasets": datasets,
-        }]}},
+        "zarr_format": 3,
+        "node_type": "group",
+        "attributes": {
+            "ome": {
+                "version": "0.5",
+                "multiscales": [
+                    {
+                        "axes": [
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": datasets,
+                    }
+                ],
+            }
+        },
     }
     (tile / "zarr.json").write_text(json.dumps(described, indent=2))
     return tile
@@ -104,11 +119,13 @@ def place_the_blocks(folder: Path, tile: Path, across: int) -> Path:
                 for change in dataset["coordinateTransformations"]:
                     if change["type"] == "translation":
                         change["translation"] = [
-                            0.0, float(row * TILE_SIDE), float(column * TILE_SIDE)]
+                            0.0,
+                            float(row * TILE_SIDE),
+                            float(column * TILE_SIDE),
+                        ]
             (store / "zarr.json").write_text(json.dumps(moved, indent=2))
             for level in range(LEVELS):
-                (store / str(level)).symlink_to(tile / str(level),
-                                               target_is_directory=True)
+                (store / str(level)).symlink_to(tile / str(level), target_is_directory=True)
     return blocks
 
 
@@ -146,8 +163,7 @@ class Counter:
             return len(self.requests), self.bytes
 
 
-def until_quiet(counter: Counter, page, *, quiet_s: float = 4.0,
-                ceiling_s: float = 180.0) -> float:
+def until_quiet(counter: Counter, page, *, quiet_s: float = 4.0, ceiling_s: float = 180.0) -> float:
     """Wait until no new chunk request for ``quiet_s``; return seconds waited."""
     began = time.perf_counter()
     last_count = counter.snapshot()[0]
@@ -170,7 +186,9 @@ def announce(port: int) -> None:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/api/announce",
         data=json.dumps({"wrote_image_in_place": True}).encode(),
-        headers={"Content-Type": "application/json"}, method="POST")
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     with urllib.request.urlopen(request, timeout=30):
         pass
 
@@ -192,31 +210,38 @@ def main() -> int:
     store = declare_a_built_picture(shown, blocks, name="deep")
     print(f"declared {store}")
 
-    server = make_server(port=0, data_dir=shown, site_dir=Path(__file__).resolve().parents[1] / "app" / "page" / "dist",
-                         store=[store.name], window=WINDOW, live=True)
+    server = make_server(
+        port=0,
+        data_dir=shown,
+        site_dir=Path(__file__).resolve().parents[1] / "app" / "page" / "dist",
+        store=[store.name],
+        window=WINDOW,
+        live=True,
+    )
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
     port = server.server_address[1]
 
     from playwright.sync_api import sync_playwright
+
     with sync_playwright() as p:
         try:
             browser = p.chromium.launch(
-                headless=True, args=["--use-gl=angle", "--use-angle=swiftshader",
-                                     "--ignore-gpu-blocklist"])
+                headless=True,
+                args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"],
+            )
         except Exception:
             browser = p.chromium.launch(
                 executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-                headless=True, args=["--use-gl=angle", "--use-angle=swiftshader",
-                                     "--ignore-gpu-blocklist"])
+                headless=True,
+                args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"],
+            )
         page = browser.new_page(viewport={"width": 1000, "height": 780})
         counter = Counter(page)
 
         page.goto(f"http://127.0.0.1:{port}", wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=60_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                               timeout=90_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
         page.wait_for_timeout(2_000)
         page.screenshot(path=str(shots / "1_flat_settled.png"))
 
@@ -233,8 +258,10 @@ def main() -> int:
         waited = until_quiet(counter, page)
         stepped = counter.snapshot()
         page.screenshot(path=str(shots / "2_after_z_step.png"))
-        print(f"Z-STEP: {stepped[0]} chunk requests, {stepped[1]/1e6:.2f} MB, "
-              f"settled in {waited:.1f}s")
+        print(
+            f"Z-STEP: {stepped[0]} chunk requests, {stepped[1] / 1e6:.2f} MB, "
+            f"settled in {waited:.1f}s"
+        )
         counter.reset()
         page.evaluate("""() => {
           const position = window.zmartViewer.navigationState.position;
@@ -245,14 +272,15 @@ def main() -> int:
         }""")
         waited = until_quiet(counter, page)
         stepped2 = counter.snapshot()
-        print(f"Z-STEP again: {stepped2[0]} requests, {stepped2[1]/1e6:.2f} MB, "
-              f"settled in {waited:.1f}s")
+        print(
+            f"Z-STEP again: {stepped2[0]} requests, {stepped2[1] / 1e6:.2f} MB, "
+            f"settled in {waited:.1f}s"
+        )
 
         # ---- instrument 1: the held-volume refetch bill ----
         page.click("text=3D")
         page.wait_for_timeout(6_000)
-        page.wait_for_function("() => window.zmartSourcesWaiting() === 0",
-                               timeout=120_000)
+        page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=120_000)
         page.wait_for_timeout(4_000)
         page.screenshot(path=str(shots / "3_volume_settled.png"))
 
@@ -261,8 +289,10 @@ def main() -> int:
         waited = until_quiet(counter, page, quiet_s=5.0, ceiling_s=300.0)
         refetched = counter.snapshot()
         page.screenshot(path=str(shots / "4_volume_after_announce.png"))
-        print(f"HELD-VOLUME REFETCH: {refetched[0]} chunk requests, "
-              f"{refetched[1]/1e6:.2f} MB, settled in {waited:.1f}s")
+        print(
+            f"HELD-VOLUME REFETCH: {refetched[0]} chunk requests, "
+            f"{refetched[1] / 1e6:.2f} MB, settled in {waited:.1f}s"
+        )
 
         # For the record: what the volume was drawing from.
         census = page.evaluate("""() => {
@@ -281,8 +311,7 @@ def main() -> int:
 
     server.shutdown()
     if not asked.keep:
-        print(f"(fixture kept at {folder} -- pass nothing to keep, "
-              "it is in /tmp and small)")
+        print(f"(fixture kept at {folder} -- pass nothing to keep, it is in /tmp and small)")
     return 0
 
 

@@ -52,16 +52,14 @@ _STORES = _HERE / "test_stores"
 # for the Z slider to have something to slide through.
 _SHAPE = (2, 4, 64, 64)  # channel, z, y, x
 _SCALE = {"z": 2.0, "y": 0.5, "x": 0.5}  # micrometres per pixel, anisotropic
-                                         # like a real stack
+# like a real stack
 
 
 def _tiny_volume(seed: int, shape: tuple[int, int, int, int] = _SHAPE) -> np.ndarray:
     """A small two-channel volume with a few soft blobs, different per seed."""
     rng = np.random.default_rng(seed)
     channels, planes, height, width = shape
-    z, y, x = np.meshgrid(
-        np.arange(planes), np.arange(height), np.arange(width), indexing="ij"
-    )
+    z, y, x = np.meshgrid(np.arange(planes), np.arange(height), np.arange(width), indexing="ij")
     volume = np.zeros(shape, dtype=np.float32)
     # A bigger canvas gets more blobs, and bigger ones, so every frame size
     # looks about as busy as the little default.
@@ -71,8 +69,7 @@ def _tiny_volume(seed: int, shape: tuple[int, int, int, int] = _SHAPE) -> np.nda
             cz, cy, cx = rng.uniform([0, 8, 8], [planes, height - 8, width - 8])
             spread = rng.uniform(3, 7) * grown
             volume[channel] += np.exp(
-                -(((z - cz) * 4) ** 2 + (y - cy) ** 2 + (x - cx) ** 2)
-                / (2 * spread**2)
+                -(((z - cz) * 4) ** 2 + (y - cy) ** 2 + (x - cx) ** 2) / (2 * spread**2)
             )
     # Realistic counts: background around 800, blobs a few thousand.
     counts = 800 + volume * 8000 + rng.normal(0, 30, shape)
@@ -92,10 +89,8 @@ def _dress_the_channels(path: Path, version: str) -> None:
     window = {"min": 0.0, "max": 65535.0, "start": 780.0, "end": 8800.0}
     omero = {
         "channels": [
-            {"label": "marker-a", "color": "00FF66", "active": True,
-             "window": dict(window)},
-            {"label": "marker-b", "color": "FF33FF", "active": True,
-             "window": dict(window)},
+            {"label": "marker-a", "color": "00FF66", "active": True, "window": dict(window)},
+            {"label": "marker-b", "color": "FF33FF", "active": True, "window": dict(window)},
         ],
         "rdefs": {"model": "color"},
     }
@@ -112,9 +107,7 @@ def _write_image(path: Path, version: str, seed: int) -> None:
     """Write one plain multiscale image store in the asked-for format version."""
     import ngff_zarr
 
-    image = ngff_zarr.to_ngff_image(
-        _tiny_volume(seed), dims=("c", "z", "y", "x"), scale=_SCALE
-    )
+    image = ngff_zarr.to_ngff_image(_tiny_volume(seed), dims=("c", "z", "y", "x"), scale=_SCALE)
     multiscales = ngff_zarr.to_multiscales(image, scale_factors=[2])
     ngff_zarr.to_ngff_zarr(str(path), multiscales, version=version, overwrite=True)
     _dress_the_channels(path, version)
@@ -207,8 +200,10 @@ def _write_grid(path: Path, seed: int) -> None:
             )
             multiscales = ngff_zarr.to_multiscales(image, scale_factors=[2])
             ngff_zarr.to_ngff_zarr(
-                str(path / f"pos_{row}{column}.ome.zarr"), multiscales,
-                version="0.4", overwrite=True,
+                str(path / f"pos_{row}{column}.ome.zarr"),
+                multiscales,
+                version="0.4",
+                overwrite=True,
             )
             _dress_the_channels(path / f"pos_{row}{column}.ome.zarr", "0.4")
 

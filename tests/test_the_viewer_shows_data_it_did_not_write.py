@@ -28,6 +28,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from a_microscope import AMicroscope  # noqa: E402
+
 from zmart_viewer.server import make_server  # noqa: E402
 
 FRAME = 256
@@ -39,8 +40,7 @@ def a_frame(value: int, channels: int = 1) -> np.ndarray:
 
 
 def test_plain_zarr_reads_back_exactly_what_the_microscope_wrote(tmp_path):
-    scope = AMicroscope(tmp_path / "overview", voxel_size=(0.5, 0.5),
-                        timepoints=2, channels=2)
+    scope = AMicroscope(tmp_path / "overview", voxel_size=(0.5, 0.5), timepoints=2, channels=2)
     pixels = a_frame(7, channels=2)
     scope.image_a_position("posA", pixels, location_yx=(0.0, 300.0))
 
@@ -50,10 +50,10 @@ def test_plain_zarr_reads_back_exactly_what_the_microscope_wrote(tmp_path):
     assert np.array_equal(np.asarray(read[0, 1, 0]), pixels[1])
 
     # The pyramid follows the contract's rule -- each level a 2x2 average.
-    level1 = np.asarray(zarr.open_array(
-        str(scope.collection / "posA" / "1"), mode="r")[0, 0, 0])
-    expected = (pixels[0].reshape(FRAME // 2, 2, FRAME // 2, 2)
-                .mean(axis=(1, 3)).round().astype("uint16"))
+    level1 = np.asarray(zarr.open_array(str(scope.collection / "posA" / "1"), mode="r")[0, 0, 0])
+    expected = (
+        pixels[0].reshape(FRAME // 2, 2, FRAME // 2, 2).mean(axis=(1, 3)).round().astype("uint16")
+    )
     assert np.array_equal(level1, expected)
 
     # And the place travels inside the member, as a translation.
@@ -68,14 +68,20 @@ def test_a_new_moment_only_adds_files_here_too(tmp_path):
     scope.image_a_position("posA", a_frame(1), location_yx=(0, 0))
 
     member = scope.collection / "posA"
-    before = {path: path.read_bytes() for path in member.rglob("*")
-              if path.is_file() and "/c/0/" in str(path).replace("\\", "/")}
+    before = {
+        path: path.read_bytes()
+        for path in member.rglob("*")
+        if path.is_file() and "/c/0/" in str(path).replace("\\", "/")
+    }
     assert before, "moment zero wrote no chunk files at all?"
 
     scope.image_a_position("posA", a_frame(2), location_yx=(0, 0), timepoint=1)
 
-    after = {path: path.read_bytes() for path in member.rglob("*")
-             if path.is_file() and "/c/0/" in str(path).replace("\\", "/")}
+    after = {
+        path: path.read_bytes()
+        for path in member.rglob("*")
+        if path.is_file() and "/c/0/" in str(path).replace("\\", "/")
+    }
     assert after == before, (
         "the stranger's writer touched moment zero while recording moment "
         "one -- the write-once promise has to hold on their side of the "
@@ -116,8 +122,7 @@ def test_our_own_server_shows_the_strangers_data(tmp_path):
     scope = AMicroscope(tmp_path / "overview")
     scope.image_a_position("posA", a_frame(9), location_yx=(0, 0))
 
-    server = make_server(port=0, data_dir=scope.collection.parent,
-                         store=["survey.ome.zarr/posA"])
+    server = make_server(port=0, data_dir=scope.collection.parent, store=["survey.ome.zarr/posA"])
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
     try:
@@ -125,8 +130,7 @@ def test_our_own_server_shows_the_strangers_data(tmp_path):
 
         def fetch(path: str) -> tuple[int, bytes]:
             try:
-                with urllib.request.urlopen(
-                        f"http://127.0.0.1:{port}{path}", timeout=30) as answer:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=30) as answer:
                     return answer.status, answer.read()
             except urllib.error.HTTPError as refused:
                 return refused.code, b""
@@ -134,8 +138,7 @@ def test_our_own_server_shows_the_strangers_data(tmp_path):
         status, described = fetch("/data/0/survey.ome.zarr/posA/zarr.json")
         assert status == 200, "the member's description must be servable"
         ome = json.loads(described)["attributes"]["ome"]
-        assert [axis["name"] for axis in ome["multiscales"][0]["axes"]] == [
-            "t", "c", "z", "y", "x"]
+        assert [axis["name"] for axis in ome["multiscales"][0]["axes"]] == ["t", "c", "z", "y", "x"]
 
         status, chunk = fetch("/data/0/survey.ome.zarr/posA/0/c/0/0/0/0/0")
         assert status == 200 and len(chunk) > 0, (

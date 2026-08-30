@@ -16,6 +16,7 @@ Nothing here is a test. It is the smallest honest run: one overview profile,
 one z plane, two positions, and pixels of a single value so a measurement can
 say plainly what it saw.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -48,8 +49,7 @@ def a_live_run(folder, *, timepoints: int = 1, linked_view: str = "per_publish")
     """
     from zmart_viewer.record.coordinator import LivePublisher
 
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  timepoints=timepoints)
+    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=timepoints)
     return LivePublisher(
         folder,
         profile,

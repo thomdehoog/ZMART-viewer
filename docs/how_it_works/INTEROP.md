@@ -38,7 +38,7 @@ project's convention rather than the format's.
 ## 1. Our files are mispositioned by a large part of the ecosystem — **fixed**
 
 **This was the finding with the widest blast radius. It is now fixed, and the
-description below is what it used to do.** `testdata/oldwriter/canvas.py` writes the
+description below is what it used to do.** the retired elder writer writes the
 translation beside each resolution, which is the place the format makes
 compulsory, and no longer writes one beside the multiscale block. Images written
 from now on open correctly in `ngff-zarr`, and so in `multiview-stitcher` and the
@@ -80,7 +80,7 @@ So `ngff-zarr` has the exact mirror of the bug we just fixed. We read only the
 outer block; it reads only the inner one. **Neither composes, and the two fail on
 each other's files.**
 
-`testdata/oldwriter/canvas.py` writes `scale` per dataset (line 1746) and
+the retired elder writer writes `scale` per dataset (line 1746) and
 `translation` at the multiscales level (line 1667). The consequence is concrete
 and it is ours, not theirs:
 
@@ -105,7 +105,7 @@ multiview-stitcher writes a **centre-of-pixel** translation per level —
 `fusion/_core.py:1012` echoes the convention by name.
 
 Our writer takes the other choice — one translation for every level, corner
-convention — and `testdata/oldwriter/canvas.py:1654-1666` argues for it well: the
+convention — and the retired elder writer argued for it well: the
 copies nest perfectly, the format is genuinely ambiguous, and a file that shifts
 itself to suit one reader is wrong for every other.
 

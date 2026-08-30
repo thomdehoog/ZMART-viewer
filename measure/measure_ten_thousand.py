@@ -43,8 +43,10 @@ import zarr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.compose import Composer  # noqa: E402
-from zmart_viewer.compose import read_the_transfer  # noqa: E402
+from zmart_viewer.compose import (
+    Composer,  # noqa: E402
+    read_the_transfer,  # noqa: E402
+)
 
 TILE = (2, 256, 256)
 VOXEL_UM = (1.0, 0.5, 0.5)
@@ -91,38 +93,63 @@ def write_a_scattered_transfer(folder: Path, tiles: int) -> tuple[Path, float]:
         picture = a_tile(number)
         datasets = []
         for level in range(LEVELS):
-            shrink = 2 ** level
+            shrink = 2**level
             shape = (TILE[0], TILE[1] // shrink, TILE[2] // shrink)
             array = zarr.create_array(
-                store=str(store / str(level)), shape=shape, chunks=shape,
-                dtype="uint16", zarr_format=3, dimension_names=["z", "y", "x"],
+                store=str(store / str(level)),
+                shape=shape,
+                chunks=shape,
+                dtype="uint16",
+                zarr_format=3,
+                dimension_names=["z", "y", "x"],
                 overwrite=True,
             )
             array[:] = picture[:, ::shrink, ::shrink]
-            datasets.append({
-                "path": str(level),
-                "coordinateTransformations": [
-                    {"type": "scale",
-                     "scale": [VOXEL_UM[0], VOXEL_UM[1] * shrink,
-                               VOXEL_UM[2] * shrink]},
-                    {"type": "translation",
-                     "translation": [0.0, float(corners[number][0]),
-                                     float(corners[number][1])]},
-                ],
-            })
-        (store / "zarr.json").write_text(json.dumps({
-            "attributes": {"ome": {
-                "version": "0.5",
-                "multiscales": [{
-                    "name": store.name, "type": "nearest",
-                    "axes": [{"name": "z", "type": "space", "unit": "micrometer"},
-                             {"name": "y", "type": "space", "unit": "micrometer"},
-                             {"name": "x", "type": "space", "unit": "micrometer"}],
-                    "datasets": datasets,
-                }],
-            }},
-            "zarr_format": 3, "node_type": "group",
-        }), encoding="utf-8")
+            datasets.append(
+                {
+                    "path": str(level),
+                    "coordinateTransformations": [
+                        {
+                            "type": "scale",
+                            "scale": [VOXEL_UM[0], VOXEL_UM[1] * shrink, VOXEL_UM[2] * shrink],
+                        },
+                        {
+                            "type": "translation",
+                            "translation": [
+                                0.0,
+                                float(corners[number][0]),
+                                float(corners[number][1]),
+                            ],
+                        },
+                    ],
+                }
+            )
+        (store / "zarr.json").write_text(
+            json.dumps(
+                {
+                    "attributes": {
+                        "ome": {
+                            "version": "0.5",
+                            "multiscales": [
+                                {
+                                    "name": store.name,
+                                    "type": "nearest",
+                                    "axes": [
+                                        {"name": "z", "type": "space", "unit": "micrometer"},
+                                        {"name": "y", "type": "space", "unit": "micrometer"},
+                                        {"name": "x", "type": "space", "unit": "micrometer"},
+                                    ],
+                                    "datasets": datasets,
+                                }
+                            ],
+                        }
+                    },
+                    "zarr_format": 3,
+                    "node_type": "group",
+                }
+            ),
+            encoding="utf-8",
+        )
 
     with ThreadPoolExecutor(max_workers=16) as pool:
         list(pool.map(write_one, range(tiles)))
@@ -140,15 +167,13 @@ def truth_for(mosaic, composer, plane: int, row: int, column: int) -> np.ndarray
         held = tile.copies[0]
         if not (at[0] <= plane < at[0] + held.shape[0]):
             continue
-        from_y, to_y = max(top, at[1]), min(min(top + piece, height),
-                                            at[1] + held.shape[1])
-        from_x, to_x = max(left, at[2]), min(min(left + piece, width),
-                                             at[2] + held.shape[2])
+        from_y, to_y = max(top, at[1]), min(min(top + piece, height), at[1] + held.shape[1])
+        from_x, to_x = max(left, at[2]), min(min(left + piece, width), at[2] + held.shape[2])
         if from_y >= to_y or from_x >= to_x:
             continue
-        ground[from_y - top:to_y - top, from_x - left:to_x - left] = np.asarray(
-            held.array[plane - at[0], from_y - at[1]:to_y - at[1],
-                       from_x - at[2]:to_x - at[2]])
+        ground[from_y - top : to_y - top, from_x - left : to_x - left] = np.asarray(
+            held.array[plane - at[0], from_y - at[1] : to_y - at[1], from_x - at[2] : to_x - at[2]]
+        )
     return ground
 
 
@@ -156,10 +181,12 @@ def main() -> None:
     parsed = argparse.ArgumentParser(description=__doc__)
     parsed.add_argument("--tiles", type=int, default=10_000)
     parsed.add_argument("--where", type=Path, default=Path(r"D:\zmart-ten-thousand"))
-    parsed.add_argument("--keep", action="store_true",
-                        help="leave the transfer on disk so it can be looked at")
-    parsed.add_argument("--checks", type=int, default=12,
-                        help="how many pieces to compare against the tiles")
+    parsed.add_argument(
+        "--keep", action="store_true", help="leave the transfer on disk so it can be looked at"
+    )
+    parsed.add_argument(
+        "--checks", type=int, default=12, help="how many pieces to compare against the tiles"
+    )
     given = parsed.parse_args()
 
     folder = given.where / f"scattered{given.tiles:05d}"
@@ -189,17 +216,17 @@ def main() -> None:
     print(f"  opening      {opening:.0f} ms   ({opening / given.tiles:.2f} ms a tile)")
     print(f"  indexing     {indexing:.0f} ms")
 
-    meeting = [len(index.get((row, column), ()))
-               for row in range(down) for column in range(across)]
+    meeting = [len(index.get((row, column), ())) for row in range(down) for column in range(across)]
     covered = [one for one in meeting if one]
-    print(f"\n  tiles meeting a piece:  median {statistics.median(covered):.0f}, "
-          f"most {max(meeting)}, "
-          f"empty {100 * (1 - len(covered) / len(meeting)):.0f}% of pieces")
+    print(
+        f"\n  tiles meeting a piece:  median {statistics.median(covered):.0f}, "
+        f"most {max(meeting)}, "
+        f"empty {100 * (1 - len(covered) / len(meeting)):.0f}% of pieces"
+    )
 
     # -- what a piece costs, across the whole picture ------------------------
     seed = np.random.default_rng(11)
-    places = [(int(seed.integers(0, down)), int(seed.integers(0, across)))
-              for _ in range(SAMPLES)]
+    places = [(int(seed.integers(0, down)), int(seed.integers(0, across))) for _ in range(SAMPLES)]
     full, empty = [], []
     for row, column in places:
         began = time.perf_counter()
@@ -212,9 +239,11 @@ def main() -> None:
             print(f"  {name:<22} none sampled")
             return
         ordered = sorted(times)
-        print(f"  {name:<22} median {statistics.median(ordered):>7.1f} ms   "
-              f"9 in 10 under {ordered[int(len(ordered) * 0.9)]:>7.1f} ms   "
-              f"worst {ordered[-1]:>7.1f} ms   ({len(times)} pieces)")
+        print(
+            f"  {name:<22} median {statistics.median(ordered):>7.1f} ms   "
+            f"9 in 10 under {ordered[int(len(ordered) * 0.9)]:>7.1f} ms   "
+            f"worst {ordered[-1]:>7.1f} ms   ({len(times)} pieces)"
+        )
 
     print(f"\n  building a piece, {SAMPLES} taken at random across the picture:")
     spread("where tiles are", full)
@@ -230,8 +259,7 @@ def main() -> None:
         built = Composer(mosaic)._build_slab(0, 0, row, column)[0]
         wrong += int((built != truth_for(mosaic, composer, 0, row, column)).sum())
         checked += 1
-    print(f"  {'PASS' if wrong == 0 else 'FAIL'} — {wrong} wrong voxels "
-          f"in {checked} pieces\n")
+    print(f"  {'PASS' if wrong == 0 else 'FAIL'} — {wrong} wrong voxels in {checked} pieces\n")
 
     if given.keep:
         print(f"  left on disk at {folder}\n")

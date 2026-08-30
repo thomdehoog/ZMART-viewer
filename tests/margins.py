@@ -83,9 +83,7 @@ def _classify(line):
     green = line[:, 1].astype(int)
     blue = line[:, 2].astype(int)
     return {
-        "image": np.asarray(
-            (red > _IMAGE_FLOOR) & (green > _IMAGE_FLOOR) & (blue > _IMAGE_FLOOR)
-        ),
+        "image": np.asarray((red > _IMAGE_FLOOR) & (green > _IMAGE_FLOOR) & (blue > _IMAGE_FLOOR)),
         "background": np.asarray((blue > _STRONG) & (red < _WEAK) & (green < _WEAK)),
         "over": np.asarray((red > _STRONG) & (green < _WEAK) & (blue < _WEAK)),
         "drawn": np.asarray((green > _STRONG) & (red < _WEAK) & (blue < _WEAK)),
@@ -131,7 +129,10 @@ def read_the_line(line) -> Line:
 
     seen = _classify(line)
     image, background, over, drawn = (
-        seen["image"], seen["background"], seen["over"], seen["drawn"]
+        seen["image"],
+        seen["background"],
+        seen["over"],
+        seen["drawn"],
     )
     found = Line()
     found.drawn_at = [float(at) for at in np.nonzero(drawn)[0]]
@@ -142,7 +143,7 @@ def read_the_line(line) -> Line:
     found.image_ends = float(len(image) - 1 - int(np.argmax(image[::-1])))
     first, last = int(found.image_starts), int(found.image_ends)
 
-    before, after = background[:first], background[last + 1:]
+    before, after = background[:first], background[last + 1 :]
     if not before.any() or not after.any():
         found.closed = True
         found.why = "the band of background had closed on one side of the image"
@@ -153,9 +154,7 @@ def read_the_line(line) -> Line:
         found.why = "the layer on top was not found outside the band"
         return found
     found.before = float(first - int(np.max(np.nonzero(over[:last_before]))) - 1)
-    found.after = float(
-        first_after + int(np.min(np.nonzero(over[first_after:]))) - last - 1
-    )
+    found.after = float(first_after + int(np.min(np.nonzero(over[first_after:]))) - last - 1)
     return found
 
 
@@ -176,8 +175,10 @@ class Margins:
     @property
     def sides(self) -> dict:
         return {
-            "left": self.left, "right": self.right,
-            "top": self.top, "bottom": self.bottom,
+            "left": self.left,
+            "right": self.right,
+            "top": self.top,
+            "bottom": self.bottom,
         }
 
     @property
@@ -257,9 +258,13 @@ def margins_around_the_hole(picture, at=0.5) -> Margins:
             down=down,
         )
     return Margins(
-        left=across.before, right=across.after,
-        top=down.before, bottom=down.after,
-        found=True, across=across, down=down,
+        left=across.before,
+        right=across.after,
+        top=down.before,
+        bottom=down.after,
+        found=True,
+        across=across,
+        down=down,
     )
 
 
@@ -383,9 +388,7 @@ def worst_drift(readings: list[Margins], nominal: float) -> dict:
     if not usable:
         return worst
     for side in ("left", "right", "top", "bottom"):
-        worst[side] = round(
-            max(abs(getattr(r, side) - nominal) for r in usable), 1
-        )
+        worst[side] = round(max(abs(getattr(r, side) - nominal) for r in usable), 1)
     worst["unevenness"] = round(max(r.unevenness for r in usable), 1)
     # The other half of the question, kept separate on purpose: how much wider
     # the band came out all round than it was cut. See
@@ -402,12 +405,10 @@ def worst_drift(readings: list[Margins], nominal: float) -> dict:
         min(r.wider_than_it_was_cut(nominal) for r in usable), 1
     )
     worst["widest_seen"] = {
-        side: max(getattr(r, side) for r in usable)
-        for side in ("left", "right", "top", "bottom")
+        side: max(getattr(r, side) for r in usable) for side in ("left", "right", "top", "bottom")
     }
     worst["narrowest_seen"] = {
-        side: min(getattr(r, side) for r in usable)
-        for side in ("left", "right", "top", "bottom")
+        side: min(getattr(r, side) for r in usable) for side in ("left", "right", "top", "bottom")
     }
     # What two opposite sides add up to, and why it is worth knowing.
     #

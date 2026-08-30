@@ -40,13 +40,19 @@ def test_point_and_box_buttons_install_neuroglancer_tools(viewer_page):
     clicking a list row instead of the tool button.
     """
     viewer_page.get_by_role("button", name="Point", exact=True).click()
-    assert viewer_page.evaluate(
-        "() => window.zmartViewer.layerManager.getLayerByName('Targets').layer.tool.value.toJSON()"
-    ) == "annotatePoint"
+    assert (
+        viewer_page.evaluate(
+            "() => window.zmartViewer.layerManager.getLayerByName('Targets').layer.tool.value.toJSON()"
+        )
+        == "annotatePoint"
+    )
     viewer_page.get_by_role("button", name="Box", exact=True).click()
-    assert viewer_page.evaluate(
-        "() => window.zmartViewer.layerManager.getLayerByName('Targets').layer.tool.value.toJSON()"
-    ) == "annotateBoundingBox"
+    assert (
+        viewer_page.evaluate(
+            "() => window.zmartViewer.layerManager.getLayerByName('Targets').layer.tool.value.toJSON()"
+        )
+        == "annotateBoundingBox"
+    )
 
 
 def test_source_changes_drive_list_selection_and_delete(viewer_page):

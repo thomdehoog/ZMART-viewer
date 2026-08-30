@@ -68,9 +68,11 @@ HOW_MANY_TILES = 100
 
 
 def main() -> None:
-    print(f"\nThe same run of about {HOW_MANY_TILES} tiles, written at four piece "
-          f"sizes.\nTiles {TILE[1]}x{TILE[2]}, trimmed to {STEP[1]}x{STEP[2]}, "
-          f"two colours and two moments.\n")
+    print(
+        f"\nThe same run of about {HOW_MANY_TILES} tiles, written at four piece "
+        f"sizes.\nTiles {TILE[1]}x{TILE[2]}, trimmed to {STEP[1]}x{STEP[2]}, "
+        f"two colours and two moments.\n"
+    )
 
     sweep.TILE = TILE
     sweep.STEP = STEP
@@ -83,19 +85,24 @@ def main() -> None:
         row["piece"] = piece
         rows.append(row)
 
-    print(f"\n  {'piece':>6} {'requests':>10} {'first pixel':>13} "
-          f"{'flat frames':>13} {'contrast':>10}")
+    print(
+        f"\n  {'piece':>6} {'requests':>10} {'first pixel':>13} "
+        f"{'flat frames':>13} {'contrast':>10}"
+    )
     print("  " + "-" * 56)
     first = rows[0]
     for row in rows:
-        first_pixel = ("-" if row["firstPixel"] is None
-                       else f"{row['firstPixel']:.1f} s")
-        print(f"  {row['piece']:>6} {row['requests']:>10} {first_pixel:>13} "
-              f"{row['flatFrames']:>13} {row['contrastMs']:>7} ms")
+        first_pixel = "-" if row["firstPixel"] is None else f"{row['firstPixel']:.1f} s"
+        print(
+            f"  {row['piece']:>6} {row['requests']:>10} {first_pixel:>13} "
+            f"{row['flatFrames']:>13} {row['contrastMs']:>7} ms"
+        )
 
     grew = rows[-1]["requests"] / max(1, first["requests"])
-    print(f"\n  Going from pieces of {PIECES[0]} to pieces of {PIECES[-1]} asked "
-          f"for {grew:.1f} times as many things.")
+    print(
+        f"\n  Going from pieces of {PIECES[0]} to pieces of {PIECES[-1]} asked "
+        f"for {grew:.1f} times as many things."
+    )
     print("  If first pixel and the frame count held, the piece size a linked")
     print("  picture forces is affordable. If they did not, acquire with more")
     print("  overlap instead -- half of a larger overlap divides more ways, so a")

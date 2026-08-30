@@ -17,6 +17,7 @@ Run it with::
 
     python app/picture/measure_a_timepoint_landing.py
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,29 +51,32 @@ def _one_rung(browser_kind, built, positions: int, keep: Path) -> dict:
     import tempfile
     import threading
 
-    from zmart_viewer.server import make_server
     from test_manifest_refresh_browser import _open, _wait_for_picture
 
     from zmart_viewer.record.coordinator import LivePublisher
     from zmart_viewer.record.model import GridCell
     from zmart_viewer.record.profiles import plan_the_writing
+    from zmart_viewer.server import make_server
 
-    across = int(round(positions ** 0.5))
-    cells = {GridCell(*divmod(number, across)): f"p{number:04d}"
-             for number in range(positions)}
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  timepoints=ROOM)
+    across = int(round(positions**0.5))
+    cells = {GridCell(*divmod(number, across)): f"p{number:04d}" for number in range(positions)}
+    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=ROOM)
     with tempfile.TemporaryDirectory(dir=keep) as folder:
-        run = LivePublisher(Path(folder) / "run", profile,
-                            run_id="landing", cells=cells)
+        run = LivePublisher(Path(folder) / "run", profile, run_id="landing", cells=cells)
         frame = np.full((1, 1, FRAME, FRAME), 1200, "uint16")
         revision = 0
         for name in sorted(cells.values()):
             run.write_and_publish(name, frame, timepoint=0)
             revision += 1
-        server = make_server(port=0, data_dir=run.folder, site_dir=built,
-                             store="views/live/live.ome.zarr", live=True,
-                             window=(0, 4095), allow_open=False)
+        server = make_server(
+            port=0,
+            data_dir=run.folder,
+            site_dir=built,
+            store="views/live/live.ome.zarr",
+            live=True,
+            window=(0, 4095),
+            allow_open=False,
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         address = f"http://127.0.0.1:{server.server_address[1]}"
@@ -87,16 +91,18 @@ def _one_rung(browser_kind, built, positions: int, keep: Path) -> dict:
                 # advances: the moment is offered as soon as any position
                 # holds it.
                 started = time.perf_counter()
-                run.write_and_publish(sorted(cells.values())[moment],
-                                      np.full_like(frame, 1200 + 700 * moment),
-                                      timepoint=moment)
+                run.write_and_publish(
+                    sorted(cells.values())[moment],
+                    np.full_like(frame, 1200 + 700 * moment),
+                    timepoint=moment,
+                )
                 page.wait_for_function(
                     f"""() => document.querySelector(
                         'input[aria-label="t position"]')?.max === '{moment}'""",
-                    timeout=60_000)
+                    timeout=60_000,
+                )
                 offered.append(time.perf_counter() - started)
-                page.wait_for_function(ON_THE_MOMENT, arg=moment,
-                                       timeout=60_000)
+                page.wait_for_function(ON_THE_MOMENT, arg=moment, timeout=60_000)
                 followed.append(time.perf_counter() - started)
         finally:
             page.close()
@@ -104,8 +110,12 @@ def _one_rung(browser_kind, built, positions: int, keep: Path) -> dict:
             thread.join(timeout=5)
     middle = sorted(offered)[len(offered) // 2]
     landed = sorted(followed)[len(followed) // 2]
-    return {"positions": positions, "offered_s": middle, "followed_s": landed,
-            "worst_followed_s": max(followed)}
+    return {
+        "positions": positions,
+        "offered_s": middle,
+        "followed_s": landed,
+        "worst_followed_s": max(followed),
+    }
 
 
 def main() -> None:
@@ -125,8 +135,7 @@ def main() -> None:
         try:
             browser = pw.chromium.launch(args=args)
         except Exception:
-            browser = pw.chromium.launch(executable_path=find_a_chromium(),
-                                         args=args)
+            browser = pw.chromium.launch(executable_path=find_a_chromium(), args=args)
         # This loop is itself a regression gate: every rung reuses one
         # process AND one run name, which is exactly the shape that poisoned
         # the world frame's remembered geometry the first time this
@@ -134,9 +143,12 @@ def main() -> None:
         # 2026-08-19, pinned by test_two_runs_share_one_process).
         for positions in arguments.rungs:
             told = _one_rung(browser, built, positions, arguments.fixtures)
-            print(f"| {told['positions']} | {told['offered_s']:.2f} |"
-                  f" {told['followed_s']:.2f} |"
-                  f" {told['worst_followed_s']:.2f} |", flush=True)
+            print(
+                f"| {told['positions']} | {told['offered_s']:.2f} |"
+                f" {told['followed_s']:.2f} |"
+                f" {told['worst_followed_s']:.2f} |",
+                flush=True,
+            )
         browser.close()
 
 

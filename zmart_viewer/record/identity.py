@@ -235,7 +235,10 @@ def store_the_profile(run_folder: Path | str, profile: AcquisitionProfile) -> Pa
         )
 
     for stored_id in stored_profile_ids(run_folder):
-        if stored_id != profile.profile_id and stored_id.casefold() == profile.profile_id.casefold():
+        if (
+            stored_id != profile.profile_id
+            and stored_id.casefold() == profile.profile_id.casefold()
+        ):
             raise ZmartLiveError(
                 f"Acquisition profiles {stored_id!r} and {profile.profile_id!r} "
                 "differ only by letter case and would be one file on a "

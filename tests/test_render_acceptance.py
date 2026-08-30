@@ -127,7 +127,9 @@ def test_a_blank_panel_would_be_noticed(viewer_page):
 
     # 1 / 3.5e-7 is one metre per screen pixel, expressed in voxels of the demo
     # volume: the exact magnification the fault produced.
-    viewer_page.evaluate("() => { window.zmartViewer.navigationState.zoomFactor.value = 1/3.5e-7; }")
+    viewer_page.evaluate(
+        "() => { window.zmartViewer.navigationState.zoomFactor.value = 1/3.5e-7; }"
+    )
     viewer_page.wait_for_timeout(2500)
 
     blanked = colour_spread(image_middle(viewer_page))

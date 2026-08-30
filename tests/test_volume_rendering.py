@@ -10,6 +10,7 @@ than trusting the click.
 from __future__ import annotations
 
 import pytest
+
 from zmart_viewer.server import make_server
 
 _STATE = """() => {
@@ -69,11 +70,15 @@ def test_the_plane_scrolls_through_z(viewer_page):
     # measuring across it would fail the test for something that is quite correct.
     viewer_page.mouse.wheel(0, -120)
     viewer_page.wait_for_timeout(600)
-    before = viewer_page.evaluate("() => Array.from(window.zmartViewer.navigationState.position.value)")
+    before = viewer_page.evaluate(
+        "() => Array.from(window.zmartViewer.navigationState.position.value)"
+    )
     for _ in range(3):
         viewer_page.mouse.wheel(0, -120)
     viewer_page.wait_for_timeout(1200)
-    after = viewer_page.evaluate("() => Array.from(window.zmartViewer.navigationState.position.value)")
+    after = viewer_page.evaluate(
+        "() => Array.from(window.zmartViewer.navigationState.position.value)"
+    )
     viewer_page.keyboard.up("Shift")
     assert after[0] != before[0], "shift and the wheel must step z"
     assert after[1:] == before[1:], "stepping z must not pan"

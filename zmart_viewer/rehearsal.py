@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import zarr
+
 from zmart_viewer.record.coordinator import LivePublisher
 from zmart_viewer.record.profiles import DEFAULTS, plan_the_writing
 

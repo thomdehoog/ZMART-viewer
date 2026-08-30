@@ -37,8 +37,8 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
+
+from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 # The scaling comparison's two sizes. Sixteen times the positions: a
 # bookkeeping cost that followed the survey would show as many times the
@@ -58,8 +58,7 @@ STEADY_RATIO_ALLOWED = 3.0
 STEADY_LANDINGS = 5
 
 
-def _steady_landings(tmp_path: Path, across: int) -> tuple[list[float],
-                                                           list[int], int]:
+def _steady_landings(tmp_path: Path, across: int) -> tuple[list[float], list[int], int]:
     """Per-landing derive times and sweep counts on one unbaked survey.
 
     Returns the steady-state derive milliseconds, the matching sweep
@@ -69,12 +68,11 @@ def _steady_landings(tmp_path: Path, across: int) -> tuple[list[float],
     """
     harness.FIXTURES = tmp_path / f"survey-{across}"
     run, order = harness.the_run(across)
-    landings = order[-(STEADY_LANDINGS + 1):]
-    for position_id in order[:-(STEADY_LANDINGS + 1)]:
+    landings = order[-(STEADY_LANDINGS + 1) :]
+    for position_id in order[: -(STEADY_LANDINGS + 1)]:
         harness.fast_publish(run, position_id)
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=False)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=False)
     opened = GovernedRun(run.folder, store=store)
     try:
         opened.composer()
@@ -114,11 +112,11 @@ def test_the_fold_today_sweeps_every_published_moment(tmp_path):
     from zmart_viewer.record.profiles import plan_the_writing
 
     moments = 8
-    profile, _ = plan_the_writing("overview", frame=harness.FRAME, z_planes=1,
-                                  timepoints=moments)
+    profile, _ = plan_the_writing("overview", frame=harness.FRAME, z_planes=1, timepoints=moments)
     run = LivePublisher(
         tmp_path / "experiment" / "acquisitions" / "timelapse",
-        profile, run_id="fold-moments",
+        profile,
+        run_id="fold-moments",
         cells={GridCell(0, 0): "posA", GridCell(0, 1): "posB"},
         linked_view="at_run_end",
     )
@@ -136,7 +134,7 @@ def test_the_fold_today_sweeps_every_published_moment(tmp_path):
     finally:
         opened.close()
 
-    published_units = 2 * (moments - 1) + 1   # posA has all 8, posB has 7
+    published_units = 2 * (moments - 1) + 1  # posA has all 8, posB has 7
     positions = 2
     # Two walks over the units per derive: the generation fold, and the
     # per-position moment gathering that came with the grown picture.
@@ -154,10 +152,13 @@ def test_a_landing_costs_the_same_on_a_small_and_a_large_survey(tmp_path):
     large_ms, large_sweeps, large_n = _steady_landings(tmp_path, LARGE_ACROSS)
     small = statistics.median(small_ms)
     large = statistics.median(large_ms)
-    print(f"STEADY LANDING: {small_n} positions {small:.2f} ms "
-          f"(swept {max(small_sweeps)}), {large_n} positions {large:.2f} ms "
-          f"(swept {max(large_sweeps)}), ratio "
-          f"{large / max(small, 1e-9):.1f}x", flush=True)
+    print(
+        f"STEADY LANDING: {small_n} positions {small:.2f} ms "
+        f"(swept {max(small_sweeps)}), {large_n} positions {large:.2f} ms "
+        f"(swept {max(large_sweeps)}), ratio "
+        f"{large / max(small, 1e-9):.1f}x",
+        flush=True,
+    )
     assert large <= small * STEADY_RATIO_ALLOWED + 2.0, (
         f"one landing derives in {small:.2f} ms on {small_n} positions but "
         f"{large:.2f} ms on {large_n} positions -- the identical change, "

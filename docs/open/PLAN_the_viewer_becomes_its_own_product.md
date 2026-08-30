@@ -78,7 +78,7 @@ Each of these makes one thing where there are two.
    live; a stale piece on screen is the exact failure the suite exists to catch.
 2. **The shared test harness stops hiding.** `measure_a_governed_run_at_scale`
    is imported as `harness` by ~15 files and called at hundreds of sites;
-   `measure_the_frame_rate_of_a_linked_view` gives `a_browser` and
+   `measure/watching.py` gives `a_browser` and
    `BROWSER_ARGS` to 21. Both are libraries wearing a measurement's name. They
    move to `tests/harness.py` and `tests/driving.py` — the latter already
    exists for this job. Only the import lines change; the call sites keep their

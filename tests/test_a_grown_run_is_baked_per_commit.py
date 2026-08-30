@@ -20,14 +20,13 @@ VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
 from test_a_governed_picture_is_baked_per_commit import (  # noqa: E402
     a_fresh_bake_of,
     every_baked_file,
 )
 from test_the_composer_obeys_the_manifest import FRAME, PIECE  # noqa: E402
 
+from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
 from zmart_viewer.record.model import GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
@@ -35,11 +34,15 @@ from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 def _a_grown_run(folder: Path) -> LivePublisher:
     """Two positions, two channels, room for two moments."""
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  timepoints=2, channels=("a", "b"))
-    return LivePublisher(folder, profile, run_id="grown-bake-run",
-                         cells={GridCell(0, 0): "posA",
-                                GridCell(0, 1): "posB"})
+    profile, _ = plan_the_writing(
+        "overview", frame=FRAME, z_planes=1, timepoints=2, channels=("a", "b")
+    )
+    return LivePublisher(
+        folder,
+        profile,
+        run_id="grown-bake-run",
+        cells={GridCell(0, 0): "posA", GridCell(0, 1): "posB"},
+    )
 
 
 def _a_frame(value: int) -> np.ndarray:
@@ -62,9 +65,9 @@ def test_a_grown_declare_bakes_every_frame(tmp_path):
     run.write_and_publish("posB", _a_frame(1300), timepoint=0)
     run.write_and_publish("posA", _a_frame(2100), timepoint=1)
 
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="shown", piece=PIECE,
-                                       bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="shown", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     try:
         composer = governed.composer()
@@ -85,16 +88,19 @@ def test_a_grown_declare_bakes_every_frame(tmp_path):
                         for row in range(down):
                             for column in range(across):
                                 body = composer.bytes_for(
-                                    level, plane, row, column,
-                                    moment=moment, channel=channel)
+                                    level, plane, row, column, moment=moment, channel=channel
+                                )
                                 baked = store.joinpath(
-                                    str(level), "c", str(moment),
-                                    str(channel), str(plane), str(row),
-                                    str(column))
+                                    str(level),
+                                    "c",
+                                    str(moment),
+                                    str(channel),
+                                    str(plane),
+                                    str(row),
+                                    str(column),
+                                )
                                 if body is None:
-                                    assert not baked.exists(), (
-                                        f"{baked} exists over absent ground"
-                                    )
+                                    assert not baked.exists(), f"{baked} exists over absent ground"
                                     continue
                                 checked += 1
                                 assert baked.is_file(), (
@@ -115,10 +121,10 @@ def _the_composed_footprint_of(composer, store: Path, name: str) -> int:
     """
     import json
 
-    baked = json.loads((store / "zarr.json").read_text(encoding="utf-8"))[
-        "attributes"]["zmart"]["baked"]
-    tile = next(one for one in composer.mosaic.tiles
-                if one.name.split(".")[0] == name)
+    baked = json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["zmart"][
+        "baked"
+    ]
+    tile = next(one for one in composer.mosaic.tiles if one.name.split(".")[0] == name)
     pieces = 0
     for level in baked:
         if level >= composer.mosaic.levels:
@@ -147,9 +153,9 @@ def test_a_moment_landing_composes_only_the_frames_it_touched(tmp_path):
     run = _a_grown_run(tmp_path)
     run.write_and_publish("posA", _a_frame(500), timepoint=0)
     run.write_and_publish("posB", _a_frame(1300), timepoint=0)
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="shown", piece=PIECE,
-                                       bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="shown", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     try:
         governed.composer().stop_warming()
@@ -181,9 +187,9 @@ def test_a_recovering_scan_patches_only_the_landed_moments(tmp_path):
     run = _a_grown_run(tmp_path)
     run.write_and_publish("posA", _a_frame(500), timepoint=0)
     run.write_and_publish("posB", _a_frame(1300), timepoint=0)
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="shown", piece=PIECE,
-                                       bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="shown", piece=PIECE, bake=True
+    )
     run.write_and_publish("posB", _a_frame(3000), timepoint=1)
 
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
@@ -217,9 +223,9 @@ def test_a_retake_replaces_every_moment_of_its_position(tmp_path):
     run.write_and_publish("posA", _a_frame(500), timepoint=0)
     run.write_and_publish("posA", _a_frame(900), timepoint=1)
     run.write_and_publish("posB", _a_frame(1300), timepoint=0)
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="shown", piece=PIECE,
-                                       bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="shown", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     try:
         governed.composer().stop_warming()
@@ -230,9 +236,10 @@ def test_a_retake_replaces_every_moment_of_its_position(tmp_path):
         assert patched == reference, (
             "after a retake the baked files differ from a from-scratch "
             "bake of the same state: "
-            + ", ".join(sorted(set(patched) ^ set(reference))[:6] or
-                        [one for one in sorted(patched)
-                         if patched[one] != reference.get(one)][:6])
+            + ", ".join(
+                sorted(set(patched) ^ set(reference))[:6]
+                or [one for one in sorted(patched) if patched[one] != reference.get(one)][:6]
+            )
         )
     finally:
         governed.close()
@@ -249,9 +256,9 @@ def test_a_moment_landing_patches_the_grown_bake(tmp_path):
     run.write_and_publish("posA", _a_frame(500), timepoint=0)
     run.write_and_publish("posB", _a_frame(1300), timepoint=0)
 
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="shown", piece=PIECE,
-                                       bake=True)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="shown", piece=PIECE, bake=True
+    )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     try:
         governed.composer().stop_warming()
@@ -262,9 +269,10 @@ def test_a_moment_landing_patches_the_grown_bake(tmp_path):
         assert patched == reference, (
             "the patched grown bake differs from a from-scratch bake of the "
             "same state: "
-            + ", ".join(sorted(set(patched) ^ set(reference))[:6] or
-                        [one for one in sorted(patched)
-                         if patched[one] != reference.get(one)][:6])
+            + ", ".join(
+                sorted(set(patched) ^ set(reference))[:6]
+                or [one for one in sorted(patched) if patched[one] != reference.get(one)][:6]
+            )
         )
     finally:
         governed.close()

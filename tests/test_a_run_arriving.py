@@ -22,6 +22,7 @@ import threading
 
 import numpy as np
 import zarr
+
 from zmart_viewer.server import make_server
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 4, 128, 64, 2
@@ -70,15 +71,20 @@ def write_position(folder, name, *, seed):
                         ],
                         "datasets": datasets,
                         "coordinateTransformations": [
-                            {"type": "translation",
-                             "translation": [0.0, 0.0, 0.0, seed * SIDE * 0.35]}
+                            {
+                                "type": "translation",
+                                "translation": [0.0, 0.0, 0.0, seed * SIDE * 0.35],
+                            }
                         ],
                     }
                 ],
                 "omero": {
                     "channels": [
-                        {"label": f"ch{i}", "color": "FFFFFF",
-                         "window": {"min": 0, "max": 65535, "start": 700, "end": 8700}}
+                        {
+                            "label": f"ch{i}",
+                            "color": "FFFFFF",
+                            "window": {"min": 0, "max": 65535, "start": 700, "end": 8700},
+                        }
                         for i in range(CHANNELS)
                     ]
                 },
@@ -119,17 +125,16 @@ SOURCES = """() => window.zmartViewer.layerManager.managedLayers
 def test_a_run_arrives_one_position_at_a_time(browser, built_dist, tmp_path):
     """Three positions announced in turn, as an experiment would produce them."""
     write_position(tmp_path, "overview_pos001", seed=0)
-    server = make_server(port=0, data_dir=tmp_path, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=tmp_path, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 800})
     fetched: list[str] = []
     page.on(
         "request",
-        lambda r: fetched.append(r.url)
-        if "/data/" in r.url and "/.z" not in r.url
-        else None,
+        lambda r: fetched.append(r.url) if "/data/" in r.url and "/.z" not in r.url else None,
     )
     try:
         page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
@@ -149,9 +154,7 @@ def test_a_run_arrives_one_position_at_a_time(browser, built_dist, tmp_path):
 
             # The row gains a source rather than the panel gaining a row: every
             # position of one acquisition type is one picture, so they share a layer.
-            page.wait_for_function(
-                f"{SOURCES} === {already + CHANNELS}", timeout=30_000
-            )
+            page.wait_for_function(f"{SOURCES} === {already + CHANNELS}", timeout=30_000)
             page.wait_for_timeout(1500)
 
             assert page.evaluate(ROWS) == CHANNELS, (
@@ -204,8 +207,7 @@ def write_timelapse(folder, name, *, frames):
             {
                 "path": str(level),
                 "coordinateTransformations": [
-                    {"type": "scale",
-                     "scale": [30.0, 1.0, 2.0, 0.35 * 2**level, 0.35 * 2**level]}
+                    {"type": "scale", "scale": [30.0, 1.0, 2.0, 0.35 * 2**level, 0.35 * 2**level]}
                 ],
             }
         )
@@ -227,8 +229,11 @@ def write_timelapse(folder, name, *, frames):
                 ],
                 "omero": {
                     "channels": [
-                        {"label": f"ch{i}", "color": "FFFFFF",
-                         "window": {"min": 0, "max": 65535, "start": 700, "end": 8700}}
+                        {
+                            "label": f"ch{i}",
+                            "color": "FFFFFF",
+                            "window": {"min": 0, "max": 65535, "start": 700, "end": 8700},
+                        }
                         for i in range(CHANNELS)
                     ]
                 },
@@ -248,9 +253,7 @@ TIME_REACH = """() => {
 }"""
 
 
-def test_a_timelapse_that_grows_is_noticed_without_being_added_twice(
-    browser, built_dist, tmp_path
-):
+def test_a_timelapse_that_grows_is_noticed_without_being_added_twice(browser, built_dist, tmp_path):
     """A frame lands, the run says so, and the viewer can reach the new frame.
 
     This is the one kind of change nothing about the scene reveals: the same store,
@@ -261,8 +264,9 @@ def test_a_timelapse_that_grows_is_noticed_without_being_added_twice(
     would leave the slider unable to reach a frame that exists on disk.
     """
     store = write_timelapse(tmp_path, "overview_pos001", frames=2)
-    server = make_server(port=0, data_dir=tmp_path, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=tmp_path, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 800})
@@ -293,9 +297,7 @@ def test_a_timelapse_that_grows_is_noticed_without_being_added_twice(
         thread.join(timeout=5)
 
 
-def test_a_store_is_only_read_again_when_it_has_actually_grown(
-    browser, built_dist, tmp_path
-):
+def test_a_store_is_only_read_again_when_it_has_actually_grown(browser, built_dist, tmp_path):
     """A neighbour arriving must not send us back to the stores already open.
 
     Re-reading a store is how a growing timelapse reaches the time slider, and it
@@ -322,8 +324,9 @@ def test_a_store_is_only_read_again_when_it_has_actually_grown(
     holds two positions or two thousand.
     """
     store = write_timelapse(tmp_path, "overview_pos001", frames=2)
-    server = make_server(port=0, data_dir=tmp_path, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=tmp_path, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 800})
@@ -362,9 +365,7 @@ def test_a_store_is_only_read_again_when_it_has_actually_grown(
 
         # Wait for the newcomer to actually be taken on, so the check below is made
         # after the pass that would have done the damage, not before it.
-        page.wait_for_function(
-            f"{SOURCES} === {sources_before + CHANNELS}", timeout=30_000
-        )
+        page.wait_for_function(f"{SOURCES} === {sources_before + CHANNELS}", timeout=30_000)
         page.wait_for_timeout(2000)
         assert len(descriptions) == settled, (
             "a neighbour arriving sent us back to a position that had not changed: "

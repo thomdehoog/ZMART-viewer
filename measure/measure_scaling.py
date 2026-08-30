@@ -51,8 +51,10 @@ import zarr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.compose import Composer  # noqa: E402
-from zmart_viewer.compose import read_the_transfer  # noqa: E402
+from zmart_viewer.compose import (
+    Composer,  # noqa: E402
+    read_the_transfer,  # noqa: E402
+)
 
 # One tile, shaped like a light-sheet transfer: a few planes, square across.
 TILE = (2, 256, 256)
@@ -83,9 +85,13 @@ SAMPLES = 9
 ASKED_AT_ONCE = 12
 
 
-def write_a_transfer(folder: Path, tiles: int, tile: tuple[int, int, int] = TILE,
-                     step_um: float = STEP_UM,
-                     values: tuple[int, int] = (24000, 56000)) -> Path:
+def write_a_transfer(
+    folder: Path,
+    tiles: int,
+    tile: tuple[int, int, int] = TILE,
+    step_um: float = STEP_UM,
+    values: tuple[int, int] = (24000, 56000),
+) -> Path:
     """Write a synthetic transfer of ``tiles`` positions on a fractional grid.
 
     ``values`` is the range the pixels are drawn from. The default spans the
@@ -112,37 +118,59 @@ def write_a_transfer(folder: Path, tiles: int, tile: tuple[int, int, int] = TILE
         store = folder / f"Tile{number:05d}.ome.zarr"
         datasets = []
         for level in range(LEVELS):
-            shrink = 2 ** level
+            shrink = 2**level
             shape = (tile[0], tile[1] // shrink, tile[2] // shrink)
             array = zarr.create_array(
-                store=str(store / str(level)), shape=shape, chunks=shape,
-                dtype="uint16", zarr_format=3, dimension_names=["z", "y", "x"],
+                store=str(store / str(level)),
+                shape=shape,
+                chunks=shape,
+                dtype="uint16",
+                zarr_format=3,
+                dimension_names=["z", "y", "x"],
                 overwrite=True,
             )
             array[:] = picture[:, ::shrink, ::shrink]
-            datasets.append({
-                "path": str(level),
-                "coordinateTransformations": [
-                    {"type": "scale",
-                     "scale": [VOXEL_UM[0], VOXEL_UM[1] * shrink,
-                               VOXEL_UM[2] * shrink]},
-                    {"type": "translation",
-                     "translation": [0.0, row * step_um, column * step_um]},
-                ],
-            })
-        (store / "zarr.json").write_text(json.dumps({
-            "attributes": {"ome": {
-                "version": "0.5",
-                "multiscales": [{
-                    "name": store.name, "type": "nearest",
-                    "axes": [{"name": "z", "type": "space", "unit": "micrometer"},
-                             {"name": "y", "type": "space", "unit": "micrometer"},
-                             {"name": "x", "type": "space", "unit": "micrometer"}],
-                    "datasets": datasets,
-                }],
-            }},
-            "zarr_format": 3, "node_type": "group",
-        }), encoding="utf-8")
+            datasets.append(
+                {
+                    "path": str(level),
+                    "coordinateTransformations": [
+                        {
+                            "type": "scale",
+                            "scale": [VOXEL_UM[0], VOXEL_UM[1] * shrink, VOXEL_UM[2] * shrink],
+                        },
+                        {
+                            "type": "translation",
+                            "translation": [0.0, row * step_um, column * step_um],
+                        },
+                    ],
+                }
+            )
+        (store / "zarr.json").write_text(
+            json.dumps(
+                {
+                    "attributes": {
+                        "ome": {
+                            "version": "0.5",
+                            "multiscales": [
+                                {
+                                    "name": store.name,
+                                    "type": "nearest",
+                                    "axes": [
+                                        {"name": "z", "type": "space", "unit": "micrometer"},
+                                        {"name": "y", "type": "space", "unit": "micrometer"},
+                                        {"name": "x", "type": "space", "unit": "micrometer"},
+                                    ],
+                                    "datasets": datasets,
+                                }
+                            ],
+                        }
+                    },
+                    "zarr_format": 3,
+                    "node_type": "group",
+                }
+            ),
+            encoding="utf-8",
+        )
     return folder
 
 
@@ -158,8 +186,9 @@ def measure(folder: Path, tiles: int) -> dict:
 
     # Pieces taken from across the middle of the picture, where tiles genuinely
     # overlap, rather than at a corner where one tile answers on its own.
-    places = [(down // 2, column) for column in
-              range(0, max(1, across), max(1, across // SAMPLES))][:SAMPLES]
+    places = [
+        (down // 2, column) for column in range(0, max(1, across), max(1, across // SAMPLES))
+    ][:SAMPLES]
 
     finding, building, rebuilding, covering = [], [], [], []
     for row, column in places:
@@ -202,13 +231,11 @@ def measure(folder: Path, tiles: int) -> dict:
     }
 
 
-def _asked_together(composer: Composer, level: int,
-                    pieces: list[tuple[int, int]]) -> float:
+def _asked_together(composer: Composer, level: int, pieces: list[tuple[int, int]]) -> float:
     """Ask for these pieces at once, the way a browser does, and time the lot."""
     with ThreadPoolExecutor(max_workers=ASKED_AT_ONCE) as pool:
         began = time.perf_counter()
-        list(pool.map(lambda rc: composer.bytes_for(level, 0, rc[0], rc[1]),
-                      pieces))
+        list(pool.map(lambda rc: composer.bytes_for(level, 0, rc[0], rc[1]), pieces))
         return (time.perf_counter() - began) * 1000
 
 
@@ -249,31 +276,43 @@ def gestures(folder: Path) -> dict:
     zoomout = _asked_together(composer, coarsest, whole)
 
     return {
-        "screenful_ms": cold, "screenful_pieces": len(screenful),
+        "screenful_ms": cold,
+        "screenful_pieces": len(screenful),
         "again_ms": again,
-        "zoomout_ms": zoomout, "zoomout_pieces": len(whole),
+        "zoomout_ms": zoomout,
+        "zoomout_pieces": len(whole),
     }
 
 
 def main() -> None:
     parsed = argparse.ArgumentParser(description=__doc__)
-    parsed.add_argument("--most", type=int, default=1024,
-                        help="the largest number of tiles to write")
-    parsed.add_argument("--rungs",
-                        help="tile counts to measure instead of the default "
-                        "ladder, e.g. 1,5,10,50,100")
-    parsed.add_argument("--tile",
-                        help="the shape of one tile as planes,height,width -- "
-                        f"default {','.join(str(n) for n in TILE)}. A camera "
-                        "frame is 2,2048,2048.")
-    parsed.add_argument("--step-um", type=float, default=None,
-                        help="how far the stage moves between tiles, in "
-                        "micrometres. Defaults to about ninety per cent of "
-                        "the tile's width, kept deliberately fractional in "
-                        "voxels, as a real stage is.")
-    parsed.add_argument("--where", type=Path,
-                        default=Path(r"D:\zmart-scaling-test"),
-                        help="where to write the throwaway transfers")
+    parsed.add_argument(
+        "--most", type=int, default=1024, help="the largest number of tiles to write"
+    )
+    parsed.add_argument(
+        "--rungs", help="tile counts to measure instead of the default ladder, e.g. 1,5,10,50,100"
+    )
+    parsed.add_argument(
+        "--tile",
+        help="the shape of one tile as planes,height,width -- "
+        f"default {','.join(str(n) for n in TILE)}. A camera "
+        "frame is 2,2048,2048.",
+    )
+    parsed.add_argument(
+        "--step-um",
+        type=float,
+        default=None,
+        help="how far the stage moves between tiles, in "
+        "micrometres. Defaults to about ninety per cent of "
+        "the tile's width, kept deliberately fractional in "
+        "voxels, as a real stage is.",
+    )
+    parsed.add_argument(
+        "--where",
+        type=Path,
+        default=Path(r"D:\zmart-scaling-test"),
+        help="where to write the throwaway transfers",
+    )
     given = parsed.parse_args()
 
     tile = tuple(int(n) for n in given.tile.split(",")) if given.tile else TILE
@@ -294,11 +333,15 @@ def main() -> None:
         rungs = [one for one in rungs if one <= given.most]
 
     print("\n  Building a picture from a transfer, as the transfer grows.")
-    print(f"  Tiles {tile[1]}x{tile[2]}, stepping {step_um} um "
-          f"({step_um / VOXEL_UM[1]:.2f} voxels -- not a whole number),"
-          f"\n  pieces of 512, one plane, nothing cached.\n")
-    print(f"  {'tiles':>7} {'picture':>15} {'opening':>10} {'finding':>10} "
-          f"{'1st build':>11} {'after':>9} {'tiles a piece':>14}")
+    print(
+        f"  Tiles {tile[1]}x{tile[2]}, stepping {step_um} um "
+        f"({step_um / VOXEL_UM[1]:.2f} voxels -- not a whole number),"
+        f"\n  pieces of 512, one plane, nothing cached.\n"
+    )
+    print(
+        f"  {'tiles':>7} {'picture':>15} {'opening':>10} {'finding':>10} "
+        f"{'1st build':>11} {'after':>9} {'tiles a piece':>14}"
+    )
     print("  " + "-" * 82)
 
     rows = []
@@ -310,24 +353,27 @@ def main() -> None:
         row = measure(folder, tiles)
         row.update(gestures(folder))
         rows.append(row)
-        print(f"  {row['tiles']:>7} {row['picture']:>15} "
-              f"{row['opening_ms']:>7.0f} ms {row['finding_ms']:>7.2f} ms "
-              f"{row['building_ms']:>8.1f} ms {row['rebuilding_ms']:>6.1f} ms "
-              f"{row['covering']:>14.0f}")
+        print(
+            f"  {row['tiles']:>7} {row['picture']:>15} "
+            f"{row['opening_ms']:>7.0f} ms {row['finding_ms']:>7.2f} ms "
+            f"{row['building_ms']:>8.1f} ms {row['rebuilding_ms']:>6.1f} ms "
+            f"{row['covering']:>14.0f}"
+        )
         shutil.rmtree(folder)
 
     print("\n  The same transfers, timed as gestures rather than pieces: a")
-    print(f"  screenful is the middle {ASKED_AT_ONCE} full-resolution pieces "
-          "asked at once, and")
-    print("  zooming out asks for the whole coarsest copy of a picture nothing"
-          "\n  has opened yet.\n")
-    print(f"  {'tiles':>7} {'screenful':>12} {'revisited':>11} "
-          f"{'zoom-out':>11} {'(pieces)':>9}")
+    print(f"  screenful is the middle {ASKED_AT_ONCE} full-resolution pieces asked at once, and")
+    print(
+        "  zooming out asks for the whole coarsest copy of a picture nothing\n  has opened yet.\n"
+    )
+    print(f"  {'tiles':>7} {'screenful':>12} {'revisited':>11} {'zoom-out':>11} {'(pieces)':>9}")
     print("  " + "-" * 56)
     for row in rows:
-        print(f"  {row['tiles']:>7} "
-              f"{row['screenful_ms']:>9.1f} ms {row['again_ms']:>8.1f} ms "
-              f"{row['zoomout_ms']:>8.1f} ms {row['zoomout_pieces']:>9}")
+        print(
+            f"  {row['tiles']:>7} "
+            f"{row['screenful_ms']:>9.1f} ms {row['again_ms']:>8.1f} ms "
+            f"{row['zoomout_ms']:>8.1f} ms {row['zoomout_pieces']:>9}"
+        )
 
     if len(rows) >= 2:
         first, last = rows[0], rows[-1]

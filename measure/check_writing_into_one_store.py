@@ -89,38 +89,67 @@ def write_store(store: Path, *, filled: bool) -> None:
         folder = store / str(level)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / ".zarray").write_text(
-            json.dumps({
-                "zarr_format": 2,
-                "shape": [1, side, side, side],
-                "chunks": [1, 1, CHUNK, CHUNK],
-                "dtype": "<u2", "compressor": None, "fill_value": 0,
-                "order": "C", "filters": None, "dimension_separator": ".",
-            }), encoding="utf-8")
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, VOXEL_UM[0] * 2**level,
-                                            VOXEL_UM[1] * 2**level,
-                                            VOXEL_UM[2] * 2**level]}],
-        })
+            json.dumps(
+                {
+                    "zarr_format": 2,
+                    "shape": [1, side, side, side],
+                    "chunks": [1, 1, CHUNK, CHUNK],
+                    "dtype": "<u2",
+                    "compressor": None,
+                    "fill_value": 0,
+                    "order": "C",
+                    "filters": None,
+                    "dimension_separator": ".",
+                }
+            ),
+            encoding="utf-8",
+        )
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {
+                        "type": "scale",
+                        "scale": [
+                            1.0,
+                            VOXEL_UM[0] * 2**level,
+                            VOXEL_UM[1] * 2**level,
+                            VOXEL_UM[2] * 2**level,
+                        ],
+                    }
+                ],
+            }
+        )
         if filled:
             fill_middle(store, level)
     (store / ".zattrs").write_text(
-        json.dumps({
-            "multiscales": [{
-                "version": "0.4",
-                "axes": [
-                    {"name": "c", "type": "channel"},
-                    {"name": "z", "type": "space", "unit": "micrometer"},
-                    {"name": "y", "type": "space", "unit": "micrometer"},
-                    {"name": "x", "type": "space", "unit": "micrometer"},
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": datasets,
+                    }
                 ],
-                "datasets": datasets,
-            }],
-            "omero": {"channels": [{"label": "ch0", "color": "FFFFFF",
-                                    "window": {"min": 0, "max": 65535,
-                                               "start": 0, "end": 4000}}]},
-        }), encoding="utf-8")
+                "omero": {
+                    "channels": [
+                        {
+                            "label": "ch0",
+                            "color": "FFFFFF",
+                            "window": {"min": 0, "max": 65535, "start": 0, "end": 4000},
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def fill_middle(store: Path, level: int) -> None:
@@ -154,19 +183,30 @@ def run() -> None:
         write_store(store, filled=False)
         # Live, as during a run: nothing is kept by the browser's own cache, so anything
         # that fails to appear failed inside the engine rather than in the browser.
-        httpd = make_server(port=0, data_dir=root, site_dir=VIZ / "app" / "page" / "dist",
-                            store=["overview_whole.ome.zarr"], live=True)
+        httpd = make_server(
+            port=0,
+            data_dir=root,
+            site_dir=VIZ / "app" / "page" / "dist",
+            store=["overview_whole.ome.zarr"],
+            live=True,
+        )
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
         url = f"http://127.0.0.1:{httpd.server_address[1]}"
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
-                args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"])
+                args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+            )
             page = browser.new_page(viewport={"width": 1100, "height": 800})
             chunks: list[str] = []
-            page.on("request", lambda r: chunks.append(r.url)
+            page.on(
+                "request",
+                lambda r: (
+                    chunks.append(r.url)
                     if "/data/" in r.url and not r.url.endswith((".zarray", ".zattrs", ".zgroup"))
-                    else None)
+                    else None
+                ),
+            )
             try:
                 page.goto(url, wait_until="domcontentloaded")
                 page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
@@ -192,8 +232,10 @@ def run() -> None:
                 if appeared:
                     print("The piece written later DID appear on its own.")
                     return
-                print("The piece written later did NOT appear on its own: the engine "
-                      "answers from what it already decided was empty.")
+                print(
+                    "The piece written later did NOT appear on its own: the engine "
+                    "answers from what it already decided was empty."
+                )
 
                 # Now ask the engine to let go of the pieces it has decoded, which is a
                 # thing it offers -- ChunkSource.invalidateCache tells the worker holding
@@ -218,13 +260,17 @@ def run() -> None:
                 print(f"  pieces asked for since:  {len(chunks) - asked_before}")
                 print()
                 if forced["distinct"] > 2 and forced["dominant_fraction"] < 0.99:
-                    print("It appeared. So a run CAN write into one open store, provided "
-                          "the viewer is told to let go of the pieces it has decoded when "
-                          "the run announces. That is a supported call, not a patch.")
+                    print(
+                        "It appeared. So a run CAN write into one open store, provided "
+                        "the viewer is told to let go of the pieces it has decoded when "
+                        "the run announces. That is a supported call, not a patch."
+                    )
                 else:
-                    print("Still nothing. Letting go of the decoded pieces is not enough "
-                          "on its own, so this needs more thought before the idea can be "
-                          "relied on.")
+                    print(
+                        "Still nothing. Letting go of the decoded pieces is not enough "
+                        "on its own, so this needs more thought before the idea can be "
+                        "relied on."
+                    )
             finally:
                 page.close()
                 browser.close()

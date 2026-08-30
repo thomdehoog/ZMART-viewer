@@ -785,8 +785,7 @@ class AcquisitionProfile:
             or self.timepoints < 1
         ):
             raise ZmartLiveError(
-                f"A profile has to keep room for at least one timepoint; got "
-                f"{self.timepoints!r}."
+                f"A profile has to keep room for at least one timepoint; got {self.timepoints!r}."
             )
         if self.topology not in TOPOLOGIES:
             raise ZmartLiveError(
@@ -1144,8 +1143,7 @@ class PositionPlacement:
         return cls(
             position_id=value["position_id"],
             component_id=value["component_id"],
-            cell=(GridCell.from_json(value["cell"])
-                  if value.get("cell") is not None else None),
+            cell=(GridCell.from_json(value["cell"]) if value.get("cell") is not None else None),
             origin=value["origin"],
             analysis_input_roi=Box.from_json(value["analysis_input_roi"]),
             analysis_core_roi=Box.from_json(value["analysis_core_roi"]),
@@ -1485,8 +1483,7 @@ class CommitEvent:
             )
         if self.position_generation < 0:
             raise ZmartLiveError(
-                "Position generations are counted from zero; got "
-                f"{self.position_generation}."
+                f"Position generations are counted from zero; got {self.position_generation}."
             )
         if self.timepoint is not None and self.timepoint < 0:
             raise ZmartLiveError(f"Timepoints are counted from zero; got {self.timepoint}.")

@@ -177,8 +177,7 @@ class Geometry:
     @property
     def chunks_per_level(self) -> tuple[int, ...]:
         return tuple(
-            (self.height // (2**level) // chunk_y)
-            * (self.width // (2**level) // chunk_x)
+            (self.height // (2**level) // chunk_y) * (self.width // (2**level) // chunk_x)
             for level, (chunk_y, chunk_x) in enumerate(self.level_chunk_shapes)
         )
 
@@ -242,10 +241,7 @@ class _AxisChoice:
 
     @property
     def counts(self) -> tuple[int, ...]:
-        return tuple(
-            self.side // (2**level) // chunk
-            for level, chunk in enumerate(self.chunks)
-        )
+        return tuple(self.side // (2**level) // chunk for level, chunk in enumerate(self.chunks))
 
 
 def _divisors(number: int) -> tuple[int, ...]:
@@ -304,14 +300,9 @@ def _axis_choices(
             other.fraction <= candidate.fraction
             and all(
                 other_count <= candidate_count
-                for other_count, candidate_count in zip(
-                    other.counts, candidate.counts, strict=True
-                )
+                for other_count, candidate_count in zip(other.counts, candidate.counts, strict=True)
             )
-            and (
-                other.fraction < candidate.fraction
-                or other.counts != candidate.counts
-            )
+            and (other.fraction < candidate.fraction or other.counts != candidate.counts)
             for other in choices
         )
         if not dominated:
@@ -349,18 +340,15 @@ def optimize_the_geometry(
     height, width = _read_the_frame(frame)
     if pyramid_levels < 1:
         raise ZmartLiveError(
-            f"A pyramid needs at least its full-resolution level; got "
-            f"{pyramid_levels}."
+            f"A pyramid needs at least its full-resolution level; got {pyramid_levels}."
         )
     if minimum_chunk < 1 or maximum_chunk < minimum_chunk:
         raise ZmartLiveError(
-            f"Chunk limits must be positive and ordered; got {minimum_chunk} to "
-            f"{maximum_chunk}."
+            f"Chunk limits must be positive and ordered; got {minimum_chunk} to {maximum_chunk}."
         )
     if target_chunks_across < 1:
         raise ZmartLiveError(
-            f"The viewer target must allow at least one chunk across; got "
-            f"{target_chunks_across}."
+            f"The viewer target must allow at least one chunk across; got {target_chunks_across}."
         )
     allowed = None if chunk_choices is None else frozenset(chunk_choices)
     if allowed is not None and (not allowed or any(size < 1 for size in allowed)):
@@ -391,19 +379,14 @@ def optimize_the_geometry(
     if height == width:
         pairs = tuple((choice, choice) for choice in y_choices)
     else:
-        pairs = tuple(
-            (y_choice, x_choice)
-            for y_choice in y_choices
-            for x_choice in x_choices
-        )
+        pairs = tuple((y_choice, x_choice) for y_choice in y_choices for x_choice in x_choices)
     candidates = tuple(
         Geometry(
             frame_shape=(height, width),
             overlap_shape=(y_choice.overlap, x_choice.overlap),
             step_shape=(height - y_choice.overlap, width - x_choice.overlap),
             level_chunk_shapes=tuple(
-                (y_choice.chunks[level], x_choice.chunks[level])
-                for level in range(pyramid_levels)
+                (y_choice.chunks[level], x_choice.chunks[level]) for level in range(pyramid_levels)
             ),
         )
         for y_choice, x_choice in pairs
@@ -840,9 +823,7 @@ def plan_the_writing(
         described,
         profile_id=name_for_a_profile(
             described,
-            readable_prefix=(
-                readable_prefix or f"{acquisition_type}-{shape}-{chunk_label}"
-            ),
+            readable_prefix=(readable_prefix or f"{acquisition_type}-{shape}-{chunk_label}"),
         ),
     )
     return profile, geometry

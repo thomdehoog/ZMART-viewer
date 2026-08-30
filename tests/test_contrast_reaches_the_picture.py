@@ -65,9 +65,10 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from zmart_viewer.contrast import measure
 from demo_data import write_demo_zarr
 from pixels import colour_spread, image_middle
+
+from zmart_viewer.contrast import measure
 from zmart_viewer.server import make_server
 
 # Two brightness windows that could not be more different, and what each should do
@@ -189,9 +190,7 @@ def test_two_very_different_windows_draw_two_different_pictures(
     """
     import numpy as np
 
-    sensible, sensible_range = _drawn_with(
-        browser, one_channel_store, built_dist, _SENSIBLE_WINDOW
-    )
+    sensible, sensible_range = _drawn_with(browser, one_channel_store, built_dist, _SENSIBLE_WINDOW)
     far_too_wide, wide_range = _drawn_with(
         browser, one_channel_store, built_dist, _FAR_TOO_WIDE_WINDOW
     )
@@ -217,9 +216,7 @@ def test_two_very_different_windows_draw_two_different_pictures(
     )
 
 
-def test_the_shading_in_the_data_survives_to_the_screen(
-    browser, built_dist, one_channel_store
-):
+def test_the_shading_in_the_data_survives_to_the_screen(browser, built_dist, one_channel_store):
     """A specimen with soft, graded edges has to be drawn with soft, graded edges.
 
     The demo volume's cells are smooth balls of brightness, so a faithful drawing
@@ -339,9 +336,9 @@ def _write_store(path, planes, *, labels=None, zarr_format=2):
         scale = [2.0, _VOXEL, _VOXEL]
         chunks = (1, 64, 64)
     else:
-        data = np.stack(
-            [np.broadcast_to(plane, (depth, *plane.shape)) for plane in planes]
-        ).astype(np.uint16)[None]
+        data = np.stack([np.broadcast_to(plane, (depth, *plane.shape)) for plane in planes]).astype(
+            np.uint16
+        )[None]
         axes = ("t", "c", "z", "y", "x")
         scale = [1.0, 1.0, 2.0, _VOXEL, _VOXEL]
         chunks = (1, 1, 1, 64, 64)
@@ -350,8 +347,7 @@ def _write_store(path, planes, *, labels=None, zarr_format=2):
     units = {"t": "second", "z": "micrometer", "y": "micrometer", "x": "micrometer"}
     multiscale = {
         "axes": [
-            {"name": axis, "type": kinds[axis]}
-            | ({"unit": units[axis]} if axis in units else {})
+            {"name": axis, "type": kinds[axis]} | ({"unit": units[axis]} if axis in units else {})
             for axis in axes
         ],
         "datasets": [
@@ -365,9 +361,7 @@ def _write_store(path, planes, *, labels=None, zarr_format=2):
         # reports that as a complaint about the channel list rather than about the
         # colour, which is easily an hour lost. White is chosen so that these rows look
         # exactly like a store that describes no channels at all.
-        described["omero"] = {
-            "channels": [{"label": label, "color": "FFFFFF"} for label in labels]
-        }
+        described["omero"] = {"channels": [{"label": label, "color": "FFFFFF"} for label in labels]}
 
     group = zarr.open_group(str(path), mode="w", zarr_format=zarr_format)
     group.create_array("0", shape=data.shape, chunks=chunks, dtype="uint16")[:] = data
@@ -413,9 +407,7 @@ def _viewer_on(browser, site_dir, folder, name, window):
         thread.join(timeout=5)
 
     try:
-        page.goto(
-            f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-        )
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
         page.wait_for_function(
             """() => {
@@ -508,9 +500,7 @@ def test_a_narrow_window_on_ramped_data_shows_a_gradient(browser, built_dist, tm
     folder.mkdir()
     _write_store(folder / "overview_pos001.ome.zarr", [_ramp(_WIDE)])
 
-    page, stop = _viewer_on(
-        browser, built_dist, folder, "overview_pos001.ome.zarr", _FITTED_WINDOW
-    )
+    page, stop = _viewer_on(browser, built_dist, folder, "overview_pos001.ome.zarr", _FITTED_WINDOW)
     try:
         found = _describe(_grey(page))
     finally:
@@ -563,9 +553,7 @@ def two_complementary_rows(browser, built_dist, tmp_path):
         [np.hstack([half, blank]), np.hstack([blank, half])],
         labels=["left-half", "right-half"],
     )
-    page, stop = _viewer_on(
-        browser, built_dist, folder, "overview_pos001.ome.zarr", _FITTED_WINDOW
-    )
+    page, stop = _viewer_on(browser, built_dist, folder, "overview_pos001.ome.zarr", _FITTED_WINDOW)
     try:
         yield page
     finally:
@@ -627,14 +615,10 @@ def test_ground_nobody_imaged_stays_transparent(two_complementary_rows):
         without = _halves(page)
         print(f"  {hidden} hidden: {without}")
         went_dark = [
-            side
-            for side in ("left", "right")
-            if without[side]["lit"] < both[side]["lit"] / 4
+            side for side in ("left", "right") if without[side]["lit"] < both[side]["lit"] / 4
         ]
         survived = [
-            side
-            for side in ("left", "right")
-            if without[side]["lit"] > both[side]["lit"] * 0.8
+            side for side in ("left", "right") if without[side]["lit"] > both[side]["lit"] * 0.8
         ]
         assert len(went_dark) == 1 and len(survived) == 1, (
             f"hiding the {hidden} row should have emptied exactly one half of the "
@@ -725,9 +709,7 @@ def test_an_ome_zarr_zero_point_five_store_measures_its_own_window(tmp_path):
     comes back describes *this specimen* rather than the kind of number it happens to be
     stored as.
     """
-    store = _write_store(
-        tmp_path / "overview_pos001.ome.zarr", [_ramp(64)], zarr_format=3
-    )
+    store = _write_store(tmp_path / "overview_pos001.ome.zarr", [_ramp(64)], zarr_format=3)
 
     found = measure(store)
     print(f"\n  measured from an OME-Zarr 0.5 store: {found['window']}")
@@ -765,9 +747,7 @@ def test_the_older_format_still_measures_the_same_specimen(tmp_path):
     one, which is the layout every instrument in the building writes today. The same
     specimen written both ways has to measure the same, down to the histogram.
     """
-    written_the_old_way = measure(
-        _write_store(tmp_path / "old_pos001.ome.zarr", [_ramp(64)])
-    )
+    written_the_old_way = measure(_write_store(tmp_path / "old_pos001.ome.zarr", [_ramp(64)]))
     written_the_new_way = measure(
         _write_store(tmp_path / "new_pos001.ome.zarr", [_ramp(64)], zarr_format=3)
     )

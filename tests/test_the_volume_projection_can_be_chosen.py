@@ -19,8 +19,6 @@ a dropdown away.
 
 from __future__ import annotations
 
-import statistics
-
 MODE_OF_EACH_LAYER = """() => window.zmartViewer.layerManager.managedLayers
     .filter((m) => m.layer && m.layer.type === 'image')
     .map((m) => m.layer.volumeRenderingMode.value)"""
@@ -38,6 +36,7 @@ def _spread(page) -> float:
     import io
 
     from PIL import Image
+
     # A generous deadline on purpose. The screenshot waits for a stable
     # frame, and the accumulation projection of the demo volume takes ~35 s
     # to draw one on a machine rendering in software (measured 2026-08-15;
@@ -45,8 +44,7 @@ def _spread(page) -> float:
     # about the two pictures DIFFERING, never about speed -- the drawing-rate
     # gates own speed -- so it must not fail on a machine that merely has no
     # GPU.
-    shot = page.screenshot(clip={"x": 0, "y": 0, "width": 600, "height": 600},
-                           timeout=180_000)
+    shot = page.screenshot(clip={"x": 0, "y": 0, "width": 600, "height": 600}, timeout=180_000)
     import numpy as np
 
     return float(np.asarray(Image.open(io.BytesIO(shot)).convert("L")).std())

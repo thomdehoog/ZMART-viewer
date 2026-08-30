@@ -80,29 +80,47 @@ def tile(brightness: int = 600) -> bytes:
 
 
 def _zarray(shape, chunks) -> str:
-    return json.dumps({
-        "zarr_format": 2, "shape": list(shape), "chunks": list(chunks),
-        "dtype": "<u2", "compressor": None, "fill_value": 0,
-        "order": "C", "filters": None, "dimension_separator": ".",
-    })
+    return json.dumps(
+        {
+            "zarr_format": 2,
+            "shape": list(shape),
+            "chunks": list(chunks),
+            "dtype": "<u2",
+            "compressor": None,
+            "fill_value": 0,
+            "order": "C",
+            "filters": None,
+            "dimension_separator": ".",
+        }
+    )
 
 
 def _attrs(datasets) -> str:
-    return json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [
-                {"name": "c", "type": "channel"},
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"},
+    return json.dumps(
+        {
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "axes": [
+                        {"name": "c", "type": "channel"},
+                        {"name": "z", "type": "space", "unit": "micrometer"},
+                        {"name": "y", "type": "space", "unit": "micrometer"},
+                        {"name": "x", "type": "space", "unit": "micrometer"},
+                    ],
+                    "datasets": datasets,
+                }
             ],
-            "datasets": datasets,
-        }],
-        "omero": {"channels": [{"label": "ch0", "color": "FFFFFF",
-                                "window": {"min": 0, "max": 65535,
-                                           "start": 0, "end": 4000}}]},
-    })
+            "omero": {
+                "channels": [
+                    {
+                        "label": "ch0",
+                        "color": "FFFFFF",
+                        "window": {"min": 0, "max": 65535, "start": 0, "end": 4000},
+                    }
+                ]
+            },
+        }
+    )
 
 
 def write_position(store: Path, index: int, across: int) -> None:
@@ -110,20 +128,27 @@ def write_position(store: Path, index: int, across: int) -> None:
     level = store / "0"
     level.mkdir(parents=True, exist_ok=True)
     (store / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
-    (level / ".zarray").write_text(_zarray((1, 1, SIDE, SIDE), (1, 1, SIDE, SIDE)),
-                                   encoding="utf-8")
+    (level / ".zarray").write_text(
+        _zarray((1, 1, SIDE, SIDE), (1, 1, SIDE, SIDE)), encoding="utf-8"
+    )
     (level / "0.0.0.0").write_bytes(tile())
     row, column = divmod(index, across)
     step = SIDE * VOXEL_UM[2]
     (store / ".zattrs").write_text(
-        _attrs([{
-            "path": "0",
-            "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, *VOXEL_UM]},
-                {"type": "translation",
-                 "translation": [0.0, 0.0, row * step, column * step]},
-            ],
-        }]),
+        _attrs(
+            [
+                {
+                    "path": "0",
+                    "coordinateTransformations": [
+                        {"type": "scale", "scale": [1.0, *VOXEL_UM]},
+                        {
+                            "type": "translation",
+                            "translation": [0.0, 0.0, row * step, column * step],
+                        },
+                    ],
+                }
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -138,13 +163,16 @@ def declare_one_store(store: Path) -> None:
         folder = store / str(level)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / ".zarray").write_text(
-            _zarray((1, side, side, side), (1, 1, CHUNK, CHUNK)), encoding="utf-8")
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale",
-                 "scale": [1.0, *(unit * 2**level for unit in VOXEL_UM)]}],
-        })
+            _zarray((1, side, side, side), (1, 1, CHUNK, CHUNK)), encoding="utf-8"
+        )
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, *(unit * 2**level for unit in VOXEL_UM)]}
+                ],
+            }
+        )
     (store / ".zattrs").write_text(_attrs(datasets), encoding="utf-8")
 
 
@@ -175,12 +203,14 @@ HELD = """() => window.zmartViewer.layerManager.managedLayers
 
 
 def open_on(pw, root: Path, names, live: bool = True):
-    httpd = make_server(port=0, data_dir=root, site_dir=HERE / "app" / "page" / "dist",
-                        store=names, live=live)
+    httpd = make_server(
+        port=0, data_dir=root, site_dir=HERE / "app" / "page" / "dist", store=names, live=live
+    )
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     browser = pw.chromium.launch(
-        args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"])
+        args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+    )
     page = browser.new_page(viewport={"width": 1100, "height": 800})
     page.goto(f"http://127.0.0.1:{httpd.server_address[1]}", wait_until="domcontentloaded")
     page.wait_for_function("() => window.zmartViewer !== undefined", timeout=300_000)
@@ -209,8 +239,7 @@ def one_position_arriving(pw, already: int) -> dict:
             page.wait_for_function(f"{HELD} === {already + 1}", timeout=300_000)
             took = time.monotonic() - started
             page.wait_for_timeout(1500)
-            return {"already": already, "requests": len(asked) - mark,
-                    "seconds": round(took, 2)}
+            return {"already": already, "requests": len(asked) - mark, "seconds": round(took, 2)}
         finally:
             page.close()
             browser.close()
@@ -250,8 +279,11 @@ def one_tile_landing(pw, already: int) -> dict:
                 elif time.monotonic() - quiet_since > 2.0:
                     break
             took = quiet_since - started
-            return {"already": already, "requests": len(asked) - mark,
-                    "seconds": round(max(took, 0.0), 2)}
+            return {
+                "already": already,
+                "requests": len(asked) - mark,
+                "seconds": round(max(took, 0.0), 2),
+            }
         finally:
             page.close()
             browser.close()
@@ -283,8 +315,10 @@ def main() -> int:
     print(f"{'already open':>13} {'a position arriving':>32} {'a tile landing in one store':>32}")
     print(f"{'':>13} {'requests':>16} {'seconds':>15} {'requests':>16} {'seconds':>15}")
     for left, right in zip(many, one, strict=True):
-        print(f"{left['already']:>13} {left['requests']:>16} {left['seconds']:>14}s "
-              f"{right['requests']:>16} {right['seconds']:>14}s")
+        print(
+            f"{left['already']:>13} {left['requests']:>16} {left['seconds']:>14}s "
+            f"{right['requests']:>16} {right['seconds']:>14}s"
+        )
     print()
     print(
         "Read down the columns rather than across. If the requests for a layout climb\n"

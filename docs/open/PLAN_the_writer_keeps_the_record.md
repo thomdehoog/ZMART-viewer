@@ -6,8 +6,9 @@
 > `zmart_viewer/record/` (formerly the `zmart_live` package), the three
 > small utilities it needed from `zmart_storage` are folded into
 > `record/model.py`, the run fixtures live with the tests
-> (`tests/record_fixtures.py`), and the elder writers the compatibility
-> gates exercise live in `testdata/oldwriter/`. The external
+> (`tests/record_fixtures.py`), and the elder writers are **gone** -- the
+> formats they wrote are pinned by hand-written fixtures
+> (`tests/pointed_by_hand.py`) against the viewer's own contracts. The external
 > `zmart-microscopy` dependency is gone from `pyproject.toml`. The plan
 > below is kept as the reasoning; its "microscopy steps" now read as the
 > other repo's migration: delete its copy of this machinery and drive the

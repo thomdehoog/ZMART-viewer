@@ -31,11 +31,11 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
 from check_the_built_picture import decode  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
+from record_fixtures import FRAME, some_specimen  # noqa: E402
 
+from zmart_viewer.building import GovernedRun  # noqa: E402
 from zmart_viewer.record.model import GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
-from record_fixtures import FRAME, some_specimen  # noqa: E402
 
 # Small pieces, so the picture is several pieces across and posA-only ground,
 # shared ground, and posB-only ground all fall in different pieces.
@@ -86,8 +86,7 @@ def pixels_of(composer, level: int, plane: int, row: int, column: int) -> np.nda
     fill value, exactly as the engine paints it.
     """
     body = composer.bytes_for(level, plane, row, column)
-    return decode(body, composer.piece, str(composer.mosaic.dtype),
-                  composer.mosaic.axes)
+    return decode(body, composer.piece, str(composer.mosaic.dtype), composer.mosaic.axes)
 
 
 def the_columns_of(run) -> tuple[int, int, int]:
@@ -171,8 +170,7 @@ def test_a_half_written_arrival_does_not_take_down_serving(tmp_path):
     composer = GovernedRun(run.folder, piece=PIECE).composer()
     a_only, _, _ = the_columns_of(run)
     assert 700 in pixels_of(composer, 0, 0, 0, a_only), (
-        "committed ground must keep serving while an uncommitted arrival is "
-        "half-written beside it"
+        "committed ground must keep serving while an uncommitted arrival is half-written beside it"
     )
 
 
@@ -187,8 +185,7 @@ def test_an_empty_run_is_a_valid_empty_picture(tmp_path):
 
     height_now, width_now = run._mosaic_extent()
     assert composer.mosaic.shape(0)[1:] == (height_now, width_now), (
-        "the picture's frame comes from the layout, so it exists before any "
-        "position does"
+        "the picture's frame comes from the layout, so it exists before any position does"
     )
     assert composer.bytes_for(0, 0, 0, 0) is None
 
@@ -211,8 +208,7 @@ def test_an_absent_chunk_of_committed_ground_is_refused_not_invented(tmp_path):
     run.write_and_publish("posA", some_specimen(700))
 
     level_zero = run.position_store("posA") / "0"
-    chunks = [one for one in level_zero.rglob("*") if one.is_file()
-              and one.name != "zarr.json"]
+    chunks = [one for one in level_zero.rglob("*") if one.is_file() and one.name != "zarr.json"]
     assert chunks, "the fixture's position keeps its pixels somewhere"
     for one in chunks:
         one.unlink()
@@ -262,8 +258,7 @@ def test_a_commit_keeps_the_unchanged_ground_warm(tmp_path):
     governed = GovernedRun(run.folder, piece=PIECE)
     a_only, _, _ = the_columns_of(run)
     before = governed.composer().bytes_for(0, 0, 0, a_only)
-    assert before is not None and 700 in pixels_of(
-        governed.composer(), 0, 0, 0, a_only)
+    assert before is not None and 700 in pixels_of(governed.composer(), 0, 0, 0, a_only)
 
     for chunk in (run.position_store("posA") / "0").rglob("*"):
         if chunk.is_file() and chunk.name != "zarr.json":
@@ -297,8 +292,7 @@ def test_ground_a_commit_touched_is_rebuilt_not_remembered(tmp_path):
 
     seen = set(np.unique(pixels_of(governed.composer(), 0, 0, 0, a_only)))
     assert 2200 in seen and 700 not in seen, (
-        "ground the replacement touched answered from the old snapshot's "
-        "cache"
+        "ground the replacement touched answered from the old snapshot's cache"
     )
 
 
@@ -331,8 +325,7 @@ def test_the_levels_of_a_governed_picture_are_registered_to_each_other(tmp_path)
     for dataset in datasets[1:]:
         transforms = dataset["coordinateTransformations"]
         voxel = next(one for one in transforms if one["type"] == "scale")["scale"]
-        at = next(one for one in transforms
-                  if one["type"] == "translation")["translation"]
+        at = next(one for one in transforms if one["type"] == "translation")["translation"]
         for axis in range(3):
             expected = base_at[axis] + (voxel[axis] - base_voxel[axis]) / 2
             assert at[axis] == pytest.approx(expected), (
@@ -353,41 +346,67 @@ def test_a_transfers_decimated_levels_keep_their_own_registration(tmp_path):
 
     import numpy as np
     import zarr
-    from zmart_viewer.compose import Composer
-    from zmart_viewer.compose import read_the_transfer
+
+    from zmart_viewer.compose import Composer, read_the_transfer
 
     transfer = tmp_path / "transfer"
     store = transfer / "tile.ome.zarr"
     datasets = []
     for level in range(2):
-        shrink = 2 ** level
+        shrink = 2**level
         array = zarr.create_array(
-            store=str(store / str(level)), shape=(1, 64 // shrink, 64 // shrink),
-            chunks=(1, 64 // shrink, 64 // shrink), dtype="uint16",
-            zarr_format=3, dimension_names=["z", "y", "x"], overwrite=True)
+            store=str(store / str(level)),
+            shape=(1, 64 // shrink, 64 // shrink),
+            chunks=(1, 64 // shrink, 64 // shrink),
+            dtype="uint16",
+            zarr_format=3,
+            dimension_names=["z", "y", "x"],
+            overwrite=True,
+        )
         array[:] = 700
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 0.5 * shrink, 0.5 * shrink]},
-                {"type": "translation", "translation": [0.0, 0.0, 0.0]},
-            ],
-        })
-    (store / "zarr.json").write_text(json.dumps({
-        "attributes": {"ome": {"version": "0.5", "multiscales": [{
-            "name": "tile", "type": "nearest",
-            "axes": [{"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": datasets}]}},
-        "zarr_format": 3, "node_type": "group"}), encoding="utf-8")
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, 0.5 * shrink, 0.5 * shrink]},
+                    {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+                ],
+            }
+        )
+    (store / "zarr.json").write_text(
+        json.dumps(
+            {
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "multiscales": [
+                            {
+                                "name": "tile",
+                                "type": "nearest",
+                                "axes": [
+                                    {"name": "z", "type": "space", "unit": "micrometer"},
+                                    {"name": "y", "type": "space", "unit": "micrometer"},
+                                    {"name": "x", "type": "space", "unit": "micrometer"},
+                                ],
+                                "datasets": datasets,
+                            }
+                        ],
+                    }
+                },
+                "zarr_format": 3,
+                "node_type": "group",
+            }
+        ),
+        encoding="utf-8",
+    )
 
     composer = Composer(read_the_transfer(transfer), piece=32)
     described = json.loads(composer.group_json())
     held = described["attributes"]["ome"]["multiscales"][0]["datasets"]
     for dataset in held:
-        at = next(one for one in dataset["coordinateTransformations"]
-                  if one["type"] == "translation")["translation"]
+        at = next(
+            one for one in dataset["coordinateTransformations"] if one["type"] == "translation"
+        )["translation"]
         assert at == [0.0, 0.0, 0.0], (
             "a decimated pyramid's levels were shifted — that misregisters "
             "every transfer that is correct today"
@@ -413,19 +432,18 @@ def test_a_governed_picture_is_served_with_the_gate_on(tmp_path):
     run.write_and_publish("posA", some_specimen(700))
     written_but_not_published(run, "posB", 4242)
 
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE
+    )
     try:
         a_only, _, b_only = the_columns_of(run)
         held = served.built_bytes_behind(store, f"0/c/0/0/{a_only}")
-        assert held is not None and 700 in decode(held, PIECE, "uint16",
-                                                  ("z", "y", "x"))
+        assert held is not None and 700 in decode(held, PIECE, "uint16", ("z", "y", "x"))
         assert served.built_bytes_behind(store, f"0/c/0/0/{b_only}") is None
 
         run.publish("posB")
         appeared = served.built_bytes_behind(store, f"0/c/0/0/{b_only}")
-        assert appeared is not None and 4242 in decode(
-            appeared, PIECE, "uint16", ("z", "y", "x"))
+        assert appeared is not None and 4242 in decode(appeared, PIECE, "uint16", ("z", "y", "x"))
     finally:
         served.forget(store)
 
@@ -452,13 +470,21 @@ def test_a_picture_declared_over_a_runs_positions_is_refused(tmp_path):
 
     store = tmp_path / "sneak" / "bypass.ome.zarr"
     store.mkdir(parents=True)
-    (store / "zarr.json").write_text(json.dumps({
-        "zarr_format": 3, "node_type": "group",
-        "attributes": {"zmart": {
-            "built_from": (run.folder / "positions").as_posix(),
-            "piece": PIECE,
-        }},
-    }), encoding="utf-8")
+    (store / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                    "zmart": {
+                        "built_from": (run.folder / "positions").as_posix(),
+                        "piece": PIECE,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     try:
         assert served.built_bytes_behind(store, "0/c/0/0/0") is None, (
             "a picture built over a governed run's positions folder must not "
@@ -488,9 +514,11 @@ def test_a_governed_picture_that_cannot_be_made_says_try_again(tmp_path):
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
-    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder,
-                                       name="live", piece=PIECE)
+    store = declare_a_governed_picture(
+        run.folder / "views" / "shown", run.folder, name="live", piece=PIECE
+    )
     import shutil
+
     shutil.rmtree(run.folder / "views" / "live" / "metadata")
 
     try:
@@ -514,15 +542,16 @@ def test_a_run_of_several_channels_declares_with_its_colour_axis(tmp_path):
     import json
 
     from zmart_viewer.building import declare_a_governed_picture
-
     from zmart_viewer.record.coordinator import LivePublisher
 
-    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1,
-                                  channels=("488", "561"))
-    run = LivePublisher(tmp_path, profile, run_id="two-colours",
-                        cells={GridCell(0, 0): "posA", GridCell(0, 1): "posB"})
-    store = declare_a_governed_picture(run.folder / "views" / "shown",
-                                       run.folder, name="live")
+    profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, channels=("488", "561"))
+    run = LivePublisher(
+        tmp_path,
+        profile,
+        run_id="two-colours",
+        cells={GridCell(0, 0): "posA", GridCell(0, 1): "posB"},
+    )
+    store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder, name="live")
     level = json.loads((store / "0" / "zarr.json").read_text())
     assert level["shape"][:2] == [1, 2], (
         "two declared channels must give the picture a two-channel axis"
@@ -553,15 +582,13 @@ def test_a_derive_reads_one_pattern_store_however_many_are_committed(tmp_path):
     governed = GovernedRun(run.folder, piece=PIECE)
     governed.composer()
     assert governed.accounting["last_tiles_read"] == 1, (
-        "a cold derive read the survey instead of stamping it from one "
-        "pattern store and the layout"
+        "a cold derive read the survey instead of stamping it from one pattern store and the layout"
     )
 
     run.write_and_publish("posC", some_specimen(1900))
     composer = governed.composer()
     assert governed.accounting["last_tiles_read"] == 0, (
-        "a landing has the pattern in hand already, so it must read no "
-        "store at all"
+        "a landing has the pattern in hand already, so it must read no store at all"
     )
     a_only, _, _ = the_columns_of(run)
     assert 700 in pixels_of(composer, 0, 0, 0, a_only), (
@@ -596,8 +623,7 @@ def test_a_stamped_tile_says_exactly_what_the_walked_tile_would(tmp_path):
 
     for position_id, generation in (("posA", 0), ("posB", 1)):
         stamped = governed._tiles[position_id]
-        walked = _a_committed_tile(governed._the_store_of(position_id,
-                                                          generation))
+        walked = _a_committed_tile(governed._the_store_of(position_id, generation))
         assert stamped.name == walked.name
         assert stamped.store == walked.store
         assert stamped.axes == walked.axes
@@ -617,8 +643,7 @@ def test_a_stamped_tile_says_exactly_what_the_walked_tile_would(tmp_path):
             )
 
 
-def test_a_commit_arriving_between_the_snapshots_two_reads_is_left_to_the_next(
-        tmp_path):
+def test_a_commit_arriving_between_the_snapshots_two_reads_is_left_to_the_next(tmp_path):
     """A commit landing mid-derive must not crash the snapshot being made.
 
     The derive reads the manifest twice — the published units, then the draw
@@ -674,9 +699,7 @@ def test_a_pattern_whose_corner_disagrees_with_the_layout_is_refused(tmp_path):
     for dataset in held["attributes"]["ome"]["multiscales"][0]["datasets"]:
         for transform in dataset["coordinateTransformations"]:
             if transform["type"] == "translation":
-                transform["translation"] = [
-                    number + 5.0 for number in transform["translation"]
-                ]
+                transform["translation"] = [number + 5.0 for number in transform["translation"]]
     described.write_text(json.dumps(held), encoding="utf-8")
 
     with pytest.raises(ValueError, match="layout"):
@@ -707,8 +730,7 @@ def test_serving_holds_no_lasting_handle_on_committed_pixels(tmp_path):
     assert composer.bytes_for(0, 0, 0, a_only) is not None
 
     level_zero = run.position_store("posA") / "0"
-    chunks = [one for one in level_zero.rglob("*") if one.is_file()
-              and one.name != "zarr.json"]
+    chunks = [one for one in level_zero.rglob("*") if one.is_file() and one.name != "zarr.json"]
     assert chunks, "the piece was built, so chunks were read"
     for chunk in chunks:
         newcomer = chunk.with_suffix(".arriving")
@@ -779,20 +801,16 @@ def test_the_inherited_piece_index_matches_one_built_fresh(tmp_path):
     landed = governed.composer()
     fresh = GovernedRun(tmp_path, piece=PIECE).composer()
     assert the_index_as_names(landed) == the_index_as_names(fresh), (
-        "after a landing, the inherited index disagrees with one built "
-        "from scratch"
+        "after a landing, the inherited index disagrees with one built from scratch"
     )
 
     run.replace_a_position("posA", some_specimen(2200))  # a new generation
     replaced = governed.composer()
     fresh = GovernedRun(tmp_path, piece=PIECE).composer()
     assert the_index_as_names(replaced) == the_index_as_names(fresh), (
-        "after a replacement, the inherited index disagrees with one built "
-        "from scratch"
+        "after a replacement, the inherited index disagrees with one built from scratch"
     )
     for entries in the_index_as_names(replaced).values():
         for named in entries.values():
             for name, _ in named:
-                assert "posA.ome" not in name, (
-                    "a piece still names the replaced generation's store"
-                )
+                assert "posA.ome" not in name, "a piece still names the replaced generation's store"

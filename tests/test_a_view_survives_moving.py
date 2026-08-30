@@ -33,14 +33,14 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
+from record_fixtures import a_live_run, some_specimen  # noqa: E402
+from test_a_dataset_is_relived_as_a_live_run import _a_grid_scan, _post  # noqa: E402
+from test_open_and_close import _store  # noqa: E402
+
 from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 from zmart_viewer.library import Library  # noqa: E402
 from zmart_viewer.live import LIVE_PICTURE, LiveRegistry  # noqa: E402
 from zmart_viewer.server import make_server  # noqa: E402
-from test_a_dataset_is_relived_as_a_live_run import _a_grid_scan, _post  # noqa: E402
-from test_open_and_close import _store  # noqa: E402
-
-from record_fixtures import a_live_run, some_specimen  # noqa: E402
 
 
 def test_a_moved_scene_still_opens_and_serves(built_dist, tmp_path):
@@ -55,29 +55,29 @@ def test_a_moved_scene_still_opens_and_serves(built_dist, tmp_path):
     first.mkdir()
     _store(first / "overview_pos001.ome.zarr", channels=1)
     scan = _a_grid_scan(tmp_path / "scan")
-    built = declare_a_built_picture(tmp_path / "scenes", scan, name="scan",
-                                    bake=True)
+    built = declare_a_built_picture(tmp_path / "scenes", scan, name="scan", bake=True)
 
     tidied = tmp_path / "projects" / "spring" / "scan.ome.zarr"
     tidied.parent.mkdir(parents=True)
     shutil.move(str(built), str(tidied))
 
-    server = make_server(port=0, data_dir=first, site_dir=built_dist,
-                         store="overview_pos001.ome.zarr")
+    server = make_server(
+        port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         address = f"http://127.0.0.1:{server.server_address[1]}"
-        status, answer = _post(address, "/api/stores/open",
-                               {"path": str(tidied)})
+        status, answer = _post(address, "/api/stores/open", {"path": str(tidied)})
         assert status == 200, answer
         told = json.dumps(answer.get("layers", []))
         assert "scan.ome.zarr" in told, "the moved scene must become rows"
         # One piece of the finest level, fetched over HTTP from the moved
         # scene: the finest ground is never baked, so these bytes can only
         # have been composed from the raw data the pointers name.
-        source = next(one for one in answer["layers"]
-                      if "scan.ome.zarr" in json.dumps(one))["sources"][0]
+        source = next(one for one in answer["layers"] if "scan.ome.zarr" in json.dumps(one))[
+            "sources"
+        ][0]
         base = source.split("|")[0]
         import urllib.request
 
@@ -107,7 +107,10 @@ def test_a_moved_run_redeclares_its_picture_at_its_new_home(tmp_path):
     with something to lose in a move: real files, written at the old home,
     which have to be written again at the new one.
     """
-    baking = (lambda run_root: True)
+
+    def baking(run_root):
+        return True
+
     run = a_live_run(tmp_path / "was")
     run.write_and_publish("posA", some_specimen(700))
 
@@ -127,15 +130,10 @@ def test_a_moved_run_redeclares_its_picture_at_its_new_home(tmp_path):
     library.open(moved, names=["views/live/live.ome.zarr"], watch=False)
     registry = LiveRegistry(library, wants_the_bake=baking)
     bindings, _ = registry.refresh()
-    assert len(bindings) == 1, (
-        f"the moved run did not bind: {registry.errors}"
-    )
-    described = json.loads(
-        (moved / LIVE_PICTURE / "zarr.json").read_text(encoding="utf-8"))
-    assert described["attributes"]["zmart"]["governed_from"] == (
-        moved.as_posix()), (
-        "the re-declared picture must name its NEW home, not the folder "
-        "the run was moved away from"
+    assert len(bindings) == 1, f"the moved run did not bind: {registry.errors}"
+    described = json.loads((moved / LIVE_PICTURE / "zarr.json").read_text(encoding="utf-8"))
+    assert described["attributes"]["zmart"]["governed_from"] == (moved.as_posix()), (
+        "the re-declared picture must name its NEW home, not the folder the run was moved away from"
     )
     assert (moved / LIVE_PICTURE / "baked.json").is_file(), (
         "the re-declaration keeps the one live path: baked, per commit"

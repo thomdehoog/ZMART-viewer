@@ -48,10 +48,10 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
 
-from playwright.sync_api import sync_playwright  # noqa: E402
-
 from make_ladder_stores import RUNGS, a_rung_of  # noqa: E402
 from pixels import fraction_lit  # noqa: E402
+from playwright.sync_api import sync_playwright  # noqa: E402
+
 from zmart_viewer.server import make_server  # noqa: E402
 
 # The picture has settled when nothing new has been asked for this long.
@@ -136,8 +136,11 @@ def _post_open(port: int, folder: Path) -> dict:
     """Ask the server to open the folder, the way a workflow would."""
     body = json.dumps({"path": str(folder)}).encode("utf-8")
     request = urllib.request.Request(
-        f"http://127.0.0.1:{port}/api/stores/open", data=body,
-        headers={"Content-Type": "application/json"}, method="POST")
+        f"http://127.0.0.1:{port}/api/stores/open",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     with urllib.request.urlopen(request, timeout=PATIENCE_S) as answer:
         return json.loads(answer.read())
 
@@ -159,8 +162,7 @@ def measure_a_rung(count: int, built: Path) -> dict:
     # Nothing is opened at startup (`loads=[]`): the rung goes in through
     # `/api/stores/open`, the same door a workflow uses, so the compose is
     # part of what is timed. Static mode, because the rung is finished data.
-    server = make_server(port=0, data_dir=rung, site_dir=built, loads=[],
-                         live=False)
+    server = make_server(port=0, data_dir=rung, site_dir=built, loads=[], live=False)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     port = server.server_address[1]
@@ -168,8 +170,8 @@ def measure_a_rung(count: int, built: Path) -> dict:
     row: dict = {"positions": count}
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
-            args=["--use-gl=angle", "--use-angle=swiftshader",
-                  "--ignore-gpu-blocklist"])
+            args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+        )
         page = browser.new_page(viewport={"width": 900, "height": 700})
         # Every request for picture, and when the last one was heard. The
         # page asks for descriptions and pieces alike under ``/data/``, so
@@ -199,15 +201,17 @@ def measure_a_rung(count: int, built: Path) -> dict:
                     raise TimeoutError(
                         f"the picture had not settled after {PATIENCE_S}s "
                         f"(state {page.evaluate(SETTLED_STATE)}, "
-                        f"{sink['data']} data requests)")
+                        f"{sink['data']} data requests)"
+                    )
                 state = page.evaluate(SETTLED_STATE)
-                if first_pixels is None and state["ready"] \
-                        and fraction_lit(page) > 0.01:
+                if first_pixels is None and state["ready"] and fraction_lit(page) > 0.01:
                     first_pixels = time.perf_counter() - began
-                arrived = (state["ready"] and state["waiting"] == 0
-                           and state["resolved"])
-                if arrived and first_pixels is not None \
-                        and time.perf_counter() - sink["last"] >= QUIET_S:
+                arrived = state["ready"] and state["waiting"] == 0 and state["resolved"]
+                if (
+                    arrived
+                    and first_pixels is not None
+                    and time.perf_counter() - sink["last"] >= QUIET_S
+                ):
                     break
                 page.wait_for_timeout(150)
 
@@ -253,7 +257,8 @@ def main() -> int:
             "the viewer page has not been built, so there is nothing for a "
             "browser to open. Build it with:\n"
             "  npm --prefix app/page install\n"
-            "  npm --prefix app/page run build")
+            "  npm --prefix app/page run build"
+        )
 
     asked = [int(one) for one in sys.argv[1:]] or list(RUNGS)
     rows = []
@@ -264,36 +269,43 @@ def main() -> int:
         if "error" in row:
             print(f"  FAILED: {row['error']}", flush=True)
         else:
-            print(f"  composed {row['composed_s']:.2f}s, first pixels "
-                  f"{row['first_pixels_s']:.2f}s, settled {row['settled_s']:.2f}s, "
-                  f"{row['open_requests']} requests "
-                  f"({row['churn']:.2f} a position), lit {row['lit']:.3f}",
-                  flush=True)
+            print(
+                f"  composed {row['composed_s']:.2f}s, first pixels "
+                f"{row['first_pixels_s']:.2f}s, settled {row['settled_s']:.2f}s, "
+                f"{row['open_requests']} requests "
+                f"({row['churn']:.2f} a position), lit {row['lit']:.3f}",
+                flush=True,
+            )
 
     print()
-    print("| positions | composed | first pixels | settled | /data/ requests | "
-          "churn (req/position) | fit requests | chunks held | lit |")
+    print(
+        "| positions | composed | first pixels | settled | /data/ requests | "
+        "churn (req/position) | fit requests | chunks held | lit |"
+    )
     print("|---|---|---|---|---|---|---|---|---|")
     for row in rows:
         if "error" in row:
-            print(f"| {row['positions']} | failed: {row['error']} "
-                  f"| | | | | | | |")
+            print(f"| {row['positions']} | failed: {row['error']} | | | | | | | |")
             continue
         held = row["chunks"]["held"]
-        print(f"| {row['positions']} | {row['composed_s']:.2f} s | "
-              f"{row['first_pixels_s']:.2f} s | {row['settled_s']:.2f} s | "
-              f"{row['open_requests']} | {row['churn']:.2f} | "
-              f"{row['fit_requests']} | {held} | {row['lit']:.3f} |")
+        print(
+            f"| {row['positions']} | {row['composed_s']:.2f} s | "
+            f"{row['first_pixels_s']:.2f} s | {row['settled_s']:.2f} s | "
+            f"{row['open_requests']} | {row['churn']:.2f} | "
+            f"{row['fit_requests']} | {held} | {row['lit']:.3f} |"
+        )
     print()
-    print("The churn number is /data/ requests from opening until the picture "
-          "settled, divided by the rung's positions. The composing door's "
-          "claim is that it FALLS as the survey grows: the browser fetches "
-          "the screen, not the survey. 'fit requests' is what zooming out to "
-          "the whole survey then cost on top; 'chunks held' is what the "
-          "engine's worker was holding afterwards, read through the ZMART "
-          "probe. Check 'lit' is well above nought before believing a row, "
-          "and look at /tmp/ladder_rung_<N>.png — a request count can be "
-          "satisfied by a black screen, an inspected picture cannot.")
+    print(
+        "The churn number is /data/ requests from opening until the picture "
+        "settled, divided by the rung's positions. The composing door's "
+        "claim is that it FALLS as the survey grows: the browser fetches "
+        "the screen, not the survey. 'fit requests' is what zooming out to "
+        "the whole survey then cost on top; 'chunks held' is what the "
+        "engine's worker was holding afterwards, read through the ZMART "
+        "probe. Check 'lit' is well above nought before believing a row, "
+        "and look at /tmp/ladder_rung_<N>.png — a request count can be "
+        "satisfied by a black screen, an inspected picture cannot."
+    )
     return 0
 
 

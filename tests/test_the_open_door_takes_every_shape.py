@@ -37,8 +37,9 @@ import pytest
 import zarr
 from driving import open_through_the_window, replay_through_the_window
 from pixels import fraction_lit, image_middle
-from zmart_viewer.server import make_server
 from test_a_plate_lays_itself_out import a_small_plate
+
+from zmart_viewer.server import make_server
 
 # One micrometre per voxel across the specimen, two through it. Round numbers
 # so that a tile's size in voxels and its place in micrometres can be reasoned
@@ -89,23 +90,45 @@ def _write_04(folder, name, *, at=(0.0, 0.0), size=(64, 64), seed=0):
         for plane in range(3):
             data[0, channel, plane] = _specimen(height, width, seed + channel * 7)
     zarr.open_group(str(path), mode="w", zarr_format=2).create_array(
-        "0", shape=data.shape, chunks=(1, 1, 1, height, width), dtype="uint16")[:] = data
-    (path / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [{"name": "t", "type": "time", "unit": "second"},
-                     {"name": "c", "type": "channel"},
-                     {"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": list(VOXEL)},
-                {"type": "translation",
-                 "translation": [0.0, 0.0, 0.0, at[0], at[1]]}]}],
-        }],
-        "omero": {"channels": [{"label": label, "color": colour, "window": WINDOW}
-                               for label, colour in CHANNELS]},
-    }), encoding="utf-8")
+        "0", shape=data.shape, chunks=(1, 1, 1, height, width), dtype="uint16"
+    )[:] = data
+    (path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "t", "type": "time", "unit": "second"},
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": list(VOXEL)},
+                                    {
+                                        "type": "translation",
+                                        "translation": [0.0, 0.0, 0.0, at[0], at[1]],
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {"label": label, "color": colour, "window": WINDOW}
+                        for label, colour in CHANNELS
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -123,29 +146,48 @@ def _write_05(folder, name, *, at=(0.0, 0.0), size=(64, 64), seed=3):
     height, width = size
     shape = (1, len(CHANNELS), 3, height, width)
     group = zarr.open_group(str(path), mode="w", zarr_format=3)
-    array = group.create_array(
-        "0", shape=shape, chunks=(1, 1, 1, height, width), dtype="uint16")
+    array = group.create_array("0", shape=shape, chunks=(1, 1, 1, height, width), dtype="uint16")
     data = np.zeros(shape, "uint16")
     for channel in range(len(CHANNELS)):
         for plane in range(3):
             data[0, channel, plane] = _specimen(height, width, seed + channel * 7)
     array[:] = data
-    group.attrs.update({"ome": {
-        "version": "0.5",
-        "multiscales": [{
-            "axes": [{"name": "t", "type": "time", "unit": "second"},
-                     {"name": "c", "type": "channel"},
-                     {"name": "z", "type": "space", "unit": "micrometer"},
-                     {"name": "y", "type": "space", "unit": "micrometer"},
-                     {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": list(VOXEL)},
-                {"type": "translation",
-                 "translation": [0.0, 0.0, 0.0, at[0], at[1]]}]}],
-        }],
-        "omero": {"channels": [{"label": label, "color": colour, "window": WINDOW}
-                               for label, colour in CHANNELS]},
-    }})
+    group.attrs.update(
+        {
+            "ome": {
+                "version": "0.5",
+                "multiscales": [
+                    {
+                        "axes": [
+                            {"name": "t", "type": "time", "unit": "second"},
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": list(VOXEL)},
+                                    {
+                                        "type": "translation",
+                                        "translation": [0.0, 0.0, 0.0, at[0], at[1]],
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {"label": label, "color": colour, "window": WINDOW}
+                        for label, colour in CHANNELS
+                    ]
+                },
+            }
+        }
+    )
     return path
 
 
@@ -202,15 +244,22 @@ def shapes(tmp_path):
     # rehearse with. These three sit at fractional offsets no grid would put
     # them at, and all record the same frame, as one camera must.
     for number, at in enumerate(((0.0, 0.0), (17.5, 300.0), (260.25, 140.75))):
-        _write_04(root / "awkward", f"awkward_pos{number:02d}.ome.zarr",
-                  at=at, size=(384, 384), seed=number * 4)
+        _write_04(
+            root / "awkward",
+            f"awkward_pos{number:02d}.ome.zarr",
+            at=at,
+            size=(384, 384),
+            seed=number * 4,
+        )
     # Two positions sharing a quarter of their ground, which is how a real
     # stage is asked to move: tiles are overlapped on purpose so a stitcher
     # can measure the true offset afterwards.
-    _write_04(root / "overlapping", "overlapping_pos001.ome.zarr",
-              at=(0.0, 0.0), size=(64, 64), seed=0)
-    _write_04(root / "overlapping", "overlapping_pos002.ome.zarr",
-              at=(16.0, 48.0), size=(64, 64), seed=9)
+    _write_04(
+        root / "overlapping", "overlapping_pos001.ome.zarr", at=(0.0, 0.0), size=(64, 64), seed=0
+    )
+    _write_04(
+        root / "overlapping", "overlapping_pos002.ome.zarr", at=(16.0, 48.0), size=(64, 64), seed=9
+    )
     return root
 
 
@@ -227,8 +276,7 @@ def page_on(browser, built_dist, shapes):
     thread.start()
     page = browser.new_page(viewport={"width": 1300, "height": 1000})
     try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
         page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         yield page, shapes
     finally:
@@ -255,7 +303,9 @@ def _wait_until_drawn(page, heading: str) -> None:
           }
           return available > 0 && available >= needed;
         }""",
-        arg=heading, timeout=60_000)
+        arg=heading,
+        timeout=60_000,
+    )
     page.wait_for_timeout(1500)
 
 
@@ -270,9 +320,10 @@ def _open(page, browse_to, row: str) -> str:
     open_through_the_window(page, row, folder=browse_to)
     page.wait_for_function(
         "(before) => window.zmartConfig.groups.some((g) => !before.includes(g))",
-        arg=sorted(before), timeout=30_000)
-    arrived = [one for one in page.evaluate("() => window.zmartConfig.groups")
-               if one not in before]
+        arg=sorted(before),
+        timeout=30_000,
+    )
+    arrived = [one for one in page.evaluate("() => window.zmartConfig.groups") if one not in before]
     assert arrived, "opening added no acquisition to the panel"
     _wait_until_drawn(page, arrived[0])
     return arrived[0]
@@ -329,18 +380,21 @@ def test_an_odd_run_opens_as_one_composed_picture(page_on):
         "(h) => window.zmartConfig.layers"
         ".filter((l) => (l.group || '') === h)"
         ".map((l) => ({name: l.name,"
-        "              sources: (l.sources || [l.source]).length}))", arg=heading)
+        "              sources: (l.sources || [l.source]).length}))",
+        arg=heading,
+    )
     assert rows, f"{heading} arrived with no channels"
     assert all(row["sources"] == 1 for row in rows), (
-        f"a composed run is one picture, so each channel is fed by one "
-        f"source; got {rows}")
+        f"a composed run is one picture, so each channel is fed by one source; got {rows}"
+    )
     # And it is still the run's own channels, wearing the names the
     # microscope gave them. Composing that renamed them to "channel 1" and
     # "channel 2" -- and dropped the colours and windows with them -- is the
     # fault this half of the gate exists for.
     assert [row["name"] for row in rows] == [label for label, _ in CHANNELS], (
         f"the composed picture must keep the run's own channel names, "
-        f"got {[row['name'] for row in rows]}")
+        f"got {[row['name'] for row in rows]}"
+    )
     assert fraction_lit(page) > 0.02, "the odd run opened but drew nothing"
 
 
@@ -364,7 +418,8 @@ def test_a_composed_run_mixes_its_channels(page_on):
     assert after < before * 1.4, (
         f"hiding the top channel took the picture from {before:.3f} to "
         f"{after:.3f} lit -- it was covering the others rather than mixing "
-        "with them")
+        "with them"
+    )
 
 
 def test_nothing_is_drawn_where_nothing_was_imaged(page_on):
@@ -399,14 +454,16 @@ def test_nothing_is_drawn_where_nothing_was_imaged(page_on):
     assert lit > 0.01, "nothing at all is on screen; this measures the wrong thing"
     assert lit < 0.75, (
         f"{lit:.3f} of the picture is lit, but only about a third of this run's "
-        "ground was imaged -- pixels are being shown where none were recorded")
+        "ground was imaged -- pixels are being shown where none were recorded"
+    )
 
     # And the emptiness is really emptiness rather than a dim wash over
     # everything: the darkest part of the picture has to be near black.
     darkest = int(np.asarray(image_middle(page)).max(axis=2).min())
     assert darkest < 30, (
         f"the dimmest pixel on screen is {darkest}, so unimaged ground is being "
-        "painted rather than left alone")
+        "painted rather than left alone"
+    )
 
 
 def test_tiles_that_overlap_load_and_do_not_blend(page_on):
@@ -427,9 +484,12 @@ def test_tiles_that_overlap_load_and_do_not_blend(page_on):
     rows = page.evaluate(
         "(h) => window.zmartConfig.layers"
         ".filter((l) => (l.group || '') === h)"
-        ".map((l) => (l.sources || [l.source]).length)", arg=heading)
+        ".map((l) => (l.sources || [l.source]).length)",
+        arg=heading,
+    )
     assert rows and all(count == 1 for count in rows), (
-        f"overlapping positions should compose to one picture, got {rows}")
+        f"overlapping positions should compose to one picture, got {rows}"
+    )
     page.get_by_role("button", name="Overview", exact=True).click()
     page.wait_for_timeout(2000)
     brightest = int(np.asarray(image_middle(page)).max())
@@ -443,22 +503,21 @@ def test_tiles_that_overlap_load_and_do_not_blend(page_on):
     darkest_inside = int(np.asarray(image_middle(page)).max(axis=2).min())
     assert brightest > 100, f"the specimen is not being drawn, brightest {brightest}"
     assert darkest_inside < 30, (
-        f"the dimmest pixel is {darkest_inside}: the overlap looks blended "
-        "rather than covered")
+        f"the dimmest pixel is {darkest_inside}: the overlap looks blended rather than covered"
+    )
 
 
 def _photograph_a_scene(browser, built_dist, root, scene_folder):
     """Open one already-declared picture and bring back what reached the screen."""
-    server = make_server(port=0, data_dir=scene_folder.parent,
-                         site_dir=built_dist, store=scene_folder.name)
+    server = make_server(
+        port=0, data_dir=scene_folder.parent, site_dir=built_dist, store=scene_folder.name
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1300, "height": 1000})
     try:
-        page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                  wait_until="domcontentloaded")
-        page.wait_for_function("() => window.zmartConfig !== undefined",
-                               timeout=30_000)
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartConfig !== undefined", timeout=30_000)
         heading = page.evaluate("() => window.zmartConfig.groups")[0]
         _wait_until_drawn(page, heading)
         page.get_by_role("button", name="Overview", exact=True).click()
@@ -471,7 +530,8 @@ def _photograph_a_scene(browser, built_dist, root, scene_folder):
 
 
 def test_a_bake_changes_how_fast_the_picture_arrives_and_nothing_else(
-        browser, built_dist, shapes, tmp_path):
+    browser, built_dist, shapes, tmp_path
+):
     """The same run, declared without a bake and with one, has to look the same.
 
     A bake computes the coarse ground now and keeps it as real files instead
@@ -492,24 +552,24 @@ def test_a_bake_changes_how_fast_the_picture_arrives_and_nothing_else(
     """
     from zmart_viewer.building import declare_a_built_picture
 
-    plain = declare_a_built_picture(tmp_path / "unbaked", shapes / "odd",
-                                    name="odd", bake=False)
-    baked = declare_a_built_picture(tmp_path / "baked", shapes / "odd",
-                                    name="odd", bake=True)
+    plain = declare_a_built_picture(tmp_path / "unbaked", shapes / "odd", name="odd", bake=False)
+    baked = declare_a_built_picture(tmp_path / "baked", shapes / "odd", name="odd", bake=True)
     without = _photograph_a_scene(browser, built_dist, shapes, plain)
     with_it = _photograph_a_scene(browser, built_dist, shapes, baked)
 
     assert without.shape == with_it.shape, (
-        f"the two pictures are different sizes: {without.shape} against "
-        f"{with_it.shape}")
+        f"the two pictures are different sizes: {without.shape} against {with_it.shape}"
+    )
     assert float(without.max()) > 40, (
-        "the unbaked picture drew nothing, so there is nothing to compare")
+        "the unbaked picture drew nothing, so there is nothing to compare"
+    )
     assert float(with_it.max()) > 40, "the baked picture drew nothing"
     apart = float(np.abs(without - with_it).mean())
     assert apart < 2.0, (
         f"baked and unbaked differ by {apart:.2f} levels per pixel on "
         "average -- a bake must change how fast the picture arrives and "
-        "nothing about what it shows")
+        "nothing about what it shows"
+    )
 
 
 def test_the_awkward_run_rehearses_through_the_experimental_door(page_on):
@@ -538,14 +598,14 @@ def test_the_awkward_run_rehearses_through_the_experimental_door(page_on):
     page, root = page_on
     replay_through_the_window(page, "awkward", folder=root)
     page.wait_for_function(
-        "() => window.zmartConfig.groups.some((one) => one.includes('replay'))",
-        timeout=60_000)
-    heading = next(one for one in page.evaluate("() => window.zmartConfig.groups")
-                   if "replay" in one)
+        "() => window.zmartConfig.groups.some((one) => one.includes('replay'))", timeout=60_000
+    )
+    heading = next(
+        one for one in page.evaluate("() => window.zmartConfig.groups") if "replay" in one
+    )
     _wait_until_drawn(page, heading)
     page.wait_for_timeout(3000)
-    assert fraction_lit(page) > 0.02, (
-        f"{heading} rehearsed but put nothing on screen")
+    assert fraction_lit(page) > 0.02, f"{heading} rehearsed but put nothing on screen"
 
 
 def test_auto_reads_the_tiles_and_not_the_ground_between_them(page_on):
@@ -582,7 +642,9 @@ def test_auto_reads_the_tiles_and_not_the_ground_between_them(page_on):
 
     channel = page.evaluate(
         "(heading) => window.zmartConfig.layers.find("
-        "  (one) => (one.group || '') === heading).name", heading)
+        "  (one) => (one.group || '') === heading).name",
+        heading,
+    )
     page.locator(f"[aria-label='toggle {channel}']").first.click()
     page.locator(f"[aria-label='toggle {channel}']").first.click()
     page.wait_for_timeout(400)
@@ -594,7 +656,9 @@ def test_auto_reads_the_tiles_and_not_the_ground_between_them(page_on):
           const layer = window.zmartViewer.state.toJSON().layers.find(
             (one) => one.name.endsWith(name));
           return (layer.shaderControls || {}).normalized.range;
-        }""", channel)
+        }""",
+        channel,
+    )
     assert window_[0] > 600, (
         f"Auto set the window to {window_}. Its floor is down near zero, "
         "which is the brightness of the ground nobody imaged -- the empty "

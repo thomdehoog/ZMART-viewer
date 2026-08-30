@@ -23,11 +23,11 @@ import time
 from pathlib import Path
 
 import pytest
-from zmart_viewer import library as stores
 import zarr
-from zmart_viewer.library import Library
+
+from zmart_viewer import library as stores
+from zmart_viewer.library import Library, axis_names, channels, is_store, written_timepoints
 from zmart_viewer.server import make_server
-from zmart_viewer.library import axis_names, channels, is_store, written_timepoints
 
 # Nothing here may take longer than this. The point of these tests is to catch
 # something that stalls, so a generous ceiling is still a ceiling.
@@ -184,7 +184,7 @@ class TestVeryLargeImages:
         assert written_timepoints(store) is None, "counted again a folder it had abandoned"
 
     def test_a_store_looked_at_before_its_first_frame_is_asked_again(self, tmp_path):
-        """"Nothing yet" is an answer about this moment, not about the run.
+        """ "Nothing yet" is an answer about this moment, not about the run.
 
         The viewer meets a store at whatever moment the operator happens to open
         the folder, and during a live run that is often before the first frame has
@@ -488,22 +488,26 @@ class TestHalfWrittenAndBroken:
     # screen to explain where it went. That is the failure this is really guarding
     # against, and only an expectation can catch it.
     _MALFORMED = {
-        "multiscales is null rather than a list": (
-            '{"multiscales": null}', []),
+        "multiscales is null rather than a list": ('{"multiscales": null}', []),
         "the axes and datasets are both null": (
-            '{"multiscales": [{"axes": null, "datasets": null}]}', []),
+            '{"multiscales": [{"axes": null, "datasets": null}]}',
+            [],
+        ),
         "the axes are bare numbers rather than named entries": (
-            '{"multiscales": [{"axes": [1, 2, 3]}]}', []),
+            '{"multiscales": [{"axes": [1, 2, 3]}]}',
+            [],
+        ),
         "the omero channels are a string rather than a list": (
-            '{"multiscales": [{}], "omero": {"channels": "not a list"}}', []),
+            '{"multiscales": [{}], "omero": {"channels": "not a list"}}',
+            [],
+        ),
         "a dataset with no path, so the array cannot be found": (
             '{"multiscales": [{"axes": [{"name": "c"}], "datasets": [{"path": null}]}]}',
-            ["c"]),
+            ["c"],
+        ),
     }
 
-    @pytest.mark.parametrize(
-        ("attrs", "axes"), list(_MALFORMED.values()), ids=list(_MALFORMED)
-    )
+    @pytest.mark.parametrize(("attrs", "axes"), list(_MALFORMED.values()), ids=list(_MALFORMED))
     def test_nonsense_metadata_is_survived(self, tmp_path, attrs, axes):
         """Whatever is in the file, the viewer gives a safe answer rather than falling over.
 
@@ -548,7 +552,9 @@ class TestHalfWrittenAndBroken:
     def test_the_config_survives_a_folder_of_rubbish(self, tmp_path, serving):
         good = write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 2, 64, 64), chunks=(1, 1, 64, 64), axes=("c", "z", "y", "x"),
+            shape=(1, 2, 64, 64),
+            chunks=(1, 1, 64, 64),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         broken = tmp_path / "overview_pos002.ome.zarr"
@@ -578,7 +584,9 @@ class TestSparseAndMissing:
     def test_a_piece_that_was_never_imaged_answers_at_once(self, tmp_path, serving):
         store = write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 1, 4096, 4096), chunks=(1, 1, 256, 256), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 4096, 4096),
+            chunks=(1, 1, 256, 256),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None), slice(None), slice(0, 256), slice(0, 256)),
         )
         port = serving(store.name)
@@ -592,7 +600,9 @@ class TestSparseAndMissing:
     def test_a_folder_that_vanishes_does_not_take_the_viewer_with_it(self, tmp_path, serving):
         store = write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 2, 64, 64), chunks=(1, 1, 64, 64), axes=("c", "z", "y", "x"),
+            shape=(1, 2, 64, 64),
+            chunks=(1, 1, 64, 64),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         port = serving(store.name)
@@ -616,7 +626,9 @@ class TestManyAtOnce:
     def test_a_hundred_pieces_asked_for_together(self, tmp_path, serving):
         store = write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 1, 2048, 2048), chunks=(1, 1, 256, 256), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 2048, 2048),
+            chunks=(1, 1, 256, 256),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         port = serving(store.name)
@@ -643,7 +655,9 @@ class TestManyAtOnce:
         for i in range(20):
             write_store(
                 tmp_path / f"overview_pos{i:03d}.ome.zarr",
-                shape=(1, 1, 64, 64), chunks=(1, 1, 64, 64), axes=("c", "z", "y", "x"),
+                shape=(1, 1, 64, 64),
+                chunks=(1, 1, 64, 64),
+                axes=("c", "z", "y", "x"),
                 fill=(slice(None),),
             )
         port = serving(sorted(p.name for p in tmp_path.glob("*.ome.zarr")))
@@ -679,16 +693,16 @@ class TestManyAtOnce:
             conn.request("GET", path)
             response = conn.getresponse()
             response.read()
-            return response.status, {
-                name.lower(): value for name, value in response.getheaders()
-            }
+            return response.status, {name.lower(): value for name, value in response.getheaders()}
         finally:
             conn.close()
 
     def _one_written_piece(self, tmp_path):
         return write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 1, 512, 512), chunks=(1, 1, 256, 256), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 512, 512),
+            chunks=(1, 1, 256, 256),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
 
@@ -788,7 +802,9 @@ class TestTheGuardUnderAttack:
     def test_nothing_outside_an_open_folder_is_reachable(self, tmp_path, attack):
         write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 1, 8, 8), chunks=(1, 1, 8, 8), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 8, 8),
+            chunks=(1, 1, 8, 8),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         library = Library()
@@ -803,7 +819,9 @@ class TestTheGuardUnderAttack:
         folder.mkdir()
         write_store(
             folder / "overview_pos001.ome.zarr",
-            shape=(1, 1, 8, 8), chunks=(1, 1, 8, 8), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 8, 8),
+            chunks=(1, 1, 8, 8),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         try:
@@ -824,7 +842,9 @@ class TestSavingUnderStress:
     def test_a_very_large_target_list_is_refused_rather_than_swallowed(self, tmp_path, serving):
         write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 1, 8, 8), chunks=(1, 1, 8, 8), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 8, 8),
+            chunks=(1, 1, 8, 8),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         port = serving("overview_pos001.ome.zarr")
@@ -842,7 +862,9 @@ class TestSavingUnderStress:
         """Two saves racing must not leave a half-written file behind."""
         write_store(
             tmp_path / "overview_pos001.ome.zarr",
-            shape=(1, 1, 8, 8), chunks=(1, 1, 8, 8), axes=("c", "z", "y", "x"),
+            shape=(1, 1, 8, 8),
+            chunks=(1, 1, 8, 8),
+            axes=("c", "z", "y", "x"),
             fill=(slice(None),),
         )
         port = serving("overview_pos001.ome.zarr")
@@ -851,8 +873,12 @@ class TestSavingUnderStress:
             document = {
                 "version": 1,
                 "annotations": [
-                    {"id": f"t{n}-{i}", "type": "point", "point": [float(i), 0.0, 0.0],
-                     "description": "x" * 200}
+                    {
+                        "id": f"t{n}-{i}",
+                        "type": "point",
+                        "point": [float(i), 0.0, 0.0],
+                        "description": "x" * 200,
+                    }
                     for i in range(200)
                 ],
             }

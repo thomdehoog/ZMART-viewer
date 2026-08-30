@@ -60,21 +60,24 @@ _BUILDING = _VIZ
 sys.path.insert(0, str(_BUILDING))
 sys.path.insert(0, str(_VIZ))
 
-import measure_the_frame_rate_of_a_linked_view as watching  # noqa: E402
-from zmart_viewer.building import declare_a_built_picture  # noqa: E402
+import watching  # noqa: E402
 from measure_scaling import write_a_transfer  # noqa: E402
+
+from zmart_viewer.building import declare_a_built_picture  # noqa: E402
 
 
 def main() -> int:
     parsing = argparse.ArgumentParser(description=__doc__)
     parsing.add_argument(
-        "--rungs", default="1,5,10,50,100",
+        "--rungs",
+        default="1,5,10,50,100",
         help="tile counts to climb through, comma separated",
     )
     parsing.add_argument(
-        "--headed", action="store_true",
+        "--headed",
+        action="store_true",
         help="open a visible window, which on Windows is the only way the "
-             "browser reaches the graphics card",
+        "browser reaches the graphics card",
     )
     asked = parsing.parse_args()
     rungs = [int(one) for one in asked.rungs.split(",")]
@@ -90,8 +93,10 @@ def main() -> int:
     watching.say_what_is_drawing(browser)
     work = Path(tempfile.mkdtemp(prefix="built-frame-rate-"))
     try:
-        print(f"\n  {'tiles':>6} {'opened':>8} {'requests':>16} "
-              f"{'frames/s':>9} {'usual':>8} {'worst':>8} {'lit':>5}")
+        print(
+            f"\n  {'tiles':>6} {'opened':>8} {'requests':>16} "
+            f"{'frames/s':>9} {'usual':>8} {'worst':>8} {'lit':>5}"
+        )
         print(f"  {'':>6} {'':>8} {'opening/watching':>16}")
         print("  " + "-" * 68)
         rows = []
@@ -100,34 +105,37 @@ def main() -> int:
             write_a_transfer(transfer, tiles)
             views = work / f"views{tiles:05d}"
             store = declare_a_built_picture(views, transfer, name="built")
-            row = watching.how_it_drew(browser, dist, views, [store.name],
-                                       expect=1)
+            row = watching.how_it_drew(browser, dist, views, [store.name], expect=1)
             row["tiles"] = tiles
             rows.append(row)
-            print(f"  {tiles:>6} {row['opened']:>6.2f} s "
-                  f"{row['asked_opening']:>8}/{row['asked_watching']:<7} "
-                  f"{row['per_second']:>9.1f} {row['usual_ms']:>5.1f} ms "
-                  f"{row['worst_ms']:>5.0f} ms {row['lit']:>5.2f}",
-                  flush=True)
+            print(
+                f"  {tiles:>6} {row['opened']:>6.2f} s "
+                f"{row['asked_opening']:>8}/{row['asked_watching']:<7} "
+                f"{row['per_second']:>9.1f} {row['usual_ms']:>5.1f} ms "
+                f"{row['worst_ms']:>5.0f} ms {row['lit']:>5.2f}",
+                flush=True,
+            )
             shutil.rmtree(transfer)
             shutil.rmtree(views)
 
         if len(rows) >= 2:
             first, last = rows[0], rows[-1]
             grew = last["tiles"] / first["tiles"]
-            print(f"\n  From {first['tiles']} tile(s) to {last['tiles']} "
-                  f"-- {grew:.0f}x more:")
-            for name, key in (("opening", "opened"),
-                              ("requests to open", "asked_opening"),
-                              ("frames a second", "per_second"),
-                              ("usual frame", "usual_ms"),
-                              ("worst pause", "worst_ms")):
-                print(f"    {name:<17} "
-                      f"{last[key] / max(1e-9, first[key]):>6.1f}x")
-            print("\n  The browser is handed one source however many tiles the"
-                  "\n  transfer holds, so every line here should read close to"
-                  "\n  1.0x -- growth in this table is the one-image promise"
-                  "\n  leaking.")
+            print(f"\n  From {first['tiles']} tile(s) to {last['tiles']} -- {grew:.0f}x more:")
+            for name, key in (
+                ("opening", "opened"),
+                ("requests to open", "asked_opening"),
+                ("frames a second", "per_second"),
+                ("usual frame", "usual_ms"),
+                ("worst pause", "worst_ms"),
+            ):
+                print(f"    {name:<17} {last[key] / max(1e-9, first[key]):>6.1f}x")
+            print(
+                "\n  The browser is handed one source however many tiles the"
+                "\n  transfer holds, so every line here should read close to"
+                "\n  1.0x -- growth in this table is the one-image promise"
+                "\n  leaking."
+            )
     finally:
         browser.close()
         started.stop()

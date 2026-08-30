@@ -11,8 +11,9 @@ import json
 
 import numpy as np
 import zarr
-from zmart_viewer.contrast import HISTOGRAM_BINS, display_window, intensity_histogram, measure
 from demo_data import write_demo_zarr
+
+from zmart_viewer.contrast import HISTOGRAM_BINS, display_window, intensity_histogram, measure
 
 
 def write_store(path, data: np.ndarray, omero: dict | None = None) -> str:
@@ -184,16 +185,15 @@ def test_measuring_an_unreadable_store_still_gives_a_usable_window(tmp_path):
 # reaches them the same way from either store in the view folder, because
 # what it walks up to is the run, not the view.
 
+
 def a_linked_run(folder, *, channels=("channel 0",), value=1200):
     from zmart_viewer.record.coordinator import LivePublisher
     from zmart_viewer.record.model import GridCell
     from zmart_viewer.record.profiles import plan_the_writing
 
     frame = 384
-    profile, _ = plan_the_writing("overview", frame=frame, z_planes=1,
-                                  channels=channels)
-    run = LivePublisher(folder, profile, run_id="measured",
-                        cells={GridCell(0, 0): "p00"})
+    profile, _ = plan_the_writing("overview", frame=frame, z_planes=1, channels=channels)
+    run = LivePublisher(folder, profile, run_id="measured", cells={GridCell(0, 0): "p00"})
     if len(channels) == 1:
         pixels = np.full((1, frame, frame), value, "uint16")
     else:
@@ -215,6 +215,7 @@ def a_linked_run(folder, *, channels=("channel 0",), value=1200):
     # store nothing had declared, because the writer left one behind on every
     # publish.
     from zmart_viewer.live import LIVE_PICTURE, the_live_picture_declared
+
     the_live_picture_declared(folder)
     return folder / LIVE_PICTURE
 

@@ -99,7 +99,9 @@ _WHERE_THE_MIDDLE_IS = """() => {
 
 
 def test_the_viewer_opens_as_a_single_panel(viewer_page):
-    assert viewer_page.evaluate("() => document.querySelectorAll('.neuroglancer-panel').length") == 1
+    assert (
+        viewer_page.evaluate("() => document.querySelectorAll('.neuroglancer-panel').length") == 1
+    )
 
 
 def test_the_overview_button_brings_a_lost_picture_back(viewer_page):
@@ -115,8 +117,7 @@ def test_the_overview_button_brings_a_lost_picture_back(viewer_page):
         drag(viewer_page, point["x"], point["y"], 300, 220)
     lost = viewer_page.evaluate(_WHERE_THE_MIDDLE_IS)
     assert any(
-        abs(where - middle) > 1
-        for where, middle in zip(lost["at"], lost["middle"], strict=True)
+        abs(where - middle) > 1 for where, middle in zip(lost["at"], lost["middle"], strict=True)
     ), "the drag did not move the view off the picture, so the test proves nothing"
 
     viewer_page.get_by_role("button", name="Overview").click()
@@ -173,8 +174,7 @@ def test_opening_lands_on_the_overview(viewer_page):
         f"the picture opens spilling toward the window's edge: {shares}"
     )
     assert max(shares) >= 0.78, (
-        f"the picture opens at {max(shares):.0%} of the window, not at the "
-        "overview"
+        f"the picture opens at {max(shares):.0%} of the window, not at the overview"
     )
 
 
@@ -282,9 +282,7 @@ def test_the_plain_wheel_zooms_without_moving_through_z(viewer_page):
     viewer_page.wait_for_timeout(600)
     after = viewer_page.evaluate(_STATE)
     assert after["zoom"] != before["zoom"], "a plain wheel must zoom"
-    assert after["zPosition"] == before["zPosition"], (
-        "a plain wheel must not also move through z"
-    )
+    assert after["zPosition"] == before["zPosition"], "a plain wheel must not also move through z"
 
 
 def test_shift_wheel_steps_through_z_and_the_slider_follows(viewer_page):
@@ -334,8 +332,7 @@ def test_the_wheel_zooms_the_volume_too(viewer_page):
     viewer_page.wait_for_timeout(600)
     after = float(viewer_page.evaluate(zoom_of))
     assert after != before, (
-        "a plain wheel must zoom the volume as it zooms the plane; the "
-        "projection zoom did not move"
+        "a plain wheel must zoom the volume as it zooms the plane; the projection zoom did not move"
     )
 
 
@@ -517,8 +514,7 @@ def test_overview_puts_the_whole_view_back(viewer_page):
         f"the picture is still turned: {back['flatTurn']}"
     )
     assert back["flatZoom"] == pytest.approx(opening["flatZoom"], rel=0.02), (
-        f"the magnification is {back['flatZoom']}, not the {opening['flatZoom']} "
-        "it opened at"
+        f"the magnification is {back['flatZoom']}, not the {opening['flatZoom']} it opened at"
     )
     on_screen = back["position"][-2:]
     assert on_screen == pytest.approx(opening["position"][-2:], abs=1.0), (
@@ -541,8 +537,7 @@ def test_overview_puts_the_volume_back_too(viewer_page):
         f"the volume is still turned: {back['volumeTurn']}"
     )
     assert back["volumeZoom"] == pytest.approx(opening["volumeZoom"], rel=0.02), (
-        f"the volume sits at {back['volumeZoom']}, not the {opening['volumeZoom']} "
-        "it opened at"
+        f"the volume sits at {back['volumeZoom']}, not the {opening['volumeZoom']} it opened at"
     )
 
 
@@ -553,17 +548,19 @@ def test_overview_leaves_the_plane_and_the_moment_alone(viewer_page):
     straight would be its own small betrayal.
     """
     page = viewer_page
-    names = page.evaluate(
-        "() => Array.from(window.zmartViewer.coordinateSpace.value.names)")
+    names = page.evaluate("() => Array.from(window.zmartViewer.coordinateSpace.value.names)")
     if "z" not in names:
         pytest.skip("this demo volume has no depth to keep a place in")
     at = names.index("z")
-    page.evaluate("""(axis) => {
+    page.evaluate(
+        """(axis) => {
       const p = window.zmartViewer.navigationState.position;
       const moved = Float32Array.from(p.value);
       moved[axis] = moved[axis] + 2;
       p.value = moved;
-    }""", at)
+    }""",
+        at,
+    )
     page.wait_for_timeout(400)
     deep = page.evaluate(_THE_VIEW)["position"][at]
     page.get_by_role("button", name="Overview", exact=True).click()

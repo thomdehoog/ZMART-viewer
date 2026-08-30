@@ -40,13 +40,13 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from check_the_built_picture import decode  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
 
+from zmart_viewer.building import GovernedRun  # noqa: E402
 from zmart_viewer.record.model import GridCell  # noqa: E402
 from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
-DEPTH = 13     # ragged on purpose
-STAMP = 1000   # plane k carries the value STAMP + k, everywhere, exactly
+DEPTH = 13  # ragged on purpose
+STAMP = 1000  # plane k carries the value STAMP + k, everywhere, exactly
 FRAME = 384
 
 
@@ -75,9 +75,8 @@ def every_plane_matches(composer, *, depth: int) -> None:
             for row in range(-(-height // piece)):
                 for column in range(-(-width // piece)):
                     body = composer.bytes_for(level, plane, row, column)
-                    decoded = decode(body, piece, str(composer.mosaic.dtype),
-                                     composer.mosaic.axes)
-                    valid = decoded[:height - row * piece, :width - column * piece]
+                    decoded = decode(body, piece, str(composer.mosaic.dtype), composer.mosaic.axes)
+                    valid = decoded[: height - row * piece, : width - column * piece]
                     assert set(np.unique(valid)) == {STAMP + plane}, (
                         f"level {level} plane {plane} piece ({row}, {column}) "
                         f"serves {sorted(np.unique(valid))[:4]} where the "
@@ -93,7 +92,8 @@ def test_the_governed_door_serves_the_stamp_one_plane_per_block(tmp_path):
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
     run = LivePublisher(
         tmp_path / "experiment" / "acquisitions" / "deep",
-        profile, run_id="stamped-deep",
+        profile,
+        run_id="stamped-deep",
         cells={GridCell(0, 0): "p00"},
     )
     run.write_and_publish("p00", a_stamped_stack())
@@ -114,36 +114,54 @@ def test_the_built_door_serves_the_stamp_several_planes_per_block(tmp_path):
     store = tmp_path / "stores" / "stamped.ome.zarr"
     datasets = []
     for level in range(2):
-        shrink = 2 ** level
+        shrink = 2**level
         planes = np.empty((DEPTH, side // shrink, side // shrink), "uint16")
         for plane in range(DEPTH):
             planes[plane] = STAMP + plane
         made = zarr.create_array(
-            store=str(store / str(level)), shape=planes.shape,
-            chunks=(8, side // shrink, side // shrink), dtype="uint16",
-            fill_value=0, overwrite=True)
+            store=str(store / str(level)),
+            shape=planes.shape,
+            chunks=(8, side // shrink, side // shrink),
+            dtype="uint16",
+            fill_value=0,
+            overwrite=True,
+        )
         made[:] = planes
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, float(shrink), float(shrink)]},
-                {"type": "translation", "translation": [0.0, 0.0, 0.0]},
-            ],
-        })
-    (store / "zarr.json").write_text(json.dumps({
-        "zarr_format": 3, "node_type": "group",
-        "attributes": {"ome": {"version": "0.5", "multiscales": [{
-            "axes": [
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"},
-            ],
-            "datasets": datasets,
-        }]}},
-    }, indent=2))
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, float(shrink), float(shrink)]},
+                    {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+                ],
+            }
+        )
+    (store / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "multiscales": [
+                            {
+                                "axes": [
+                                    {"name": "z", "type": "space", "unit": "micrometer"},
+                                    {"name": "y", "type": "space", "unit": "micrometer"},
+                                    {"name": "x", "type": "space", "unit": "micrometer"},
+                                ],
+                                "datasets": datasets,
+                            }
+                        ],
+                    }
+                },
+            },
+            indent=2,
+        )
+    )
 
-    declared = declare_a_built_picture(tmp_path / "shown", tmp_path / "stores",
-                                       name="stamped")
+    declared = declare_a_built_picture(tmp_path / "shown", tmp_path / "stores", name="stamped")
     composer = served._composer_for(declared)
     assert composer is not None, "the declared picture would not open"
     try:
@@ -201,33 +219,55 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
             for plane in range(PLANES):
                 frames[moment, channel, plane] = the_stamp(moment, channel, plane)
     made = zarr.create_array(
-        store=str(store / "0"), shape=frames.shape,
-        chunks=(1, 1, 1, side, side), dtype="uint16", fill_value=0,
-        overwrite=True)
+        store=str(store / "0"),
+        shape=frames.shape,
+        chunks=(1, 1, 1, side, side),
+        dtype="uint16",
+        fill_value=0,
+        overwrite=True,
+    )
     made[:] = frames
-    (store / "zarr.json").write_text(json.dumps({
-        "zarr_format": 3, "node_type": "group",
-        "attributes": {"ome": {"version": "0.5", "multiscales": [{
-            "axes": [
-                {"name": "t", "type": "time", "unit": "second"},
-                {"name": "c", "type": "channel"},
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"},
-            ],
-            "datasets": [{"path": "0", "coordinateTransformations": [
-                {"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0, 1.0]},
-                {"type": "translation",
-                 "translation": [0.0, 0.0, 0.0, 0.0, 0.0]},
-            ]}],
-        }]}},
-    }, indent=2))
+    (store / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "multiscales": [
+                            {
+                                "axes": [
+                                    {"name": "t", "type": "time", "unit": "second"},
+                                    {"name": "c", "type": "channel"},
+                                    {"name": "z", "type": "space", "unit": "micrometer"},
+                                    {"name": "y", "type": "space", "unit": "micrometer"},
+                                    {"name": "x", "type": "space", "unit": "micrometer"},
+                                ],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0, 1.0]},
+                                            {
+                                                "type": "translation",
+                                                "translation": [0.0, 0.0, 0.0, 0.0, 0.0],
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                },
+            },
+            indent=2,
+        )
+    )
 
-    declared = declare_a_built_picture(tmp_path / "shown", tmp_path / "stores",
-                                       name="combined")
+    declared = declare_a_built_picture(tmp_path / "shown", tmp_path / "stores", name="combined")
     described = json.loads((declared / "zarr.json").read_text())
-    axes = [axis["name"] for axis in
-            described["attributes"]["ome"]["multiscales"][0]["axes"]]
+    axes = [axis["name"] for axis in described["attributes"]["ome"]["multiscales"][0]["axes"]]
     assert axes == ["t", "c", "z", "y", "x"], (
         "a picture whose tiles keep (t, c) room must declare five axes"
     )
@@ -240,22 +280,18 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
             for channel in range(COLOURS):
                 for plane in range(PLANES):
                     body = served.built_bytes_behind(
-                        declared, f"0/c/{moment}/{channel}/{plane}/0/0")
-                    decoded = decode(body, piece,
-                                     str(composer.mosaic.dtype),
-                                     composer.mosaic.axes)
+                        declared, f"0/c/{moment}/{channel}/{plane}/0/0"
+                    )
+                    decoded = decode(body, piece, str(composer.mosaic.dtype), composer.mosaic.axes)
                     valid = decoded[:side, :side]
-                    assert set(np.unique(valid)) == {
-                        the_stamp(moment, channel, plane)}, (
+                    assert set(np.unique(valid)) == {the_stamp(moment, channel, plane)}, (
                         f"frame (t={moment}, c={channel}, z={plane}) serves "
                         f"{sorted(np.unique(valid))[:3]} where its stamp is "
                         f"{the_stamp(moment, channel, plane)}"
                     )
         # One frame past every room answers absent, never a neighbour's.
-        assert served.built_bytes_behind(
-            declared, f"0/c/{MOMENTS}/0/0/0/0") is None
-        assert served.built_bytes_behind(
-            declared, f"0/c/0/{COLOURS}/0/0/0") is None
+        assert served.built_bytes_behind(declared, f"0/c/{MOMENTS}/0/0/0/0") is None
+        assert served.built_bytes_behind(declared, f"0/c/0/{COLOURS}/0/0/0") is None
     finally:
         composer.close()
         if composer._warmer is not None:
@@ -272,22 +308,24 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
     it is published.
     """
     from zmart_viewer.building import GovernedRun
-
     from zmart_viewer.record.coordinator import LivePublisher
 
     frame = 384
     profile, _ = plan_the_writing(
-        "overview", frame=frame, z_planes=PLANES,
-        timepoints=3, channels=("green", "red"),
+        "overview",
+        frame=frame,
+        z_planes=PLANES,
+        timepoints=3,
+        channels=("green", "red"),
     )
     run = LivePublisher(
         tmp_path / "experiment" / "acquisitions" / "combined",
-        profile, run_id="combined-oracle",
+        profile,
+        run_id="combined-oracle",
         cells={GridCell(0, 0): "p00"},
     )
     for moment in range(MOMENTS):
-        run.write_and_publish("p00", a_combined_stack(moment, frame),
-                              timepoint=moment)
+        run.write_and_publish("p00", a_combined_stack(moment, frame), timepoint=moment)
     # Moment 2's pixels land on disk WITHOUT being published — every step
     # of a publication except the commit, the gateway tests' recipe. This
     # is the one state the record exists to keep off the screen.
@@ -305,14 +343,10 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
         for moment in range(MOMENTS):
             for channel in range(COLOURS):
                 for plane in range(PLANES):
-                    body = composer.bytes_for(0, plane, 0, 0,
-                                              moment, channel)
-                    decoded = decode(body, piece,
-                                     str(composer.mosaic.dtype),
-                                     composer.mosaic.axes)
+                    body = composer.bytes_for(0, plane, 0, 0, moment, channel)
+                    decoded = decode(body, piece, str(composer.mosaic.dtype), composer.mosaic.axes)
                     valid = decoded[:height, :width]
-                    assert set(np.unique(valid)) == {
-                        the_stamp(moment, channel, plane)}, (
+                    assert set(np.unique(valid)) == {the_stamp(moment, channel, plane)}, (
                         f"frame (t={moment}, c={channel}, z={plane}) serves "
                         "another frame's stamp through the governed door"
                     )
@@ -326,8 +360,7 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
         run.publish("p00", timepoint=2)
         fresh = opened.composer()
         body = fresh.bytes_for(0, 0, 0, 0, 2, 1)
-        decoded = decode(body, piece, str(fresh.mosaic.dtype),
-                         fresh.mosaic.axes)
+        decoded = decode(body, piece, str(fresh.mosaic.dtype), fresh.mosaic.axes)
         assert set(np.unique(decoded[:height, :width])) == {the_stamp(2, 1, 0)}
     finally:
         opened.close()
@@ -343,7 +376,8 @@ def test_every_door_parses_the_one_address():
     # The transfer demo carries its own serving door; it must use the one
     # parser too. Loaded by path, because demos are scripts, not a package.
     spec = importlib.util.spec_from_file_location(
-        "the_transfer_door", _VIZ / "demos" / "serve_a_transfer.py")
+        "the_transfer_door", _VIZ / "demos" / "serve_a_transfer.py"
+    )
     transfer_door = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(transfer_door)
 

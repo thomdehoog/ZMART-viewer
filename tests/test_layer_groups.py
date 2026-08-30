@@ -17,6 +17,7 @@ import threading
 
 import pytest
 from demo_data import write_demo_zarr
+
 from zmart_viewer.server import make_server
 
 
@@ -104,7 +105,7 @@ class TestEveryChannelBecomesARow:
     def test_channels_carry_the_colours_the_store_declared(self, grouped_page):
         config = grouped_page.evaluate("() => window.zmartConfig")
         overview = [row for row in config["layers"] if row["group"] == "overview"]
-        assert overview[0]["color"] == [1.0, 1.0, 1.0]        # structure, white
+        assert overview[0]["color"] == [1.0, 1.0, 1.0]  # structure, white
         assert overview[1]["color"] == pytest.approx([0.0, 1.0, 0.4], abs=0.01)
         assert overview[2]["color"] == pytest.approx([1.0, 0.2, 1.0], abs=0.01)
 
@@ -158,9 +159,7 @@ class TestChannelControlsStillWork:
     def test_one_channel_can_be_hidden_on_its_own(self, grouped_page):
         grouped_page.get_by_label("toggle marker-b").first.click()
         grouped_page.wait_for_timeout(600)
-        hidden = [
-            layer for layer in _image_layers(grouped_page) if layer["visible"] is False
-        ]
+        hidden = [layer for layer in _image_layers(grouped_page) if layer["visible"] is False]
         assert hidden, "expected one channel to be hidden"
         grouped_page.get_by_label("toggle marker-b").first.click()
 
@@ -218,8 +217,9 @@ def test_a_store_with_one_channel_still_shows_as_one_row(browser, built_dist, tm
         data_dir=root,
         site_dir=built_dist,
         # The load names the dataset; the store names no longer decide anything.
-        loads=[{"stores": ["Mag5_Tile0_Ch488.ome.zarr",
-                           "Mag5_Tile0_Ch647.ome.zarr"], "name": "Mag5"}],
+        loads=[
+            {"stores": ["Mag5_Tile0_Ch488.ome.zarr", "Mag5_Tile0_Ch647.ome.zarr"], "name": "Mag5"}
+        ],
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

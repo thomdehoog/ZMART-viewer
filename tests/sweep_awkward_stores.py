@@ -67,34 +67,37 @@ def sweep() -> list[str]:
             # What this store contributed is the difference the open made,
             # never a guess from names: a leftover layer from an earlier
             # store must not be laid at this one's door.
-            with urllib.request.urlopen(
-                    f"http://127.0.0.1:{port}/api/config") as now:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/config") as now:
                 before = json.loads(now.read())
-            seen = {(layer.get("group"), layer.get("name"))
-                    for layer in before.get("layers", [])}
+            seen = {(layer.get("group"), layer.get("name")) for layer in before.get("layers", [])}
             status, answer = _ask(port, "stores/open", path=str(store))
             if status != 200:
-                broken.append(f"{store.name}: refused to open — "
-                              f"{answer.get('error', status)}")
+                broken.append(f"{store.name}: refused to open — {answer.get('error', status)}")
                 print(f"  BROKEN {store.name} [{kind}]: {answer.get('error')}")
                 continue
-            layers = [layer for layer in answer.get("layers", [])
-                      if (layer.get("group"), layer.get("name")) not in seen]
+            layers = [
+                layer
+                for layer in answer.get("layers", [])
+                if (layer.get("group"), layer.get("name")) not in seen
+            ]
             colors = [tuple(layer.get("color") or _WHITE) for layer in layers]
             if len(layers) > 1 and all(color == _WHITE for color in colors):
                 broken.append(f"{store.name}: several channels, all white")
             if not layers:
-                broken.append(f"{store.name}: opened without contributing a "
-                              "single layer")
+                broken.append(f"{store.name}: opened without contributing a single layer")
             for layer in layers:
                 if layer.get("kind") == "segmentation":
                     continue
                 if not layer.get("window") and not layer.get("histogram"):
-                    broken.append(f"{store.name}: layer {layer.get('name')!r} "
-                                  "has no window and no histogram to measure "
-                                  "one from")
-            print(f"  ok     {store.name} [{kind}] — {len(layers)} layer(s): "
-                  + ", ".join(str(layer.get('name')) for layer in layers))
+                    broken.append(
+                        f"{store.name}: layer {layer.get('name')!r} "
+                        "has no window and no histogram to measure "
+                        "one from"
+                    )
+            print(
+                f"  ok     {store.name} [{kind}] — {len(layers)} layer(s): "
+                + ", ".join(str(layer.get("name")) for layer in layers)
+            )
             for group in {layer.get("group") for layer in layers}:
                 _ask(port, "stores/close", group=group)
     finally:

@@ -22,6 +22,7 @@ import json
 import numpy as np
 import pytest
 import zarr
+
 from zmart_viewer.library import Library
 
 
@@ -39,7 +40,10 @@ def _store(path, *, scale=(2.0, 0.35, 0.35), axes=("z", "y", "x"), channels=None
                 "version": "0.4",
                 "axes": [{"name": name} for name in axes],
                 "datasets": [
-                    {"path": "0", "coordinateTransformations": [{"type": "scale", "scale": list(scale)}]}
+                    {
+                        "path": "0",
+                        "coordinateTransformations": [{"type": "scale", "scale": list(scale)}],
+                    }
                 ],
             }
         ]
@@ -222,7 +226,7 @@ def test_a_dataset_knows_its_channels_from_the_filenames(tmp_path):
 def test_a_dataset_takes_the_names_a_store_gives_its_own_channels(tmp_path):
     """Where a store names its channels inside itself, those are the names shown.
 
-    The other shape, and the one a run written by `oldwriter` produces: the
+    The other shape, the one an acquisition that declares generous room produces: the
     channels live along an axis of a single image, and the store's own description
     says what each is called. Those names are what the microscopist chose —
     "marker-a", "nuclei" — so they are taken whole rather than worked out from

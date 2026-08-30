@@ -6,14 +6,20 @@ import http.client
 import json
 import threading
 
-from zmart_viewer import live as live_config
-from zmart_viewer.live import Announcements, ManifestWatcher
-from zmart_viewer.library import Library
-from zmart_viewer.live import LIVE_PICTURE, LiveBinding, LiveRegistry, live_rows
-from zmart_viewer.server import make_server
-
-from zmart_viewer.record.live_state import LiveStateTracker
 from record_fixtures import a_live_run, prepare_without_publishing, some_specimen  # noqa: E402
+
+from zmart_viewer import live as live_config
+from zmart_viewer.library import Library
+from zmart_viewer.live import (
+    LIVE_PICTURE,
+    Announcements,
+    LiveBinding,
+    LiveRegistry,
+    ManifestWatcher,
+    live_rows,
+)
+from zmart_viewer.record.live_state import LiveStateTracker
+from zmart_viewer.server import make_server
 
 
 def _request(port: int, path: str, *, headers=None):
@@ -150,13 +156,12 @@ def test_live_state_and_config_advance_only_after_commit_with_stable_urls(tmp_pa
         config = json.loads(body)
         assert len(config["layers"]) == 1
         assert sum(len(row["sources"]) for row in config["layers"]) == 1
-        assert [row["sources"] for row in config["layers"]] == [
-            [f"/data/0/{LIVE_PICTURE}/|zarr3:"]
-        ]
+        assert [row["sources"] for row in config["layers"]] == [[f"/data/0/{LIVE_PICTURE}/|zarr3:"]]
         assert {revision for row in config["layers"] for revision in row["sourceRevisions"]} == {1}
         assert all("?" not in url for row in config["layers"] for url in row["sources"])
-        assert all(row["committedTimeRanges"] == [{"start": 0, "stop": 1}]
-                   for row in config["layers"])
+        assert all(
+            row["committedTimeRanges"] == [{"start": 0, "stop": 1}] for row in config["layers"]
+        )
 
         current_etag = headers["ETag"]
         status, _, body = _request(
@@ -193,13 +198,9 @@ def test_a_timelapse_run_binds_and_serves_its_grown_picture(tmp_path):
 
     bindings, governed = registry.refresh()
     assert governed == {0}
-    assert len(bindings) == 1, (
-        f"the timelapse run did not bind: {registry.errors}"
-    )
-    described = json.loads(
-        (run.folder / LIVE_PICTURE / "zarr.json").read_text())
-    axes = [axis["name"] for axis in
-            described["attributes"]["ome"]["multiscales"][0]["axes"]]
+    assert len(bindings) == 1, f"the timelapse run did not bind: {registry.errors}"
+    described = json.loads((run.folder / LIVE_PICTURE / "zarr.json").read_text())
+    axes = [axis["name"] for axis in described["attributes"]["ome"]["multiscales"][0]["axes"]]
     assert axes == ["t", "c", "z", "y", "x"], (
         "the live picture of a timelapse run must declare the grown axes"
     )
@@ -309,15 +310,11 @@ def test_live_registry_follows_the_production_open_and_close_routes(tmp_path):
         assert status == 200
         assert [run["dataset"] for run in config["liveState"]["runs"]] == [0, 1]
         assert {
-            source_id.split("/", 1)[0]
-            for row in config["layers"]
-            for source_id in row["sourceIds"]
+            source_id.split("/", 1)[0] for row in config["layers"] for source_id in row["sourceIds"]
         } == {"0", "1"}
 
         second_group = next(
-            row["group"]
-            for row in config["layers"]
-            if row["sourceIds"][0].startswith("1/")
+            row["group"] for row in config["layers"] if row["sourceIds"][0].startswith("1/")
         )
         status, closed = _post(
             port,
@@ -327,9 +324,7 @@ def test_live_registry_follows_the_production_open_and_close_routes(tmp_path):
         assert status == 200
         assert [run["dataset"] for run in closed["liveState"]["runs"]] == [0]
         assert all(
-            source_id.startswith("0/")
-            for row in closed["layers"]
-            for source_id in row["sourceIds"]
+            source_id.startswith("0/") for row in closed["layers"] for source_id in row["sourceIds"]
         )
     finally:
         server.shutdown()
@@ -344,7 +339,10 @@ def test_binding_a_live_run_declares_the_baked_picture_exactly_once(tmp_path, mo
     to minutes, and re-doing it on every look at what is open would put that
     cost in front of the operator over and over.
     """
-    baking = (lambda run_root: True)
+
+    def baking(run_root):
+        return True
+
     run = a_live_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
     declared = []

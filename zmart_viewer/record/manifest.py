@@ -496,9 +496,7 @@ class RunManifest:
         anything.
         """
         try:
-            state = CommittedState.from_json(
-                json.loads(self.truth.read_text(encoding="utf-8"))
-            )
+            state = CommittedState.from_json(json.loads(self.truth.read_text(encoding="utf-8")))
         except (
             OSError,
             UnicodeDecodeError,
@@ -763,8 +761,10 @@ class RunManifest:
                     ("the overview's pointers", event.links_ready),
                     # A run that writes its linked view once at the end owes
                     # no view mid-run, so a deferred view is not a missing one.
-                    ("the linked view's description",
-                     event.view_ready or event.linked_view_deferred),
+                    (
+                        "the linked view's description",
+                        event.view_ready or event.linked_view_deferred,
+                    ),
                     ("the final check over all of it", event.validated),
                 )
                 if not done

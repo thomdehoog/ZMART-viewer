@@ -179,9 +179,7 @@ def contributors_to(
     """
     shows = chunk.covers(profile, _chunk_at(profile, chunk.level))
     return tuple(
-        placement
-        for placement in placements
-        if placement.frame_roi_in_run().overlaps(shows)
+        placement for placement in placements if placement.frame_roi_in_run().overlaps(shows)
     )
 
 

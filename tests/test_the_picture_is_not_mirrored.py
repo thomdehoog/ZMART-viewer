@@ -61,9 +61,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from measure_the_frame_rate_of_a_linked_view import (  # noqa: E402
+from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
+
 from zmart_viewer.server import make_server
 
 # The little acquisition this file draws. It is one plane of one channel, a few
@@ -145,8 +146,7 @@ def write_a_lopsided_acquisition(store: Path, *, moments: int = 0) -> Path:
     # along it is. Time and channel have no size worth speaking of, so they get a
     # one; the three that measure distance get the voxel size in micrometres.
     axes = [{"name": "c", "type": "channel"}] + [
-        {"name": name, "type": "space", "unit": "micrometer"}
-        for name in ("z", "y", "x")
+        {"name": name, "type": "space", "unit": "micrometer"} for name in ("z", "y", "x")
     ]
     step = [1.0, *VOXEL_UM]
     if moments:
@@ -230,9 +230,7 @@ def lopsided_page(request, browser, built_dist, tmp_path_factory):
     """
     moments = 3 if request.param == "a recording" else 0
     folder = tmp_path_factory.mktemp("lopsided")
-    write_a_lopsided_acquisition(
-        folder / "overview_pos00000.ome.zarr", moments=moments
-    )
+    write_a_lopsided_acquisition(folder / "overview_pos00000.ome.zarr", moments=moments)
     server = make_server(
         port=0,
         data_dir=folder,
@@ -243,9 +241,7 @@ def lopsided_page(request, browser, built_dist, tmp_path_factory):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
-    page.goto(
-        f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded"
-    )
+    page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
     page.wait_for_function("() => window.zmartViewer !== undefined", timeout=60_000)
     page.wait_for_function("() => window.zmartSourcesWaiting() === 0", timeout=90_000)
     # A mirroring check run before the picture has arrived is a check of nothing.
@@ -402,8 +398,7 @@ def test_the_specimen_is_not_drawn_as_its_own_mirror_image(lopsided_page):
     picture = the_drawing(lopsided_page)
     reading = which_way_the_ramp_runs(picture)
     assert reading["found"], (
-        "the specimen was not drawn, so there is no ramp to read a direction "
-        f"from: {reading}"
+        f"the specimen was not drawn, so there is no ramp to read a direction from: {reading}"
     )
     print(f"\n  the ramp across the picture: {reading}")
     assert reading["grey_levels_per_100_px"] > 0, (

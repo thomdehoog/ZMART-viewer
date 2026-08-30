@@ -41,13 +41,13 @@ sys.path.insert(0, "/home/user/ZMART-microscopy/app/server")
 from zmart_viewer.server import make_server  # noqa: E402
 
 # A canvas sized for the stage, not for what we happened to image.
-CANVAS = 8192          # y and x, in pixels
-DEPTH = 4              # z planes
+CANVAS = 8192  # y and x, in pixels
+DEPTH = 4  # z planes
 CHANNELS = 2
-TILE = 512             # each acquisition writes a tile this big
+TILE = 512  # each acquisition writes a tile this big
 CHUNK = 256
-LEVELS = 6             # 8192 -> 4096 -> 2048 -> 1024 -> 512 -> 256
-VOXEL_UM = (2.0, 0.35, 0.35)   # z, y, x
+LEVELS = 6  # 8192 -> 4096 -> 2048 -> 1024 -> 512 -> 256
+VOXEL_UM = (2.0, 0.35, 0.35)  # z, y, x
 
 # Nine tiles in a 3x3 arrangement, spread across the canvas and chunk-aligned so
 # each one is an independent write with no read-modify-write on its edges.
@@ -74,7 +74,9 @@ def build(root: Path) -> Path:
             rng = np.random.default_rng(index)
             # Noise, not a flat fill: real microscope pixels barely compress, and a
             # constant patch would shrink ~18x and flatter the disk figure.
-            patch = (800 + rng.integers(0, 16000, size=(1, CHANNELS, DEPTH, size, size))).astype(np.uint16)
+            patch = (800 + rng.integers(0, 16000, size=(1, CHANNELS, DEPTH, size, size))).astype(
+                np.uint16
+            )
             y, x = y0 // factor, x0 // factor
             arr[:, :, :, y : y + size, x : x + size] = patch
 
@@ -105,10 +107,16 @@ def build(root: Path) -> Path:
                 "multiscales": [{"version": "0.4", "axes": axes, "datasets": datasets}],
                 "omero": {
                     "channels": [
-                        {"label": "structure", "color": "FFFFFF",
-                         "window": {"min": 0, "max": 65535, "start": 800, "end": 16000}},
-                        {"label": "marker-a", "color": "00FF66",
-                         "window": {"min": 0, "max": 65535, "start": 800, "end": 16000}},
+                        {
+                            "label": "structure",
+                            "color": "FFFFFF",
+                            "window": {"min": 0, "max": 65535, "start": 800, "end": 16000},
+                        },
+                        {
+                            "label": "marker-a",
+                            "color": "00FF66",
+                            "window": {"min": 0, "max": 65535, "start": 800, "end": 16000},
+                        },
                     ]
                 },
             },
@@ -194,14 +202,20 @@ def measure(store: Path, dist: Path):
             per_level = ", ".join(f"level {k}: {v}" for k, v in sorted(fetched.items()))
             print(f"\n  {label}")
             print(f"    chunk files fetched : {sum(fetched.values())}   ({per_level or 'none'})")
-            print(f"    engine reports      : {state['available']}/{state['needed']} visible chunks ready")
+            print(
+                f"    engine reports      : {state['available']}/{state['needed']} visible chunks ready"
+            )
 
         settle()
         print("\n=== what Neuroglancer fetches, by pyramid level ===")
         # Zoomed right out: the whole 8192 canvas across ~900 screen pixels.
         look(CANVAS * 0.35 / 900 * 1e-6, "ZOOMED OUT — whole mosaic on screen")
         # Zoomed in: one screen pixel per image pixel.
-        look(0.35e-6, "ZOOMED IN — one screen pixel per image pixel (fresh page, no cache)", fresh=True)
+        look(
+            0.35e-6,
+            "ZOOMED IN — one screen pixel per image pixel (fresh page, no cache)",
+            fresh=True,
+        )
 
         browser.close()
     server.shutdown()
@@ -224,10 +238,14 @@ def main() -> int:
     written = len(TILE_ORIGINS) * CHANNELS * DEPTH * TILE * TILE * 2
 
     print("\n=== what the canvas costs ===")
-    print(f"  canvas declared      : {CANVAS} x {CANVAS} px, {DEPTH} z, {CHANNELS} c"
-          f"  = {declared / 1024**3:.2f} GiB at full resolution")
-    print(f"  tiles actually imaged: {len(TILE_ORIGINS)} x {TILE}x{TILE}"
-          f"  = {written / 1024**2:.0f} MiB of pixels")
+    print(
+        f"  canvas declared      : {CANVAS} x {CANVAS} px, {DEPTH} z, {CHANNELS} c"
+        f"  = {declared / 1024**3:.2f} GiB at full resolution"
+    )
+    print(
+        f"  tiles actually imaged: {len(TILE_ORIGINS)} x {TILE}x{TILE}"
+        f"  = {written / 1024**2:.0f} MiB of pixels"
+    )
     print(f"  on disk (all {LEVELS} pyramid levels): {on_disk_kb / 1024:.0f} MiB")
     print(f"  fraction of the declared canvas: {on_disk_kb * 1024 / declared:.1%}")
     print(f"  built in {build_seconds:.0f}s")

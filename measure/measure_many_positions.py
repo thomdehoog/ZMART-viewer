@@ -32,6 +32,7 @@ VIZ = Path("/home/user/ZMART-microscopy/zmart-viewer")
 sys.path.insert(0, str(VIZ))
 
 from playwright.sync_api import sync_playwright  # noqa: E402
+
 from zmart_viewer.server import make_server  # noqa: E402
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 1, 64, 64, 2
@@ -75,31 +76,50 @@ def write_timelapse(folder: Path, name: str, *, frames: int, column: int) -> Pat
         # server counts how far the run has got. Without it there is nothing to
         # count and the row never reports a frame at all.
         array[:] = 3000
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {"type": "scale", "scale": [30.0, 1.0, 2.0, 0.35 * 2**level, 0.35 * 2**level]}
-            ],
-        })
-    (store / ".zattrs").write_text(json.dumps({
-        "multiscales": [{
-            "version": "0.4",
-            "axes": [
-                {"name": "t", "type": "time", "unit": "second"},
-                {"name": "c", "type": "channel"},
-                {"name": "z", "type": "space", "unit": "micrometer"},
-                {"name": "y", "type": "space", "unit": "micrometer"},
-                {"name": "x", "type": "space", "unit": "micrometer"}],
-            "datasets": datasets,
-            "coordinateTransformations": [
-                {"type": "translation",
-                 "translation": [0.0, 0.0, 0.0, 0.0, column * SIDE * 0.35]}],
-        }],
-        "omero": {"channels": [
-            {"label": f"ch{i}", "color": "FFFFFF",
-             "window": {"min": 0, "max": 65535, "start": 700, "end": 8700}}
-            for i in range(CHANNELS)]},
-    }), encoding="utf-8")
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {"type": "scale", "scale": [30.0, 1.0, 2.0, 0.35 * 2**level, 0.35 * 2**level]}
+                ],
+            }
+        )
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "axes": [
+                            {"name": "t", "type": "time", "unit": "second"},
+                            {"name": "c", "type": "channel"},
+                            {"name": "z", "type": "space", "unit": "micrometer"},
+                            {"name": "y", "type": "space", "unit": "micrometer"},
+                            {"name": "x", "type": "space", "unit": "micrometer"},
+                        ],
+                        "datasets": datasets,
+                        "coordinateTransformations": [
+                            {
+                                "type": "translation",
+                                "translation": [0.0, 0.0, 0.0, 0.0, column * SIDE * 0.35],
+                            }
+                        ],
+                    }
+                ],
+                "omero": {
+                    "channels": [
+                        {
+                            "label": f"ch{i}",
+                            "color": "FFFFFF",
+                            "window": {"min": 0, "max": 65535, "start": 700, "end": 8700},
+                        }
+                        for i in range(CHANNELS)
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     return store
 
 
@@ -118,27 +138,32 @@ def measure(positions: int, root: Path) -> dict:
     built = time.perf_counter()
     first = None
     for index in range(positions):
-        store = write_timelapse(folder, f"overview_pos{index + 1:04d}",
-                                frames=2, column=index)
+        store = write_timelapse(folder, f"overview_pos{index + 1:04d}", frames=2, column=index)
         if index == 0:
             first = store
     wrote = time.perf_counter() - built
 
-    server = make_server(port=0, data_dir=folder, site_dir=VIZ / "app" / "page" / "dist",
-                         store="overview_pos0001.ome.zarr")
+    server = make_server(
+        port=0,
+        data_dir=folder,
+        site_dir=VIZ / "app" / "page" / "dist",
+        store="overview_pos0001.ome.zarr",
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
-            args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"])
+            args=["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+        )
         page = browser.new_page(viewport={"width": 900, "height": 700})
         described: list[str] = []
-        page.on("request", lambda r: described.append(r.url)
-                if r.url.endswith((".zarray", ".zattrs")) else None)
+        page.on(
+            "request",
+            lambda r: described.append(r.url) if r.url.endswith((".zarray", ".zattrs")) else None,
+        )
         try:
             opened = time.perf_counter()
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}",
-                      wait_until="domcontentloaded")
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
             page.wait_for_function("() => window.zmartViewer !== undefined", timeout=120_000)
             page.wait_for_function(f"{SOURCES} === {positions * CHANNELS}", timeout=300_000)
             cold = time.perf_counter() - opened
@@ -176,9 +201,13 @@ if __name__ == "__main__":
     # thousand of them is a lot of small files to leave lying beside the code.
     holding = tempfile.TemporaryDirectory(prefix="zmart-many-positions-")
     root = Path(holding.name)
-    print(f"{'positions':>9} {'cold open':>10} {'descr. reqs':>12} "
-          f"{'one frame lands':>16} {'descr. reqs':>12}")
+    print(
+        f"{'positions':>9} {'cold open':>10} {'descr. reqs':>12} "
+        f"{'one frame lands':>16} {'descr. reqs':>12}"
+    )
     for size in sizes:
         row = measure(size, root)
-        print(f"{row['positions']:>9} {row['cold_s']:>9.1f}s {row['cold_requests']:>12} "
-              f"{row['growth_s']:>15.1f}s {row['growth_requests']:>12}")
+        print(
+            f"{row['positions']:>9} {row['cold_s']:>9.1f}s {row['cold_requests']:>12} "
+            f"{row['growth_s']:>15.1f}s {row['growth_requests']:>12}"
+        )

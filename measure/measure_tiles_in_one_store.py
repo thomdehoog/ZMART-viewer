@@ -130,22 +130,31 @@ def build_stores(work: Path, grid: int):
     true_shape = (DEPTH, (grid - 1) * STEP + TILE, (grid - 1) * STEP + TILE)
 
     montage = zarr.open_array(
-        str(work / "slot_per_tile.zarr"), mode="w", shape=montage_shape,
-        chunks=(1, CHUNK, CHUNK), dtype="uint16")
+        str(work / "slot_per_tile.zarr"),
+        mode="w",
+        shape=montage_shape,
+        chunks=(1, CHUNK, CHUNK),
+        dtype="uint16",
+    )
     truth = zarr.open_array(
-        str(work / "true_geometry.zarr"), mode="w", shape=true_shape,
-        chunks=(1, CHUNK, CHUNK), dtype="uint16")
+        str(work / "true_geometry.zarr"),
+        mode="w",
+        shape=true_shape,
+        chunks=(1, CHUNK, CHUNK),
+        dtype="uint16",
+    )
 
     for iy in range(grid):
         for ix in range(grid):
             # Noise rather than a flat value, so that a piece assembled out of the
             # wrong part of the store cannot accidentally match the right one.
             tile = np.random.default_rng(iy * 1000 + ix).integers(
-                1000, 4000, size=(DEPTH, TILE, TILE), dtype=np.uint16)
-            montage[:, iy * TILE:(iy + 1) * TILE, ix * TILE:(ix + 1) * TILE] = tile
+                1000, 4000, size=(DEPTH, TILE, TILE), dtype=np.uint16
+            )
+            montage[:, iy * TILE : (iy + 1) * TILE, ix * TILE : (ix + 1) * TILE] = tile
             # Written in raster order, so where tiles overlap the later one wins.
             # The reader below has to reproduce exactly this.
-            truth[:, iy * STEP:iy * STEP + TILE, ix * STEP:ix * STEP + TILE] = tile
+            truth[:, iy * STEP : iy * STEP + TILE, ix * STEP : ix * STEP + TILE] = tile
 
     return montage, truth, true_shape
 
@@ -194,8 +203,9 @@ def read_true_piece(montage, grid, true_shape, z, y0, x0, size=CHUNK):
             # The same rectangle, in this tile's own slot in the store.
             slot_y = iy * TILE + (oy0 - tile_y)
             slot_x = ix * TILE + (ox0 - tile_x)
-            piece[oy0 - y0:oy1 - y0, ox0 - x0:ox1 - x0] = montage[
-                z, slot_y:slot_y + (oy1 - oy0), slot_x:slot_x + (ox1 - ox0)]
+            piece[oy0 - y0 : oy1 - y0, ox0 - x0 : ox1 - x0] = montage[
+                z, slot_y : slot_y + (oy1 - oy0), slot_x : slot_x + (ox1 - ox0)
+            ]
     return piece
 
 
@@ -214,13 +224,16 @@ def smaller_copies(montage, grid: int, work: Path):
     full = np.asarray(montage[:])
     copies = [montage]
     for level in range(1, LEVELS):
-        factor = 2 ** level
+        factor = 2**level
         side = (grid * TILE) // factor
-        shrunk = (full.reshape(DEPTH, side, factor, side, factor)
-                      .mean(axis=(2, 4)).astype(np.uint16))
+        shrunk = full.reshape(DEPTH, side, factor, side, factor).mean(axis=(2, 4)).astype(np.uint16)
         array = zarr.open_array(
-            str(work / f"slot_per_tile_copy{level}.zarr"), mode="w",
-            shape=shrunk.shape, chunks=(1, CHUNK, CHUNK), dtype="uint16")
+            str(work / f"slot_per_tile_copy{level}.zarr"),
+            mode="w",
+            shape=shrunk.shape,
+            chunks=(1, CHUNK, CHUNK),
+            dtype="uint16",
+        )
         array[:] = shrunk
         copies.append(array)
     return copies
@@ -249,17 +262,20 @@ def place_on_copy(copy, grid: int, level: int, z: int, y0: int, x0: int, shape):
             touched += 1
             slot_y = iy * tile + (oy0 - tile_y)
             slot_x = ix * tile + (ox0 - tile_x)
-            piece[oy0 - y0:oy1 - y0, ox0 - x0:ox1 - x0] = copy[
-                z, slot_y:slot_y + (oy1 - oy0), slot_x:slot_x + (ox1 - ox0)]
+            piece[oy0 - y0 : oy1 - y0, ox0 - x0 : ox1 - x0] = copy[
+                z, slot_y : slot_y + (oy1 - oy0), slot_x : slot_x + (ox1 - ox0)
+            ]
     return piece, touched
 
 
 def _report(name: str, times: list[float]) -> float:
     ordered = sorted(times)
     middle = statistics.median(ordered)
-    print(f"  {name:<34} n={len(ordered):<3} median={middle:7.2f} ms  "
-          f"p90={ordered[int(len(ordered) * 0.9)]:7.2f} ms  "
-          f"max={max(ordered):7.2f} ms")
+    print(
+        f"  {name:<34} n={len(ordered):<3} median={middle:7.2f} ms  "
+        f"p90={ordered[int(len(ordered) * 0.9)]:7.2f} ms  "
+        f"max={max(ordered):7.2f} ms"
+    )
     return middle
 
 
@@ -267,8 +283,10 @@ def main() -> None:
     grid = int(sys.argv[1]) if len(sys.argv) > 1 else 8
     work = Path(tempfile.mkdtemp(prefix="tiles-in-one-store-"))
     try:
-        print(f"\n{grid * grid} tiles of {TILE}x{TILE}, {OVERLAP} voxels of overlap, "
-              f"{grid}x{grid} raster, {DEPTH} planes")
+        print(
+            f"\n{grid * grid} tiles of {TILE}x{TILE}, {OVERLAP} voxels of overlap, "
+            f"{grid}x{grid} raster, {DEPTH} planes"
+        )
 
         started = time.perf_counter()
         montage, truth, true_shape = build_stores(work, grid)
@@ -289,19 +307,20 @@ def main() -> None:
             virtual.append((time.perf_counter() - started) * 1000)
 
             started = time.perf_counter()
-            np.asarray(truth[z, y0:y0 + CHUNK, x0:x0 + CHUNK])
+            np.asarray(truth[z, y0 : y0 + CHUNK, x0 : x0 + CHUNK])
             control.append((time.perf_counter() - started) * 1000)
 
         print()
         put_in_place = _report("virtual view over the montage", virtual)
         plain_read = _report("true image on disk (control)", control)
-        print(f"\n  -> putting the tiles in place costs "
-              f"{put_in_place / plain_read:.1f}x a plain read")
+        print(
+            f"\n  -> putting the tiles in place costs {put_in_place / plain_read:.1f}x a plain read"
+        )
 
         worst = 0
         for z, y0, x0 in wanted[:12]:
             got = read_true_piece(montage, grid, true_shape, z, y0, x0)
-            want = np.asarray(truth[z, y0:y0 + got.shape[0], x0:x0 + got.shape[1]])
+            want = np.asarray(truth[z, y0 : y0 + got.shape[0], x0 : x0 + got.shape[1]])
             worst = max(worst, int(np.abs(got.astype(int) - want.astype(int)).max()))
         print(f"  -> largest disagreement with the true picture: {worst} grey levels")
         if worst:
@@ -338,23 +357,25 @@ def main() -> None:
             # sees every alignment sideways and only two of the seven downwards,
             # and so still misses the worst case.
             inside = max(0, min(CHUNK, side - CHUNK))
-            spots = [(0, inside + down * CHUNK, inside + across * CHUNK)
-                     for down in range(PHASE_REPEATS)
-                     for across in range(PHASE_REPEATS)
-                     if inside + down * CHUNK < side
-                     and inside + across * CHUNK < side]
-            if not spots:      # a copy too small to have an inside at all
+            spots = [
+                (0, inside + down * CHUNK, inside + across * CHUNK)
+                for down in range(PHASE_REPEATS)
+                for across in range(PHASE_REPEATS)
+                if inside + down * CHUNK < side and inside + across * CHUNK < side
+            ]
+            if not spots:  # a copy too small to have an inside at all
                 spots = [(0, 0, 0)]
             times, most = [], 0
             for z, y0, x0 in spots:
                 started = time.perf_counter()
-                _, touched = place_on_copy(copies[level], grid, level, z, y0, x0,
-                                           (side, side))
+                _, touched = place_on_copy(copies[level], grid, level, z, y0, x0, (side, side))
                 times.append((time.perf_counter() - started) * 1000)
                 most = max(most, touched)
-            print(f"    copy {level}  {statistics.median(times):8.2f} ms   "
-                  f"touching at most {most:4d} tiles"
-                  + ("   <- the whole run" if most >= grid * grid else ""))
+            print(
+                f"    copy {level}  {statistics.median(times):8.2f} ms   "
+                f"touching at most {most:4d} tiles"
+                + ("   <- the whole run" if most >= grid * grid else "")
+            )
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

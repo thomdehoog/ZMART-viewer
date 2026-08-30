@@ -45,15 +45,14 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.building import GovernedRun  # noqa: E402
+
+from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 # The replacement's brightness: far below the fixtures' BRIGHT window
 # (46,000-62,000) and far above zero, so the three grounds this file must
 # tell apart -- bright neighbour, dim replacement, empty fill -- can never
 # be mistaken for one another, downsampling and averaging included.
 DIM = 700
-
 
 
 def _grid_neighbours(run, order):
@@ -71,9 +70,10 @@ def _grid_neighbours(run, order):
             if order.index(later) <= order.index(earlier):
                 continue
             beside = placed[later]
-            if (beside.get("y", 0) == origin.get("y", 0)
-                    and 0 < beside.get("x", 0) - origin.get("x", 0)
-                    < harness.FRAME):
+            if (
+                beside.get("y", 0) == origin.get("y", 0)
+                and 0 < beside.get("x", 0) - origin.get("x", 0) < harness.FRAME
+            ):
                 return earlier, later
     raise AssertionError(
         "no two committed positions overlap horizontally in this layout, so "
@@ -89,18 +89,20 @@ def test_the_overlap_band_belongs_to_the_later_commit(tmp_path):
         harness.fast_publish(run, position_id)
     early, later = _grid_neighbours(run, order)
     origin = run.layout.placement(early).origin
-    step = (run.layout.placement(later).origin["x"] - origin["x"])
+    step = run.layout.placement(later).origin["x"] - origin["x"]
 
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
     opened = GovernedRun(run.folder, store=store)
     try:
         held = opened.composer()
         # The coarsest level the patcher COMPOSES (rather than re-halves)
         # is where paste-over would live, so it is where the proof looks.
-        baked = tuple(json.loads((store / "zarr.json").read_text(
-            encoding="utf-8"))["attributes"]["zmart"]["baked"])
+        baked = tuple(
+            json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["zmart"][
+                "baked"
+            ]
+        )
         level = max(one for one in baked if one < held.mosaic.levels)
         down = int(run.profile.level(level).downsampling.get("x", 1))
 
@@ -113,10 +115,11 @@ def test_the_overlap_band_belongs_to_the_later_commit(tmp_path):
         # One point in the replaced position's OWN ground -- inside its
         # frame, clear of every neighbour's overlap band -- and one in the
         # band it shares with its later-committed neighbour.
-        own = (origin["y"] + harness.FRAME // 2,
-               origin["x"] + (harness.FRAME - step) + step // 3)
-        shared = (origin["y"] + harness.FRAME // 2,
-                  origin["x"] + step + (harness.FRAME - step) // 2)
+        own = (origin["y"] + harness.FRAME // 2, origin["x"] + (harness.FRAME - step) + step // 3)
+        shared = (
+            origin["y"] + harness.FRAME // 2,
+            origin["x"] + step + (harness.FRAME - step) // 2,
+        )
 
         bright_low = harness.BRIGHT[0]
         assert pixel(*own) >= bright_low and pixel(*shared) >= bright_low, (
@@ -124,8 +127,9 @@ def test_the_overlap_band_belongs_to_the_later_commit(tmp_path):
             "specimen, or this proof is sampling the wrong ground"
         )
 
-        run.replace_a_position(early, np.full(
-            (1, harness.FRAME, harness.FRAME), DIM, dtype="uint16"))
+        run.replace_a_position(
+            early, np.full((1, harness.FRAME, harness.FRAME), DIM, dtype="uint16")
+        )
         opened.composer()
 
         replaced = pixel(*own)
@@ -170,8 +174,7 @@ def test_the_baked_files_equal_a_fresh_composition(tmp_path):
     for position_id in order[:-2]:
         harness.fast_publish(run, position_id)
     shown = run.folder / "views" / "shown"
-    store = declare_a_governed_picture(shown, run.folder, name="live",
-                                       bake=True)
+    store = declare_a_governed_picture(shown, run.folder, name="live", bake=True)
     opened = GovernedRun(run.folder, store=store)
     try:
         opened.composer()
@@ -179,11 +182,15 @@ def test_the_baked_files_equal_a_fresh_composition(tmp_path):
             harness.fast_publish(run, position_id)
             opened.composer()
         early, _later = _grid_neighbours(run, order)
-        run.replace_a_position(early, np.full(
-            (1, harness.FRAME, harness.FRAME), DIM, dtype="uint16"))
+        run.replace_a_position(
+            early, np.full((1, harness.FRAME, harness.FRAME), DIM, dtype="uint16")
+        )
         held = opened.composer()
-        baked = tuple(json.loads((store / "zarr.json").read_text(
-            encoding="utf-8"))["attributes"]["zmart"]["baked"])
+        baked = tuple(
+            json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["zmart"][
+                "baked"
+            ]
+        )
         level = max(one for one in baked if one < held.mosaic.levels)
         deep, rows, columns = held.grid(level)
         unpacking = Zstd()
@@ -192,8 +199,7 @@ def test_the_baked_files_equal_a_fresh_composition(tmp_path):
             for row in range(rows):
                 for column in range(columns):
                     fresh = held.bytes_for(level, plane, row, column)
-                    file = (Path(store) / str(level) / "c" / str(plane)
-                            / str(row) / str(column))
+                    file = Path(store) / str(level) / "c" / str(plane) / str(row) / str(column)
                     if fresh is None:
                         assert not file.is_file(), (
                             f"piece {level}/{plane}/{row}/{column} is "
@@ -205,10 +211,8 @@ def test_the_baked_files_equal_a_fresh_composition(tmp_path):
                         f"piece {level}/{plane}/{row}/{column} holds "
                         "specimen by composition but no baked file exists"
                     )
-                    on_disk = np.frombuffer(
-                        unpacking.decode(file.read_bytes()), dtype="<u2")
-                    composed = np.frombuffer(
-                        unpacking.decode(fresh), dtype="<u2")
+                    on_disk = np.frombuffer(unpacking.decode(file.read_bytes()), dtype="<u2")
+                    composed = np.frombuffer(unpacking.decode(fresh), dtype="<u2")
                     differing = int((on_disk != composed).sum())
                     assert differing == 0, (
                         f"piece {level}/{plane}/{row}/{column} differs from "

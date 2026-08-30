@@ -34,8 +34,9 @@ from pathlib import Path
 
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
-sys.path.insert(0, str(_VIZ / "testdata"))
+sys.path.insert(0, str(_VIZ / "tests"))
 from demo_data import write_demo_zarr  # noqa: E402
+
 from zmart_viewer.server import _DEMO_STORE, _FRONTEND_DIST, make_server  # noqa: E402
 
 # Where the screenshot lands, and how long we allow for a cold start (the engine

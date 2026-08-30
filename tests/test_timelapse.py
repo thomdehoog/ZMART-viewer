@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import zarr
 from demo_data import write_demo_zarr
+
 from zmart_viewer.server import make_server
 
 FRAMES = 4
@@ -220,9 +221,7 @@ class TestTheTimeSlider:
     def test_the_time_slider_survives_the_switch_to_3d(self, timelapse_page):
         """Time means something in the volume view too, so it must stay."""
         timelapse_page.get_by_role("button", name="3D", exact=True).click()
-        timelapse_page.wait_for_function(
-            "() => window.zmartMode === 'volume'", timeout=15_000
-        )
+        timelapse_page.wait_for_function("() => window.zmartMode === 'volume'", timeout=15_000)
         assert timelapse_page.locator("[aria-label='t position']").count() == 1
         # Z, by contrast, is not offered in 3-D: the whole depth is on screen.
         assert timelapse_page.locator("[aria-label='z position']").count() == 0
@@ -358,7 +357,7 @@ def test_a_store_that_lengthens_its_own_array_is_read_again(browser, built_dist,
 
     There are two shapes a timelapse can take on disk and the viewer meets both.
     One declares all its moments up front and fills them in, which is what
-    `oldwriter` writes; the slider is then held back by the count the server
+    an acquisition writer declares; the slider is then held back by the count the server
     reads off the disk, and the engine never has to change its mind about anything.
     The other **grows**: the array is written with one moment, and its declared
     length is raised as the run goes. `docs/how_it_works/DATA_LAYOUT.md` records a real instrument
@@ -420,9 +419,7 @@ def test_a_store_that_lengthens_its_own_array_is_read_again(browser, built_dist,
 
         # The run goes on, and the store grows to hold three moments.
         _write_a_growing_timelapse(store, frames=3)
-        connection = http.client.HTTPConnection(
-            "127.0.0.1", server.server_address[1], timeout=10
-        )
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
         connection.request("POST", "/api/announce", body=b"{}", headers={"Content-Length": "2"})
         assert json.loads(connection.getresponse().read())["told"] >= 1
         connection.close()
@@ -470,7 +467,9 @@ def _write_a_growing_timelapse(store, *, frames: int) -> None:
         array.resize((frames, 1, height, width))
     else:
         array = group.create_array(
-            "0", shape=(frames, 1, height, width), chunks=(1, 1, height, width),
+            "0",
+            shape=(frames, 1, height, width),
+            chunks=(1, 1, height, width),
             dtype="uint16",
         )
     for frame in range(frames):

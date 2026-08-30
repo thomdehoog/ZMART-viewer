@@ -29,8 +29,9 @@ import time
 import numpy as np
 import pytest
 import zarr
-from zmart_viewer.server import make_server
 from driving import open_through_the_window, pick_colormap  # noqa: E402
+
+from zmart_viewer.server import make_server
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 16, 1024, 256, 3
 
@@ -86,8 +87,11 @@ def _store(path, *, seed=0, channels=CHANNELS, side=SIDE):
                 ],
                 "omero": {
                     "channels": [
-                        {"label": f"ch{i}", "color": "FFFFFF",
-                         "window": {"min": 0, "max": 65535, "start": 800, "end": 9800}}
+                        {
+                            "label": f"ch{i}",
+                            "color": "FFFFFF",
+                            "window": {"min": 0, "max": 65535, "start": 800, "end": 9800},
+                        }
                         for i in range(channels)
                     ]
                 },
@@ -161,9 +165,7 @@ class Watcher:
 
     def _served_chunks(self) -> list[str]:
         return [
-            path
-            for path in getattr(self, "served", [])
-            if "/data/" in path and "/.z" not in path
+            path for path in getattr(self, "served", []) if "/data/" in path and "/.z" not in path
         ]
 
     @property
@@ -390,9 +392,7 @@ class TestMovingAround:
         allowed to keep nothing at all.
         """
         page, watcher, _ = quiet_page
-        home = page.evaluate(
-            "() => Array.from(window.zmartViewer.navigationState.position.value)"
-        )
+        home = page.evaluate("() => Array.from(window.zmartViewer.navigationState.position.value)")
         page.mouse.move(550, 400)
         for _ in range(3):
             page.mouse.wheel(0, -120)
@@ -458,7 +458,7 @@ class TestMovingAround:
         """The volume needs more data; returning to the slice needs none of it again."""
         page, watcher, _ = quiet_page
         page.click("text=3D")
-        page.wait_for_timeout(6000)          # the volume legitimately fetches more
+        page.wait_for_timeout(6000)  # the volume legitimately fetches more
         mark = watcher.mark
         page.click("text=2D")
         page.wait_for_timeout(3000)
@@ -504,8 +504,7 @@ class TestOpeningSomethingElse:
             added = watcher.urls[len(before) :]
             first_again = [url for url in added if "overview_pos001" in url]
             assert not first_again, (
-                "opening a second acquisition refetched the first: "
-                f"{len(first_again)} pieces"
+                f"opening a second acquisition refetched the first: {len(first_again)} pieces"
             )
         finally:
             page.close()
@@ -538,8 +537,9 @@ class TestDataArrivingWhileYouWatch:
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,
-            loads=[{"stores": sorted(p.name for p in tmp_path.glob("*.ome.zarr")),
-                    "name": "overview"}],
+            loads=[
+                {"stores": sorted(p.name for p in tmp_path.glob("*.ome.zarr")), "name": "overview"}
+            ],
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -590,32 +590,55 @@ class TestDataArrivingWhileYouWatch:
         store.mkdir()
         group = zarr.open_group(str(store), mode="w", zarr_format=2)
         array = group.create_array(
-            "0", shape=(8, 1, 8, 256, 256), chunks=(1, 1, 1, 256, 256), dtype="uint16",
+            "0",
+            shape=(8, 1, 8, 256, 256),
+            chunks=(1, 1, 1, 256, 256),
+            dtype="uint16",
             chunk_key_encoding={"name": "v2", "separator": "/"},
         )
         for t in range(2):
             array[t] = np.full((1, 8, 256, 256), 5000, dtype=np.uint16)
         (store / ".zattrs").write_text(
-            json.dumps({
-                "multiscales": [{
-                    "version": "0.4",
-                    "axes": [
-                        {"name": "t", "type": "time", "unit": "second"},
-                        {"name": "c", "type": "channel"},
-                        {"name": "z", "type": "space", "unit": "micrometer"},
-                        {"name": "y", "type": "space", "unit": "micrometer"},
-                        {"name": "x", "type": "space", "unit": "micrometer"}],
-                    "datasets": [{"path": "0", "coordinateTransformations": [
-                        {"type": "scale", "scale": [30.0, 1.0, 2.0, 0.35, 0.35]}]}],
-                }],
-                "omero": {"channels": [{"label": "ch0", "color": "FFFFFF",
-                    "window": {"min": 0, "max": 65535, "start": 0, "end": 9000}}]},
-            }),
+            json.dumps(
+                {
+                    "multiscales": [
+                        {
+                            "version": "0.4",
+                            "axes": [
+                                {"name": "t", "type": "time", "unit": "second"},
+                                {"name": "c", "type": "channel"},
+                                {"name": "z", "type": "space", "unit": "micrometer"},
+                                {"name": "y", "type": "space", "unit": "micrometer"},
+                                {"name": "x", "type": "space", "unit": "micrometer"},
+                            ],
+                            "datasets": [
+                                {
+                                    "path": "0",
+                                    "coordinateTransformations": [
+                                        {"type": "scale", "scale": [30.0, 1.0, 2.0, 0.35, 0.35]}
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                    "omero": {
+                        "channels": [
+                            {
+                                "label": "ch0",
+                                "color": "FFFFFF",
+                                "window": {"min": 0, "max": 65535, "start": 0, "end": 9000},
+                            }
+                        ]
+                    },
+                }
+            ),
             encoding="utf-8",
         )
 
         server = make_server(
-            port=0, data_dir=tmp_path, site_dir=built_dist,
+            port=0,
+            data_dir=tmp_path,
+            site_dir=built_dist,
             loads=[{"stores": [store.name], "name": "overview"}],
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)

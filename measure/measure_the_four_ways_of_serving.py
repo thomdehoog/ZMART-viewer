@@ -28,13 +28,13 @@ sys.path.insert(0, str(_VIZ / "measure"))
 sys.path.insert(0, str(_VIZ.parent))
 
 import measure_a_governed_run_at_scale as harness  # noqa: E402
-from zmart_viewer.record.gateway import answer_from_a_live_run  # noqa: E402
-from zmart_viewer.record.model import CommitEvent  # noqa: E402
-from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 from zmart_viewer import pieces as served  # noqa: E402
 from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 from zmart_viewer.live import the_live_picture_declared  # noqa: E402
+from zmart_viewer.record.gateway import answer_from_a_live_run  # noqa: E402
+from zmart_viewer.record.model import CommitEvent  # noqa: E402
+from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
 
 harness.FIXTURES = Path(os.environ.get("ZMART_FIXTURES", str(harness.FIXTURES)))
 

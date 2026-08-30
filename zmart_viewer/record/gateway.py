@@ -98,7 +98,7 @@ def _generation_named(
             return position_id, 0
         prefix = f"{position_id}.generation-"
         if store_name.startswith(prefix):
-            generation = store_name[len(prefix):]
+            generation = store_name[len(prefix) :]
             if generation.isdigit():
                 return position_id, int(generation)
     found = _GENERATION.fullmatch(store_name)
@@ -166,7 +166,7 @@ class _LiveRun:
                 published = self._published_mut
                 moments_by_position = self._moments_by_position
                 replacements_seen = self._replacements_seen
-                for event in events[self._folded:]:
+                for event in events[self._folded :]:
                     if event.position_id not in self._arrived_set:
                         self._arrived.append(event.position_id)
                         self._arrived_set.add(event.position_id)
@@ -185,8 +185,7 @@ class _LiveRun:
                         # to this generation, while moments never committed remain
                         # withheld even if their fill-value room was copied too.
                         published.update(
-                            (position_id, inherited, generation)
-                            for inherited in already_visible
+                            (position_id, inherited, generation) for inherited in already_visible
                         )
                     already_visible.add(moment)
                     published.add((position_id, moment, generation))
@@ -302,8 +301,7 @@ class _LiveRun:
                         if position_id in already_committed
                     ] != committed_order:
                         raise ValueError(
-                            "the live view draw order disagrees with the manifest's "
-                            "commit order"
+                            "the live view draw order disagrees with the manifest's commit order"
                         )
                     first_uncommitted = next(
                         (
@@ -322,9 +320,7 @@ class _LiveRun:
                             "ground in the live view draw order"
                         )
                 elif tuple(position_ids) != declared_order:
-                    raise ValueError(
-                        "the live view levels disagree about the draw order"
-                    )
+                    raise ValueError("the live view levels disagree about the draw order")
                 geometry = profile.level(level_number)
                 by_z = geometry.downsampling.get("z", 1)
                 by_y = geometry.downsampling.get("y", 1)
@@ -351,9 +347,7 @@ class _LiveRun:
                 for entry in entries:
                     position_id = str(entry["position_id"])
                     if position_id not in generations:
-                        raise ValueError(
-                            "a routed position has no generation in the live link map"
-                        )
+                        raise ValueError("a routed position has no generation in the live link map")
                     array = (self.folder / entry["array"]).resolve()
                     named = _generation_named(array.parent.name, position_ids)
                     expected_generation = int(generations[position_id])
@@ -382,9 +376,7 @@ class _LiveRun:
                         or tuple(entry["taken_from"]) != (0, 0, 0)
                         or tuple(entry["size"]) != expected_size
                     ):
-                        raise ValueError(
-                            "a live view route disagrees with the immutable layout"
-                        )
+                        raise ValueError("a live view route disagrees with the immutable layout")
                     placed.append(
                         Placed(
                             array=array,

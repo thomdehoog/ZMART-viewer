@@ -36,9 +36,7 @@ _VIZ_ROOT = Path(__file__).resolve().parent.parent
 # One browser test to run in the inner pytest. Any would do — every one of them
 # needs a browser, so every one of them skips on a machine that has none. A
 # single test is chosen rather than the whole file simply to keep it quick.
-_A_TEST_THAT_NEEDS_A_BROWSER = (
-    "tests/test_interaction.py::test_the_viewer_opens_as_a_single_panel"
-)
+_A_TEST_THAT_NEEDS_A_BROWSER = "tests/test_interaction.py::test_the_viewer_opens_as_a_single_panel"
 
 
 def _run_the_suite_with_no_browser(tmp_path: Path, require_browser: bool):

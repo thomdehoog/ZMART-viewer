@@ -143,11 +143,10 @@ class Inspection:
         which = f"'{self.position_id}' at moment {self.moment}"
         if self.everything_checks_out:
             about_the_view = (
-                "the linked view is written once at the end of the run, so no "
-                "mid-run view was owed"
+                "the linked view is written once at the end of the run, so no mid-run view was owed"
                 if self.linked_view_deferred
                 else f"{self.view_levels_validated} virtual view levels validated "
-                     f"without copied payload"
+                f"without copied payload"
             )
             return (
                 f"{which} is complete: {self.pieces_read} pixels read back out of "
@@ -169,8 +168,13 @@ def _the_files_identity(target: Path) -> tuple | None:
         stamp = target.stat()
     except OSError:
         return None
-    return (stamp.st_dev, getattr(stamp, "st_ino", 0), stamp.st_size,
-            stamp.st_mtime_ns, stamp.st_ctime_ns)
+    return (
+        stamp.st_dev,
+        getattr(stamp, "st_ino", 0),
+        stamp.st_size,
+        stamp.st_mtime_ns,
+        stamp.st_ctime_ns,
+    )
 
 
 @dataclass
@@ -341,8 +345,7 @@ class LivePublisher:
                     "twice. Supply the complete planned footprint before starting this "
                     "publisher."
                 )
-            object.__setattr__(
-                self, "positions", places_on_a_grid(self.profile, self.cells))
+            object.__setattr__(self, "positions", places_on_a_grid(self.profile, self.cells))
         else:
             # A run given its places was not laid out on a grid, so it has no
             # squares to record and no planned rectangle to be missing any
@@ -373,9 +376,14 @@ class LivePublisher:
             )
 
         placements = place_the_positions(
-            self.profile, self.positions,
-            cells=({name: cell for cell, name in self.cells.items()}
-                   if self.cells is not None else None))
+            self.profile,
+            self.positions,
+            cells=(
+                {name: cell for cell, name in self.cells.items()}
+                if self.cells is not None
+                else None
+            ),
+        )
         candidate_layout = SceneLayoutRevision(
             revision=1,
             schema_version="zmart-live-layout/2",
@@ -390,11 +398,9 @@ class LivePublisher:
         self.manifest = RunManifest.start(self.folder, run_id=self.run_id)
 
         newest = latest_layout_revision(self.folder)
-        if (
-            newest is not None
-            and spatial_fingerprint_of_a_layout(newest)
-            != spatial_fingerprint_of_a_layout(candidate_layout)
-        ):
+        if newest is not None and spatial_fingerprint_of_a_layout(
+            newest
+        ) != spatial_fingerprint_of_a_layout(candidate_layout):
             raise ZmartLiveError(
                 f"Run {self.run_id!r} already has immutable layout revision "
                 f"{newest.revision}, and reopening it with this acquisition "
@@ -425,17 +431,14 @@ class LivePublisher:
                 replacements_seen[event.position_id] = inferred
             generation = max(event.position_generation, inferred)
             if generation:
-                restored[event.position_id] = max(
-                    restored.get(event.position_id, 0), generation
-                )
+                restored[event.position_id] = max(restored.get(event.position_id, 0), generation)
         self.generations = restored
         # The stored link map's routes, remembered against the file's own
         # identity: every consumer of the map on disk shares one read and
         # one routing of it per file state, where re-reading and re-routing
         # the whole survey twice per publish was two of the twelve routing
         # passes profiled at 12,769 positions. See _the_stored_routes.
-        self._stored_routes: tuple[tuple, dict, dict[int, object]] | None = \
-            None
+        self._stored_routes: tuple[tuple, dict, dict[int, object]] | None = None
         # The layout object as last recorded and the pointer file's identity
         # after that write, so an unchanged arrangement is never re-recorded
         # while a tampered pointer is still repaired -- see write_the_layout.
@@ -567,8 +570,11 @@ class LivePublisher:
             committed.setdefault(position, set()).add(moment)
         members = {}
         for position in sorted(committed):
-            name = (position if self.generations.get(position, 0) == 0
-                    else f"{position}.generation-{self.generations[position]}")
+            name = (
+                position
+                if self.generations.get(position, 0) == 0
+                else f"{position}.generation-{self.generations[position]}"
+            )
             count = 0
             while count in committed[position]:
                 count += 1
@@ -631,9 +637,7 @@ class LivePublisher:
 
     # -- writing -------------------------------------------------------------
 
-    def write_a_position(
-        self, position_id: str, pixels: np.ndarray, *, timepoint: int = 0
-    ) -> None:
+    def write_a_position(self, position_id: str, pixels: np.ndarray, *, timepoint: int = 0) -> None:
         """Write one position's pixels and every zoomed-out copy it advertises.
 
         ``pixels`` is one colour given as ``(z, y, x)``, or every colour given as
@@ -665,9 +669,7 @@ class LivePublisher:
             )
         self._write_the_pixels(position_id, pixels, timepoint=timepoint)
 
-    def _write_the_pixels(
-        self, position_id: str, pixels: np.ndarray, *, timepoint: int
-    ) -> None:
+    def _write_the_pixels(self, position_id: str, pixels: np.ndarray, *, timepoint: int) -> None:
         """Put one moment's pixels, and every zoomed-out copy, into the store.
 
         Kept apart from :meth:`write_a_position` so that a deliberate replacement
@@ -692,8 +694,9 @@ class LivePublisher:
         with ThreadPoolExecutor(max_workers=len(self.profile.levels)) as pool:
             writes = []
             for level in self.profile.levels:
-                writes.append(pool.submit(self._write_one_level, store,
-                                          level, shrinking, timepoint))
+                writes.append(
+                    pool.submit(self._write_one_level, store, level, shrinking, timepoint)
+                )
                 shrinking = _halve(shrinking)
             for write in writes:
                 write.result()
@@ -738,9 +741,7 @@ class LivePublisher:
                 "acquisition."
             )
 
-        expected_shape = tuple(
-            self.profile.frame_shape[axis] for axis in ("z", "y", "x")
-        )
+        expected_shape = tuple(self.profile.frame_shape[axis] for axis in ("z", "y", "x"))
         if tuple(settled.shape[1:]) != expected_shape:
             raise ZmartLiveError(
                 f"Profile {self.profile.profile_id!r} declares each position as "
@@ -757,7 +758,8 @@ class LivePublisher:
         colours, depth, height, width = pixels.shape
         shape = (self.timepoints, len(self.channels), depth, height, width)
         chunks = (
-            1, 1,
+            1,
+            1,
             min(level.inner_chunk["z"], depth),
             min(level.inner_chunk["y"], height),
             min(level.inner_chunk["x"], width),
@@ -778,9 +780,14 @@ class LivePublisher:
             )
         if not path.exists():
             zarr.create_array(
-                store=str(path), shape=shape, chunks=chunks, shards=shards,
-                dtype=self.profile.dtype, zarr_format=3,
-                compressors=[ZstdCodec(level=3)], overwrite=False,
+                store=str(path),
+                shape=shape,
+                chunks=chunks,
+                shards=shards,
+                dtype=self.profile.dtype,
+                zarr_format=3,
+                compressors=[ZstdCodec(level=3)],
+                overwrite=False,
             )
         array = zarr.open_array(str(path), mode="r+")
         for channel in range(colours):
@@ -908,8 +915,7 @@ class LivePublisher:
         """
         pointer = the_records_folder(self.folder) / _LAYOUT
         mark = _the_files_identity(pointer)
-        if (self.layout is self._layout_recorded and mark is not None
-                and mark == self._layout_mark):
+        if self.layout is self._layout_recorded and mark is not None and mark == self._layout_mark:
             return
         self.layout = record_the_layout(self.folder, self.layout)
         self._layout_recorded = self.layout
@@ -954,9 +960,7 @@ class LivePublisher:
             rounded_up(width, smaller.get("x", 1)),
         )
 
-    def write_the_link_map(
-        self, committed: frozenset[str | tuple[str, int]]
-    ) -> None:
+    def write_the_link_map(self, committed: frozenset[str | tuple[str, int]]) -> None:
         """Write down which position's own bytes answer for each piece of the overview.
 
         At the zoom levels the storage plan says can be pointed at, the overview
@@ -979,9 +983,7 @@ class LivePublisher:
         that were not all written the same way, one that does not land on whole
         pieces, or one asked for ground it does not hold.
         """
-        showing_set = {
-            position_id for position_id, _ in self._as_position_moments(committed)
-        }
+        showing_set = {position_id for position_id, _ in self._as_position_moments(committed)}
         showing = [
             position_id
             for position_id in self._positions_in_commit_order()
@@ -990,8 +992,7 @@ class LivePublisher:
         showing += [
             placement.position_id
             for placement in self.layout.positions
-            if placement.position_id in showing_set
-            and placement.position_id not in showing
+            if placement.position_id in showing_set and placement.position_id not in showing
         ]
         levels: list[dict] = []
         routed: dict[int, object] = {}
@@ -1007,8 +1008,7 @@ class LivePublisher:
             # positions do not fit together comes before anything is written
             # down as though they did. It is then KEPT rather than thrown
             # away -- see the read-back below.
-            routed[level_number] = route_the_view(
-                list(pointed.values()), view_shape=reach)
+            routed[level_number] = route_the_view(list(pointed.values()), view_shape=reach)
             levels.append(
                 {
                     "level": level_number,
@@ -1033,8 +1033,7 @@ class LivePublisher:
             "profile_id": self.profile.profile_id,
             "scene_layout_revision": self.layout.revision,
             "position_generations": {
-                position_id: self.generations.get(position_id, 0)
-                for position_id in showing
+                position_id: self.generations.get(position_id, 0) for position_id in showing
             },
             "created_at": now_in_words(),
             "levels": levels,
@@ -1055,8 +1054,7 @@ class LivePublisher:
         except OSError:
             written_back = None
         if written_back == payload:
-            self._stored_routes = (_the_files_identity(target), described,
-                                   routed)
+            self._stored_routes = (_the_files_identity(target), described, routed)
         else:
             self._stored_routes = None
 
@@ -1165,9 +1163,7 @@ class LivePublisher:
         if deferring:
             validated = 0
         else:
-            ranges += self._follow_the_stored_pointers(
-                position_id, moment, about_pointers
-            )
+            ranges += self._follow_the_stored_pointers(position_id, moment, about_pointers)
             validated = self._check_the_view_description(about_the_picture)
         layout_ok = self._layout_reads_back(about_the_layout)
 
@@ -1182,12 +1178,7 @@ class LivePublisher:
             pieces_read=pieces_read,
             ranges_checked=ranges,
             view_levels_validated=validated,
-            complaints=tuple(
-                about_pixels
-                + about_pointers
-                + about_the_picture
-                + about_the_layout
-            ),
+            complaints=tuple(about_pixels + about_pointers + about_the_picture + about_the_layout),
         )
 
     def _every_piece_this_moment_owes(self, array, timepoint: int) -> list[tuple[int, ...]]:
@@ -1202,10 +1193,7 @@ class LivePublisher:
         The coordinates count pieces rather than pixels, in the picture's own axis
         order of moment, colour, z, y and x.
         """
-        across = [
-            -(-size // chunk)
-            for size, chunk in zip(array.shape, array.chunks, strict=True)
-        ]
+        across = [-(-size // chunk) for size, chunk in zip(array.shape, array.chunks, strict=True)]
         # Moments are stored one to a piece, so a moment's own piece index is
         # simply its number. Working it out from the chunk size rather than
         # assuming one keeps this right if that ever changes.
@@ -1216,9 +1204,7 @@ class LivePublisher:
             wanted = [(*so_far, place) for so_far in wanted for place in reach]
         return wanted
 
-    def _read_every_piece(
-        self, position_id: str, timepoint: int, complaints: list[str]
-    ) -> int:
+    def _read_every_piece(self, position_id: str, timepoint: int, complaints: list[str]) -> int:
         """Ask the store which pieces this moment really holds, and decode them.
 
         Two different questions, and both have to be asked.
@@ -1238,8 +1224,7 @@ class LivePublisher:
         store = self.position_store(position_id)
         if not store.exists():
             complaints.append(
-                f"Nothing has been written for '{position_id}' yet — there is no "
-                f"image at {store}."
+                f"Nothing has been written for '{position_id}' yet — there is no image at {store}."
             )
             return 0
         read = 0
@@ -1262,9 +1247,7 @@ class LivePublisher:
                     )
                     continue
                 owed = self._every_piece_this_moment_owes(array, timepoint)
-                absent = [
-                    piece for piece in owed if where_one_chunk_lives(path, piece) is None
-                ]
+                absent = [piece for piece in owed if where_one_chunk_lives(path, piece) is None]
                 if absent:
                     complaints.append(
                         f"Moment {timepoint} of '{position_id}' is missing "
@@ -1282,8 +1265,7 @@ class LivePublisher:
                 read += int(everything.size)
                 if everything.size == 0:
                     complaints.append(
-                        f"Level {level.level} of '{position_id}' opened but holds "
-                        f"no pixels at all."
+                        f"Level {level.level} of '{position_id}' opened but holds no pixels at all."
                     )
             except Exception as trouble:
                 complaints.append(
@@ -1315,8 +1297,7 @@ class LivePublisher:
             try:
                 array = zarr.open_array(str(path), mode="r")
                 grid = [
-                    -(-size // chunk)
-                    for size, chunk in zip(array.shape, array.chunks, strict=True)
+                    -(-size // chunk) for size, chunk in zip(array.shape, array.chunks, strict=True)
                 ]
                 # One piece from each corner of the level is enough to prove the
                 # route works while keeping this cheap enough to run on every
@@ -1377,9 +1358,7 @@ class LivePublisher:
         for level in stored.get("levels", ()):
             level_number = level["level"]
             mine = [
-                entry
-                for entry in level.get("positions", ())
-                if entry["position_id"] == position_id
+                entry for entry in level.get("positions", ()) if entry["position_id"] == position_id
             ]
             if not mine:
                 complaints.append(
@@ -1390,8 +1369,12 @@ class LivePublisher:
                 continue
             try:
                 served += self._every_piece_of_mine_is_served(
-                    position_id, level_number, mine[0],
-                    routed[int(level_number)], timepoint, complaints
+                    position_id,
+                    level_number,
+                    mine[0],
+                    routed[int(level_number)],
+                    timepoint,
+                    complaints,
                 )
             except Exception as trouble:
                 complaints.append(
@@ -1436,8 +1419,11 @@ class LivePublisher:
         starts = [entry["taken_from"][axis] for axis in range(3)]
         stops = [starts[axis] + entry["size"][axis] for axis in range(3)]
         mine = array[
-            timepoint, :,
-            starts[0]:stops[0], starts[1]:stops[1], starts[2]:stops[2],
+            timepoint,
+            :,
+            starts[0] : stops[0],
+            starts[1] : stops[1],
+            starts[2] : stops[2],
         ]
         served = 0
         for colour in range(len(self.channels)):
@@ -1487,7 +1473,10 @@ class LivePublisher:
                             reading.seek(answer.offset)
                             handed_over = reading.read(answer.length)
                         if not self._these_are_the_same_pixels(
-                            handed_over, route.storage, mine[(colour, *here)], array,
+                            handed_over,
+                            route.storage,
+                            mine[(colour, *here)],
+                            array,
                             answer.inside_the_position,
                         ):
                             complaints.append(
@@ -1542,15 +1531,12 @@ class LivePublisher:
         checked = 0
         try:
             stored, routed = self._the_stored_routes()
-            described = {
-                int(item["level"]): item for item in stored.get("levels", ())
-            }
+            described = {int(item["level"]): item for item in stored.get("levels", ())}
             for level in self._strict_zero_copy_levels():
                 entry = described.get(level.level)
                 if entry is None:
                     complaints.append(
-                        f"The linked virtual view has no route for level "
-                        f"{level.level}."
+                        f"The linked virtual view has no route for level {level.level}."
                     )
                     continue
                 path = self.view_level(level.level)
@@ -1587,9 +1573,11 @@ class LivePublisher:
         straight back to the full read-and-compare below.
         """
         target = the_records_folder(self.folder) / _LAYOUT
-        if (self.layout is self._layout_recorded
-                and self._layout_mark is not None
-                and _the_files_identity(target) == self._layout_mark):
+        if (
+            self.layout is self._layout_recorded
+            and self._layout_mark is not None
+            and _the_files_identity(target) == self._layout_mark
+        ):
             return True
         if not target.exists():
             complaints.append(
@@ -1658,9 +1646,7 @@ class LivePublisher:
         # names, and only a position the record already knows can gain a moment.
         # Chosen from the durable record rather than remembered, for the same
         # reason as _committed_units itself.
-        already_published = any(
-            position == position_id for position, _ in self._committed_units()
-        )
+        already_published = any(position == position_id for position, _ in self._committed_units())
         if superseding:
             kind = "position_replaced"
         elif already_published and timepoint is not None:
@@ -1707,9 +1693,7 @@ class LivePublisher:
         commit. Doing these in another order can expose an unfinished answer.
         """
         self.write_a_position(position_id, pixels, timepoint=timepoint or 0)
-        return self._rebuild_everything_shared_and_publish(
-            position_id, timepoint=timepoint
-        )
+        return self._rebuild_everything_shared_and_publish(position_id, timepoint=timepoint)
 
     def replace_a_position(
         self, position_id: str, pixels: np.ndarray, *, timepoint: int = 0
@@ -1770,9 +1754,7 @@ class LivePublisher:
             else:
                 self.generations.pop(position_id, None)
             try:
-                self._restore_shared_state_after_failed_replacement(
-                    position_id, timepoint
-                )
+                self._restore_shared_state_after_failed_replacement(position_id, timepoint)
             except BaseException as recovery_failure:
                 raise ZmartLiveError(
                     f"Replacing moment {timepoint} of {position_id!r} failed "
@@ -1812,9 +1794,7 @@ class LivePublisher:
             # arrangement — and an unchanged arrangement is recorded once,
             # so this is a stat, not a rewrite.
             self.write_the_layout()
-            return self.publish(
-                position_id, timepoint=timepoint, superseding=superseding
-            )
+            return self.publish(position_id, timepoint=timepoint, superseding=superseding)
         moment = 0 if timepoint is None else timepoint
         units = frozenset(self._committed_units()) | {(position_id, moment)}
         # Write the candidate route map first. For a replacement, this makes
@@ -1875,9 +1855,7 @@ def _unpacked_on_its_own(handed_over: bytes, storage) -> np.ndarray | None:
     noise, and comparing that against the specimen would fail for a reason that
     has nothing to do with the run.
     """
-    named = [
-        step.get("name") if isinstance(step, dict) else None for step in storage.codecs
-    ]
+    named = [step.get("name") if isinstance(step, dict) else None for step in storage.codecs]
     if named[:1] != ["bytes"]:
         return None
     settings = storage.codecs[0].get("configuration") or {}
@@ -1941,14 +1919,16 @@ def _the_same_picture(lifted: bytes, array, corner: tuple[int, ...]) -> bool:
     try:
         alone = Path(scratch) / "one.zarr"
         solo = zarr.create_array(
-            store=str(alone), shape=array.chunks, chunks=array.chunks,
-            dtype=array.dtype, zarr_format=3,
-            compressors=[ZstdCodec(level=3)], overwrite=True,
+            store=str(alone),
+            shape=array.chunks,
+            chunks=array.chunks,
+            dtype=array.dtype,
+            zarr_format=3,
+            compressors=[ZstdCodec(level=3)],
+            overwrite=True,
         )
-        solo[...] = 1                    # force the single piece to exist on disk
-        stored = next(
-            p for p in alone.rglob("*") if p.is_file() and p.name != "zarr.json"
-        )
+        solo[...] = 1  # force the single piece to exist on disk
+        stored = next(p for p in alone.rglob("*") if p.is_file() and p.name != "zarr.json")
         stored.write_bytes(lifted)
         try:
             recovered = zarr.open_array(str(alone), mode="r")[keep]
@@ -1976,7 +1956,5 @@ def _halve(pixels: np.ndarray) -> np.ndarray:
     height -= height % 2
     width -= width % 2
     trimmed = pixels[:, :, :height, :width].astype("float32")
-    smaller = trimmed.reshape(
-        colours, depth, height // 2, 2, width // 2, 2
-    ).mean(axis=(3, 5))
+    smaller = trimmed.reshape(colours, depth, height // 2, 2, width // 2, 2).mean(axis=(3, 5))
     return smaller.astype(pixels.dtype)

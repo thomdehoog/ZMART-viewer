@@ -35,8 +35,9 @@ import time
 from pathlib import Path
 
 import pytest
-from zmart_viewer.contrast import display_window
 from pixels import assert_something_was_drawn
+
+from zmart_viewer.contrast import display_window
 from zmart_viewer.server import make_server
 
 _STORE_ENV = "ZMART_MESOSPIM_STORE"
@@ -189,8 +190,7 @@ def test_the_viewer_reads_it_from_where_it_was_written(tile, transfer, built_dis
         # the 30 s this wait used to allow, while the chunk-reading below was
         # given 180 s for exactly that kind of time (2026-08-19). One
         # patience for both.
-        page.wait_for_function("() => window.zmartViewer !== undefined",
-                               timeout=180_000)
+        page.wait_for_function("() => window.zmartViewer !== undefined", timeout=180_000)
         page.evaluate(
             """([src, low, high]) => window.zmartViewer.state.restoreState({
                  layers: [{type: 'image', name: 'meso', source: src,
@@ -220,7 +220,9 @@ def test_the_viewer_reads_it_from_where_it_was_written(tile, transfer, built_dis
                   return {needed, available, err, scales: d ? Array.from(d.scales) : [], names: d ? d.names : []};
                 }"""
             )
-            if report["err"] or (report["available"] > 0 and report["available"] >= report["needed"]):
+            if report["err"] or (
+                report["available"] > 0 and report["available"] >= report["needed"]
+            ):
                 break
             time.sleep(1.0)
 
