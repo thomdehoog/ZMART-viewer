@@ -50,15 +50,41 @@ Through the door's own functions, per piece:
 |---:|---|---:|---:|---:|
 | 10,000 | baked (files) | 3.4 s | **0.15 ms** | 53 s fresh bake, once |
 | 10,000 | unbaked (composed) | 13.1 s | 4.1 ms | 3.8 s |
-| 10,000 | linked (gateway byte ranges) | 60–73 s | **3.0 ms** | re-link 11.6 s |
-| 2,500 | linked | 5.5 s | 1.4 ms | re-link 2.6 s |
-| 400 | linked | 0.5 s | 1.0 ms | re-link 0.3 s |
 
-The gateway's cold cost is O(events) paid **once per reader**, then warm
-answers are milliseconds; the re-link (the finish-the-run cost) is O(N)
-and honest. A run that has grown past its recorded link map is refused by
-the gateway until re-linked — governance failing closed, by design — and
-the governed picture serves it meanwhile.
+A run that has grown past its recorded link map refuses zero-copy serving
+until re-linked — governance failing closed, by design — and the governed
+picture serves it meanwhile.
+
+## The zero-copy linked row: two doors, one clear winner
+
+After an honest re-link, byte ranges through the writer's gateway against
+the viewer's own door (`pieces.link_a_finished_run`, this repo), measured
+end to end, read included (`measure_the_relinked_row.py`):
+
+| positions | door | link cost | first answer | warm median |
+|---:|---|---:|---:|---:|
+| 400 | gateway | 0.3 s re-link | 372 ms | 0.74 ms |
+| 400 | **viewer** | 0.3 s | **7.9 ms** | **0.10 ms** |
+| 2,500 | gateway | 2.1 s re-link | 4.3 s | 1.0 ms |
+| 2,500 | **viewer** | 1.5 s | **57 ms** | **0.09 ms** |
+| 10,000 | gateway | 20.8 s re-link | **47 s** | 3.1 ms |
+| 10,000 | **viewer** | 4.8 s | **209 ms** | **0.10 ms** |
+
+The gateway's first answer walks the run's whole history — the cost that
+grows to a minute; the viewer's first answer reads its own map, built once
+at link time with the shard indexes already inside. The viewer's link cost
+is linear (0.3 → 1.5 → 4.8 s) and below the writer's own re-link at every
+size. Staleness stays honest either way: a commit after linking silences
+the viewer's pointers until the map is remade, and the governed picture
+serves meanwhile — gated in the free-placement suite's linked row, along
+with a whole-canvas byte sweep against the independent paste.
+
+Three writer-side scale findings ride along, all handed over in
+`HANDOVER_the_pointer_map_decides_on_day_zero.md`: constructing a
+10,000-position `LivePublisher` costs minutes at full CPU
+(`place_the_positions`' neighbour sweep — the writer's constructor, never
+paid by a reader); the per-landing ~2.3 s is flat but rate-limiting; and
+the gateway's first answer per reader walks the whole history.
 
 ## The storm: 10 commits a second, a viewer watching the whole time
 

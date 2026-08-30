@@ -155,6 +155,14 @@ governed serving is unaffected (a non-live path answers `None` in ~1 ms).
 An incremental cold path (the manifest's own `events()` already reads
 only what is new) would take the minute down to the tail.
 
+**Construction is quadratic in positions.** Building a `LivePublisher`
+over 10,000 planned positions spends minutes at full CPU inside
+`place_the_positions` → `plan_one_position` → `ownership._touching` —
+each position swept against its neighbours. A run is opened once per
+writer process, so this is start-up pain rather than steady-state, but
+minutes before the first pixel is real; an index over origins (the
+placements are on a grid or a declared canvas) makes the sweep local.
+
 **What one more landing costs, measured.** The viewer's derive after a
 landing is O(change): at most one tile read, never a survey re-read
 (gated count-wise in `test_one_more_landing_reads_one_tile_no_matter_the_survey`).
