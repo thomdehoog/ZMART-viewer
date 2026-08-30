@@ -659,7 +659,7 @@ def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
     (data / "demo.zarr").mkdir(parents=True)
     (data / "demo.zarr" / ".zattrs").write_text('{"multiscales": []}', encoding="utf-8")
 
-    server = make_server(port=0, data_dir=data, site_dir=site)
+    server = make_server(port=0, data_dir=data, site_dir=site, store="demo.zarr")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
