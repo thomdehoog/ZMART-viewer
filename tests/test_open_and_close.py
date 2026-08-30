@@ -263,7 +263,9 @@ def test_the_load_data_box_can_be_switched_off(browser, built_dist, demo_store):
 
     from zmart_viewer.server import make_server
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist, allow_open=False)
+    server = make_server(
+        port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, allow_open=False
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page()
@@ -304,7 +306,7 @@ def test_the_selection_list_is_absent_unless_asked_for(browser, built_dist, demo
 
     from zmart_viewer.server import make_server
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist)
+    server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page()
@@ -329,7 +331,9 @@ def test_the_bar_of_controls_can_be_put_on_the_left(browser, built_dist, demo_st
 
     from zmart_viewer.server import make_server
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist, panel_side="left")
+    server = make_server(
+        port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, panel_side="left"
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
@@ -352,7 +356,7 @@ def test_the_controls_fold_away(browser, built_dist, demo_store):
 
     from zmart_viewer.server import make_server
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist)
+    server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
@@ -458,7 +462,7 @@ def test_a_live_viewer_waits_to_be_told(browser, built_dist, demo_store):
 
     from zmart_viewer.server import make_server
 
-    server = make_server(port=0, data_dir=demo_store, site_dir=built_dist)
+    server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page()
