@@ -31,3 +31,6 @@ parked/measurements/acquisitions/
 
 # The editable install writes its metadata beside the package.
 *.egg-info/
+
+# generated on demand by testdata/make_awkward_stores.py and friends
+test_stores/
