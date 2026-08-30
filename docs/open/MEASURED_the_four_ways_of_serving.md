@@ -81,10 +81,12 @@ with a whole-canvas byte sweep against the independent paste.
 
 Three writer-side scale findings ride along, all handed over in
 `HANDOVER_the_pointer_map_decides_on_day_zero.md`: constructing a
-10,000-position `LivePublisher` costs minutes at full CPU
-(`place_the_positions`' neighbour sweep — the writer's constructor, never
-paid by a reader); the per-landing ~2.3 s is flat but rate-limiting; and
-the gateway's first answer per reader walks the whole history.
+10,000-position `LivePublisher` cost 128 s at full CPU in
+`place_the_positions`' quadratic neighbour sweep — **fixed and validated
+here** (frame-sized buckets; placements proven identical; 128 s → 19 s,
+the sweep itself 0.8 s), the patch in the handover; the per-landing
+~2.3 s is flat but rate-limiting; and the gateway's first answer per
+reader walks the whole history.
 
 ## The storm: 10 commits a second, a viewer watching the whole time
 
