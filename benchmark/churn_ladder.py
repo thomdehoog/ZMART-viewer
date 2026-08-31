@@ -148,7 +148,21 @@ def a_fabricated_run(folder: Path, profile, origins: dict) -> LivePublisher:
             "coordinateTransformations"
         ][0]["scale"][-2:]
 
+        # Ten thousand hard-linked stores cost ~4G of directory metadata; a
+        # hundred thousand would not fit this disk at all. The stores the
+        # viewer actually opens for their own metadata -- the pattern store
+        # and the churn targets -- stay real, stamped copies; every other
+        # position is one symlink to the master, whose chunk files serving
+        # reads straight through. Same pixels, same serving work, a thousandth
+        # of the metadata.
+        real_stores = (
+            set(sorted(origins)[: CHANGES + 1]) if len(origins) >= 100_000 else set(origins)
+        )
+
         for number, (name, origin) in enumerate(origins.items()):
+            if name not in real_stores:
+                (survey / name).symlink_to(master)
+                continue
             subprocess.run(
                 ["cp", "-al", str(master), str(survey / name)], check=True
             ) if number else shutil.copytree(master, survey / name)
@@ -158,6 +172,8 @@ def a_fabricated_run(folder: Path, profile, origins: dict) -> LivePublisher:
             # layout and refuses a drifted record, exactly as it should. The
             # replacement goes through a fresh file -- writing into the
             # hard-linked one would restamp the master and every sibling.
+            # (Symlinked positions are never stamped: any write through the
+            # link would land in the master itself.)
             stamped = json.loads(json.dumps(pattern))
             about = stamped["attributes"]["ome"]["multiscales"][0]
             about["name"] = name
