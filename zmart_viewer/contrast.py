@@ -220,8 +220,21 @@ def _readability_problem(store: Path) -> str | None:
     array failure is not: reporting both as "waiting" leaves a corrupt store
     waiting forever and hides the only fact that can help the operator.
     """
+    import json
+
     import zarr
 
+    # The description file itself first, because the ordinary reader swallows
+    # a decode error and hands back nothing — and "names no pixel levels" is
+    # the wrong sentence for a file that is not JSON at all.
+    for name in (".zattrs", "zarr.json"):
+        described = Path(store) / name
+        if described.is_file():
+            try:
+                json.loads(described.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                return f"the image description {name} cannot be read ({exc})"
+            break
     try:
         attrs = _read_attrs_at(store)
         levels = _level_paths(attrs)

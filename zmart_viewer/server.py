@@ -34,6 +34,7 @@ from .scratch import KINDS as SCRATCH_KINDS, ScratchSession
 from .contrast import (
     Measurements,
     _readability_problem,
+    coarsest_level_is_written,
     measure_here,
 )
 from .library import (
@@ -745,10 +746,16 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         low, high = found["window"]
+        # Whether this is the run's last word or a reading from what has
+        # landed so far: the panel says "measured from pixels acquired so far"
+        # while a live run is still being written, and stops saying it once
+        # the whole picture has been read.
+        settled = coarsest_level_is_written(store)
         self._send_json(
             {
                 "window": {"low": low, "high": high},
                 "histogram": found["histogram"],
+                "measurementState": "settled" if settled else "provisional",
             }
         )
 
