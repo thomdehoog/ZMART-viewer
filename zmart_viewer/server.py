@@ -30,6 +30,7 @@ from zmart_viewer.record.gateway import answer_from_a_live_run
 # for, rather than pointed at.
 from . import live, loading, pieces
 from .acquisition import CAPABILITIES
+from .scratch import KINDS as SCRATCH_KINDS, ScratchSession
 from .contrast import (
     Measurements,
     _readability_problem,
@@ -615,6 +616,19 @@ class _Handler(SimpleHTTPRequestHandler):
             self._serve_config()
             return
 
+        if self.path.rstrip("/") == "/api/scratch":
+            # What this Viewer holds under its own root, by folder, in bytes,
+            # and what the last start-up reclaimed. The point is that scratch
+            # is counted somewhere: a folder nothing ever measures is the one
+            # that quietly fills a disk.
+            sessions = self._scratch.get("sessions")
+            told = sessions.managed_bytes() if sessions is not None else {
+                "root": str(ScratchSession().root), "kinds": {}, "total": 0,
+            }
+            told["swept_at_start"] = self._scratch.get("swept", {})
+            self._send_json(told)
+            return
+
         if self.path.rstrip("/") == "/api/live-state":
             self._serve_live_state()
             return
@@ -1139,16 +1153,17 @@ class _Handler(SimpleHTTPRequestHandler):
         return self._a_session_folder("scenes")
 
     def _a_session_folder(self, kind: str) -> Path:
-        """A folder of the viewer's own for this session, made when wanted."""
-        folder = self._scratch.get(kind)
+        """A folder of the viewer's own for this session, made and locked when wanted.
 
-        if folder is None:
-            home = Path.home() / ".zmart-viewer" / kind
-            home.mkdir(parents=True, exist_ok=True)
-            folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
-            self._scratch[kind] = folder
+        Locked, so that a Viewer started after this one died can tell this
+        folder was abandoned and reclaim it — see ``scratch.py``.
+        """
+        sessions = self._scratch.get("sessions")
 
-        return folder
+        if sessions is None:
+            sessions = self._scratch["sessions"] = ScratchSession()
+
+        return sessions.open(kind)
 
     def _serve_open(self, payload: object) -> None:
         """Open a folder of images and answer with the viewer's new contents."""
@@ -1334,6 +1349,7 @@ def make_server(
     browse=None,
     live: bool = True,
     allow_open: bool = True,
+    scratch_root: Path | None = None,
     allow_selection: bool = False,
     panel_side: str = "right",
     open_from: Path | None = None,
@@ -1357,7 +1373,7 @@ def make_server(
             name=spec.get("name"),
         )
 
-    scratch: dict = {}
+    scratch: dict = {"sessions": ScratchSession(scratch_root) if scratch_root else ScratchSession()}
     registry = SourceRegistry(
         library,
         watching=live,
@@ -1548,19 +1564,23 @@ def make_server(
             super().server_bind()
 
         def serve_forever(self, *args, **kwargs):
+            # Before anything else: reclaim the scratch folders of Viewers that
+            # died without cleaning up. Only folders nobody holds a lock on go;
+            # a Viewer still running beside this one keeps its own.
+            swept = {}
+            for kind in SCRATCH_KINDS:
+                try:
+                    swept[kind] = scratch["sessions"].sweep_orphans(kind)
+                except Exception as why:  # noqa: BLE001 -- a sweep must never stop a server
+                    swept[kind] = {"error": str(why)}
+            scratch["swept"] = swept
             # The disk is watched only while the server is actually running.
             registry.start()
             super().serve_forever(*args, **kwargs)
 
         def shutdown(self):
             registry.stop()
-
-            for own in ("scenes", "replays"):
-                made = scratch.pop(own, None)
-
-                if made is not None:
-                    shutil.rmtree(made, ignore_errors=True)
-
+            scratch["sessions"].close()
             super().shutdown()
 
     handler = functools.partial(
