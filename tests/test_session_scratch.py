@@ -185,3 +185,77 @@ def test_a_clean_shutdown_leaves_no_session_folder_behind(tmp_path):
     thread.join(timeout=5)
     assert not made.exists()
     assert not any((root / "scenes").iterdir()) if (root / "scenes").exists() else True
+
+
+def test_the_lock_is_held_through_the_removal(tmp_path, monkeypatch):
+    """No instant in which the folder is unowned but still there.
+
+    A Viewer starting at the same moment could otherwise claim the folder
+    between the sweeper letting go and the sweeper deleting, and then have it
+    deleted from under it. So while the removal runs, a second attempt at the
+    lock must fail.
+    """
+    import zmart_viewer.scratch as scratch
+
+    the_real_rmtree = scratch.shutil.rmtree
+    orphan = tmp_path / "scenes" / "session-dead"
+    orphan.mkdir(parents=True)
+    (orphan / LOCK_FILE).touch()
+    _fill(orphan, 10)
+    seen = {}
+
+    def a_removal_that_looks_first(folder, ignore_errors=False):
+        # Another owner arrives now. With the lock held, it cannot take it.
+        with (Path(folder) / LOCK_FILE).open("a+") as newcomer:
+            seen["newcomer_got_the_lock"] = scratch._take_the_lock(newcomer)
+        the_real_rmtree(folder, ignore_errors=ignore_errors)
+
+    monkeypatch.setattr(scratch.shutil, "rmtree", a_removal_that_looks_first)
+    done = ScratchSession(tmp_path).sweep_orphans("scenes")
+
+    assert done["removed"] == ["session-dead"]
+    assert seen["newcomer_got_the_lock"] is False
+
+
+def test_a_newborn_folder_a_sweeper_beat_to_the_lock_is_abandoned_for_another(tmp_path, monkeypatch):
+    """If the sweeper won the race for the first folder, open() makes a second."""
+    import zmart_viewer.scratch as scratch
+
+    the_real_mkdtemp = scratch.tempfile.mkdtemp
+    home = tmp_path / "scenes"
+    home.mkdir()
+    claimed = Path(the_real_mkdtemp(prefix="session-", dir=home))
+    holder = (claimed / LOCK_FILE).open("a+")
+    assert scratch._take_the_lock(holder)  # the sweeper, holding it
+    handed = [claimed]
+
+    def mkdtemp_that_hands_out_the_claimed_one_first(prefix, dir):
+        if handed:
+            return str(handed.pop())
+        return the_real_mkdtemp(prefix=prefix, dir=dir)
+
+    monkeypatch.setattr(scratch.tempfile, "mkdtemp", mkdtemp_that_hands_out_the_claimed_one_first)
+    session = ScratchSession(tmp_path)
+    mine = session.open("scenes")
+    try:
+        assert mine != claimed
+        assert mine.is_dir() and (mine / LOCK_FILE).exists()
+    finally:
+        session.close()
+        holder.close()
+
+
+def test_reclaimed_bytes_count_what_actually_went(tmp_path, monkeypatch):
+    """A folder that would not go is not reported as reclaimed."""
+    import zmart_viewer.scratch as scratch
+
+    stuck = tmp_path / "replays" / "session-stuck"
+    stuck.mkdir(parents=True)
+    _fill(stuck, 500)
+    monkeypatch.setattr(scratch.shutil, "rmtree", lambda *_a, **_k: None)
+
+    done = ScratchSession(tmp_path).sweep_orphans("replays")
+
+    assert done["removed"] == []
+    assert done["stuck"] == ["session-stuck"]
+    assert done["reclaimed_bytes"] == 0

@@ -50,6 +50,9 @@ def _take_the_lock(handle) -> bool:
         import msvcrt
 
         try:
+            # The same byte, from the same place, on both sides: the file is
+            # never written, but saying so here keeps that from being silent.
+            handle.seek(0)
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
             return True
         except OSError:
@@ -117,13 +120,30 @@ class ScratchSession:
             return held[0]
         home = self.root / kind
         home.mkdir(parents=True, exist_ok=True)
-        folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
         # The lock is taken before anything else is written, so a sweeper that
-        # looks in between sees a locked folder, never a half-made one.
-        handle = (folder / LOCK_FILE).open("a+")
-        if not _take_the_lock(handle):
+        # looks in between sees a locked folder, never a half-made one. There
+        # is one gap the lock cannot close: a sweeper that listed this folder
+        # in the instant between its creation and its lock takes the lock
+        # first and removes it. The answer is not to argue with the sweeper
+        # but to make another folder, which the sweeper has not seen.
+        folder = handle = None
+        for _ in range(3):
+            folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
+            try:
+                handle = (folder / LOCK_FILE).open("a+")
+            except OSError:
+                handle = None
+                continue
+            if _take_the_lock(handle):
+                break
             handle.close()
-            raise RuntimeError(f"could not lock the new scratch folder {folder}")
+            handle = None
+        if handle is None:
+            raise RuntimeError(
+                f"the viewer could not take a lock on its own scratch folder under {home}. "
+                "This usually means the folder is on a share or a drive that does not "
+                "support file locks; point the viewer's scratch at a local disk."
+            )
         (folder / OWNER_FILE).write_text(
             json.dumps({"pid": os.getpid(), "started": time.time(), "kind": kind}, indent=1),
             encoding="utf-8",
@@ -160,7 +180,7 @@ class ScratchSession:
         ones, which are the folders another process still holds the lock on.
         """
         home = self.root / kind
-        done = {"reclaimed_bytes": 0, "removed": [], "kept": []}
+        done = {"reclaimed_bytes": 0, "removed": [], "kept": [], "stuck": []}
         if not home.is_dir():
             return done
         for candidate in sorted(home.iterdir()):
@@ -172,27 +192,58 @@ class ScratchSession:
                 done["kept"].append(candidate.name)
                 continue
             lock = candidate / LOCK_FILE
-            try:
-                handle = lock.open("a+")
-            except OSError:
+            if not lock.exists():
                 # No lock file at all: a folder made before locks existed, or
                 # one whose owner died before it could be locked. Nobody can
                 # be holding it, so it is unowned.
-                done["reclaimed_bytes"] += _bytes_under(candidate)
-                shutil.rmtree(candidate, ignore_errors=True)
-                done["removed"].append(candidate.name)
+                self._remove(candidate, done)
+                continue
+            try:
+                handle = lock.open("a+")
+            except OSError:
+                done["kept"].append(candidate.name)
                 continue
             try:
                 if not _take_the_lock(handle):
                     done["kept"].append(candidate.name)
                     continue
-                done["reclaimed_bytes"] += _bytes_under(candidate)
-                _let_go_of_the_lock(handle)
+                # The lock is held all the way through the removal. Letting go
+                # first left an instant in which a Viewer starting at the same
+                # moment could claim the folder and then have it deleted from
+                # under it. On Windows an open file cannot be deleted, so the
+                # folder is first renamed to something no sweep will ever look
+                # at, and removed after the lock is closed.
+                if sys.platform == "win32":
+                    retired = candidate.with_name(f"retired-{candidate.name[len('session-'):]}")
+                    try:
+                        candidate.rename(retired)
+                    except OSError:
+                        done["kept"].append(candidate.name)
+                        continue
+                    _let_go_of_the_lock(handle)
+                    handle.close()
+                    handle = None
+                    self._remove(retired, done, reported_as=candidate.name)
+                else:
+                    self._remove(candidate, done)
             finally:
-                handle.close()
-            shutil.rmtree(candidate, ignore_errors=True)
-            done["removed"].append(candidate.name)
+                if handle is not None:
+                    _let_go_of_the_lock(handle)
+                    handle.close()
         return done
+
+    @staticmethod
+    def _remove(folder: Path, done: dict, *, reported_as: str | None = None) -> None:
+        """Remove ``folder`` and count what actually went, not what was there."""
+        before = _bytes_under(folder)
+        shutil.rmtree(folder, ignore_errors=True)
+        remaining = _bytes_under(folder) if folder.exists() else 0
+        done["reclaimed_bytes"] += before - remaining
+        name = reported_as or folder.name
+        if folder.exists():
+            done.setdefault("stuck", []).append(name)
+        else:
+            done["removed"].append(name)
 
     def managed_bytes(self) -> dict:
         """How much every session folder under this root holds, by kind and by folder."""
