@@ -174,6 +174,10 @@ def test_measuring_an_unreadable_store_reports_that_no_window_exists_yet(tmp_pat
     assert together["volumeWindow"] is None
     assert together["histogram"] is None
     assert together["settled"] is False
+    # And the sentence names the fact that would help: the file is not JSON,
+    # not "a description with no levels".
+    assert together["measurementState"] == "unreadable"
+    assert ".zattrs cannot be read" in together["measurementError"]
     assert together["measurementState"] == "unreadable"
     assert together["measurementError"]
 

@@ -192,6 +192,36 @@ def test_measuring_a_valid_but_empty_live_store_says_it_is_waiting(tmp_path):
     assert "window" not in answered
 
 
+def test_a_successful_measurement_says_whether_it_is_provisional(tmp_path):
+    """The panel shows "measured from pixels acquired so far" only when told to.
+
+    A store whose coarsest copy is written is settled; one still arriving is
+    provisional. The route says which, on success, so the embedded panel can
+    use the same words as the standalone one.
+    """
+    import numpy as np
+    import zarr
+
+    store = tmp_path / "data" / "landed.zarr"
+    group = zarr.open_group(str(store), mode="w", zarr_format=2)
+    array = group.create_array("0", shape=(1, 32, 32), chunks=(1, 32, 32), dtype="uint16")
+    array[:] = (np.arange(32 * 32, dtype="uint16").reshape(1, 32, 32) % 900) + 100
+    (store / ".zattrs").write_text(
+        json.dumps({"multiscales": [{"axes": [{"name": n} for n in "zyx"],
+                                     "datasets": [{"path": "0"}]}]}),
+        encoding="utf-8",
+    )
+    port, stop = _serve_one_store(tmp_path, "landed.zarr", live=True)
+    try:
+        answered = _measure(port, "/data/0/landed.zarr/|zarr2:")
+    finally:
+        stop()
+    assert "window" in answered and answered["histogram"] is not None
+    assert answered["measurementState"] in {"settled", "provisional"}
+    # One level, fully written: the whole picture has been read.
+    assert answered["measurementState"] == "settled"
+
+
 def test_measuring_a_store_that_cannot_be_read_says_so_instead_of_waiting(tmp_path):
     """A fault is not absence: a broken store must not wait for ever."""
     store = tmp_path / "data" / "broken.zarr"

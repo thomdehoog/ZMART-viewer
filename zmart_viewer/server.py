@@ -1587,8 +1587,11 @@ def make_server(
 
         def shutdown(self):
             registry.stop()
-            scratch["sessions"].close()
+            # Stop serving first, then let go of the scratch: a request that
+            # arrived in between would otherwise make a fresh locked folder
+            # that nothing closes until the next start sweeps it.
             super().shutdown()
+            scratch["sessions"].close()
 
     handler = functools.partial(
         _Handler,
