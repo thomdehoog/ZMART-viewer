@@ -1935,6 +1935,7 @@ export default function App() {
   React.useEffect(() => {
     (config?.layers || []).forEach((spec, i) => {
       if (spec.kind === "segmentation" || spec.window || spec.histogram) return;
+      if (spec.measurementState === "unreadable") return;
       if (layerState[i]?.window) return;
       const about = aboutTheChannel(spec);
       if (touchedWindows.current.has(about)) return;

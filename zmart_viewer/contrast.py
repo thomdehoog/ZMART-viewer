@@ -213,6 +213,31 @@ def _samples(store: Path, *, channel: int | None = None):
     return None
 
 
+def _readability_problem(store: Path) -> str | None:
+    """Why this is not a readable image, or ``None`` for a valid empty one.
+
+    Pixel absence is ordinary at the start of a live run.  Description or
+    array failure is not: reporting both as "waiting" leaves a corrupt store
+    waiting forever and hides the only fact that can help the operator.
+    """
+    import zarr
+
+    try:
+        attrs = _read_attrs_at(store)
+        levels = _level_paths(attrs)
+    except (OSError, KeyError, UnicodeDecodeError, ValueError) as exc:
+        return f"the image description cannot be read ({exc})"
+    if not levels:
+        return "the image description names no pixel levels"
+    try:
+        group = zarr.open_group(str(store), mode="r")
+        for level in levels:
+            group[level]
+    except (OSError, KeyError, UnicodeDecodeError, ValueError, MemoryError) as exc:
+        return f"the image arrays cannot be read ({exc})"
+    return None
+
+
 def _a_built_pictures_values(store: str | Path, level: int, box, channel: int | None):
     """A built picture's pixels inside the share of it on screen, or None."""
     from .pieces import the_values_inside
@@ -319,11 +344,14 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
     read = _samples(store, channel=channel)
 
     if read is None:
+        problem = _readability_problem(store)
         return {
             "window": None,
             "volumeWindow": None,
             "histogram": None,
             "settled": False,
+            "measurementState": "unreadable" if problem is not None else "waiting",
+            "measurementError": problem,
         }
 
     attrs, values, settled = read
@@ -335,6 +363,8 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
         "volumeWindow": _window(values, volumetric=True),
         "histogram": _histogram(values, bins=bins),
         "settled": settled,
+        "measurementState": "settled" if settled else "provisional",
+        "measurementError": None,
     }
 
 
@@ -650,11 +680,14 @@ class Measurements:
     ) -> dict:
         """Read one store's pixels and work out how it should first be shown."""
         if self._fixed is not None:
+            fixed_settled = coarsest_level_is_written(root / name)
             found = {
                 "window": self._fixed,
                 "volumeWindow": self._fixed,
                 "histogram": intensity_histogram(root / name, channel=channel),
-                "settled": coarsest_level_is_written(root / name),
+                "settled": fixed_settled,
+                "measurementState": "declared",
+                "measurementError": None,
             }
         else:
             found = measure(root / name, channel=channel)
@@ -664,6 +697,9 @@ class Measurements:
 
         if asked_for is not None:
             flat = volume = (asked_for["low"], asked_for["high"])
+        measurement_state = (
+            "declared" if asked_for is not None else found.get("measurementState", "waiting")
+        )
 
         color = channel_color(name) if coloured else None
         described = {
@@ -675,6 +711,8 @@ class Measurements:
             "color": list(color) if color else None,
             "histogram": found["histogram"],
             "settled": bool(found.get("settled")),
+            "measurementState": measurement_state,
+            "measurementError": found.get("measurementError"),
         }
         held = camera_range(root / name, declared_range)
 

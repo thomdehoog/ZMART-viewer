@@ -138,6 +138,7 @@ def test_config_tells_the_page_what_to_open(serving):
     assert layers[0]["volumeWindow"] is None
     assert layers[0]["histogram"] is None
     assert layers[0]["settled"] is False
+    assert layers[0]["measurementState"] == "unreadable"
     assert config["chrome"] is False, "the engine's own furniture stays hidden"
 
 

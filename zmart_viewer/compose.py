@@ -560,7 +560,14 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
     corner = tuple(min(tile.copies[0].corner_um[axis] for tile in tiles) for axis in range(3))
     position_displays: list[dict | None] = []
     for tile in tiles:
-        described, _ = _the_description_of(tile.store)
+        try:
+            described, _ = _the_description_of(tile.store)
+        except (OSError, UnicodeDecodeError, ValueError):
+            # Tile construction has already established the pixel geometry.
+            # Display metadata is advisory on the legacy path, so a racing or
+            # malformed second read may cost a declared window, never pixels.
+            position_displays.append(None)
+            continue
         position_displays.append(
             described.get("omero") if isinstance(described.get("omero"), dict) else None
         )

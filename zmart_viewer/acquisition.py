@@ -189,7 +189,7 @@ def read_acquisition_description(folder: str | Path, *, channel_count: int) -> d
     )
 
 
-def source_metadata(description: dict) -> tuple[dict, dict]:
+def source_metadata(description: dict) -> tuple[dict | None, dict]:
     """Convert a validated sidecar into ordinary OME plus ZMART provenance."""
     channels = []
     recorded = []
@@ -219,13 +219,23 @@ def source_metadata(description: dict) -> tuple[dict, dict]:
                 ),
             }
         )
+    # ngio 1.0.0 was checked against all four shapes on 2026-09-02: no omero
+    # block and a complete window open; label-only and min/max-only channels
+    # are refused.  OME's channel list is one block, so one unresolved channel
+    # makes the interoperable answer omission of the whole advisory block.
+    omero = (
+        {"channels": channels}
+        if all(channel.get("displayWindow") is not None for channel in description["channels"])
+        else None
+    )
     return (
-        {"channels": channels},
+        omero,
         {
             "acquisitionDisplaySchema": SCHEMA,
             "acquisitionType": description["acquisitionType"],
             "displayWindowSource": DESCRIPTION_NAME,
             "displayWindows": recorded,
+            "channels": deepcopy(description["channels"]),
         },
     )
 
@@ -251,28 +261,32 @@ def _legacy_window(entry: dict, first: str, second: str) -> tuple[float, float] 
 def legacy_source_metadata(
     descriptions: list[dict | None], *, acquisition_type: str, channel_count: int
 ) -> tuple[dict | None, dict | None]:
-    """Reconcile position OME metadata without making the first tile authority."""
-    if not any(isinstance(one, dict) for one in descriptions):
+    """Reconcile advisory position metadata without withholding valid pixels.
+
+    A legacy transfer has no acquisition-wide display authority.  Its position
+    ``omero`` blocks can therefore establish a window only by consensus.  A
+    missing block, a per-image ``id``/``name`` or a channel disagreement is not
+    a geometry error and must never stop the transfer opening: at worst it
+    leaves the Viewer to measure the picture.
+    """
+    present = [one for one in descriptions if isinstance(one, dict)]
+    if not present:
         return None, None
 
     identities = []
     display_pairs = []
-    other_omero = []
-    for at, description in enumerate(descriptions):
-        description = description if isinstance(description, dict) else {}
-        base = {key: deepcopy(value) for key, value in description.items() if key != "channels"}
-        other_omero.append(base)
+    for description in present:
         raw = description.get("channels")
         raw = raw if isinstance(raw, list) else []
-        if len(raw) > channel_count:
-            raise ValueError(
-                f"position {at + 1} describes {len(raw)} channels but its pixels hold "
-                f"{channel_count}"
-            )
+        # A partial or overlong list cannot describe the acquisition, but its
+        # pixels are still usable.  Omit legacy display metadata and let the
+        # ordinary store/channel discovery path name and measure them.
+        if len(raw) != channel_count or any(not isinstance(entry, dict) for entry in raw):
+            return None, None
         one_identity = []
         one_display = []
         for index in range(channel_count):
-            entry = raw[index] if index < len(raw) and isinstance(raw[index], dict) else {}
+            entry = raw[index]
             label = str(entry.get("label") or entry.get("name") or f"channel {index + 1}")
             color = entry.get("color")
             color = color.upper() if isinstance(color, str) else None
@@ -283,12 +297,8 @@ def legacy_source_metadata(
         identities.append(one_identity)
         display_pairs.append(one_display)
 
-    if any(value != other_omero[0] for value in other_omero[1:]):
-        raise ValueError("the positions disagree about their non-channel OME display metadata")
     if any(value != identities[0] for value in identities[1:]):
-        raise ValueError(
-            "the positions disagree about channel count, labels, colours, ranges, or visibility"
-        )
+        return None, None
 
     channels = []
     provenance = []
@@ -302,13 +312,22 @@ def legacy_source_metadata(
         if declared_range is not None:
             window = {"min": declared_range[0], "max": declared_range[1]}
         candidates = [position[index] for position in display_pairs]
-        consensus = candidates[0] if all(candidate == candidates[0] for candidate in candidates) else None
+        # Missing position metadata is silence, not agreement.  Preserve the
+        # shared channel identity but do not elevate the described subset's
+        # display pair to acquisition-wide authority.
+        consensus = None
+        if len(present) == len(descriptions) and candidates:
+            consensus = (
+                candidates[0]
+                if all(candidate == candidates[0] for candidate in candidates)
+                else None
+            )
         if window is not None:
             if consensus is not None:
                 window.update({"start": consensus[0], "end": consensus[1]})
             entry["window"] = window
         channels.append(entry)
-        if consensus is not None:
+        if consensus is not None and window is not None:
             provenance.append(
                 {
                     "key": label,
@@ -321,7 +340,19 @@ def legacy_source_metadata(
                 }
             )
 
-    omero = {**other_omero[0], "channels": channels}
+    # Non-channel OME keys such as id/name/version belong to each position,
+    # not to the composed image.  Carrying the first one would recreate the
+    # very first-position authority this reconciliation removes.
+    omero = (
+        {"channels": channels}
+        if all(
+            isinstance(channel.get("window"), dict)
+            and "start" in channel["window"]
+            and "end" in channel["window"]
+            for channel in channels
+        )
+        else None
+    )
     zmart = {
         "acquisitionDisplaySchema": SCHEMA,
         "acquisitionType": acquisition_type,

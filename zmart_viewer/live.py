@@ -24,7 +24,6 @@ from pathlib import Path
 from zmart_viewer.record.gateway import live_run_holding
 from zmart_viewer.record.live_state import LiveStateSnapshot, LiveStateTracker
 from zmart_viewer.record.model import ZmartLiveError
-from zmart_viewer.record.omezarr import the_channels_described
 
 from .building import declare_a_governed_picture, the_scene_folder_name
 from .contrast import intensity_histogram
@@ -537,10 +536,11 @@ def live_state_document(
 def the_runs_channels(run_root: Path) -> list[dict]:
     """What this run says about its colours: their names, tints and windows."""
     from zmart_viewer.record.gateway import _LiveRun
+    from zmart_viewer.record.omezarr import the_channels_for_display
 
     profile = _LiveRun(run_root)._geometry()[1]
     return described_channels(
-        the_channels_described(profile.channels, profile.dtype),
+        the_channels_for_display(profile.channels, profile.dtype),
         len(profile.channels),
     )
 
