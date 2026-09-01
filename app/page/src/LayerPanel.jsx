@@ -793,8 +793,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   const [here, setHere] = React.useState(null);
   // The same resting window the canvas draws with (see scene.js): the run's
   // recorded window, or the measured one when the run said nothing.
-  const window_ = entry.window || restingWindow(layer, mode === "volume")
-    || { low: 0, high: 65535 };
+  const window_ = entry.window || restingWindow(layer, mode === "volume");
   // Which part of the brightness axis is drawn. Nothing said means the data's
   // own span; the two boxes under the histogram are where an operator says
   // otherwise, and their answer is kept per channel for as long as the panel
@@ -827,16 +826,26 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // axis, the bars and the Auto light all describe one measurement instead
   // of disagreeing about which picture they are talking about.
   const seen = here ? { ...layer, histogram: here } : layer;
-  const { min, max } = contrastRange(seen, window_, shown || framed);
+  // No window is a real live state: the source may have declared itself before
+  // its first pixels landed. Keep the arithmetic dormant until either metadata
+  // or a measurement supplies a pair; the camera range is bounds, not a display
+  // decision.
+  const { min, max } = window_
+    ? contrastRange(seen, window_, shown || framed)
+    : { min: 0, max: 1 };
   // The two handles are kept at least one count apart. A window of no width
   // makes every value in the image land on the same shade, so the picture
   // goes flat and it is not obvious why.
-  const setLow = (low) =>
+  const setLow = (low) => {
+    if (!window_) return;
     onWindow(index, { low: Math.min(withinImage(low), window_.high - 1),
                       high: window_.high });
-  const setHigh = (high) =>
+  };
+  const setHigh = (high) => {
+    if (!window_) return;
     onWindow(index, { low: window_.low,
                       high: Math.max(withinImage(high), window_.low + 1) });
+  };
 
   // There used to be BRIGHTNESS and CONTRAST sliders below MIN and MAX --
   // the same window re-described, the way Fiji presents it. They were removed
@@ -907,6 +916,10 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
       </div>
       {isMask ? (
         <div style={styles.maskNote}>objects, each in its own colour</div>
+      ) : !window_ ? (
+        <div role="status" aria-live="polite" style={styles.maskNote}>
+          waiting for measurable pixels
+        </div>
       ) : (
         <>
           {/* The brightness of this channel, drawn across the panel. It

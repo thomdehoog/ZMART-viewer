@@ -13,7 +13,13 @@ import numpy as np
 import zarr
 from demo_data import write_demo_zarr
 
-from zmart_viewer.contrast import HISTOGRAM_BINS, display_window, intensity_histogram, measure
+from zmart_viewer.contrast import (
+    HISTOGRAM_BINS,
+    Measurements,
+    display_window,
+    intensity_histogram,
+    measure,
+)
 
 
 def write_store(path, data: np.ndarray, omero: dict | None = None) -> str:
@@ -75,8 +81,8 @@ def test_uniform_data_still_yields_a_usable_window(tmp_path):
     assert high > low
 
 
-def test_an_unreadable_store_falls_back_to_the_full_range(tmp_path):
-    assert display_window(tmp_path / "missing.zarr") == (0.0, 65535.0)
+def test_an_unreadable_store_has_no_invented_window(tmp_path):
+    assert display_window(tmp_path / "missing.zarr") is None
 
 
 def test_histogram_covers_every_sample_in_compact_bins(tmp_path):
@@ -155,22 +161,73 @@ def test_one_measurement_answers_all_three_questions(tmp_path):
     assert together["histogram"] == intensity_histogram(store)
 
 
-def test_measuring_an_unreadable_store_still_gives_a_usable_window(tmp_path):
-    """A store that cannot be read must not stop the viewer from opening.
-
-    A broken or half-written acquisition sitting in the folder should cost that
-    one row its histogram, not bring down the whole panel — so the fallback is a
-    window covering the full range of the data type, which shows *something*.
-    """
+def test_measuring_an_unreadable_store_reports_that_no_window_exists_yet(tmp_path):
+    """A broken or half-written store stays open without inventing brightness."""
     broken = tmp_path / "not-really.zarr"
     broken.mkdir()
     (broken / ".zattrs").write_text("{ this is not json", encoding="utf-8")
 
     together = measure(broken)
 
-    assert together["window"] == (0.0, 65535.0)
-    assert together["volumeWindow"] == (0.0, 65535.0)
+    assert together["window"] is None
+    assert together["volumeWindow"] is None
     assert together["histogram"] is None
+    assert together["settled"] is False
+
+
+def test_an_empty_config_row_carries_null_windows_instead_of_camera_range(tmp_path):
+    store = tmp_path / "arriving.zarr"
+    store.mkdir()
+    (store / ".zattrs").write_text("{ this is not json", encoding="utf-8")
+
+    described = Measurements().describe(0, tmp_path, store.name, "arriving", False)
+
+    assert described["window"] is None
+    assert described["volumeWindow"] is None
+    assert described["histogram"] is None
+    assert described["settled"] is False
+
+
+def test_an_empty_live_source_says_it_is_waiting_instead_of_showing_camera_range(
+    browser, built_dist, tmp_path
+):
+    import threading
+
+    from zmart_viewer.server import make_server
+
+    store = tmp_path / "arriving.zarr"
+    group = zarr.open_group(str(store), mode="w", zarr_format=2)
+    group.create_array("0", shape=(1, 32, 32), chunks=(1, 32, 32), dtype="uint16")
+    (store / ".zattrs").write_text(
+        json.dumps(
+            {
+                "multiscales": [
+                    {
+                        "axes": [{"name": name} for name in "zyx"],
+                        "datasets": [{"path": "0"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    server = make_server(
+        port=0, data_dir=tmp_path, site_dir=built_dist, store=store.name, live=True
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    page = browser.new_page(viewport={"width": 900, "height": 700})
+    try:
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+        waiting = page.get_by_role("status")
+        waiting.wait_for(state="visible", timeout=60_000)
+        assert waiting.inner_text() == "waiting for measurable pixels"
+        assert page.get_by_label("min arriving").count() == 0
+        assert page.get_by_label("max arriving").count() == 0
+    finally:
+        page.close()
+        server.shutdown()
+        thread.join(timeout=5)
 
 
 # -- measuring a linked live picture ------------------------------------------
