@@ -108,7 +108,103 @@ def test_path_traversal_out_of_the_data_directory_is_refused(serving):
 def test_health_endpoint(serving):
     status, _, body = request(serving, "/api/health")
     assert status == 200
-    assert json.loads(body) == {"ok": True}
+    answered = json.loads(body)
+    assert answered["ok"] is True
+    assert isinstance(answered["version"], str) and answered["version"]
+
+
+def test_health_names_the_display_window_promises_a_writer_relies_on(serving):
+    """The writer beside this server asks here before it stops stamping windows.
+
+    A writer that no longer measures a window per position has to know that the
+    Viewer it is talking to reads the acquisition-wide contract and reports an
+    absent window honestly; an older Viewer would fill the gap with the camera's
+    whole range and open the picture very nearly black.  Both promises are named
+    by exact strings, so the check on the other side is a lookup rather than a
+    version comparison.
+    """
+    from zmart_viewer.acquisition import (
+        CAPABILITY_ABSENT_DISPLAY_WINDOW,
+        CAPABILITY_ACQUISITION_DISPLAY_WINDOW,
+    )
+
+    _, _, body = request(serving, "/api/health")
+    promised = json.loads(body)["capabilities"]
+    assert CAPABILITY_ACQUISITION_DISPLAY_WINDOW in promised
+    assert CAPABILITY_ABSENT_DISPLAY_WINDOW in promised
+    assert promised == ["acquisition-display-window-v1", "absent-display-window-v1"]
+
+
+def _serve_one_store(tmp_path, name: str, *, live: bool):
+    """A server over ``tmp_path / "data" / name``, on a free port, and its stop."""
+    site = tmp_path / "site"
+    site.mkdir(exist_ok=True)
+    (site / "index.html").write_text("<!doctype html><title>page</title>", encoding="utf-8")
+    server = make_server(
+        port=0, data_dir=tmp_path / "data", site_dir=site, store=name, live=live
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def stop() -> None:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    return server.server_address[1], stop
+
+
+def _measure(port: int, source: str) -> dict:
+    asked = json.dumps({"source": source, "channel": 0, "box": [[0, 0], [1, 1]]}).encode()
+    status, _, body = request(
+        port, "/api/measure", method="POST", body=asked,
+        extra={"Content-Type": "application/json"},
+    )
+    assert status == 200, body
+    return json.loads(body)
+
+
+def test_measuring_a_valid_but_empty_live_store_says_it_is_waiting(tmp_path):
+    """Nothing written yet is ordinary at the start of a run, and is said so.
+
+    The panel beside the canvas asks this route to measure a channel. Before
+    the first position lands there is nothing to measure, and the answer must
+    make that a waiting state rather than a failure — and must never hand back
+    the camera's whole range as if somebody had chosen it.
+    """
+    import zarr
+
+    store = tmp_path / "data" / "arriving.zarr"
+    group = zarr.open_group(str(store), mode="w", zarr_format=2)
+    group.create_array("0", shape=(1, 32, 32), chunks=(1, 32, 32), dtype="uint16")
+    (store / ".zattrs").write_text(
+        json.dumps({"multiscales": [{"axes": [{"name": n} for n in "zyx"],
+                                     "datasets": [{"path": "0"}]}]}),
+        encoding="utf-8",
+    )
+    port, stop = _serve_one_store(tmp_path, "arriving.zarr", live=True)
+    try:
+        answered = _measure(port, "/data/0/arriving.zarr/|zarr2:")
+    finally:
+        stop()
+    assert answered["empty"] is True
+    assert answered["measurementState"] == "waiting"
+    assert answered["measurementError"] is None
+    assert "window" not in answered
+
+
+def test_measuring_a_store_that_cannot_be_read_says_so_instead_of_waiting(tmp_path):
+    """A fault is not absence: a broken store must not wait for ever."""
+    store = tmp_path / "data" / "broken.zarr"
+    store.mkdir(parents=True)
+    (store / ".zattrs").write_text('{"multiscales": []}', encoding="utf-8")
+    port, stop = _serve_one_store(tmp_path, "broken.zarr", live=True)
+    try:
+        answered = _measure(port, "/data/0/broken.zarr/|zarr2:")
+    finally:
+        stop()
+    assert answered["empty"] is True
+    assert answered["measurementState"] == "unreadable"
+    assert "no pixel levels" in answered["measurementError"]
 
 
 def config_from(**kwargs) -> dict:

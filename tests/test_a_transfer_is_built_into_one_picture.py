@@ -208,6 +208,9 @@ def test_the_descriptor_reaches_a_declared_picture_and_its_config(a_transfer: Pa
     row = Measurements().describe(0, store.parent, store.name, "GFP", True, channel=0)
     assert row["window"] == {"low": 300.0, "high": 4200.0}
     assert row["name"] == "GFP"
+    # And the page is told this was the run's decision, not a measurement it
+    # is welcome to overrule.
+    assert row["measurementState"] == "declared"
 
 
 def test_an_unresolved_acquisition_description_does_not_invent_a_window(a_transfer: Path):

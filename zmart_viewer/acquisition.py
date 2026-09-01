@@ -16,6 +16,22 @@ from pathlib import Path
 DESCRIPTION_NAME = "zmart-acquisition.json"
 SCHEMA = "zmart-acquisition-display/1"
 
+#: What this Viewer can promise a writer about display windows. A writer that
+#: stops stamping a per-position window may only do so beside a Viewer that
+#: names both of these, because an older Viewer would fill the gap with the
+#: camera's whole range and open the picture very nearly black.
+#:
+#: ``acquisition-display-window-v1``: the composed source reads one
+#: acquisition-wide window from ``zmart-acquisition.json`` and never lets the
+#: first position decide for the rest.
+#:
+#: ``absent-display-window-v1``: a channel with no declared and no measurable
+#: window is reported as absent, in JSON as ``null``, and the page says it is
+#: waiting rather than showing ``0…65535`` as though somebody chose it.
+CAPABILITY_ACQUISITION_DISPLAY_WINDOW = "acquisition-display-window-v1"
+CAPABILITY_ABSENT_DISPLAY_WINDOW = "absent-display-window-v1"
+CAPABILITIES = (CAPABILITY_ACQUISITION_DISPLAY_WINDOW, CAPABILITY_ABSENT_DISPLAY_WINDOW)
+
 
 def _finite_numbers(value, what: str) -> None:
     """Refuse NaN/infinity anywhere, including preserved provenance fields."""

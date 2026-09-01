@@ -29,8 +29,10 @@ from zmart_viewer.record.gateway import answer_from_a_live_run
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
 from . import live, loading, pieces
+from .acquisition import CAPABILITIES
 from .contrast import (
     Measurements,
+    _readability_problem,
     measure_here,
 )
 from .library import (
@@ -54,6 +56,16 @@ _HERE = Path(__file__).resolve().parent
 _FRONTEND_DIST = (_HERE.parent / "app" / "page" / "dist").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
+
+
+def _the_version() -> str:
+    """This Viewer's version as installed, or ``unknown`` from a bare checkout."""
+    try:
+        from importlib.metadata import version
+
+        return version("zmart-viewer")
+    except Exception:  # noqa: BLE001 -- a checkout that was never installed
+        return "unknown"
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
 # suffix. Only single ranges are honoured, which is all the engine ever asks for.
 _RANGE_HEADER = re.compile(r"^bytes=(\d*)-(\d*)$")
@@ -587,7 +599,12 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def _serve_api_get(self) -> None:
         if self.path.rstrip("/") == "/api/health":
-            self._send_json({"ok": True})
+            # More than a heartbeat: the writer beside this server asks here
+            # what the Viewer can promise before it stops stamping windows of
+            # its own. See ``acquisition.CAPABILITIES``.
+            self._send_json(
+                {"ok": True, "version": _the_version(), "capabilities": list(CAPABILITIES)}
+            )
             return
 
         if self.path.rstrip("/") == "/api/events":
@@ -700,7 +717,17 @@ class _Handler(SimpleHTTPRequestHandler):
         found = measure_here(store, channel=channel, box=corners)
 
         if found is None:
-            self._send_json({"empty": True})
+            # Nothing measurable in the part on screen. Say why, because an
+            # empty answer for a store that cannot be read at all would leave
+            # the panel waiting for pixels that are never coming.
+            problem = _readability_problem(store)
+            self._send_json(
+                {
+                    "empty": True,
+                    "measurementState": "unreadable" if problem is not None else "waiting",
+                    "measurementError": problem,
+                }
+            )
             return
 
         low, high = found["window"]

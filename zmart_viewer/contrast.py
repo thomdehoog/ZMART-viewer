@@ -356,6 +356,14 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
 
     attrs, values, settled = read
     declared = _omero_window(attrs, channel)
+    if declared is not None:
+        # The store's own decision. Said so, because the panel tells an
+        # operator the difference between "the run chose this" and "measured
+        # from the pixels acquired so far", and a run's own window called
+        # provisional would invite somebody to overrule it.
+        state = "declared"
+    else:
+        state = "settled" if settled else "provisional"
     return {
         # A window the store itself declares is honoured for the plane view: the
         # microscope software that wrote it knew what it was showing.
@@ -363,7 +371,7 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
         "volumeWindow": _window(values, volumetric=True),
         "histogram": _histogram(values, bins=bins),
         "settled": settled,
-        "measurementState": "settled" if settled else "provisional",
+        "measurementState": state,
         "measurementError": None,
     }
 
