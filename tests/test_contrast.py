@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 import numpy as np
+from pathlib import Path
 import zarr
 from demo_data import write_demo_zarr
 
@@ -175,6 +176,30 @@ def test_measuring_an_unreadable_store_reports_that_no_window_exists_yet(tmp_pat
     assert together["settled"] is False
     assert together["measurementState"] == "unreadable"
     assert together["measurementError"]
+
+
+def test_a_window_the_store_declares_is_reported_as_declared_not_measured(tmp_path):
+    """The panel says whether a run chose its window or the Viewer measured one.
+
+    A store that declares ``start``/``end`` has made a decision, and the
+    configuration row must say ``declared`` so the page does not label it
+    "measured from pixels acquired so far" and invite an operator to overrule
+    the run's own choice.
+    """
+    data = (np.arange(64 * 64, dtype=np.uint16).reshape(1, 64, 64) % 3000) + 100
+    store = write_store(
+        tmp_path / "declared.zarr", data,
+        omero={"channels": [{"label": "GFP", "color": "00FF00",
+                             "window": {"min": 0, "max": 65535, "start": 300, "end": 4200}}]},
+    )
+
+    found = measure(store, channel=0)
+    assert found["window"] == (300.0, 4200.0)
+    assert found["measurementState"] == "declared"
+
+    row = Measurements().describe(0, tmp_path, Path(store).name, "GFP", True, channel=0)
+    assert row["window"] == {"low": 300.0, "high": 4200.0}
+    assert row["measurementState"] == "declared"
 
 
 def test_an_empty_config_row_carries_null_windows_instead_of_camera_range(tmp_path):
