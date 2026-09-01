@@ -132,12 +132,12 @@ def test_config_tells_the_page_what_to_open(serving):
     layers = config["layers"]
     assert len(layers) == 1
     assert layers[0]["sources"] == ["/data/0/demo.zarr/|zarr2:"]
-    assert layers[0]["window"]["high"] > layers[0]["window"]["low"]
-    # Both windows travel up front so the 2-D/3-D toggle needs no round trip.
-    assert layers[0]["volumeWindow"]["high"] > layers[0]["volumeWindow"]["low"]
-    # This fixture has metadata but no readable array, so the server is honest:
-    # display can fall back, while a histogram is not invented.
+    # This fixture has metadata but no readable array. The honest live state is
+    # no display decision yet; camera range is not smuggled in as brightness.
+    assert layers[0]["window"] is None
+    assert layers[0]["volumeWindow"] is None
     assert layers[0]["histogram"] is None
+    assert layers[0]["settled"] is False
     assert config["chrome"] is False, "the engine's own furniture stays hidden"
 
 

@@ -21,6 +21,8 @@ from pathlib import Path
 import numpy as np
 import zarr
 
+from .acquisition import metadata_for_transfer
+
 IMAGE_SUFFIX = ".ome.zarr"
 
 OURS = "zmart"
@@ -105,6 +107,7 @@ class Mosaic:
     averaged: bool = False
 
     omero: dict | None = None
+    zmart: dict | None = None
 
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
         default_factory=dict, repr=False
@@ -555,17 +558,16 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
     kind = _refuse_tiles_that_disagree(tiles)
 
     corner = tuple(min(tile.copies[0].corner_um[axis] for tile in tiles) for axis in range(3))
-    said = None
-
+    position_displays: list[dict | None] = []
     for tile in tiles:
-        try:
-            described, _ = _the_description_of(tile.store)
-        except ValueError:
-            continue
-
-        if isinstance(described.get("omero"), dict):
-            said = described["omero"]
-            break
+        described, _ = _the_description_of(tile.store)
+        position_displays.append(
+            described.get("omero") if isinstance(described.get("omero"), dict) else None
+        )
+    channel_count = next(iter(rooms))[1]
+    said, provenance = metadata_for_transfer(
+        folder, position_displays, channel_count=channel_count
+    )
 
     return Mosaic(
         tiles=tiles,
@@ -574,6 +576,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
         dtype=kind,
         corner_um=corner,  # type: ignore[arg-type]
         omero=said,
+        zmart=provenance,
     )
 
 
@@ -587,6 +590,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         # Only where the tiles said something. A picture whose tiles named no
         # channels writes no key, exactly as it did before this was carried.
         **({"omero": mosaic.omero} if mosaic.omero else {}),
+        **({"zmart": mosaic.zmart} if mosaic.zmart else {}),
         "tiles": [
             {
                 "name": tile.name,
@@ -641,6 +645,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
         dtype=held["dtype"],
         corner_um=tuple(held["corner_um"]),
         omero=held.get("omero"),
+        zmart=held.get("zmart"),
     )
 
 
@@ -1465,7 +1470,8 @@ class Composer:
                             }
                         ],
                         **({"omero": self.mosaic.omero} if self.mosaic.omero else {}),
-                    }
+                    },
+                    **({"zmart": self.mosaic.zmart} if self.mosaic.zmart else {}),
                 },
                 "zarr_format": 3,
                 "node_type": "group",

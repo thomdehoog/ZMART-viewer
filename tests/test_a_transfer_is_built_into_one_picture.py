@@ -138,6 +138,170 @@ def a_transfer(tmp_path: Path) -> Path:
     return folder
 
 
+def _describe_channels(store: Path, channels: list[dict]) -> None:
+    """Put ordinary OME channel metadata onto one fixture position."""
+    description = json.loads((store / "zarr.json").read_text(encoding="utf-8"))
+    description["attributes"]["ome"]["omero"] = {"channels": channels}
+    (store / "zarr.json").write_text(json.dumps(description), encoding="utf-8")
+
+
+def _acquisition_description(folder: Path, *, window=(300, 4200)) -> dict:
+    channel = {
+        "key": "488",
+        "index": 0,
+        "label": "GFP",
+        "color": "00FF00",
+        "range": {"min": 0, "max": 65535},
+    }
+    if window is not None:
+        channel.update(
+            {
+                "displayWindow": {"start": window[0], "end": window[1]},
+                "windowProvenance": {
+                    "method": "preset",
+                    "algorithm": None,
+                    "sampleCount": 0,
+                    "resolvedAtRevision": 0,
+                    "resolvedFrom": "acquisition-record",
+                },
+            }
+        )
+    return {
+        "schema": "zmart-acquisition-display/1",
+        "acquisitionType": folder.name,
+        "channels": [channel],
+    }
+
+
+def test_an_acquisition_description_is_the_composed_sources_authority(a_transfer: Path):
+    asked = _acquisition_description(a_transfer)
+    (a_transfer / "zmart-acquisition.json").write_text(json.dumps(asked), encoding="utf-8")
+
+    mosaic = read_the_transfer(a_transfer)
+    described = json.loads(Composer(mosaic).group_json())
+
+    channel = described["attributes"]["ome"]["omero"]["channels"][0]
+    assert channel == {
+        "label": "GFP",
+        "color": "00FF00",
+        "window": {"min": 0, "max": 65535, "start": 300, "end": 4200},
+    }
+    provenance = described["attributes"]["zmart"]
+    assert provenance["displayWindowSource"] == "zmart-acquisition.json"
+    assert provenance["displayWindows"][0]["windowProvenance"]["resolvedFrom"] == (
+        "acquisition-record"
+    )
+
+
+def test_the_descriptor_reaches_a_declared_picture_and_its_config(a_transfer: Path, tmp_path: Path):
+    from zmart_viewer.contrast import Measurements
+
+    (a_transfer / "zmart-acquisition.json").write_text(
+        json.dumps(_acquisition_description(a_transfer)), encoding="utf-8"
+    )
+    store = declare_a_built_picture(tmp_path / "views", a_transfer, name="built", piece=PIECE)
+
+    group = json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]
+    assert group["ome"]["omero"]["channels"][0]["window"]["start"] == 300
+    assert group["zmart"]["displayWindowSource"] == "zmart-acquisition.json"
+
+    row = Measurements().describe(0, store.parent, store.name, "GFP", True, channel=0)
+    assert row["window"] == {"low": 300.0, "high": 4200.0}
+    assert row["name"] == "GFP"
+
+
+def test_an_unresolved_acquisition_description_does_not_invent_a_window(a_transfer: Path):
+    asked = _acquisition_description(a_transfer, window=None)
+    (a_transfer / "zmart-acquisition.json").write_text(json.dumps(asked), encoding="utf-8")
+
+    channel = json.loads(Composer(read_the_transfer(a_transfer)).group_json())["attributes"][
+        "ome"
+    ]["omero"]["channels"][0]
+
+    assert channel["window"] == {"min": 0, "max": 65535}
+    assert "start" not in channel["window"] and "end" not in channel["window"]
+
+
+def test_legacy_positions_must_reach_consensus_instead_of_the_first_winning(a_transfer: Path):
+    positions = sorted(a_transfer.glob("*.ome.zarr"))
+    for at, position in enumerate(positions):
+        _describe_channels(
+            position,
+            [
+                {
+                    "label": "GFP",
+                    "color": "00FF00",
+                    "window": {
+                        "min": 0,
+                        "max": 65535,
+                        "start": 100 if at == 0 else 900,
+                        "end": 4100 if at == 0 else 4900,
+                    },
+                }
+            ],
+        )
+
+    described = json.loads(Composer(read_the_transfer(a_transfer)).group_json())
+    channel = described["attributes"]["ome"]["omero"]["channels"][0]
+
+    assert channel["window"] == {"min": 0.0, "max": 65535.0}
+    assert described["attributes"]["zmart"]["displayWindows"] == []
+
+
+def test_legacy_consensus_is_recorded_and_survives_the_written_ledger(
+    a_transfer: Path, tmp_path: Path
+):
+    for position in a_transfer.glob("*.ome.zarr"):
+        _describe_channels(
+            position,
+            [
+                {
+                    "label": "GFP",
+                    "color": "00FF00",
+                    "window": {"min": 0, "max": 65535, "start": 200, "end": 3200},
+                }
+            ],
+        )
+
+    store = declare_a_built_picture(tmp_path / "views", a_transfer, name="built", piece=PIECE)
+    described = json.loads((store / "zarr.json").read_text(encoding="utf-8"))
+    assert described["attributes"]["ome"]["omero"]["channels"][0]["window"]["start"] == 200.0
+    assert described["attributes"]["zmart"]["displayWindows"][0]["windowProvenance"] == {
+        "method": "legacy-consensus",
+        "resolvedFrom": "legacy-position-consensus",
+    }
+
+    ledger = json.loads((store / "tiles.json").read_text(encoding="utf-8"))
+    assert ledger["omero"] == read_the_transfer(a_transfer).omero
+    assert ledger["zmart"] == read_the_transfer(a_transfer).zmart
+
+
+def test_legacy_channel_identity_disagreement_is_refused(a_transfer: Path):
+    for at, position in enumerate(sorted(a_transfer.glob("*.ome.zarr"))):
+        _describe_channels(
+            position,
+            [
+                {
+                    "label": "GFP" if at != 1 else "not GFP",
+                    "color": "00FF00",
+                    "window": {"min": 0, "max": 65535, "start": 200, "end": 3200},
+                }
+            ],
+        )
+
+    with pytest.raises(ValueError, match="labels"):
+        read_the_transfer(a_transfer)
+
+
+def test_a_descriptor_whose_channel_count_disagrees_is_refused(a_transfer: Path):
+    asked = _acquisition_description(a_transfer)
+    asked["channels"].append({**asked["channels"][0], "key": "561", "index": 1})
+    (a_transfer / "zmart-acquisition.json").write_text(json.dumps(asked), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="describes 2 channel"):
+        read_the_transfer(a_transfer)
+
+
 def _laid_out_by_hand(
     mosaic, level: int, plane: int, top: int, left: int, piece: int
 ) -> np.ndarray:

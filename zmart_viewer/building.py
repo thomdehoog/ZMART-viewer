@@ -133,7 +133,7 @@ def declare_a_built_picture(
         finally:
             composer.close()
 
-    described["attributes"][OURS] = {
+    described["attributes"].setdefault(OURS, {}).update({
         "what": (
             "A picture that holds no pixels beyond its baked coarse ground. "
             "Every other piece of it is built when it is asked for, out of the "
@@ -144,7 +144,7 @@ def declare_a_built_picture(
         "piece": composer.piece,
         "tiles": len(mosaic.tiles),
         "baked": baked,
-    }
+    })
     (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
 
     (store / "tiles.json").write_text(json.dumps(the_mosaic_written_down(mosaic)), encoding="utf-8")
@@ -195,7 +195,7 @@ def declare_a_governed_picture(
             with _holding_the_bake_lock(store):
                 baked = _bake_the_coarse_ground(store, composer, described, governed_run=run)
 
-        described["attributes"][OURS] = {
+        described["attributes"].setdefault(OURS, {}).update({
             "what": (
                 "A picture of a live, manifest-governed run. It holds no "
                 "pixels beyond its baked coarse ground, kept true per "
@@ -206,7 +206,7 @@ def declare_a_governed_picture(
             "governed_from": run.as_posix(),
             "piece": composer.piece,
             "baked": baked,
-        }
+        })
         (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
 
         if bake:

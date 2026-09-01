@@ -320,8 +320,8 @@ def measure(store: str | Path, *, channel: int | None = None, bins: int = HISTOG
 
     if read is None:
         return {
-            "window": (0.0, 65535.0),
-            "volumeWindow": (0.0, 65535.0),
+            "window": None,
+            "volumeWindow": None,
             "histogram": None,
             "settled": False,
         }
@@ -540,8 +540,8 @@ def _histogram(values, *, bins: int) -> dict:
 
 def display_window(
     store: str | Path, *, volumetric: bool = False, channel: int | None = None
-) -> tuple[float, float]:
-    """Return the ``(low, high)`` intensity window to display ``store`` with."""
+) -> tuple[float, float] | None:
+    """Return the display window, or ``None`` until one can be known honestly."""
     store = Path(store)
 
     if not volumetric:
@@ -553,7 +553,7 @@ def display_window(
     read = _samples(store, channel=channel)
 
     if read is None:
-        return 0.0, 65535.0
+        return None
 
     return _window(read[1], volumetric=volumetric)
 
@@ -668,10 +668,13 @@ class Measurements:
         color = channel_color(name) if coloured else None
         described = {
             "sources": [f"/data/{root_number}/{name}/|{zarr_scheme(root / name)}:"],
-            "window": {"low": flat[0], "high": flat[1]},
-            "volumeWindow": {"low": volume[0], "high": volume[1]},
+            "window": None if flat is None else {"low": flat[0], "high": flat[1]},
+            "volumeWindow": (
+                None if volume is None else {"low": volume[0], "high": volume[1]}
+            ),
             "color": list(color) if color else None,
             "histogram": found["histogram"],
+            "settled": bool(found.get("settled")),
         }
         held = camera_range(root / name, declared_range)
 
