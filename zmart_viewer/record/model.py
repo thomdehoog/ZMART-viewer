@@ -1686,6 +1686,20 @@ class Channel:
     color: str | None = None
     window: tuple[int, int] | None = None
 
+    def described_for_display(self, depth_max: int) -> dict:
+        """Describe this channel for the Viewer, even before its window resolves.
+
+        This internal shape may honestly omit ``start`` and ``end`` so the
+        Viewer knows it still has to measure acquired pixels.  It must not be
+        written as an OME ``omero`` channel, whose window is required to be
+        complete by strict readers.
+        """
+        color = self.color or _CHANNEL_COLORS.get(self.name, "FFFFFF")
+        window = {"min": 0, "max": depth_max}
+        if self.window is not None:
+            window.update({"start": self.window[0], "end": self.window[1]})
+        return {"label": self.name, "color": color, "window": window}
+
     def described(self, depth_max: int) -> dict:
         """This channel in the form an OME-Zarr ``omero`` block expects.
 
@@ -1696,31 +1710,16 @@ class Channel:
         The ``start`` and ``end`` are a different thing: they are the brightness
         range the image should first be *displayed* with.
 
-        These used to be left out when a run did not ask for a window, on the
-        reasoning that a viewer would then measure a good one from the pixels.
-        That reasoning was sound but the file it produced was not: **a describing
-        block with an incomplete window is refused outright.** Checked against
-        ngio, a block naming a channel without ``start`` and ``end`` fails to
-        open, while the same image with no describing block at all opens
-        perfectly well. So the choice was never "a measured window or a declared
-        one" — it was "a complete window or no channel names and colours at all",
-        and names and colours are worth having.
-
-        So a window is always written now. When the run did not ask for one, the
-        camera's whole range is declared, because that is the honest thing to say
-        when nothing is known. Be aware of what that looks like: a real
-        acquisition sits in the bottom few per cent of a camera's range — a few
-        hundred counts of background with the signal not far above — so an image
-        opened on the whole range looks almost black until somebody drags the
-        contrast slider. **A run that knows roughly how bright its images are
-        should pass a window**, and its acquisitions will open looking like
-        something.
+        Strict readers refuse a channel block whose window has ``min``/``max``
+        but no ``start``/``end``.  Inventing the camera range as the missing
+        display pair avoids that format error but makes real acquisitions open
+        almost black.  The writer therefore omits the *whole* ``omero`` block
+        when any channel is unresolved; this method is called only for a channel
+        carrying an explicit display decision.
         """
-        color = self.color or _CHANNEL_COLORS.get(self.name, "FFFFFF")
-        window = {"min": 0, "max": depth_max}
-        window["start"], window["end"] = self.window or (0, depth_max)
-        return {
-            "label": self.name,
-            "color": color,
-            "window": window,
-        }
+        if self.window is None:
+            raise ZmartLiveError(
+                f"channel {self.name!r} has no display window; omit the image's whole "
+                "omero block until the acquisition declares one"
+            )
+        return self.described_for_display(depth_max)

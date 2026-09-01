@@ -162,7 +162,7 @@ def test_one_measurement_answers_all_three_questions(tmp_path):
 
 
 def test_measuring_an_unreadable_store_reports_that_no_window_exists_yet(tmp_path):
-    """A broken or half-written store stays open without inventing brightness."""
+    """A broken store is kept distinct from an ordinary pixel-empty one."""
     broken = tmp_path / "not-really.zarr"
     broken.mkdir()
     (broken / ".zattrs").write_text("{ this is not json", encoding="utf-8")
@@ -173,6 +173,8 @@ def test_measuring_an_unreadable_store_reports_that_no_window_exists_yet(tmp_pat
     assert together["volumeWindow"] is None
     assert together["histogram"] is None
     assert together["settled"] is False
+    assert together["measurementState"] == "unreadable"
+    assert together["measurementError"]
 
 
 def test_an_empty_config_row_carries_null_windows_instead_of_camera_range(tmp_path):
@@ -186,6 +188,7 @@ def test_an_empty_config_row_carries_null_windows_instead_of_camera_range(tmp_pa
     assert described["volumeWindow"] is None
     assert described["histogram"] is None
     assert described["settled"] is False
+    assert described["measurementState"] == "unreadable"
 
 
 def test_an_empty_live_source_says_it_is_waiting_instead_of_showing_camera_range(
@@ -224,6 +227,34 @@ def test_an_empty_live_source_says_it_is_waiting_instead_of_showing_camera_range
         assert waiting.inner_text() == "waiting for measurable pixels"
         assert page.get_by_label("min arriving").count() == 0
         assert page.get_by_label("max arriving").count() == 0
+    finally:
+        page.close()
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_an_unreadable_live_source_reports_a_fault_instead_of_waiting(
+    browser, built_dist, tmp_path
+):
+    import threading
+
+    from zmart_viewer.server import make_server
+
+    store = tmp_path / "broken.zarr"
+    store.mkdir()
+    (store / ".zattrs").write_text("{ this is not json", encoding="utf-8")
+    server = make_server(
+        port=0, data_dir=tmp_path, site_dir=built_dist, store=store.name, live=True
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    page = browser.new_page(viewport={"width": 900, "height": 700})
+    try:
+        page.goto(f"http://127.0.0.1:{server.server_address[1]}", wait_until="domcontentloaded")
+        fault = page.get_by_role("alert")
+        fault.wait_for(state="visible", timeout=60_000)
+        assert fault.inner_text() == "this acquisition cannot be read"
+        assert page.get_by_text("waiting for measurable pixels").count() == 0
     finally:
         page.close()
         server.shutdown()

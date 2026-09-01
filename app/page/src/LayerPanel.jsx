@@ -869,6 +869,8 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // before the view can be asked -- an unlaid-out panel, a volume turned in
   // three dimensions -- and nothing more than that.
   const autoWindow = seen.histogram?.autoWindow;
+  const brightnessUnreadable = layer.measurementState === "unreadable";
+  const brightnessProvisional = layer.measurementState === "provisional";
 
   return (
     <div style={styles.controls} aria-label="channel controls">
@@ -916,12 +918,21 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
       </div>
       {isMask ? (
         <div style={styles.maskNote}>objects, each in its own colour</div>
+      ) : brightnessUnreadable && !window_ ? (
+        <div role="alert" style={styles.maskNote}>
+          this acquisition cannot be read
+        </div>
       ) : !window_ ? (
         <div role="status" aria-live="polite" style={styles.maskNote}>
           waiting for measurable pixels
         </div>
       ) : (
         <>
+          {brightnessProvisional ? (
+            <div role="status" aria-live="polite" style={styles.maskNote}>
+              brightness measured from pixels acquired so far
+            </div>
+          ) : null}
           {/* The brightness of this channel, drawn across the panel. It
               takes the whole width now: the two buttons that used to sit
               beside it stole a sixth of the picture to say four letters

@@ -352,14 +352,17 @@ _CHANNEL_TURNS = ("00FF66", "FF33FF", "33CCFF", "FFBF19")
 
 
 def the_channels_described(channels: Sequence[str | Channel], dtype: str) -> list[dict]:
-    """Name and colour each channel, in the form a reader expects.
+    """Name and colour each channel, or omit the whole unresolved OME block.
 
     The colours and the brightness window are built by
     :class:`~zmart_viewer.record.model.Channel`, which is the one place in this project
     that decides what a channel's description should look like. Writing a second
     version of that here would be how the two quietly drift apart, and a
     description with an incomplete brightness window is refused outright by
-    strict readers.
+    strict readers.  A profile that has not chosen a window therefore returns
+    no OME channel list; labels and colours remain available to the live Viewer
+    through :func:`the_channels_for_display` without being written in an invalid
+    or misleading on-disk shape.
 
     One thing is decided here rather than per channel: a run of SEVERAL
     channels that declared no colours does not describe them all white.
@@ -382,7 +385,32 @@ def the_channels_described(channels: Sequence[str | Channel], dtype: str) -> lis
                     channel.name, _CHANNEL_TURNS[turn % len(_CHANNEL_TURNS)], channel.window
                 )
                 turn += 1
+    if any(channel.window is None for channel in named):
+        return []
     return [channel.described(brightest) for channel in named]
+
+
+def the_channels_for_display(channels: Sequence[str | Channel], dtype: str) -> list[dict]:
+    """Profile channels for the live UI, preserving an unresolved window.
+
+    Unlike an OME ``omero`` block this is an internal value, so it can retain
+    labels, colours and the numeric range while honestly omitting
+    ``start``/``end``.  The UI then measures pixels rather than mistaking the
+    camera range for a display decision.
+    """
+    brightest = _the_brightest_a_pixel_can_be(dtype)
+    named = [
+        channel if isinstance(channel, Channel) else Channel(str(channel)) for channel in channels
+    ]
+    if len(named) > 1:
+        turn = 0
+        for at, channel in enumerate(named):
+            if channel.color is None:
+                named[at] = Channel(
+                    channel.name, _CHANNEL_TURNS[turn % len(_CHANNEL_TURNS)], channel.window
+                )
+                turn += 1
+    return [channel.described_for_display(brightest) for channel in named]
 
 
 def the_image_description(
@@ -494,7 +522,9 @@ def the_image_description(
         "multiscales": [multiscale],
     }
     if channels:
-        described["omero"] = {"channels": the_channels_described(channels, profile.dtype)}
+        channel_descriptions = the_channels_described(channels, profile.dtype)
+        if channel_descriptions:
+            described["omero"] = {"channels": channel_descriptions}
     return described
 
 

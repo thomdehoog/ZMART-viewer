@@ -214,12 +214,11 @@ def test_an_unresolved_acquisition_description_does_not_invent_a_window(a_transf
     asked = _acquisition_description(a_transfer, window=None)
     (a_transfer / "zmart-acquisition.json").write_text(json.dumps(asked), encoding="utf-8")
 
-    channel = json.loads(Composer(read_the_transfer(a_transfer)).group_json())["attributes"][
-        "ome"
-    ]["omero"]["channels"][0]
+    described = json.loads(Composer(read_the_transfer(a_transfer)).group_json())["attributes"]
 
-    assert channel["window"] == {"min": 0, "max": 65535}
-    assert "start" not in channel["window"] and "end" not in channel["window"]
+    assert "omero" not in described["ome"]
+    assert described["zmart"]["channels"][0]["label"] == "GFP"
+    assert "displayWindow" not in described["zmart"]["channels"][0]
 
 
 def test_legacy_positions_must_reach_consensus_instead_of_the_first_winning(a_transfer: Path):
@@ -242,9 +241,7 @@ def test_legacy_positions_must_reach_consensus_instead_of_the_first_winning(a_tr
         )
 
     described = json.loads(Composer(read_the_transfer(a_transfer)).group_json())
-    channel = described["attributes"]["ome"]["omero"]["channels"][0]
-
-    assert channel["window"] == {"min": 0.0, "max": 65535.0}
+    assert "omero" not in described["attributes"]["ome"]
     assert described["attributes"]["zmart"]["displayWindows"] == []
 
 
@@ -276,7 +273,9 @@ def test_legacy_consensus_is_recorded_and_survives_the_written_ledger(
     assert ledger["zmart"] == read_the_transfer(a_transfer).zmart
 
 
-def test_legacy_channel_identity_disagreement_is_refused(a_transfer: Path):
+def test_legacy_channel_identity_disagreement_omits_metadata_without_refusing_pixels(
+    a_transfer: Path,
+):
     for at, position in enumerate(sorted(a_transfer.glob("*.ome.zarr"))):
         _describe_channels(
             position,
@@ -289,8 +288,67 @@ def test_legacy_channel_identity_disagreement_is_refused(a_transfer: Path):
             ],
         )
 
-    with pytest.raises(ValueError, match="labels"):
-        read_the_transfer(a_transfer)
+    mosaic = read_the_transfer(a_transfer)
+
+    assert mosaic.tiles
+    assert mosaic.omero is None
+    assert mosaic.zmart is None
+
+
+def test_a_position_without_omero_beside_positions_with_it_still_opens(a_transfer: Path):
+    positions = sorted(a_transfer.glob("*.ome.zarr"))
+    for position in positions[1:]:
+        _describe_channels(
+            position,
+            [
+                {
+                    "label": "GFP",
+                    "color": "00FF00",
+                    "window": {"min": 0, "max": 65535, "start": 200, "end": 3200},
+                }
+            ],
+        )
+
+    mosaic = read_the_transfer(a_transfer)
+
+    assert mosaic.omero is None
+    assert mosaic.zmart["displayWindows"] == []
+
+
+def test_per_image_non_channel_omero_keys_do_not_refuse_a_transfer(a_transfer: Path):
+    for at, position in enumerate(sorted(a_transfer.glob("*.ome.zarr"))):
+        described = json.loads((position / "zarr.json").read_text(encoding="utf-8"))
+        described["attributes"]["ome"]["omero"] = {
+            "id": at,
+            "name": position.name,
+            "version": "0.4",
+            "channels": [
+                {
+                    "label": "GFP",
+                    "color": "00FF00",
+                    "window": {"min": 0, "max": 65535, "start": 200, "end": 3200},
+                }
+            ],
+        }
+        (position / "zarr.json").write_text(json.dumps(described), encoding="utf-8")
+
+    mosaic = read_the_transfer(a_transfer)
+
+    assert mosaic.omero == {
+        "channels": [
+            {
+                "label": "GFP",
+                "color": "00FF00",
+                "window": {
+                    "min": 0.0,
+                    "max": 65535.0,
+                    "start": 200.0,
+                    "end": 3200.0,
+                },
+            }
+        ]
+    }
+    assert set(mosaic.omero) == {"channels"}
 
 
 def test_a_descriptor_whose_channel_count_disagrees_is_refused(a_transfer: Path):
