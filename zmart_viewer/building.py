@@ -243,24 +243,40 @@ def declare_a_governed_picture(
         governed.close()
 
 
-def a_share_of(source: Path, share: float, *, kind: str = "derived picture"):
+#: The least a bake may always write, whatever share of the run that is.
+#:
+#: The share rule exists to stop a derived picture costing a real fraction of
+#: a real acquisition. A run of a few megabytes -- a test, a first look, a
+#: single field -- would have a tenth of almost nothing, and refusing its
+#: coarse ground would save nothing while making small runs open differently
+#: from large ones. So a bake may always write this much; the share only bites
+#: above it.
+A_BAKE_MAY_ALWAYS_WRITE = 64 * 1024 ** 2
+
+
+def a_share_of(
+    source: Path, share: float, *, kind: str = "derived picture", at_least: int | None = None
+):
     """A budget allowing ``share`` of the bytes under ``source``, for a bake to ask.
 
     The answer is a function: given how many bytes have been written so far,
     it does nothing while there is room and raises :class:`OutOfRoom` -- with
     a sentence saying how much was allowed and of what -- the moment there is
-    not. The source is measured once, when the budget is made.
+    not. The source is measured once, when the budget is made. ``at_least``
+    is the floor below which the share never bites, :data:`A_BAKE_MAY_ALWAYS_WRITE`
+    unless said otherwise; a test hands in ``0`` to see the refusal on a small run.
     """
     source_bytes = _bytes_under(Path(source))
-    allowed = int(max(0.0, float(share)) * source_bytes)
+    floor = A_BAKE_MAY_ALWAYS_WRITE if at_least is None else max(0, int(at_least))
+    allowed = max(floor, int(max(0.0, float(share)) * source_bytes))
 
     def ask(written: int) -> None:
         if written > allowed:
             raise OutOfRoom(
                 f"the {kind} of {source} would hold more than {written:,} bytes, past "
                 f"{share:.0%} of the {source_bytes:,} bytes the run itself holds "
-                f"({allowed:,} bytes allowed). It is not kept; the picture is built "
-                "piece by piece when asked for instead."
+                f"({allowed:,} bytes allowed, never fewer than {floor:,}). It is not "
+                "kept; the picture is built piece by piece when asked for instead."
             )
 
     return ask
