@@ -816,3 +816,52 @@ def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
         "own content, so refusing to cache it makes every reload pay for the "
         "whole viewer again"
     )
+
+
+def test_a_measurement_is_provisional_until_the_writer_says_the_acquisition_is_over(tmp_path):
+    """The word comes from the acquisition's liveness, not from the store's shape.
+
+    A single position is written whole in one go, so judged by its own
+    whole-field copy it looked "settled" while the scan was still landing
+    fields around it. Judged by the acquisition it is provisional until the
+    writer announces the acquisition finished -- and settled from then on.
+    """
+    import numpy as np
+    import zarr
+
+    store = tmp_path / "data" / "overview_P000000.ome.zarr"
+    group = zarr.open_group(str(store), mode="w", zarr_format=2)
+    array = group.create_array("0", shape=(1, 32, 32), chunks=(1, 32, 32), dtype="uint16")
+    array[:] = (np.arange(32 * 32, dtype="uint16").reshape(1, 32, 32) % 900) + 100
+    (store / ".zattrs").write_text(
+        json.dumps({"multiscales": [{"axes": [{"name": n} for n in "zyx"],
+                                     "datasets": [{"path": "0"}]}]}),
+        encoding="utf-8",
+    )
+    port, stop = _serve_one_store(tmp_path, "overview_P000000.ome.zarr", live=True)
+    try:
+        assert _measure(port, "/data/0/overview_P000000.ome.zarr/|zarr2:")["measurementState"] == "provisional"
+        _, _, body = request(port, "/api/config")
+        assert json.loads(body)["layers"][0]["measurementState"] == "provisional"
+
+        # The writer names the acquisition the way the panel groups it.
+        group = json.loads(body)["layers"][0]["group"]
+        told = json.dumps({"finished": group}).encode()
+        status, _, _ = request(
+            port, "/api/announce", method="POST", body=told,
+            extra={"Content-Type": "application/json"},
+        )
+        assert status == 200
+
+        assert _measure(port, "/data/0/overview_P000000.ome.zarr/|zarr2:")["measurementState"] == "settled"
+        _, _, body = request(port, "/api/config")
+        assert json.loads(body)["layers"][0]["measurementState"] == "settled"
+    finally:
+        stop()
+
+    # A server over finished data has nothing that can still grow.
+    port, stop = _serve_one_store(tmp_path, "overview_P000000.ome.zarr", live=False)
+    try:
+        assert _measure(port, "/data/0/overview_P000000.ome.zarr/|zarr2:")["measurementState"] == "settled"
+    finally:
+        stop()

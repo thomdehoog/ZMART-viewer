@@ -351,6 +351,15 @@ def channels(store: Path) -> list[dict]:
     described = attrs.get("omero", {}).get("channels")
     described = described if isinstance(described, list) else []
 
+    if not described:
+        # No ``omero`` block does not mean no channels. A run that has not
+        # decided its display window yet writes none, because a strict reader
+        # refuses a channel entry without a complete window -- but it still
+        # knows what its channels are called and which colour each is meant to
+        # be, and it says so under ``zmart``. Read that, so an unresolved
+        # three-colour acquisition shows three named rows rather than one.
+        described = _channels_the_acquisition_named(attrs)
+
     count = _channel_count(store, names, len(described))
 
     if count is None:
@@ -358,6 +367,44 @@ def channels(store: Path) -> list[dict]:
         return [{"name": _short_name(store.name), "color": None}]
 
     return described_channels(described, count)
+
+
+def _channels_the_acquisition_named(attrs: dict) -> list[dict]:
+    """The acquisition's own channel list, kept under ``zmart`` when no ``omero`` block can be written.
+
+    The entries come from ``zmart-acquisition.json`` by way of the store's
+    ``zmart`` attributes: a label, a colour, and the numeric range the camera
+    can produce. They are handed back in the shape an ``omero`` entry has, so
+    the rest of this module reads them the same way -- with one deliberate
+    difference. No ``start`` or ``end`` is ever filled in here, because none was
+    decided; the Viewer measures a window from the pixels instead and says so.
+    """
+    ours = attrs.get("zmart")
+    listed = ours.get("channels") if isinstance(ours, dict) else None
+
+    if not isinstance(listed, list) or not listed:
+        return []
+
+    out = []
+
+    for entry in listed:
+        if not isinstance(entry, dict):
+            return []
+
+        shown: dict = {"label": entry.get("label")}
+        colour = entry.get("color")
+
+        if isinstance(colour, str):
+            shown["color"] = colour
+
+        declared_range = entry.get("range")
+
+        if isinstance(declared_range, dict):
+            shown["window"] = {"min": declared_range.get("min"), "max": declared_range.get("max")}
+
+        out.append(shown)
+
+    return out
 
 
 def described_channels(described: list[dict], count: int) -> list[dict]:

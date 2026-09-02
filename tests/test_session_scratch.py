@@ -259,3 +259,71 @@ def test_reclaimed_bytes_count_what_actually_went(tmp_path, monkeypatch):
     assert done["removed"] == []
     assert done["stuck"] == ["session-stuck"]
     assert done["reclaimed_bytes"] == 0
+
+
+# -- the limits ---------------------------------------------------------------
+
+
+def test_the_root_limit_refuses_what_would_pass_it(tmp_path):
+    """Everything under the root counts together, and one byte over is over."""
+    session = ScratchSession(tmp_path, root_limit_bytes=1000)
+    _fill(session.open("scenes"), 300)
+    held = session.managed_bytes()["total"]  # 300 plus the owner note
+
+    assert session.room_for("replays", wanted_bytes=1000 - held) is None
+    refused = session.room_for("replays", wanted_bytes=1000 - held + 1)
+    assert refused is not None
+    assert "past the limit of 1,000 bytes" in refused
+    session.close()
+
+
+def test_a_scene_may_not_cost_more_than_its_share_of_the_source(tmp_path):
+    session = ScratchSession(tmp_path, share_of_source=0.10)
+    assert session.room_for("scenes", wanted_bytes=100, source_bytes=1000) is None
+    refused = session.room_for("scenes", wanted_bytes=101, source_bytes=1000)
+    assert refused is not None and "10%" in refused
+    # A replay is a copy by nature, so the share rule does not apply to it.
+    assert session.room_for("replays", wanted_bytes=5000, source_bytes=1000) is None
+
+
+def test_a_retired_folder_is_counted_and_swept_again(tmp_path):
+    """What a Windows sweep renamed and could not remove is neither hidden nor forgotten."""
+    retired = tmp_path / "scenes" / "retired-dead"
+    retired.mkdir(parents=True)
+    _fill(retired, 77)
+
+    told = ScratchSession(tmp_path).managed_bytes()
+    assert told["kinds"]["scenes"]["retired"] == {"retired-dead": 77}
+    assert told["total"] == 77
+
+    done = ScratchSession(tmp_path).sweep_orphans("scenes")
+    assert done["removed"] == ["retired-dead"]
+    assert done["reclaimed_bytes"] == 77
+    assert not retired.exists()
+
+
+def test_a_replay_is_refused_before_a_byte_is_written_when_there_is_no_room(tmp_path):
+    import http.client
+
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    (dataset / "big").write_bytes(b"z" * 4096)
+    root = tmp_path / "root"
+    server, thread = _serve(tmp_path, root)
+    try:
+        server.RequestHandlerClass.keywords["scratch"]["sessions"].root_limit_bytes = 1024
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
+        conn.request(
+            "POST", "/api/stores/replay", body=json.dumps({"path": str(dataset)}),
+            headers={"Content-Type": "application/json"},
+        )
+        answer = conn.getresponse()
+        told = json.loads(answer.read())
+        conn.close()
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert answer.status == 507
+    assert "refused" in told["error"] and "past the limit of 1,024 bytes" in told["error"]
+    assert not (root / "replays").exists() or not any((root / "replays").iterdir())
