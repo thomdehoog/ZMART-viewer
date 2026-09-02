@@ -30,11 +30,10 @@ from zmart_viewer.record.gateway import answer_from_a_live_run
 # for, rather than pointed at.
 from . import live, loading, pieces
 from .acquisition import CAPABILITIES
-from .scratch import KINDS as SCRATCH_KINDS, ScratchSession
+from .scratch import KINDS as SCRATCH_KINDS, ScratchSession, _bytes_under
 from .contrast import (
     Measurements,
     _readability_problem,
-    coarsest_level_is_written,
     measure_here,
 )
 from .library import (
@@ -132,6 +131,28 @@ def _validate_annotations(payload: object) -> dict:
 # -- what the panel calls each open acquisition ---------------------------------
 
 
+def bare_group_name(label: str) -> str:
+    """An acquisition's own name, with the Viewer's decorations taken off.
+
+    The panel decorates a group label when names collide -- a session prefix
+    (``session-abc · overview.zmartview.zarr``), a copy number (``… (2)``) --
+    and a store suffix follows the name. None of that is what the writer
+    calls the acquisition, and the writer is who says when one is finished,
+    so both sides compare the bare name.
+    """
+    bare = str(label).rsplit(" · ", 1)[-1]
+    bare = re.sub(r" \(\d+\)$", "", bare)
+    for suffix in (".zmartview.zarr", ".ome.zarr", ".zarr"):
+        bare = bare.removesuffix(suffix)
+    return bare
+
+
+def _group_number_of(rel: str) -> int | None:
+    """The dataset number at the front of a ``/data/<number>/…`` address, if any."""
+    first = rel.split("/", 1)[0]
+    return int(first) if first.isdigit() else None
+
+
 def group_labels(datasets) -> dict[int, str]:
     """What to call each open dataset in the panel."""
     shared: dict[str, int] = {}
@@ -187,6 +208,7 @@ class _Handler(SimpleHTTPRequestHandler):
         live_state=None,
         forget_measurements=None,
         open_from=None,
+        liveness=None,
         **kwargs,
     ):
         self._data_dir = data_dir  # where drawn targets are saved
@@ -214,6 +236,10 @@ class _Handler(SimpleHTTPRequestHandler):
         # answer, so a store written after the viewer opened can still appear.
         self._config = config
         self._forget_measurements = forget_measurements or (lambda closed: None)
+        # Which acquisitions the writer has said are finished, by the bare
+        # name of their group. Shared by every request, because the writer
+        # says it once and every measurement afterwards has to know.
+        self._liveness = liveness if liveness is not None else {"finished": set()}
         super().__init__(*args, directory=str(site_dir), **kwargs)
 
     def handle_one_request(self) -> None:
@@ -627,6 +653,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 "root": str(ScratchSession().root), "kinds": {}, "total": 0,
             }
             told["swept_at_start"] = self._scratch.get("swept", {})
+            told["refused_bakes"] = dict(live.REFUSED_BAKES)
             self._send_json(told)
             return
 
@@ -746,22 +773,51 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         low, high = found["window"]
-        # Whether this is the run's last word or a reading from what has
-        # landed so far: the panel says "measured from pixels acquired so far"
-        # while a live run is still being written, and stops saying it once
-        # the whole picture has been read.
-        settled = coarsest_level_is_written(store)
         self._send_json(
             {
                 "window": {"low": low, "high": high},
                 "histogram": found["histogram"],
-                "measurementState": "settled" if settled else "provisional",
+                "measurementState": self._how_final_a_measurement_of(rel),
             }
         )
+
+    def _how_final_a_measurement_of(self, rel: str) -> str:
+        """``settled`` once the acquisition can no longer change, ``provisional`` until then.
+
+        This used to be decided by whether the store's smallest, whole-field
+        copy had been written, and that answered the wrong question. A single
+        position is written whole in one go, so its first field looked
+        "settled" while the scan was still landing fields around it; and a
+        picture composed over positions holds no copy of its own, so it looked
+        "provisional" for ever, long after the scan had ended. What the word
+        is meant to tell an operator is whether the picture may still grow --
+        which is a fact about the acquisition, not about this storage form.
+        So it is taken from the acquisition: a server over finished data says
+        settled for everything, and a server over a live run says settled only
+        for the acquisitions the writer has told it are finished.
+        """
+        return "settled" if self._is_finished(_group_number_of(rel)) else "provisional"
+
+    def _is_finished(self, root_number: int | None) -> bool:
+        if not self._live:
+            return True
+        if root_number is None or self._library is None:
+            return False
+        named = group_labels(self._library.datasets()).get(root_number)
+        return named is not None and bare_group_name(named) in self._liveness.get("finished", ())
 
     def _serve_announcement(self, payload: object) -> None:
         """Accept the legacy optional hint used by generic live folders."""
         in_place = bool(isinstance(payload, dict) and payload.get("wrote_image_in_place"))
+        # The writer may also say that an acquisition is over: nothing more
+        # will be written under that name. From then on a measurement of it is
+        # the last word rather than a reading of what has landed so far.
+        finished = payload.get("finished") if isinstance(payload, dict) else None
+        finished = [finished] if isinstance(finished, str) else finished
+        if isinstance(finished, list):
+            for name in finished:
+                if isinstance(name, str) and name:
+                    self._liveness.setdefault("finished", set()).add(bare_group_name(name))
         covering = None
 
         try:
@@ -1093,6 +1149,21 @@ class _Handler(SimpleHTTPRequestHandler):
         every = asked.get("every")
         every_s = float(every) if isinstance(every, (int, float)) else 0.7
         every_s = max(0.0, every_s)
+        # A replay writes a copy of the whole dataset into the viewer's own
+        # folders, so before a byte of it is written the copy is checked
+        # against what those folders may hold. Refused whole rather than
+        # stopped part-way: a half-replayed run is nothing anybody wants.
+        sessions = self._scratch.get("sessions")
+        no_room = (
+            sessions.room_for("replays", wanted_bytes=_bytes_under(data_path))
+            if sessions is not None else None
+        )
+        if no_room is not None:
+            self._send_json(
+                {"error": f"the replay was refused: {no_room}"},
+                HTTPStatus.INSUFFICIENT_STORAGE,
+            )
+            return
         replays = self._a_session_folder("replays")
         number = 1
 
@@ -1388,6 +1459,10 @@ def make_server(
     )
 
     measurements = Measurements(fixed_window=window)
+    # Which acquisitions the writer has said are finished. See
+    # ``_how_final_a_measurement_of``: the word an operator reads beside a
+    # measured window comes from here, not from the shape of the store.
+    liveness: dict = {"finished": set()}
 
     last_built: dict = {"revision": None, "config": None}
     building_config = threading.Lock()
@@ -1403,6 +1478,7 @@ def make_server(
         revision = (
             library.revision(excluding=live_numbers),
             live_etag,
+            tuple(sorted(liveness["finished"])),
         )
 
         if last_built["revision"] == revision:
@@ -1485,6 +1561,15 @@ def make_server(
                         channel=index,
                         declared_range=declared_range,
                     )
+                    if base.get("measurementState") in ("provisional", "settled"):
+                        # The same rule the measure route uses: a reading is
+                        # final when the acquisition is, not when this store
+                        # happens to hold a whole-field copy.
+                        base["measurementState"] = (
+                            "settled"
+                            if not live or bare_group_name(group) in liveness["finished"]
+                            else "provisional"
+                        )
                     merged[key] = {
                         **base,
                         "sources": [address],
@@ -1609,6 +1694,7 @@ def make_server(
         announcements=registry.announcements,
         live_state=registry.state_document,
         forget_measurements=measurements.forget,
+        liveness=liveness,
     )
 
     try:

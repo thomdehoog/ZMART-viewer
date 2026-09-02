@@ -28,6 +28,8 @@ from zmart_viewer.record.gateway import _LiveRun
 from zmart_viewer.record.model import rounded_up
 from zmart_viewer.record.shardlink import how_the_array_is_stored
 
+from .scratch import SHARE_OF_SOURCE, OutOfRoom, _bytes_under
+
 from .compose import (
     OURS,
     PIECE,
@@ -103,8 +105,14 @@ def declare_a_built_picture(
     bake: bool = False,
     workers: int = 1,
     told=None,
+    budget=None,
 ) -> Path:
-    """Write the description of a picture built from a transfer."""
+    """Write the description of a picture built from a transfer.
+
+    ``budget``, when given, is asked after every piece a bake writes, with the
+    number of bytes written so far; it raises :class:`OutOfRoom` to stop the
+    bake. See :func:`_bake_the_coarse_ground` for what happens then.
+    """
     where, transfer = Path(where), Path(transfer).resolve()
     mosaic = read_the_transfer(transfer)
     composer = Composer(mosaic, piece=piece, workers=workers)
@@ -129,7 +137,9 @@ def declare_a_built_picture(
 
     if bake:
         try:
-            baked = _bake_the_coarse_ground(store, composer, described, told=told)
+            baked = _bake_the_coarse_ground(
+                store, composer, described, told=told, budget=budget
+            )
         finally:
             composer.close()
 
@@ -159,11 +169,25 @@ def declare_a_governed_picture(
     name: str = "live",
     piece: int = PIECE,
     bake: bool = False,
+    share_of_source: float | None = SHARE_OF_SOURCE,
 ) -> Path:
-    """Write the description of a picture built from a manifest-governed run."""
+    """Write the description of a picture built from a manifest-governed run.
+
+    A bake writes the coarse ground of the picture as real files beside the
+    run, and it is allowed at most ``share_of_source`` of the bytes the run
+    itself holds -- a tenth, by default. Past that the bake is refused with
+    :class:`OutOfRoom`, its files are removed, and the caller decides what to
+    open instead. ``None`` means no limit, which is for tests and for anybody
+    who has measured their disk and knows better.
+    """
 
     where, run = Path(where), Path(run).resolve()
     governed = GovernedRun(run, piece=piece)
+    budget = (
+        a_share_of(run, share_of_source, kind="baked coarse ground")
+        if bake and share_of_source is not None
+        else None
+    )
 
     try:
         composer = governed.composer()
@@ -193,7 +217,9 @@ def declare_a_governed_picture(
 
         if bake:
             with _holding_the_bake_lock(store):
-                baked = _bake_the_coarse_ground(store, composer, described, governed_run=run)
+                baked = _bake_the_coarse_ground(
+                    store, composer, described, governed_run=run, budget=budget
+                )
 
         described["attributes"].setdefault(OURS, {}).update({
             "what": (
@@ -217,6 +243,29 @@ def declare_a_governed_picture(
         governed.close()
 
 
+def a_share_of(source: Path, share: float, *, kind: str = "derived picture"):
+    """A budget allowing ``share`` of the bytes under ``source``, for a bake to ask.
+
+    The answer is a function: given how many bytes have been written so far,
+    it does nothing while there is room and raises :class:`OutOfRoom` -- with
+    a sentence saying how much was allowed and of what -- the moment there is
+    not. The source is measured once, when the budget is made.
+    """
+    source_bytes = _bytes_under(Path(source))
+    allowed = int(max(0.0, float(share)) * source_bytes)
+
+    def ask(written: int) -> None:
+        if written > allowed:
+            raise OutOfRoom(
+                f"the {kind} of {source} would hold more than {written:,} bytes, past "
+                f"{share:.0%} of the {source_bytes:,} bytes the run itself holds "
+                f"({allowed:,} bytes allowed). It is not kept; the picture is built "
+                "piece by piece when asked for instead."
+            )
+
+    return ask
+
+
 def _bake_the_coarse_ground(
     store: Path,
     composer: Composer,
@@ -224,11 +273,39 @@ def _bake_the_coarse_ground(
     *,
     governed_run: Path | None = None,
     told=None,
+    budget=None,
 ) -> list[int]:
-    """Build the coarse ground once, into real files, and extend the pyramid."""
+    """Build the coarse ground once, into real files, and extend the pyramid.
+
+    ``budget`` is asked with the bytes written so far -- after every piece on
+    the serial path, after every stripe when workers write -- and may raise
+    :class:`OutOfRoom`. When it does, every piece this bake wrote is removed
+    again before the error goes on up, so a refused bake leaves the store
+    exactly as lazy as it found it.
+    """
+    try:
+        return _bake_within_the_budget(
+            store, composer, described, governed_run=governed_run, told=told, budget=budget
+        )
+    except OutOfRoom:
+        for level in sorted(composer.pinned_levels):
+            shutil.rmtree(store / str(level) / "c", ignore_errors=True)
+        raise
+
+
+def _bake_within_the_budget(
+    store: Path,
+    composer: Composer,
+    described: dict,
+    *,
+    governed_run: Path | None = None,
+    told=None,
+    budget=None,
+) -> list[int]:
     coarsest = composer.mosaic.levels - 1
     pinned = sorted(composer.pinned_levels)
     datasets = described["attributes"]["ome"]["multiscales"][0]["datasets"]
+    written = 0
 
     built_by_workers = False
 
@@ -258,6 +335,11 @@ def _bake_the_coarse_ground(
                 # bake, exactly as the serial loop's first failure would.
                 for stripe in stripes:
                     stripe.result()
+
+                    if budget is not None:
+                        # Workers write straight to disk, so what they wrote
+                        # is measured there rather than counted here.
+                        budget(_bytes_under(store))
             finally:
                 working.shutdown(wait=True, cancel_futures=True)
 
@@ -314,6 +396,10 @@ def _bake_the_coarse_ground(
 
                                 inside.mkdir(parents=True, exist_ok=True)
                                 (inside / str(column)).write_bytes(body)
+                                written += len(body)
+
+                                if budget is not None:
+                                    budget(written)
 
     whole = np.asarray(zarr.open_array(str(store / str(coarsest)), mode="r"))
     room = whole.shape[:-3]

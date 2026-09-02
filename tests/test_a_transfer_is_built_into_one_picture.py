@@ -1295,3 +1295,35 @@ def test_a_built_picture_is_measured_where_the_operator_is_looking(
         "Tile0 was never read: this is a thumbnail's answer, not the "
         "picture's"
     )
+
+
+def test_a_bake_past_its_share_of_the_run_is_refused_and_leaves_the_scene_lazy(
+    a_transfer: Path, tmp_path: Path
+):
+    """A baked coarse ground may cost a tenth of the run; past that it is not kept.
+
+    The budget is made tiny here so the refusal can be seen without writing
+    gigabytes: nothing at all is allowed, so the first piece is one too many.
+    What matters is what is left behind -- a scene exactly as lazy as an
+    unbaked one, with no half-written pieces under it.
+    """
+    from zmart_viewer.building import a_share_of
+    from zmart_viewer.scratch import OutOfRoom
+
+    with pytest.raises(OutOfRoom, match="past 0% of the"):
+        declare_a_built_picture(
+            tmp_path / "views", a_transfer, name="overview", piece=64,
+            bake=True, budget=a_share_of(a_transfer, 0.0),
+        )
+
+    scene = tmp_path / "views" / the_scene_folder_name("overview")
+    assert scene.is_dir(), "the lazy description itself is still wanted"
+    assert not list(scene.glob("*/c")), "no baked piece may be left behind"
+
+    # And with room, the same bake goes through and says which levels it kept.
+    built = declare_a_built_picture(
+        tmp_path / "views", a_transfer, name="overview", piece=64,
+        bake=True, budget=a_share_of(a_transfer, 10.0),
+    )
+    described = json.loads((built / "zarr.json").read_text())
+    assert described["attributes"]["zmart"]["baked"], "a bake with room keeps its ground"

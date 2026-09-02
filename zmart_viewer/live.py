@@ -26,6 +26,7 @@ from zmart_viewer.record.live_state import LiveStateSnapshot, LiveStateTracker
 from zmart_viewer.record.model import ZmartLiveError
 
 from .building import declare_a_governed_picture, the_scene_folder_name
+from .scratch import OutOfRoom
 from .contrast import intensity_histogram
 from .library import described_channels, zarr_scheme
 from .pieces import catch_up_governed_runs
@@ -255,6 +256,11 @@ LIVE_PICTURE = "views/live/" + (
 _DECLARE_RETRY_S = 2.0
 
 
+#: Every bake this process refused for want of room, by run folder, with the
+#: sentence that says why. Reported on ``/api/scratch``.
+REFUSED_BAKES: dict[str, str] = {}
+
+
 def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
     """The governed picture this run is served by, declared if needed."""
     store = run_root / LIVE_PICTURE
@@ -264,9 +270,22 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
         return store
 
     began = time.perf_counter()
-    made = declare_a_governed_picture(
-        run_root / "views" / "live", run_root, name="picture", bake=bake
-    )
+    try:
+        made = declare_a_governed_picture(
+            run_root / "views" / "live", run_root, name="picture", bake=bake
+        )
+    except OutOfRoom as why:
+        # The baked ground would cost more than its share of the run. The run
+        # still opens -- built piece by piece as it is asked for, the way an
+        # unbaked picture always is -- and the refusal is kept where the
+        # server can show it, because a bake that quietly did not happen
+        # looks exactly like one that did.
+        REFUSED_BAKES[run_root.as_posix()] = str(why)
+        log.warning("the bake of %s was refused: %s", run_root, why)
+        bake = False
+        made = declare_a_governed_picture(
+            run_root / "views" / "live", run_root, name="picture", bake=False
+        )
     log.info(
         "declared the %s%s live picture %s in %.1f s",
         "grown, " if grown else "",

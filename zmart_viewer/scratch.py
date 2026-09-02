@@ -43,6 +43,33 @@ KINDS = ("scenes", "replays")
 LOCK_FILE = ".owner.lock"
 OWNER_FILE = "owner.json"
 
+#: How much every session folder under one root may hold together, in bytes.
+#: Five gibibytes, which is the provisional operational default the design
+#: settled on: large enough for a day of replays and composed scenes, small
+#: enough that a forgotten Viewer cannot quietly fill a microscope PC's disk.
+ROOT_LIMIT_BYTES = 5 * 1024 ** 3
+
+#: How much a derived picture may hold, as a share of the bytes it was made
+#: from. A composed scene or a baked coarse ground is a convenience, and a
+#: convenience that costs more than a tenth of the acquisition it describes
+#: is not one. Replays are a copy of a dataset by nature, so this share does
+#: not apply to them; the root limit above does.
+SHARE_OF_SOURCE = 0.10
+
+#: The two prefixes a folder under a kind may carry. ``session-`` is a folder
+#: some Viewer made for itself; ``retired-`` is one a sweep on Windows renamed
+#: out of the way before removing it, and could not remove.
+SESSION_PREFIX = "session-"
+RETIRED_PREFIX = "retired-"
+
+
+class OutOfRoom(RuntimeError):
+    """Raised when writing would take the Viewer's scratch past one of its limits.
+
+    The message is a whole sentence for the operator: which limit, what was
+    asked for, and what is already held.
+    """
+
 
 def _take_the_lock(handle) -> bool:
     """Try to lock ``handle`` exclusively without waiting; True if it is ours now."""
@@ -106,6 +133,9 @@ class ScratchSession:
     """
 
     root: Path = field(default_factory=lambda: DEFAULT_ROOT)
+    #: The two limits, as plain numbers so a test can make them tiny.
+    root_limit_bytes: int = ROOT_LIMIT_BYTES
+    share_of_source: float = SHARE_OF_SOURCE
     _held: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
@@ -162,15 +192,48 @@ class ScratchSession:
     def is_mine(self, folder: Path) -> bool:
         return any(Path(folder) == held[0] for held in self._held.values())
 
-    def _is_a_session_folder_under_root(self, candidate: Path, kind: str) -> bool:
+    def _is_a_session_folder_under_root(
+        self, candidate: Path, kind: str, *, prefix: str = SESSION_PREFIX
+    ) -> bool:
         """Only a real directory, directly beneath this root's kind folder, not a link."""
         try:
             if candidate.is_symlink() or not candidate.is_dir():
                 return False
             home = (self.root / kind).resolve()
-            return candidate.resolve().parent == home and candidate.name.startswith("session-")
+            return candidate.resolve().parent == home and candidate.name.startswith(prefix)
         except OSError:
             return False
+
+    def room_for(self, kind: str, *, wanted_bytes: int, source_bytes: int | None = None) -> str | None:
+        """Whether ``wanted_bytes`` more may be written under ``kind``.
+
+        Answers nothing when there is room, and otherwise one plain sentence
+        saying which limit would be passed. Two limits are checked. The root
+        limit is what every session folder under this root holds together,
+        replays and scenes alike, plus what is asked for now. The share limit
+        applies when ``source_bytes`` is given -- the size of the acquisition a
+        derived picture is being made from -- and refuses a derivative larger
+        than :data:`SHARE_OF_SOURCE` of it. Nothing is written by asking.
+        """
+        wanted = max(0, int(wanted_bytes))
+        if source_bytes is not None and kind == "scenes":
+            allowed = int(self.share_of_source * max(0, int(source_bytes)))
+            if wanted > allowed:
+                return (
+                    f"the {kind} folder would hold {wanted:,} bytes, more than "
+                    f"{self.share_of_source:.0%} of the {int(source_bytes):,} bytes of the "
+                    "acquisition it is made from. A derived picture that costs more than "
+                    "that is not worth keeping automatically; open the run without it."
+                )
+        held = self.managed_bytes()["total"]
+        if held + wanted > self.root_limit_bytes:
+            return (
+                f"the viewer's own folders under {self.root} hold {held:,} bytes and "
+                f"{wanted:,} more were asked for, which is past the limit of "
+                f"{self.root_limit_bytes:,} bytes. Close a Viewer or remove old replays "
+                "and scenes there, then try again."
+            )
+        return None
 
     def sweep_orphans(self, kind: str) -> dict:
         """Remove every session folder of ``kind`` that no running Viewer owns.
@@ -214,7 +277,9 @@ class ScratchSession:
                 # folder is first renamed to something no sweep will ever look
                 # at, and removed after the lock is closed.
                 if sys.platform == "win32":
-                    retired = candidate.with_name(f"retired-{candidate.name[len('session-'):]}")
+                    retired = candidate.with_name(
+                        f"{RETIRED_PREFIX}{candidate.name[len(SESSION_PREFIX):]}"
+                    )
                     try:
                         candidate.rename(retired)
                     except OSError:
@@ -230,6 +295,15 @@ class ScratchSession:
                 if handle is not None:
                     _let_go_of_the_lock(handle)
                     handle.close()
+        # And the folders an earlier sweep on Windows renamed but could not
+        # remove. Nobody holds a lock on a retired folder -- the sweep that
+        # renamed it had already let go -- so removal is simply tried again,
+        # and a folder that still will not go is reported as stuck rather
+        # than forgotten. Before this they were invisible to every sweep and
+        # to the tally alike, which is exactly how scratch grows unnoticed.
+        for candidate in sorted(home.iterdir()):
+            if self._is_a_session_folder_under_root(candidate, kind, prefix=RETIRED_PREFIX):
+                self._remove(candidate, done)
         return done
 
     @staticmethod
@@ -247,15 +321,26 @@ class ScratchSession:
 
     def managed_bytes(self) -> dict:
         """How much every session folder under this root holds, by kind and by folder."""
-        told = {"root": str(self.root), "kinds": {}, "total": 0}
+        told = {
+            "root": str(self.root), "kinds": {}, "total": 0,
+            "limits": {"root_bytes": self.root_limit_bytes, "share_of_source": self.share_of_source},
+        }
         for kind in KINDS:
             home = self.root / kind
             sessions = {}
+            retired = {}
             if home.is_dir():
                 for candidate in sorted(home.iterdir()):
-                    if not self._is_a_session_folder_under_root(candidate, kind):
-                        continue
-                    sessions[candidate.name] = _bytes_under(candidate)
-            told["kinds"][kind] = {"sessions": sessions, "bytes": sum(sessions.values())}
+                    if self._is_a_session_folder_under_root(candidate, kind):
+                        sessions[candidate.name] = _bytes_under(candidate)
+                    elif self._is_a_session_folder_under_root(candidate, kind, prefix=RETIRED_PREFIX):
+                        # Renamed by a sweep that could not finish removing it.
+                        # Still on the disk, so still counted.
+                        retired[candidate.name] = _bytes_under(candidate)
+            told["kinds"][kind] = {
+                "sessions": sessions,
+                "retired": retired,
+                "bytes": sum(sessions.values()) + sum(retired.values()),
+            }
             told["total"] += told["kinds"][kind]["bytes"]
         return told
