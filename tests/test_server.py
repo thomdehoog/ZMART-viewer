@@ -195,9 +195,11 @@ def test_measuring_a_valid_but_empty_live_store_says_it_is_waiting(tmp_path):
 def test_a_successful_measurement_says_whether_it_is_provisional(tmp_path):
     """The panel shows "measured from pixels acquired so far" only when told to.
 
-    A store whose coarsest copy is written is settled; one still arriving is
-    provisional. The route says which, on success, so the embedded panel can
-    use the same words as the standalone one.
+    A measurement over a live run is provisional -- the acquisition may still
+    grow, however complete this one store looks -- and one over finished data
+    is settled. The route says which, on success, so the embedded panel can use
+    the same words as the standalone one. How a live server learns that an
+    acquisition is over is the test after this one.
     """
     import numpy as np
     import zarr
@@ -217,8 +219,16 @@ def test_a_successful_measurement_says_whether_it_is_provisional(tmp_path):
     finally:
         stop()
     assert "window" in answered and answered["histogram"] is not None
-    assert answered["measurementState"] in {"settled", "provisional"}
-    # One level, fully written: the whole picture has been read.
+    # Fully written, but served as part of a live run nobody has said is
+    # over: still provisional. Judging by the store's own completeness was
+    # what called a first position settled while the scan grew around it.
+    assert answered["measurementState"] == "provisional"
+
+    port, stop = _serve_one_store(tmp_path, "landed.zarr", live=False)
+    try:
+        answered = _measure(port, "/data/0/landed.zarr/|zarr2:")
+    finally:
+        stop()
     assert answered["measurementState"] == "settled"
 
 
