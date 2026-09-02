@@ -1313,7 +1313,7 @@ def test_a_bake_past_its_share_of_the_run_is_refused_and_leaves_the_scene_lazy(
     with pytest.raises(OutOfRoom, match="past 0% of the"):
         declare_a_built_picture(
             tmp_path / "views", a_transfer, name="overview", piece=64,
-            bake=True, budget=a_share_of(a_transfer, 0.0),
+            bake=True, budget=a_share_of(a_transfer, 0.0, at_least=0),
         )
 
     scene = tmp_path / "views" / the_scene_folder_name("overview")
