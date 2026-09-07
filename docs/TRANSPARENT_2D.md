@@ -28,6 +28,8 @@ acquisition files. Gzip keeps mostly uniform coverage chunks small. Black
 coverage layers sit beneath the ordinary image channels; their identities,
 revisions, local channel positions and visibility follow the image sources.
 Layer count follows channel rows, not the number of mosaic positions.
+Only levels backed by compositor tile copies are advertised for coverage;
+Neuroglancer samples those levels when a baked image has extra overview levels.
 
 An ordinary position store is dense within its declared array bounds, even if
 its writer omitted zero-valued chunks. Its writer must expose only acquired
@@ -35,6 +37,14 @@ extents/timepoints. Use governed composed views for publication-gated sparse
 acquisitions. A refused compositor must never fall back to dense coverage.
 Legacy pointer-only linked mosaics are not supported by this opt-in feature.
 It does not infer arbitrary third-party sparse geometry from pixel values.
+
+A fixed (`live=False`) single dense source uses constant shader alpha, without a coverage layer.
+Watched rows retain coverage so adding sources cannot change their alpha strategy.
+Multi-source rows retain underpainting: their existing covering blend avoids
+overlap seams, and making every channel opaque would erase lower-channel colour.
+Transparency styling affects only the embedding surfaces, not the engine's
+theme colours. The image has no CSS opacity fade, which would expose the host
+through acquired pixels during arrival.
 
 ## Checks
 

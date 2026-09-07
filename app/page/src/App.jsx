@@ -2020,7 +2020,6 @@ export default function App() {
     <div
       style={{
         ...styles.shell,
-        ...(transparentBackground ? { background: "transparent" } : {}),
         // Putting the bar on the left is done by reversing the row rather than by
         // moving anything: the image and the bar keep the same order in the page,
         // so the fold strip stays between them and still folds towards the edge the
@@ -2029,8 +2028,7 @@ export default function App() {
       }}
     >
       <main style={styles.stage}>
-        <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed}
-          transparentBackground={transparentBackground} />
+        <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed} />
         <div style={styles.topBar}>
           <ModeToggle mode={mode} onChange={setMode} />
           <BringItBack viewer={viewer} />

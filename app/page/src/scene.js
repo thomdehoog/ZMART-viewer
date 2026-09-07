@@ -82,7 +82,7 @@ export function hexColour(rgb) {
 // splits a multichannel volume into one layer per channel too, and why the
 // channels are added by the engine between layers rather than by a program
 // within one.
-export function shaderFor(volumetric, lut = null) {
+export function shaderFor(volumetric, lut = null, opaque = false) {
   const stops = lut ? LOOKUP_TABLES[lut] : null;
   const declared = [
     "#uicontrol invlerp normalized",
@@ -116,6 +116,10 @@ export function shaderFor(volumetric, lut = null) {
       "  emitIntensity(v * weight * faded);",
       "  emitRGBA(vec4(shown * faded, v * weight * faded));",
       "}");
+  } else if (opaque) {
+    // Dense position stores are acquired throughout their declared extent,
+    // including exact-zero pixels. No coverage texture is needed.
+    lines.push("  emitRGBA(vec4(shown, 1.0));", "}");
   } else {
     // Brightness rides in the colour and coverage rides in the transparency,
     // and they answer two different questions: how bright is this spot, and
@@ -265,7 +269,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       layer.notSelectedAlpha = opacity;
       return layer;
     }
-    layer.shader = shaderFor(volumetric, lut);
+    layer.shader = shaderFor(volumetric, lut, config.transparentBackground && spec.opaque);
     // A row that got here is a channel a microscope wrote as its own file, so
     // the engine has to add it to its neighbours from outside -- there is no
     // one program holding both. Adding is safe only while the row is fed by a

@@ -25,6 +25,15 @@ def source_url(source: str) -> str:
     return source.split("|", 1)[0].rstrip("/") + f"/{MARKER}/|zarr3:"
 
 
+def requires_geometry(store: Path) -> bool:
+    """A linked or governed view must never inherit dense-position opacity."""
+    return (
+        pieces.the_map_inside(store) is not None
+        or live_run_holding(store) is not None
+        or pieces._composer_for(store) is not None
+    )
+
+
 def answer(store: Path, inside: str) -> bytes | None:
     """Serve a Zarr 3 coverage group using the source's own axes and transforms."""
     held = pieces._composer_for(store)
@@ -39,6 +48,11 @@ def answer(store: Path, inside: str) -> bytes | None:
         return None
     scale = multiscales[0]
     datasets = scale.get("datasets", [])
+    if composer:
+        # Baking may add coarser image levels without adding tile copies to the
+        # compositor. Let NG sample the supported coverage levels at those zooms.
+        datasets = datasets[: composer.mosaic.levels]
+    multiscales = [{**scale, "datasets": datasets}]
     if inside == "zarr.json":
         return json.dumps(
             {
