@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import math
 import os
 import queue
@@ -28,7 +29,7 @@ from zmart_viewer.record.gateway import answer_from_a_live_run
 
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
-from . import live, loading, pieces
+from . import coverage, live, loading, pieces
 from .contrast import (
     Measurements,
     measure_here,
@@ -168,6 +169,7 @@ class _Handler(SimpleHTTPRequestHandler):
         replay_job=None,
         scratch=None,
         allow_open: bool = True,
+        transparent_background: bool = False,
         live: bool = True,
         announcements=None,
         live_state=None,
@@ -180,6 +182,7 @@ class _Handler(SimpleHTTPRequestHandler):
         self._library = library  # which folders may be read from, and what is in them
         self._browse = browse  # opens a native folder chooser, when one is available
         self._allow_open = allow_open  # may the operator change what is open?
+        self._transparent_background = transparent_background
         # One prebake at a time, shared by every request this server answers.
         # See _serve_bake for the shape of what it holds.
         self._bake_job = bake_job if bake_job is not None else {}
@@ -297,6 +300,24 @@ class _Handler(SimpleHTTPRequestHandler):
     def _serve_from_data(self) -> None:
         """Serve one file from an open OME-Zarr store under ``/data``."""
         rel = self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0]
+        marker = f"/{coverage.MARKER}/"
+        if marker in rel:
+            store_rel, inside = rel.split(marker, 1)
+            store = self._library.resolve(store_rel)
+            if store is None or not self._transparent_background:
+                self._send_empty(HTTPStatus.FORBIDDEN)
+                return
+            try:
+                body = coverage.answer(store, inside)
+            except Exception:
+                logging.getLogger(__name__).exception("coverage unavailable for %s", store)
+                self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            if body is None:
+                self._send_empty(HTTPStatus.NOT_FOUND)
+            else:
+                self._send_bytes(body)
+            return
         target = self._library.resolve(rel)
 
         if target is None:
@@ -1309,6 +1330,7 @@ def make_server(
     allow_open: bool = True,
     allow_selection: bool = False,
     panel_side: str = "right",
+    transparent_background: bool = False,
     open_from: Path | None = None,
 ) -> ThreadingHTTPServer:
     """Create (but do not start) the viewer's web server.
@@ -1386,6 +1408,7 @@ def make_server(
         labels = layer_names(present)
         groups_named = group_labels(library.datasets())
         merged: dict[tuple, dict] = {}
+        store_paths: dict[str, Path] = {}
 
         for (root_number, root, name), label in zip(entries, labels, strict=True):
             if root_number in live_numbers:
@@ -1394,6 +1417,7 @@ def make_server(
             group = groups_named[root_number]
             store_path = root / name
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
+            store_paths[address] = store_path
 
             if "c" in axis_names(store_path):
                 found = [
@@ -1492,11 +1516,23 @@ def make_server(
         # Group order follows first appearance, which follows the sorted store
         # names, so the panel does not reshuffle itself between runs.
         groups = list(dict.fromkeys(row["group"] for row in rows))
+        if transparent_background:
+            for row in rows:
+                if row.get("kind", "image") != "image":
+                    continue
+                # Only fixed, single-source dense rows can omit coverage. Live
+                # rows must keep the same strategy as sources arrive; covering
+                # multi-source rows must not erase lower-channel colour.
+                store = store_paths.get(row["sources"][0]) if len(row["sources"]) == 1 else None
+                row["opaque"] = bool(not live and store and not coverage.requires_geometry(store))
+                if not row["opaque"]:
+                    row["coverageSources"] = [coverage.source_url(url) for url in row["sources"]]
         return {
             "layers": rows,
             "groups": groups,
             "depthSamples": depth_samples,
             "chrome": chrome,
+            "transparentBackground": transparent_background,
             "canOpen": allow_open,
             # Whether the selection list is offered. See ``allow_selection``.
             "canSelect": allow_selection,
@@ -1548,6 +1584,7 @@ def make_server(
         replay_job={},
         open_from=Path(open_from).resolve() if open_from else None,
         allow_open=allow_open,
+        transparent_background=transparent_background,
         live=live,
         announcements=registry.announcements,
         live_state=registry.state_document,

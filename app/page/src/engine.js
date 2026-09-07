@@ -649,34 +649,10 @@ function syncSources(
     framesSeen.set(layer, new Map(wanted.map((url, at) => [url, counts[at]])));
   }
   if (grown.length) {
-    // Ask the stores that were already open what they say about themselves now.
-    //
-    // This is what happens when a timelapse gains a frame. The store is already
-    // open and the engine already holds its address, so there is nothing to add --
-    // but the engine also still believes the length it read when it first looked,
-    // and the slider will not reach a frame it does not know about. Handing a data
-    // source its own address back makes the engine let go of what it worked out and
-    // ask again.
-    //
-    // What this costs, measured rather than assumed, because it is more than it
-    // looks. Re-reading the descriptions themselves is genuinely cheap: a few
-    // hundred bytes per store, served with instructions never to keep a copy, so
-    // what comes back is the truth. But the engine files its decoded image under a
-    // key that includes the array's shape, so when the shape has genuinely changed
-    // the pieces on screen are filed under a new key and fetched again. It is
-    // bounded -- the frame being looked at, not the whole timelapse -- and it
-    // happens once per growth, but it is not free, and a viewer left on a fast
-    // timelapse will pay it repeatedly.
-    //
-    // The happier half of the same fact: when a store's description comes back
-    // unchanged -- an acquisition that declared its length up front and is filling
-    // in the frames it already promised -- the key is unchanged too and nothing at
-    // all is re-fetched. That case is pinned by
-    // test_frames_arriving_do_not_disturb_what_is_shown.
-    //
-    // The forgetting has to come first. Without it the engine resolves the store
-    // again but answers itself from what it already remembers, so the re-read never
-    // reaches the disk and the length never moves. See forgetWhatWasReadAbout above.
+    // Re-read changed metadata while keeping acquired pixels drawable. The NG
+    // bounds-refresh patch extends compatible Zarr sources in place; replacing
+    // source.spec would drop both image and coverage before their chunks return.
+    // Forget cached metadata first, or the new extent never reaches the engine.
     //
     // Note that this happens *as well as* adding anything new below, not instead of
     // it. One announcement can mean both -- a position finished and another gained a
@@ -704,7 +680,7 @@ function syncSources(
         forgetWhatWasReadAbout(chunkManager, store);
         if (forgotten) forgotten.add(store);
       }
-      source.spec = { ...source.spec };
+      void source.refreshMetadata();
     }
   }
 
@@ -1604,7 +1580,7 @@ export function watchTheReplay(viewer, layersExpected = 0) {
   return whenTheSourcesHaveSettled(
     viewer,
     () => viewer.layerManager.managedLayers.filter(
-      (managed) => managed.layer?.type === "image",
+      (managed) => managed.layer?.type === "image" && !managed.name.startsWith("__coverage__"),
     ).length >= layersExpected,
     () => {
       startDepthAtTheFirstPlane(viewer);
@@ -1645,7 +1621,12 @@ function carryTheFieldAcross(viewer, from, to) {
   else if (from === "3d" && to === "xy") flat.value = volume.value / height;
 }
 
-export function syncView(viewer, { layout, chrome }) {
+export function syncView(viewer, { layout, chrome, transparentBackground = false }) {
+  const transparent = transparentBackground && layout === "xy";
+  if (viewer.display.transparentBackground !== transparent) {
+    viewer.display.transparentBackground = transparent;
+    viewer.display.scheduleRedraw();
+  }
   const leaving = viewer.layout.toJSON();
   if (leaving !== layout) {
     carryTheFieldAcross(viewer, leaving, layout);

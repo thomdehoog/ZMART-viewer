@@ -258,15 +258,15 @@ export default function NeuroglancerView({ onViewer, generation = 0, veiled = fa
   // means the veil looks like an empty canvas, and the short fade makes the
   // arrival read as the picture appearing rather than snapping.
   return (
-    <div style={{ width: "100%", height: "100%", background: "var(--canvas-bg, #000)" }}>
+    <div style={{ width: "100%", height: "100%", background: "var(--image-surface-bg, var(--canvas-bg, #000))" }}>
       <div
         ref={containerRef}
         style={{
           width: "100%",
           height: "100%",
-          background: "var(--canvas-bg, #000)",
+          background: "var(--image-surface-bg, var(--canvas-bg, #000))",
           opacity: veiled ? 0 : 1,
-          transition: "opacity 120ms linear",
+          transition: "var(--image-arrival-transition, opacity 120ms linear)",
         }}
       />
     </div>

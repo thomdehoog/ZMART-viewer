@@ -17,7 +17,7 @@
         margin: 0;
         height: 100%;
         width: 100%;
-        background: #0b0d10;
+        background: var(--page-bg, #0b0d10);
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       }
       /* neuroglancer's own stylesheet sizes its viewer by assuming it fills the
@@ -27,6 +27,12 @@
       .neuroglancer-viewer {
         position: absolute;
         inset: 0;
+      }
+      html:root[data-transparent-background] {
+        --page-bg: transparent;
+        --image-surface-bg: transparent;
+        /* A CSS opacity fade would make acquired black pixels translucent. */
+        --image-arrival-transition: none;
       }
     </style>
   </head>

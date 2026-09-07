@@ -452,7 +452,7 @@ def test_a_store_that_lengthens_its_own_array_is_read_again(browser, built_dist,
         thread.join(timeout=5)
 
 
-def _write_a_growing_timelapse(store, *, frames: int) -> None:
+def _write_a_growing_timelapse(store, *, frames: int, time_chunk: int = 1) -> None:
     """Write a timelapse that declares exactly the moments it has imaged so far.
 
     Called again with a larger number, it lengthens the array in place — which is
@@ -469,7 +469,7 @@ def _write_a_growing_timelapse(store, *, frames: int) -> None:
         array = group.create_array(
             "0",
             shape=(frames, 1, height, width),
-            chunks=(1, 1, height, width),
+            chunks=(time_chunk, 1, height, width),
             dtype="uint16",
         )
     for frame in range(frames):

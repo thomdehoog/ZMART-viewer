@@ -55,6 +55,7 @@ def open_window(
     allow_open: bool = True,
     allow_selection: bool = False,
     panel_side: str = "right",
+    transparent_background: bool = False,
     open_from: Path | None = None,
 ) -> None:
     """Start the server and open the studio in a native window."""
@@ -80,6 +81,7 @@ def open_window(
         "allow_open": allow_open,
         "allow_selection": allow_selection,
         "panel_side": panel_side,
+        "transparent_background": transparent_background,
         # Where the load window starts browsing, when that is somewhere other
         # than the data folder itself.
         "open_from": open_from,

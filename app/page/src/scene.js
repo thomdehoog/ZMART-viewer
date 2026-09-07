@@ -82,7 +82,7 @@ export function hexColour(rgb) {
 // splits a multichannel volume into one layer per channel too, and why the
 // channels are added by the engine between layers rather than by a program
 // within one.
-export function shaderFor(volumetric, lut = null) {
+export function shaderFor(volumetric, lut = null, opaque = false) {
   const stops = lut ? LOOKUP_TABLES[lut] : null;
   const declared = [
     "#uicontrol invlerp normalized",
@@ -116,6 +116,10 @@ export function shaderFor(volumetric, lut = null) {
       "  emitIntensity(v * weight * faded);",
       "  emitRGBA(vec4(shown * faded, v * weight * faded));",
       "}");
+  } else if (opaque) {
+    // Dense position stores are acquired throughout their declared extent,
+    // including exact-zero pixels. No coverage texture is needed.
+    lines.push("  emitRGBA(vec4(shown, 1.0));", "}");
   } else {
     // Brightness rides in the colour and coverage rides in the transparency,
     // and they answer two different questions: how bright is this spot, and
@@ -217,7 +221,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
   const seen = new Set(ordered.map(({ index }) => index));
   const all = [...ordered, ...rows.filter(({ index }) => !seen.has(index))];
 
-  return all.map(({ spec, index }) => {
+  const layers = all.map(({ spec, index }) => {
     const { visible, color, opacity, lut, window: windowOverride } = layerState[index];
     const group = groupState[spec.group || ""] || { visible: true };
     const displayWindow = windowOverride || restingWindow(spec, volumetric);
@@ -265,7 +269,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       layer.notSelectedAlpha = opacity;
       return layer;
     }
-    layer.shader = shaderFor(volumetric, lut);
+    layer.shader = shaderFor(volumetric, lut, config.transparentBackground && spec.opaque);
     // A row that got here is a channel a microscope wrote as its own file, so
     // the engine has to add it to its neighbours from outside -- there is no
     // one program holding both. Adding is safe only while the row is fed by a
@@ -324,4 +328,23 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     }
     return layer;
   });
+  if (volumetric || !config.transparentBackground) return layers;
+  // Black underpainting supplies acquisition coverage independently of intensity.
+  // All coverage goes below all channels, so it cannot obscure another channel.
+  // One tiled source per image source; the layer count does not grow with positions.
+  const coverage = layers.flatMap((layer, index) => {
+    const sources = all[index].spec.coverageSources;
+    if (layer.type !== "image" || !sources?.length) return [];
+    return [{
+      type: "image", name: `__coverage__${layer.name}`,
+      source: sources.map(source => `${window.location.origin}${source}`),
+      sourceIds: layer.sourceIds?.map(id => `${id}/coverage`),
+      sourceRevisions: layer.sourceRevisions,
+      frameCounts: layer.frameCounts, localPosition: layer.localPosition,
+      visible: layer.visible, opacity: 1, blend: "additive",
+      shader: "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
+        + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }",
+    }];
+  });
+  return [...coverage, ...layers];
 }
