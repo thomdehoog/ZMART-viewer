@@ -1170,6 +1170,11 @@ export default function App() {
   const engine = React.useRef(null);
   const [config, setConfig] = React.useState(null);
   const [mode, setMode] = React.useState("flat");
+  const transparentBackground = config?.transparentBackground === true && mode === "flat";
+  React.useEffect(() => {
+    document.documentElement.toggleAttribute("data-transparent-background", transparentBackground);
+    return () => document.documentElement.removeAttribute("data-transparent-background");
+  }, [transparentBackground]);
   // A projection by default rather than accumulation; see `VolumeMode`.
   const [volumeMode, setVolumeMode] = React.useState("max");
   const [volumeGain, setVolumeGain] = React.useState(0);
@@ -1690,6 +1695,7 @@ export default function App() {
     const perspectiveZoom = viewer.perspectiveNavigationState.zoomFactor.value;
 
     syncView(viewer, {
+      transparentBackground: config.transparentBackground === true,
       layout: mode === "volume" ? VOLUME_LAYOUT : SLICE_LAYOUT,
       // The engine's own furniture -- the yellow data-bounds box and the axis
       // lines -- is off unless asked for. We are supplying the interface.

@@ -1,7 +1,14 @@
 /**
- * The one patch this repository maintains against its pinned Neuroglancer.
+ * Patches against the pinned Neuroglancer: live refresh and opt-in 2D transparency.
  *
- * It says one thing: **a refresh should replace pixels, not remove them.**
+ * The transparency edits preserve binary image coverage only when the host sets
+ * display.transparentBackground. The host must also supply geometry-based
+ * coverage for sparse mosaics; intensity zero cannot distinguish their gaps
+ * from acquired black pixels. See docs/TRANSPARENT_2D.md.
+ * Keep the alpha edits aligned with ZMART-microscopy's
+ * application/patches/neuroglancer+2.41.2.patch (patch-package form).
+ *
+ * The refresh pair says: **a refresh should replace pixels, not remove them.**
  *
  * Neuroglancer refreshes a chunk source by re-queueing its chunks and then
  * telling the page to drop every chunk it holds. Between the drop and the
@@ -20,7 +27,7 @@
  *   object rather than replacing it, so the render layer's reference stays
  *   valid and the ordinary state transition uploads the new texture.
  *
- * Nothing is added: no new RPC, no parallel refresh machinery, no per-chunk
+ * The refresh pair adds no new RPC, no parallel refresh machinery, no per-chunk
  * bookkeeping. Both edits are inside functions Neuroglancer already has, and
  * both are improvements to it rather than accommodations of us — which is the
  * point, because this is meant to be sendable upstream and read in a minute.
@@ -42,6 +49,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { growthPatches } from "./patch_neuroglancer_growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "..", "node_modules", "neuroglancer", "lib");
@@ -65,6 +73,52 @@ const modulesOnly = process.argv.includes("--modules-only");
 const SUPERSEDED = "zmartPumpRefreshesWithoutDeadline";
 
 const PATCHES = [
+  ...growthPatches(lib),
+  // Keep an opaque image opaque under translucent annotations and scale bars.
+  ...[
+    { indent: "      ", drawing: "annotations" },
+    { indent: "        ", drawing: "scale bars" },
+  ].map(({ indent, drawing }) => {
+    const anchor = `${indent}gl.blendFunc(\n${indent}  WebGL2RenderingContext.SRC_ALPHA,\n${indent}  WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA\n${indent});`;
+    const marker = `${indent}// Preserve image alpha under ${drawing}.`;
+    return {
+      file: join(lib, "sliceview", "panel.js"), marker, anchor,
+      replacement: `${anchor}\n${marker}\n${indent}if (this.context.transparentBackground) gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);`,
+    };
+  }),
+  {
+    file: join(lib, "display_context.js"),
+    marker: "if (!this.transparentBackground)",
+    anchor: `    this.gl.clearColor(1, 1, 1, 1);
+    this.gl.colorMask(false, false, false, true);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.gl.colorMask(true, true, true, true);`,
+    replacement: `    if (!this.transparentBackground) {
+      this.gl.clearColor(1, 1, 1, 1);
+      this.gl.colorMask(false, false, false, true);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.gl.colorMask(true, true, true, true);
+    }`,
+  },
+  {
+    file: join(lib, "sliceview", "panel.js"),
+    marker: "if (this.context.transparentBackground) backgroundColor.fill(0)",
+    anchor: `    backgroundColor[3] = 1;`,
+    replacement: `    backgroundColor[3] = 1;
+    if (this.context.transparentBackground) backgroundColor.fill(0);`,
+  },
+  {
+    file: join(lib, "sliceview", "frontend.js"),
+    marker: "sampledColor.a = float(sampledColor.a > 0.0)",
+    anchor: `  sampledColor = uBackgroundColor;
+}
+emit(sampledColor * uColorFactor, 0u);`,
+    replacement: `  sampledColor = uBackgroundColor;
+}
+// The embedding surface uses binary coverage, independently of channel weights.
+if (uBackgroundColor.a == 0.0) sampledColor.a = float(sampledColor.a > 0.0);
+emit(sampledColor * uColorFactor, 0u);`,
+  },
   {
     file: join(lib, "chunk_manager", "backend.js"),
     also: workerBundle,
@@ -152,5 +206,9 @@ for (const patch of PATCHES) {
     writeFileSync(file, held.replace(patch.anchor, patch.replacement));
     console.log(`patched: ${file}`);
   }
+}
+if (!modulesOnly && !readFileSync(workerBundle, "utf8").includes('"zarr/extendBounds"')) {
+  console.error("The precompiled Neuroglancer worker lacks bounds refresh. Run npm ci, then npm run build.");
+  failed = true;
 }
 if (failed) process.exit(1);

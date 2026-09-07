@@ -1080,6 +1080,21 @@ class Composer:
         self.costs["slabs_built"] += 1
         return slab
 
+    def coverage_for(self, level, plane, row, column, moment=0, channel=0):
+        """Binary acquired ground, from the same placements used to build pixels."""
+        mask = np.zeros((self.piece, self.piece), dtype=np.uint8)
+        top, left = row * self.piece, column * self.piece
+        for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
+            size = tile.copies[level].shape
+            if not _tile_has_the_frame(tile, level, moment, channel):
+                continue
+            if not at[0] <= plane < at[0] + size[0]:
+                continue
+            y0, y1 = max(top, at[1]), min(top + self.piece, at[1] + size[1])
+            x0, x1 = max(left, at[2]), min(left + self.piece, at[2] + size[2])
+            mask[y0 - top:y1 - top, x0 - left:x1 - left] = 1
+        return mask
+
     def _slab_for(
         self,
         level: int,
