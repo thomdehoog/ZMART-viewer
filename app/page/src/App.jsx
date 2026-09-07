@@ -1170,6 +1170,11 @@ export default function App() {
   const engine = React.useRef(null);
   const [config, setConfig] = React.useState(null);
   const [mode, setMode] = React.useState("flat");
+  const transparentBackground = config?.transparentBackground === true && mode === "flat";
+  React.useEffect(() => {
+    document.documentElement.toggleAttribute("data-transparent-background", transparentBackground);
+    return () => document.documentElement.removeAttribute("data-transparent-background");
+  }, [transparentBackground]);
   // A projection by default rather than accumulation; see `VolumeMode`.
   const [volumeMode, setVolumeMode] = React.useState("max");
   const [volumeGain, setVolumeGain] = React.useState(0);
@@ -1690,6 +1695,7 @@ export default function App() {
     const perspectiveZoom = viewer.perspectiveNavigationState.zoomFactor.value;
 
     syncView(viewer, {
+      transparentBackground: config.transparentBackground === true,
       layout: mode === "volume" ? VOLUME_LAYOUT : SLICE_LAYOUT,
       // The engine's own furniture -- the yellow data-bounds box and the axis
       // lines -- is off unless asked for. We are supplying the interface.
@@ -2014,6 +2020,7 @@ export default function App() {
     <div
       style={{
         ...styles.shell,
+        ...(transparentBackground ? { background: "transparent" } : {}),
         // Putting the bar on the left is done by reversing the row rather than by
         // moving anything: the image and the bar keep the same order in the page,
         // so the fold strip stays between them and still folds towards the edge the
@@ -2022,7 +2029,8 @@ export default function App() {
       }}
     >
       <main style={styles.stage}>
-        <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed} />
+        <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed}
+          transparentBackground={transparentBackground} />
         <div style={styles.topBar}>
           <ModeToggle mode={mode} onChange={setMode} />
           <BringItBack viewer={viewer} />

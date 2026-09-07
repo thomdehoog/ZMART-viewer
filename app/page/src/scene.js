@@ -217,7 +217,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
   const seen = new Set(ordered.map(({ index }) => index));
   const all = [...ordered, ...rows.filter(({ index }) => !seen.has(index))];
 
-  return all.map(({ spec, index }) => {
+  const layers = all.map(({ spec, index }) => {
     const { visible, color, opacity, lut, window: windowOverride } = layerState[index];
     const group = groupState[spec.group || ""] || { visible: true };
     const displayWindow = windowOverride || restingWindow(spec, volumetric);
@@ -324,4 +324,23 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     }
     return layer;
   });
+  if (volumetric || !config.transparentBackground) return layers;
+  // Black underpainting supplies acquisition coverage independently of intensity.
+  // All coverage goes below all channels, so it cannot obscure another channel.
+  // One tiled source per image source; the layer count does not grow with positions.
+  const coverage = layers.flatMap((layer, index) => {
+    const sources = all[index].spec.coverageSources;
+    if (layer.type !== "image" || !sources?.length) return [];
+    return [{
+      type: "image", name: `__coverage__${layer.name}`,
+      source: sources.map(source => `${window.location.origin}${source}`),
+      sourceIds: layer.sourceIds?.map(id => `${id}/coverage`),
+      sourceRevisions: layer.sourceRevisions,
+      frameCounts: layer.frameCounts, localPosition: layer.localPosition,
+      visible: layer.visible, opacity: 1, blend: "additive",
+      shader: "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
+        + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }",
+    }];
+  });
+  return [...coverage, ...layers];
 }
