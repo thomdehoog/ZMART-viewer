@@ -181,6 +181,8 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
     thread.start()
     page = browser.new_page(viewport={"width": 1000, "height": 780})
     failed: list[dict] = []
+    completed: list[str] = []
+    responses: list[tuple[str, int]] = []
     request_began: dict[int, float] = {}
 
     def request_started(request) -> None:
@@ -189,6 +191,14 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
 
     def request_finished(request) -> None:
         request_began.pop(id(request), None)
+        if "/c/" in request.url:
+            response = request.response()
+            if response is not None and response.status == 200:
+                completed.append(request.url)
+
+    def response_received(response) -> None:
+        if "/c/" in response.url:
+            responses.append((response.url, response.status))
 
     def request_failed(request) -> None:
         if "/c/" not in request.url:
@@ -203,6 +213,7 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         )
 
     page.on("request", request_started)
+    page.on("response", response_received)
     page.on("requestfinished", request_finished)
     page.on("requestfailed", request_failed)
     debug_folder = (
@@ -268,28 +279,6 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         if debug_folder is not None:
             page.screenshot(path=str(debug_folder / "timeout_warm_after_quiet.png"))
 
-        def coarsest_refresh_probe() -> dict:
-            return page.evaluate(
-                """async () => {
-                  const sources = [];
-                  for (const held of
-                       window.zmartViewer.chunkManager.rpc.objects.values()) {
-                    if (!held || typeof held.invalidateCache !== 'function'
-                        || !held.spec?.upperVoxelBound) continue;
-                    const bound = Array.from(held.spec.upperVoxelBound);
-                    const answer = await held.rpc.promiseInvoke(
-                      'ChunkSource.zmartProbe', {source: held.rpcId});
-                    const probe = answer?.value ?? answer;
-                    if (probe?.refresh) {
-                      sources.push({bound, refresh: probe.refresh});
-                    }
-                  }
-                  sources.sort((a, b) => Math.max(...a.bound) -
-                    Math.max(...b.bound));
-                  return sources[0];
-                }"""
-            )
-
         # A retryable HTTP response is different from a slow response.  Reject
         # one request for a coarse chunk the page certainly holds and announce
         # it only once.  Neuroglancer's existing HTTP reader owns the retry: a
@@ -300,15 +289,18 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
         probe_piece = whole_wave[probe_level][0]
         attempts_before_drop = sum(server_attempts.values())
         attempts_by_path_before_drop = dict(server_attempts)
-        retry_before = coarsest_refresh_probe()
+        completed_before_drop = len(completed)
+        responses_before_drop = len(responses)
         rejected_target["suffix"] = f"/{probe_level}/c/0/0/0"
         reject_one_chunk.set()
         _announce(port, {probe_level: [probe_piece]})
         drop_deadline = time.monotonic() + 8
         while time.monotonic() < drop_deadline:
             path = dropped["path"]
-            if path is not None and server_attempts.get(path, 0) >= (
-                attempts_by_path_before_drop.get(path, 0) + 2
+            if (
+                path is not None
+                and server_attempts.get(path, 0) >= (attempts_by_path_before_drop.get(path, 0) + 2)
+                and any(url.endswith(path) for url in completed[completed_before_drop:])
             ):
                 break
             page.wait_for_timeout(100)
@@ -318,8 +310,15 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
             attempts_by_path_before_drop.get(dropped_path, 0) + 2
         ), f"the dropped request for {dropped_path} was never retried"
         page.wait_for_timeout(500)
-        retry_after = coarsest_refresh_probe()
+        retry_statuses = [
+            status
+            for url, status in responses[responses_before_drop:]
+            if url.endswith(dropped_path)
+        ]
         after_real_retry = _fraction_lit_across_canvas(page)
+        assert any(url.endswith(dropped_path) for url in completed[completed_before_drop:]), (
+            "the browser never finished reading the successfully retried chunk"
+        )
 
         navigation = page.evaluate(
             """() => ({
@@ -373,8 +372,7 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
                     "failed_before_deliberate_drop": failed_before_drop,
                     "deliberately_dropped_path": dropped_path,
                     "attempts_after_drop": (sum(server_attempts.values()) - attempts_before_drop),
-                    "retry_probe_before": retry_before,
-                    "retry_probe_after": retry_after,
+                    "retry_response_statuses": retry_statuses,
                     "coverage_after_real_retry": after_real_retry,
                     "baked": baked,
                     "bake_complete_after_recovery_s": baked_after_recovery,
@@ -394,9 +392,9 @@ def test_a_slow_or_transient_refresh_reaches_confirmation_after_quiet(
             "slow requests are still being manufactured into failures near "
             f"the old two-second deadline: {deadline_failures}"
         )
-        assert retry_after["refresh"]["failures"] == (retry_before["refresh"]["failures"]), (
-            "the HTTP reader should absorb and retry a transient 503; the "
-            "outer ZMART refresh promise unexpectedly rejected"
+        assert 503 in retry_statuses and 200 in retry_statuses[retry_statuses.index(503) + 1 :], (
+            "the browser must retry the rejected chunk after receiving "
+            f"the transient 503: {retry_statuses}"
         )
         assert warm >= fresh - 0.03, (
             f"after the server recovered and the run went quiet, the warm "
