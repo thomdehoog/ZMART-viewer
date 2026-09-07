@@ -1645,7 +1645,12 @@ function carryTheFieldAcross(viewer, from, to) {
   else if (from === "3d" && to === "xy") flat.value = volume.value / height;
 }
 
-export function syncView(viewer, { layout, chrome }) {
+export function syncView(viewer, { layout, chrome, transparentBackground = false }) {
+  const transparent = transparentBackground && layout === "xy";
+  if (viewer.display.transparentBackground !== transparent) {
+    viewer.display.transparentBackground = transparent;
+    viewer.display.scheduleRedraw();
+  }
   const leaving = viewer.layout.toJSON();
   if (leaving !== layout) {
     carryTheFieldAcross(viewer, leaving, layout);

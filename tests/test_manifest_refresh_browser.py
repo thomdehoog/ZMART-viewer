@@ -52,7 +52,7 @@ def _run(folder, run_id, *, timepoints=1):
 
 
 @contextmanager
-def _serving(built_dist, run=None, *, loads=None):
+def _serving(built_dist, run=None, *, loads=None, transparent_background=False):
     server = make_server(
         port=0,
         data_dir=run.folder if run is not None else loads[0]["path"],
@@ -63,6 +63,7 @@ def _serving(built_dist, run=None, *, loads=None):
         live=True,
         allow_open=False,
         allow_selection=True,
+        transparent_background=transparent_background,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
