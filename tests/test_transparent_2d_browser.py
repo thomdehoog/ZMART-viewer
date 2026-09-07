@@ -8,6 +8,7 @@ import zarr
 from PIL import Image
 from record_fixtures import a_live_run, prepare_without_publishing, some_specimen
 from test_manifest_refresh_browser import _open, _serving, _wait_for_picture, _wait_for_revision
+from test_timelapse import _write_a_growing_timelapse
 
 READ_ALPHA = """() => {
   const display = window.zmartViewer.display;
@@ -83,6 +84,124 @@ def test_live_mosaic_gains_opaque_black_footprints(browser, built_dist, tmp_path
             for colour in ([255, 0, 255], [255, 165, 0], [0, 0, 0]):
                 assert np.all(rgb == colour, axis=-1).sum() > 1000, colour
             assert not errors, errors
+        finally:
+            page.close()
+
+
+@pytest.mark.parametrize("time_chunk", [1, 4])
+def test_dense_time_growth_never_exposes_acquired_pixels(browser, built_dist, tmp_path, time_chunk):
+    store = tmp_path / "position.ome.zarr"
+    _write_a_growing_timelapse(store, frames=2, time_chunk=time_chunk)
+    loads = [{"path": tmp_path, "stores": [store.name], "name": "position"}]
+    with _serving(built_dist, loads=loads, transparent_background=True) as address:
+        page = browser.new_page(viewport={"width": 1000, "height": 800})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        try:
+            page.goto(address)
+            _wait_for_picture(page)
+            first = page.evaluate(READ_ALPHA)
+            assert first["opaque"] > 1000, first
+            page.evaluate(
+                """read => {
+                  const sample = eval('(' + read + ')');
+                  window.alphaFrames = [];
+                  window.stopAlphaFrames = window.zmartViewer.display.updateFinished.add(
+                    () => window.alphaFrames.push(sample()));
+                }""",
+                READ_ALPHA.replace("display.draw();", ""),
+            )
+            for count in (3, 5):
+                _write_a_growing_timelapse(store, frames=count)
+                if time_chunk == 1:
+                    page.wait_for_function(
+                        "count => window.zmartConfig.layers[0].frames === count", arg=count
+                    )
+                else:
+                    # The application's file-count watcher supports one frame
+                    # per chunk. Exercise the engine API directly for packed T.
+                    page.evaluate("""async () => {
+                      const sources = window.zmartViewer.layerManager.managedLayers
+                        .filter(layer => layer.layer.type === 'image').flatMap(layer => layer.layer.dataSources);
+                      const cache = sources[0].layer.manager.dataSourceProviderRegistry.chunkManager.memoize.map;
+                      for (const key of [...cache.keys()]) {
+                        if (!key.includes('"constructorId"')) cache.delete(key);
+                      }
+                      await Promise.all(sources.map(source => source.refreshMetadata()));
+                    }""")
+                _wait_for_picture(page)
+            frames = page.evaluate("() => { window.stopAlphaFrames(); return window.alphaFrames; }")
+            assert frames, "no rendered update frames were inspected"
+            assert min(frame["opaque"] for frame in frames) >= first["opaque"], frames
+            assert all(frame["partial"] == 0 for frame in frames), frames
+            assert all(frame["black"] <= first["black"] for frame in frames), frames
+            # T2 extends an existing packed chunk; T4 starts a new chunk.
+            for moment in (2, 4):
+                page.evaluate(
+                    """moment => {
+                  const position = window.zmartViewer.navigationState.position;
+                  const at = Float32Array.from(position.value);
+                  at[position.coordinateSpace.value.names.indexOf('t')] = moment;
+                  position.value = at;
+                }""",
+                    moment,
+                )
+                _wait_for_picture(page)
+                last = page.evaluate(READ_ALPHA)
+                assert last["opaque"] >= first["opaque"], last
+                assert last["black"] <= first["black"], last
+            assert not errors, errors
+        finally:
+            page.close()
+
+
+@pytest.mark.parametrize("outcome", ["error", "superseded", "closed"])
+def test_metadata_refresh_retains_or_releases_its_owner(browser, built_dist, tmp_path, outcome):
+    store = tmp_path / "position.ome.zarr"
+    _write_a_growing_timelapse(store, frames=2)
+    loads = [{"path": tmp_path, "stores": [store.name], "name": "position"}]
+    with _serving(built_dist, loads=loads, transparent_background=True, live=False) as address:
+        page = browser.new_page(viewport={"width": 1000, "height": 800})
+        try:
+            page.goto(address)
+            _wait_for_picture(page)
+            result = page.evaluate(
+                """async outcome => {
+              const layer = window.zmartViewer.layerManager.managedLayers.find(m => m.layer.type === 'image').layer;
+              const source = layer.dataSources[0], held = source.loadState;
+              const registry = layer.manager.dataSourceProviderRegistry;
+              const get = registry.get, requests = [];
+              registry.get = () => new Promise((resolve, reject) => requests.push({resolve, reject}));
+              try {
+                const first = source.refreshMetadata();
+                if (outcome === 'error') requests[0].reject(new Error('metadata unavailable'));
+                if (outcome === 'superseded') {
+                  const second = source.refreshMetadata();
+                  requests[1].resolve(held.dataSource);
+                  await second;
+                  requests[0].reject(new Error('obsolete failure'));
+                }
+                if (outcome === 'closed') {
+                  source.spec = {...source.spec, url: ''};
+                  requests[0].resolve(held.dataSource);
+                }
+                await first;
+                return {
+                  retained: source.loadState === held,
+                  disposed: !!held.wasDisposed,
+                  messages: Array.from(source.messages).map(message => message.message),
+                  pending: !!source.metadataRefresh,
+                };
+              } finally { registry.get = get; }
+            }""",
+                outcome,
+            )
+            assert result == {
+                "retained": outcome != "closed",
+                "disposed": outcome == "closed",
+                "messages": ["metadata unavailable"] if outcome == "error" else [],
+                "pending": False,
+            }
         finally:
             page.close()
 
