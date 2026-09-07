@@ -1408,6 +1408,7 @@ def make_server(
         labels = layer_names(present)
         groups_named = group_labels(library.datasets())
         merged: dict[tuple, dict] = {}
+        store_paths: dict[str, Path] = {}
 
         for (root_number, root, name), label in zip(entries, labels, strict=True):
             if root_number in live_numbers:
@@ -1416,11 +1417,7 @@ def make_server(
             group = groups_named[root_number]
             store_path = root / name
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
-            # Only fixed scenes can omit coverage: a watched row may acquire a
-            # second source, which must not change alpha while underpaint loads.
-            opaque = (
-                transparent_background and not live and not coverage.requires_geometry(store_path)
-            )
+            store_paths[address] = store_path
 
             if "c" in axis_names(store_path):
                 found = [
@@ -1465,7 +1462,6 @@ def make_server(
                     merged[key] = {
                         **base,
                         "sources": [address],
-                        "opaque": opaque,
                         "name": channel_name,
                         "group": group,
                         "channelIndex": index,
@@ -1478,7 +1474,6 @@ def make_server(
                     }
                 else:
                     row["sources"].append(address)
-                    row["opaque"] = row["opaque"] and opaque
                     row["frameCounts"].append(frames)
 
                     if frames and (row.get("frames") or 0) < frames:
@@ -1523,10 +1518,14 @@ def make_server(
         groups = list(dict.fromkeys(row["group"] for row in rows))
         if transparent_background:
             for row in rows:
-                # Multi-source rows retain their covering blend to avoid tile
-                # seams. Constant alpha there would erase lower-channel colour.
-                row["opaque"] = bool(row.get("opaque") and len(row["sources"]) == 1)
-                if row.get("kind", "image") == "image" and not row.get("opaque"):
+                if row.get("kind", "image") != "image":
+                    continue
+                # Only fixed, single-source dense rows can omit coverage. Live
+                # rows must keep the same strategy as sources arrive; covering
+                # multi-source rows must not erase lower-channel colour.
+                store = store_paths.get(row["sources"][0]) if len(row["sources"]) == 1 else None
+                row["opaque"] = bool(not live and store and not coverage.requires_geometry(store))
+                if not row["opaque"]:
                     row["coverageSources"] = [coverage.source_url(url) for url in row["sources"]]
         return {
             "layers": rows,

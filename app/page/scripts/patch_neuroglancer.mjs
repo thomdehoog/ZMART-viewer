@@ -49,6 +49,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { growthPatches } from "./patch_neuroglancer_growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "..", "node_modules", "neuroglancer", "lib");
@@ -72,6 +73,7 @@ const modulesOnly = process.argv.includes("--modules-only");
 const SUPERSEDED = "zmartPumpRefreshesWithoutDeadline";
 
 const PATCHES = [
+  ...growthPatches(lib),
   // Keep an opaque image opaque under translucent annotations and scale bars.
   ...[
     { indent: "      ", drawing: "annotations" },
@@ -204,5 +206,9 @@ for (const patch of PATCHES) {
     writeFileSync(file, held.replace(patch.anchor, patch.replacement));
     console.log(`patched: ${file}`);
   }
+}
+if (!modulesOnly && !readFileSync(workerBundle, "utf8").includes('"zarr/extendBounds"')) {
+  console.error("The precompiled Neuroglancer worker lacks bounds refresh. Run npm ci, then npm run build.");
+  failed = true;
 }
 if (failed) process.exit(1);

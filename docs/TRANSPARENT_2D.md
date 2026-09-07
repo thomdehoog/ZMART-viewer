@@ -46,6 +46,22 @@ Transparency styling affects only the embedding surfaces, not the engine's
 theme colours. The image has no CSS opacity fade, which would expose the host
 through acquired pixels during arrival.
 
+## Growing dense arrays
+
+`patch_neuroglancer_growth.mjs` adds a bounds-only metadata refresh to the pinned
+engine. Compatible Zarr growth keeps the same render layers and chunk sources,
+updates their frontend/worker bounds, and refreshes boundary chunks in place.
+It does not add a screenshot overlay or a second drawable copy. Metadata errors
+leave the current picture visible and report the error; superseded requests and
+closed sources cannot apply delayed results. Layout changes or shrinking bounds
+use ordinary source replacement, not the retained-growth path.
+
+The application watches ordinary timelapses with one frame per chunk. The engine
+refresh also handles packed time chunks; these are tested directly because the
+application's existing file-count watcher does not count their individual frames.
+After updating an installed checkout, run `npm ci` before building: the build
+rejects a previously flattened worker that lacks the new bounds-update RPC.
+
 ## Checks
 
 Build `app/page` with `npm ci && npm run build`, then run:
@@ -55,7 +71,8 @@ Build `app/page` with `npm ci && npm run build`, then run:
 Set `ZMART_REQUIRE_BROWSER=1` to forbid silent browser skips and `ZMART_CHROMIUM`
 to the installed Chromium executable when required. The tests cover acquired
 black pixels, gaps inside one chunk, pyramid geometry, C/Z/T availability,
-publication, DOM surfaces beneath/above, and the unchanged opaque/volume modes.
+publication, repeated dense growth, packed boundary chunks, refresh cancellation,
+DOM surfaces beneath/above, and the unchanged opaque/volume modes.
 
 The companion microscopy integration uses its writer's individual dense position
 stores, so its image shader can emit constant alpha inside those stores without
