@@ -1,4 +1,4 @@
-# Transparent 2D embedding (viewer 0.2.0)
+# Transparent 2D embedding (viewer 0.2.1)
 
 Opt in with `make_server(..., transparent_background=True)` or
 `open_window(..., transparent_background=True)`. The default stays opaque.
