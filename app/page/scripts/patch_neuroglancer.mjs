@@ -5,6 +5,8 @@
  * display.transparentBackground. The host must also supply geometry-based
  * coverage for sparse mosaics; intensity zero cannot distinguish their gaps
  * from acquired black pixels. See docs/TRANSPARENT_2D.md.
+ * Keep the alpha edits aligned with ZMART-microscopy's
+ * application/patches/neuroglancer+2.41.2.patch (patch-package form).
  *
  * The refresh pair says: **a refresh should replace pixels, not remove them.**
  *

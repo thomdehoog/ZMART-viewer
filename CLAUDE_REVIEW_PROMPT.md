@@ -38,16 +38,23 @@ Check particularly:
    channel colour/mixing or grow the layer count per mosaic position.
 5. The opt-in flag crosses server/config/render/CSS boundaries. Check each is
    necessary; suggest a smaller contained alternative if equally correct.
+6. Baked pyramids may have more image levels than compositor tile copies;
+   coverage advertises only supported levels. Fixed single-source dense rows
+   use constant alpha; watched or covering multi-source rows retain coverage
+   to avoid changing opacity strategy mid-publication or erasing channel colour.
+   The wrapper background is separate from the engine's theme background.
 
 ## Verification performed
 
-Viewer builds succeeded. The final targeted Python run passed 47 tests:
+Viewer builds succeeded. The review-fix targeted Python run passed 52 tests:
 
     python -m pytest tests/test_acquisition_coverage.py tests/test_transparent_2d_browser.py tests/test_manifest_refresh_browser.py tests/test_the_screen_never_goes_black.py tests/test_server.py -q
 
 After strengthening the publication test with per-rendered-frame alpha sampling,
 all three transparency browser tests passed again. Ruff passed on changed Python
 files. Browser rendering used installed Playwright Chromium on NVIDIA T400.
+Regression checks now also cover baked overview levels, fixed versus watched
+dense rows, and light-theme volume backgrounds after transparent 2D embedding.
 Pytest warned that this environment lacks the plugin for its `timeout` option.
 No Firefox/Edge rendering qualification or large-scale coverage benchmark is
 claimed. Normal dense position stores use their declared extents; arbitrary

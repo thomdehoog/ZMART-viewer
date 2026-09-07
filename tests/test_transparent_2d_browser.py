@@ -111,11 +111,17 @@ def test_dense_czt_and_volume_keep_their_coverage(browser, built_dist, tmp_path,
     data[1, :, 1, :, 32:] = 4095
     group.create_array("0", data=data, chunks=(1, 1, 1, 32, 32), compressor=None)
     loads = [{"path": tmp_path, "stores": [store.name], "name": "position"}]
-    with _serving(built_dist, loads=loads, transparent_background=transparent) as address:
+    with _serving(
+        built_dist, loads=loads, transparent_background=transparent, live=False
+    ) as address:
         page = browser.new_page(viewport={"width": 1000, "height": 800})
         try:
             page.goto(address)
             _wait_for_picture(page)
+            config = page.request.get(address.rstrip("/") + "/api/config").json()
+            assert not any(row.get("coverageSources") for row in config["layers"])
+            if transparent:
+                assert all(row["opaque"] for row in config["layers"])
             first = page.evaluate(READ_ALPHA)
             assert first["partial"] == 0
             assert (first["clear"] > 1000) == transparent
@@ -134,6 +140,11 @@ def test_dense_czt_and_volume_keep_their_coverage(browser, built_dist, tmp_path,
             assert second["opaque"] == first["opaque"], (first, second)
             assert second["partial"] == 0
             assert second["black"] < first["black"]
+            # Transparent wrappers must not replace the engine's theme colour.
+            page.evaluate("document.documentElement.dataset.theme = 'light'")
+            page.wait_for_function("""() => Array.from(
+              window.zmartViewer.perspectiveViewBackgroundColor.value
+            ).every(value => value > 0.5)""")
             page.get_by_title("Ray-cast volume; drag to rotate", exact=True).click()
             page.wait_for_function("() => window.zmartMode === 'volume'")
             _wait_for_picture(page)

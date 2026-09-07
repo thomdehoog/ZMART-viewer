@@ -33,6 +33,12 @@
       html[data-transparent-background] #root {
         background: transparent;
       }
+      html:root[data-transparent-background] {
+        --page-bg: transparent;
+        --image-surface-bg: transparent;
+        /* A CSS opacity fade would make acquired black pixels translucent. */
+        --image-arrival-transition: none;
+      }
     </style>
   </head>
   <body>

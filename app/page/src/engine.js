@@ -1604,7 +1604,7 @@ export function watchTheReplay(viewer, layersExpected = 0) {
   return whenTheSourcesHaveSettled(
     viewer,
     () => viewer.layerManager.managedLayers.filter(
-      (managed) => managed.layer?.type === "image",
+      (managed) => managed.layer?.type === "image" && !managed.name.startsWith("__coverage__"),
     ).length >= layersExpected,
     () => {
       startDepthAtTheFirstPlane(viewer);
