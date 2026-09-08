@@ -100,7 +100,13 @@ cached composition survive. This is not minimal per-voxel or per-C/Z/T dirtiness
 The existing whole-source client refresh updates image and coverage together.
 
 Reopening with a different bake flag is supported without changing the aggregate
-address. Old baked files are ignored while baking is off; accumulated dirty
+address or dataset identity. One server publication owner is retained per resolved
+folder, including concurrent opens and an already-loaded folder. A rejected
+reopen does not close the existing dataset. The open response supplies the updated
+configuration; an external opener uses the existing announcement endpoint to
+notify already-open browser sessions.
+
+Old baked files are ignored while baking is off; accumulated dirty
 ground, including retired positions, is rebuilt when baking resumes. Existing
 original stores are never edited. Interrupted publication fails closed until
 retry, including interrupted order changes.
@@ -110,6 +116,12 @@ at least two mean-pyramid levels and an integer-aligned common voxel lattice.
 Mixed flat/stack sources and growing Z domains are the next increment. Legacy
 folder opening and the earlier complete-rectangle bake API remain unchanged;
 they are not a fallback for a refused explicit composition snapshot.
+
+Mandatory aggregation is currently a guarantee of the explicit `composition`
+API, not of legacy folder opening. Operator adoption must use this API in both
+bake modes, explicitly guarantee complete stores (or supply authoritative sparse
+regions), and publish the complete back-to-front order independently of revisions.
+No completeness guarantee may be inferred from a workflow name or bounding box.
 
 `tests/test_acquired_composition.py` covers fine/coarse numerical pixels, opaque
 black coverage, gap filling, partial/empty chunks, overlap order, C/Z/T,
@@ -124,3 +136,23 @@ pixel-change, request and idle-refresh assertions in both bake modes. The
 check, not evidence of production acquisition throughput. Cold coarse requests
 may read substantial fine data. No release default or operator installation is
 changed by this increment.
+
+## Cold coarse-read cost
+
+`measure/measure_acquired_coarse.py NEW_DIRECTORY` measures a fixed 100-position
+fixture: separate 1024x1024 uint16 images on a 10x10 grid, six native mean-pyramid
+levels, one channel, plane and timepoint. Every request starts with empty viewer
+caches; the operating-system file cache is not flushed. It compares encoded
+chunk hashes between bake modes as well as recording reads and wall time.
+
+On the test workstation (2026-09-08), one L2 chunk took 174 ms with bake off and
+172 ms with bake on, reading L0 from four originals in either mode. One L5 chunk
+covering the entire canvas took 3.429 s with bake off (all 100 originals at L0)
+and 12.6 ms with bake on (no original reads). L4 and L5 were baked; L2 was virtual.
+Initial virtual publication took 0.317 s; enabling baking took 3.578 s.
+
+These are single cold-request measurements, not acquisition throughput or bridge
+latency. They establish a real cost gap: acquired composition currently reduces
+L0 even when complete original pyramids exist. Reusing those pyramids needs a
+separate correctness-preserving change; independent reductions cannot simply
+replace compose-before-reduce at misaligned overlaps or sparse coverage edges.

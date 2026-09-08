@@ -1156,23 +1156,19 @@ class _Handler(SimpleHTTPRequestHandler):
         asked_bake = bool(payload.get("bake", published.bake))
         canvas = payload.get("canvas", published.canvas)
         if (asked_bake or "composition" in payload) and live_run_holding(target) is None:
-            number = None
             try:
                 if "composition" in payload and not isinstance(payload["composition"], dict):
                     raise ValueError(
                         "composition must explicitly describe acquired coverage and order"
                     )
-                number = self._library.open(target)
                 published.open(
-                    number,
+                    target,
                     canvas=canvas,
                     versions=payload.get("source_revisions"),
                     composition=payload.get("composition"),
                     bake=asked_bake,
                 )
             except (ValueError, OSError, KeyError, TypeError) as why:
-                if number is not None:
-                    self._library.close(number)
                 self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
                 return
             self._send_json(self._config())
@@ -1385,7 +1381,7 @@ def make_server(
     if bake:
         for dataset in library.datasets():
             if live_run_holding(dataset.root) is None:
-                published.open(dataset.number)
+                published.open(dataset.root)
     registry = SourceRegistry(
         library,
         watching=live,

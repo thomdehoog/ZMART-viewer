@@ -247,7 +247,7 @@ def test_explicit_completed_revisions_are_the_only_publication_trigger(tmp_path)
     published = PublishedFolders(library)
     try:
         published.open(
-            number, canvas={"x_um": [0, 1024], "y_um": [0, 512]}, versions={"a.ome.zarr": 1}
+            tmp_path, canvas={"x_um": [0, 1024], "y_um": [0, 512]}, versions={"a.ome.zarr": 1}
         )
         write_position(tmp_path, "a.ome.zarr", 0, 2400)
         assert published.refresh() == ((number, 1),)
