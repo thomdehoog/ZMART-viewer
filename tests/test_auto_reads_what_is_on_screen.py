@@ -71,6 +71,24 @@ def a_picture(tmp_path):
     return store
 
 
+def test_one_channel_measurement_can_span_two_common_canvas_sources(a_picture, tmp_path):
+    import shutil
+
+    second = tmp_path / "second.ome.zarr"
+    shutil.copytree(a_picture, second)
+    array = zarr.open_array(str(second / "0"), mode="r+")
+    values = array[:]
+    array[:] = np.where(values, values + 10000, 0)
+    combined = measure_here([a_picture, second], channel=0)
+    first_only = measure_here(a_picture, channel=0)
+    second_only = measure_here(second, channel=0)
+    assert combined["window"][0] < 1000
+    assert combined["window"][1] > 15000
+    assert sum(combined["histogram"]["counts"]) == (
+        sum(first_only["histogram"]["counts"]) + sum(second_only["histogram"]["counts"])
+    )
+
+
 def test_the_window_follows_the_part_being_looked_at(a_picture):
     """Looking at the bright quarter gives a bright window, and the dim a dim one."""
     dim = measure_here(a_picture, channel=0, box=((0.0, 0.0), (0.5, 0.5)))

@@ -42,6 +42,7 @@ from .library import (
     channel_color,
     channel_of,
     channels,
+    described_channels,
     forget,
     label_images,
     layer_names,
@@ -677,18 +678,24 @@ class _Handler(SimpleHTTPRequestHandler):
     def _serve_measurement(self, payload: object) -> None:
         """Measure the brightness of the part of a picture on screen."""
         asked = payload if isinstance(payload, dict) else {}
-        source = asked.get("source")
+        sources = asked.get("sources", [asked.get("source")])
 
-        if not isinstance(source, str) or not source.strip():
+        if (
+            not isinstance(sources, list)
+            or not sources
+            or any(not isinstance(source, str) or not source.strip() for source in sources)
+        ):
             self._send_json({"error": "which picture to measure is needed"}, HTTPStatus.BAD_REQUEST)
             return
 
-        rel = source.split("/data/", 1)[-1].split("|", 1)[0].strip("/")
-        store = self._library.resolve(rel)
-
-        if store is None or not store.is_dir():
-            self._send_json({"error": "that picture is not open here"}, HTTPStatus.NOT_FOUND)
-            return
+        stores = []
+        for source in dict.fromkeys(sources):
+            rel = source.split("/data/", 1)[-1].split("|", 1)[0].strip("/")
+            store = self._library.resolve(rel)
+            if store is None or not store.is_dir():
+                self._send_json({"error": "that picture is not open here"}, HTTPStatus.NOT_FOUND)
+                return
+            stores.append(store)
 
         box = asked.get("box")
 
@@ -707,7 +714,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         channel = asked.get("channel")
         channel = channel if isinstance(channel, int) else None
-        found = measure_here(store, channel=channel, box=corners)
+        found = measure_here(stores, channel=channel, box=corners)
 
         if found is None:
             self._send_json({"empty": True})
@@ -1476,7 +1483,10 @@ def make_server(
                     )
                 ]
                 if published.source_depth(root_number, name) is not None:
-                    channel = channels(store_path)[0]
+                    declared = _read_attrs_at(store_path).get("omero", {}).get("channels", [])
+                    channel = described_channels(declared if isinstance(declared, list) else [], 1)[
+                        0
+                    ]
                     found = [
                         (
                             None,
@@ -1492,7 +1502,8 @@ def make_server(
             depth = published.source_depth(root_number, name)
 
             for index, channel_name, color, declared_range, active in found:
-                key = (root_number, index, channel_name)
+                logical_channel = 0 if depth is not None and index is None else index
+                key = (root_number, logical_channel, channel_name)
                 row = merged.get(key)
 
                 if row is None:

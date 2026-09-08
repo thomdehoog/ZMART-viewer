@@ -1944,6 +1944,7 @@ export default function App() {
       (async () => {
         const answer = await measureHere({
           source: (spec.sources || [spec.source])[0],
+          sources: spec.sourceDepths ? spec.sources : undefined,
           channel: spec.channelIndex ?? null,
           box: [[0, 0], [1, 1]],
         });
@@ -2161,6 +2162,7 @@ export default function App() {
                 if (!box) return null;
                 const answer = await measureHere({
                   source: (spec.sources || [spec.source])[0],
+                  sources: spec.sourceDepths ? spec.sources : undefined,
                   channel: spec.channelIndex ?? null,
                   box,
                   span: asked.span || null,
