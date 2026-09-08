@@ -11,6 +11,7 @@ import math
 import os
 import threading
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 from .acquired import AcquiredRegion
@@ -26,6 +27,47 @@ from .compose import (
 from .library import _description_file, _read_attrs_at, discover
 
 STORE = ".zmart-viewer/overview.ome.zarr"
+
+
+def _place_depth(tiles):
+    """Display flats together; keep stacks on their common specimen-Z lattice."""
+    flat = [tile.copies[0].shape[0] == 1 for tile in tiles]
+    if any(flat) and not all(flat):
+        raise ValueError("Separate flat and stack aggregates are required for mixed sources")
+    if all(flat):
+        placed = [
+            replace(
+                tile,
+                copies=[
+                    replace(
+                        copy,
+                        corner_um=(0.0, *copy.corner_um[1:]),
+                        voxel_um=(1.0, *copy.voxel_um[1:]),
+                    )
+                    for copy in tile.copies
+                ],
+            )
+            for tile in tiles
+        ]
+        return placed, 0.0, 1.0
+    spacing = tiles[0].copies[0].voxel_um[0]
+    if (
+        not math.isfinite(spacing)
+        or spacing <= 0
+        or any(copy.voxel_um[0] != spacing for tile in tiles for copy in tile.copies)
+    ):
+        raise ValueError("Stack aggregates require the same positive Z spacing at every level")
+    lower = min(tile.copies[0].corner_um[0] for tile in tiles)
+    offsets = [(tile.copies[0].corner_um[0] - lower) / spacing for tile in tiles]
+    if any(
+        not math.isfinite(n) or not math.isclose(n, round(n), rel_tol=0, abs_tol=1e-7)
+        for n in offsets
+    ):
+        raise ValueError("Stack origins must be aligned to a common specimen-Z grid")
+    planes = max(
+        round(offset) + tile.copies[0].shape[0] for tile, offset in zip(tiles, offsets, strict=True)
+    )
+    return tiles, lower, planes * spacing
 
 
 class PublishedFolders:
@@ -290,6 +332,23 @@ class PublishedTransfer(ComposedPicture):
                 if _read_attrs_at(tile.store)["multiscales"][0].get("type") != "mean":
                     raise ValueError("Coarse baking requires mean-reduced position pyramids")
                 tiles.append(tile)
+            if composition is not None:
+                if previous and (tiles[0].copies[0].shape[0] == 1) != (
+                    previous.mosaic.tiles[0].copies[0].shape[0] == 1
+                ):
+                    raise ValueError("The aggregate cannot change between flat and stack sources")
+                tiles, depth_origin, depth_extent = _place_depth(tiles)
+                if previous:
+                    held = previous.mosaic
+                    if (
+                        depth_origin < held.corner_um[0] - 1e-7
+                        or depth_origin + depth_extent
+                        > held.corner_um[0] + held.extent_um[0] + 1e-7
+                    ):
+                        raise ValueError(
+                            "The published Z domain cannot grow without a geometry refresh"
+                        )
+                    depth_origin, depth_extent = held.corner_um[0], held.extent_um[0]
             _refuse_tiles_that_disagree(tiles)
             first = tiles[0]
             if first.keeps < 2:
@@ -306,8 +365,11 @@ class PublishedTransfer(ComposedPicture):
                         "Baking supports unrotated ZYX, CZYX and TCZYX position stores"
                     )
                 if any(
-                    (copy.shape[0], copy.outer_shape, copy.corner_um[0])
-                    != (base.shape[0], base.outer_shape, base.corner_um[0])
+                    copy.outer_shape != base.outer_shape
+                    or (
+                        composition is None
+                        and (copy.shape[0], copy.corner_um[0]) != (base.shape[0], base.corner_um[0])
+                    )
                     for copy, base in zip(tile.copies, first.copies, strict=True)
                 ):
                     raise ValueError("Positions in a baked acquisition must share C/Z/T geometry")
@@ -315,9 +377,13 @@ class PublishedTransfer(ComposedPicture):
             scales = attrs["multiscales"]
             averaged = scales[0].get("type") == "mean"
             base = first.copies[0]
-            corner = (base.corner_um[0], canvas["y_um"][0], canvas["x_um"][0])
+            corner = (
+                depth_origin if composition is not None else base.corner_um[0],
+                canvas["y_um"][0],
+                canvas["x_um"][0],
+            )
             extent = (
-                base.shape[0] * base.voxel_um[0],
+                depth_extent if composition is not None else base.shape[0] * base.voxel_um[0],
                 canvas["y_um"][1] - corner[1],
                 canvas["x_um"][1] - corner[2],
             )
