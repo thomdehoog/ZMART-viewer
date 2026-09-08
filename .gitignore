@@ -11,6 +11,9 @@ testdata/demo_store/
 # The store demos/run_live_run_demo.py declares and fills; rebuilt on every run.
 testdata/live_run_demo/
 
+# Interactive source-refresh demo datasets and window profiles.
+testdata/source_refresh_demo/
+
 # Python and test scratch.
 **/__pycache__/
 tests/_check/
