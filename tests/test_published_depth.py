@@ -1,6 +1,7 @@
 """Specimen Z belongs to stacks; flat display placement never edits originals."""
 
 import json
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -8,13 +9,14 @@ import zarr
 from test_published_transfer import write_position
 
 from zmart_viewer.acquired import AcquiredRegion
-from zmart_viewer.published import STORE, PublishedTransfer
+from zmart_viewer.compose import _read_one_tile
+from zmart_viewer.published import STORE, PublishedTransfer, _place_depth
 
 CANVAS = {"x_um": [0, 2048], "y_um": [0, 128]}
 HEIGHTS = [62.99, 62.79, 64.26, 64.01, 61.10, 60.40, 62.20, 61.40]
 
 
-def at_depth(folder, name, x, z, *, depth=1, dz=1.3):
+def at_depth(folder, name, x, z, *, depth=1, dz=1.3, plane_step=10):
     store = write_position(folder, name, x, 0, frames=2, channels=2, depth=depth)
     group = zarr.open_group(str(store), mode="r+")
     ome = group.attrs["ome"]
@@ -22,7 +24,7 @@ def at_depth(folder, name, x, z, *, depth=1, dz=1.3):
         dataset["coordinateTransformations"][0]["scale"][2] = dz
         dataset["coordinateTransformations"][1]["translation"][2] = z
         values = np.fromfunction(
-            lambda t, c, p: 1000 + 400 * t + 100 * c + 10 * p, (2, 2, depth)
+            lambda t, c, p: 1000 + 400 * t + 100 * c + plane_step * p, (2, 2, depth)
         ).astype("uint16")
         group[str(level)][:] = np.broadcast_to(values[..., None, None], group[str(level)].shape)
     group.attrs["ome"] = ome
@@ -31,6 +33,30 @@ def at_depth(folder, name, x, z, *, depth=1, dz=1.3):
 
 def composition(names):
     return {"regions": "complete", "order": list(names)}
+
+
+@pytest.mark.parametrize(
+    "delta,depth,accepted",
+    [(1e-14, 1000, True), (1e-9, 2, True), (1e-9, 1000, False), (0.01, 2, False)],
+)
+def test_spacing_tolerance_bounds_total_stack_drift(tmp_path, delta, depth, accepted):
+    tile = _read_one_tile(at_depth(tmp_path, "a.ome.zarr", 0, 60, depth=2))
+    tile = replace(
+        tile,
+        copies=[
+            replace(
+                copy, shape=(depth, *copy.shape[1:]), voxel_um=(1.3 + delta, *copy.voxel_um[1:])
+            )
+            for copy in tile.copies
+        ],
+    )
+    if accepted:
+        placed, _, _ = _place_depth([tile], spacing=1.3)
+        assert all(copy.voxel_um[0] == 1.3 for copy in placed[0].copies)
+        assert all(copy.voxel_um[0] == 1.3 + delta for copy in tile.copies)
+    else:
+        with pytest.raises(ValueError, match="Z spacing"):
+            _place_depth([tile], spacing=1.3)
 
 
 @pytest.mark.parametrize("bake", [False, True])
@@ -280,9 +306,9 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
         positions, zoom, center = [0], 4, 960
     else:
         names = ["a.ome.zarr", "b.ome.zarr"]
-        at_depth(tmp_path, names[0], 0, 60, depth=3)
-        at_depth(tmp_path, names[1], 256, 61.3, depth=4)
-        positions, zoom, center = [60, 61.3, 65.2], 1, 192
+        at_depth(tmp_path, names[0], 0, 60, depth=3, plane_step=800)
+        at_depth(tmp_path, names[1], 256, 61.3, depth=4, plane_step=800)
+        positions, zoom, center = [60, 61.3, 62.6, 65.2], 1, 192
 
     server = make_server(
         port=0,
@@ -325,6 +351,20 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
         _wait_for_picture(page)
         return page.evaluate(READ_ALPHA)
 
+    def stack_pixels(magnification):
+        return page.evaluate(
+            """([center,zoom]) => {
+            const dc=zmartViewer.display; dc.draw(); const gl=dc.gl;
+            return [64,320].map(x => {
+                const pixel=new Uint8Array(4);
+                gl.readPixels(Math.round(gl.drawingBufferWidth/2+(x-center)/zoom),
+                    Math.floor(gl.drawingBufferHeight/2),1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);
+                return Array.from(pixel);
+            });
+        }""",
+            [center, magnification],
+        )
+
     try:
         response = page.request.post(f"{address}/api/stores/open", data=payload)
         assert response.ok, response.text()
@@ -332,17 +372,32 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
         _wait_for_picture(page)
         page.evaluate("document.body.style.background='#ff00ff'")
         counts = []
+        plane_pixels = []
         for index, z in enumerate(positions):
             alpha = look(z, zoom)
-            tiles = 8 if kind == "flat" else (2 if index == 1 else 1)
+            tiles = 8 if kind == "flat" else (2 if index in (1, 2) else 1)
             assert alpha["opaque"] == pytest.approx(tiles * (128 / zoom) ** 2, rel=0.02), alpha
             assert alpha["clear"] > 1000 and alpha["partial"] == 0
             if kind == "flat":
                 assert alpha["black"] >= (128 / zoom) ** 2
+            else:
+                plane_pixels.append(stack_pixels(zoom))
             counts.append(alpha["opaque"])
             page.screenshot(path=str(tmp_path / f"{kind}-{bake}-z{z}.png"))
         coarse = look(positions[-1], zoom * 2)
         assert coarse["opaque"] == pytest.approx(counts[-1] / 4, rel=0.02)
+        if kind == "stack":
+            actual = np.array(plane_pixels)
+            np.testing.assert_array_equal(
+                actual[:, :, 3], [[255, 0], [255, 255], [255, 255], [0, 255]]
+            )
+            # Each step must change the image itself, not just its coverage.
+            assert np.all(np.diff(actual[:3, 0, :3].max(axis=1)) > 25), plane_pixels
+            assert np.all(np.diff(actual[1:, 1, :3].max(axis=1)) > 25), plane_pixels
+            np.testing.assert_array_equal(actual[0, 0], actual[1, 1])
+            np.testing.assert_array_equal(actual[1, 0], actual[2, 1])
+            assert actual[3, 1, :3].sum() > actual[2, 0, :3].sum() + 25
+            np.testing.assert_allclose(stack_pixels(zoom * 2), actual[-1], atol=1, rtol=0)
         page.screenshot(path=str(tmp_path / f"{kind}-{bake}-coarse.png"))
         assert (
             len({url for row in page.evaluate("zmartConfig.layers") for url in row["sources"]}) == 1
@@ -363,6 +418,7 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
                 "coarse_opaque": coarse["opaque"],
                 "aggregate_sources": 1,
                 "idle_refetches": 0,
+                "stack_plane_rgba": plane_pixels,
             }
         )
     finally:

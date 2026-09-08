@@ -14,6 +14,7 @@ from zmart_viewer.compose import (
     MEAN_CROP_REDUCTION,
     Composer,
     Mosaic,
+    _read_one_tile,
     halve_xy,
     read_the_mosaic_as_written,
     the_mosaic_written_down,
@@ -157,6 +158,101 @@ def test_actual_writer_native_pixels_sparse_coverage_and_unchanged_originals(
                 composition={**composition, "xy_origin": "center"},
                 bake=bake,
             )
+    finally:
+        view.close()
+
+
+@pytest.mark.parametrize("bake", [False, True])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_actual_writer_stack_grid_survives_retirement_reopen_and_append(
+    operator_writer, tmp_path, bake, reverse
+):
+    import tifffile
+
+    folder = tmp_path / "positions"
+
+    def write_stack(name, x, heights, values):
+        planes = []
+        for z, (height, value) in enumerate(zip(heights, values, strict=True)):
+            path = tmp_path / f"{name}-{z}.ome.tif"
+            tifffile.imwrite(
+                path,
+                np.full((256, 256), value, dtype="uint16"),
+                metadata={
+                    "axes": "YX",
+                    "PhysicalSizeX": 1.0,
+                    "PhysicalSizeY": 1.0,
+                    "PhysicalSizeXUnit": "um",
+                    "PhysicalSizeYUnit": "um",
+                },
+            )
+            planes.append(
+                {
+                    "t": 0,
+                    "c": 0,
+                    "z": z,
+                    "path": str(path),
+                    "x_um": x + 128,
+                    "y_um": 128,
+                    "z_um": height,
+                }
+            )
+        return operator_writer(
+            {"acquisition_type": "focus", "position_label": name, "planes": planes}, folder
+        )
+
+    a = write_stack("a", 0, [60.0, 61.3], [500, 1500])
+    b = write_stack("b", 512, [61.3, 62.6], [2500, 3500])
+    assert _read_one_tile(a).copies[0].voxel_um[0] != _read_one_tile(b).copies[0].voxel_um[0]
+    originals = {p: p.read_bytes() for store in (a, b) for p in store.rglob("*") if p.is_file()}
+    names = [a.name, b.name]
+    if reverse:
+        names.reverse()
+    canvas = {"x_um": [0, 1024], "y_um": [0, 512]}
+
+    def snapshot(order):
+        return {
+            "regions": "complete",
+            "order": order,
+            "pyramid_reduction": MEAN_CROP_REDUCTION,
+            "xy_origin": "corner",
+        }
+
+    view = PublishedTransfer(folder / STORE, piece=64)
+    try:
+        view.publish(
+            folder, dict.fromkeys(names, 1), canvas, composition=snapshot(names), bake=bake
+        )
+        made = view.composer()
+        spacing = made.mosaic.voxel_um(0)[0]
+        assert made.mosaic.corner_um[0] == 60 and made.mosaic.shape(0)[0] == 3
+        for level in range(made.mosaic.levels):
+            for plane in range(3):
+                for x, offset, values in ((0, 0, [500, 1500, 0]), (512, 1, [0, 2500, 3500])):
+                    col, pixel = divmod(x // 2**level, 64)
+                    data = made.values_for(level, plane, 0, col)
+                    assert (data[0, pixel] if data is not None else 0) == values[plane]
+                    assert made.coverage_for(level, plane, 0, col)[0, pixel] == (
+                        offset <= plane < offset + 2
+                    )
+        # Remove whichever original selected the grid, then reload its persisted replacement.
+        survivor = names[1]
+        view.publish(folder, {survivor: 1}, canvas, composition=snapshot([survivor]), bake=bake)
+        assert view.composer().mosaic.voxel_um(0)[0] == spacing
+        view.close()
+        view = PublishedTransfer(folder / STORE, piece=64)
+        assert view.composer().mosaic.voxel_um(0)[0] == spacing
+        c = write_stack("c", 256, [61.3, 62.6], [1200, 2200])
+        originals.update({p: p.read_bytes() for p in c.rglob("*") if p.is_file()})
+        order = [c.name, survivor]
+        view.publish(
+            folder, dict.fromkeys(order, 1), canvas, composition=snapshot(order), bake=bake
+        )
+        made = view.composer()
+        assert made.mosaic.voxel_um(0)[0] == spacing
+        assert made.mosaic.corner_um[0] == 60 and made.mosaic.shape(0)[0] == 3
+        assert made.values_for(0, 1, 0, 4)[0, 0] == 1200
+        assert all(p.read_bytes() == data for p, data in originals.items())
     finally:
         view.close()
 

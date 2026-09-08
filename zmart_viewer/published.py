@@ -29,7 +29,7 @@ from .library import _description_file, _read_attrs_at, discover
 STORE = ".zmart-viewer/overview.ome.zarr"
 
 
-def _place_depth(tiles):
+def _place_depth(tiles, *, spacing=None):
     """Display flats together; keep stacks on their common specimen-Z lattice."""
     flat = [tile.copies[0].shape[0] == 1 for tile in tiles]
     if any(flat) and not all(flat):
@@ -50,13 +50,30 @@ def _place_depth(tiles):
             for tile in tiles
         ]
         return placed, 0.0, 1.0
-    spacing = tiles[0].copies[0].voxel_um[0]
+    if spacing is None:
+        spacing = tiles[0].copies[0].voxel_um[0]
     if (
         not math.isfinite(spacing)
         or spacing <= 0
-        or any(copy.voxel_um[0] != spacing for tile in tiles for copy in tile.copies)
+        or any(
+            not math.isfinite(copy.voxel_um[0])
+            or copy.voxel_um[0] <= 0
+            # Match the origin-alignment tolerance over the full stack, not per plane.
+            or abs(copy.voxel_um[0] - spacing) * copy.shape[0] / spacing > 1e-7
+            for tile in tiles
+            for copy in tile.copies
+        )
     ):
         raise ValueError("Stack aggregates require the same positive Z spacing at every level")
+    tiles = [
+        replace(
+            tile,
+            copies=[
+                replace(copy, voxel_um=(spacing, *copy.voxel_um[1:])) for copy in tile.copies
+            ],
+        )
+        for tile in tiles
+    ]
     lower = min(tile.copies[0].corner_um[0] for tile in tiles)
     offsets = [(tile.copies[0].corner_um[0] - lower) / spacing for tile in tiles]
     if any(
@@ -337,7 +354,9 @@ class PublishedTransfer(ComposedPicture):
                     previous.mosaic.tiles[0].copies[0].shape[0] == 1
                 ):
                     raise ValueError("The aggregate cannot change between flat and stack sources")
-                tiles, depth_origin, depth_extent = _place_depth(tiles)
+                tiles, depth_origin, depth_extent = _place_depth(
+                    tiles, spacing=previous.mosaic.voxel_um(0)[0] if previous else None
+                )
                 if previous:
                     held = previous.mosaic
                     if (
