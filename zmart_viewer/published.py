@@ -38,20 +38,33 @@ class PublishedFolders:
         self.views = {}
         self._lock = threading.RLock()
 
-    def open(self, number, *, canvas=None, versions=None, composition=None, bake=True):
-        dataset = self.library.dataset(number)
+    def open(self, path, *, canvas=None, versions=None, composition=None, bake=True):
+        """Open or update the single publisher for a resolved acquisition folder."""
         bounds = canvas if canvas is not None else self.canvas
         if not bounds:
             raise ValueError("A live baked folder needs its full specimen canvas bounds")
-        view = PublishedTransfer(dataset.root / STORE)
         if composition is not None and versions is None:
             raise ValueError("Acquired composition needs explicit completed source revisions")
         automatic = versions is None
-        if automatic:
-            versions = self._versions_on_disk(dataset.root)
-        view.publish(dataset.root, versions, bounds, composition=composition, bake=bake)
         with self._lock:
+            root = discover(path)[0].resolve()
+            dataset = next((one for one in self.library.datasets() if one.root == root), None)
+            created = dataset is None
+            number = self.library.open(path) if created else dataset.number
+            held = self.views.get(number)
+            view = held[0] if held else PublishedTransfer(root / STORE)
+            try:
+                if automatic:
+                    versions = self._versions_on_disk(root)
+                view.publish(root, versions, bounds, composition=composition, bake=bake)
+            except Exception:
+                if not held:
+                    view.close()
+                if created:
+                    self.library.close(number)
+                raise
             self.views[number] = (view, bounds, automatic)
+            return number
 
     @staticmethod
     def _versions_on_disk(folder):

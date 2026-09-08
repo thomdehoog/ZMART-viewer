@@ -235,7 +235,7 @@ def test_complete_stores_append_retire_and_keep_one_aggregate_at_100(tmp_path, b
     canvas = {"x_um": [0, 1600], "y_um": [0, 8]}
     try:
         published.open(
-            number,
+            tmp_path,
             canvas=canvas,
             versions={names[0]: 1},
             bake=bake,
