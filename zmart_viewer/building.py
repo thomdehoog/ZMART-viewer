@@ -9,6 +9,7 @@ per commit: the cost of a change is the change.
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
@@ -442,7 +443,15 @@ def _holding_the_bake_lock(store: Path):
             import msvcrt
 
             holding.seek(0)
-            msvcrt.locking(holding.fileno(), msvcrt.LK_LOCK, 1)
+            while True:
+                try:
+                    msvcrt.locking(holding.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError as problem:
+                    # LK_LOCK waits only ten attempts; a bake may take longer.
+                    # Match flock's blocking semantics, without hiding other errors.
+                    if problem.errno != errno.EDEADLK:
+                        raise
 
             try:
                 yield
