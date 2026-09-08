@@ -113,8 +113,9 @@ ground, including retired positions, is rebuilt when baking resumes. Existing
 original stores are never edited. Interrupted publication fails closed until
 retry, including interrupted order changes.
 
-This API still requires at least one source, fixed matching C/Z/T geometry,
+This API still requires at least one source, fixed matching C/T geometry,
 at least two mean-pyramid levels and an integer-aligned common voxel lattice.
+Stack origins and depths may differ within a fixed aggregate Z domain (see below).
 Mixed flat/stack sources and growing Z domains are the next increment. Legacy
 folder opening and the earlier complete-rectangle bake API remain unchanged;
 they are not a fallback for a refused explicit composition snapshot.
@@ -228,3 +229,29 @@ vendor TIFFs in scratch, invokes the real position writer, and checks original
 bytes, native reads, coverage and browser fine/coarse placement in both bake modes.
 Generic qualification tests run without that external checkout. The actual writer
 is never imported by viewer production code, and no operator-name exception exists.
+
+## Aggregate Z placement: homogeneous sources
+
+Explicit acquired composition places one-plane sources at display Z=0 with unit
+depth spacing, regardless of their capture heights. Only the derived tile
+descriptions change; the separate original arrays and specimen metadata do not.
+Sparse regions remain in original source-local voxel coordinates.
+
+Stacks retain specimen-Z origins and relative offsets. Their common positive
+spacing must match at every level, with integer-aligned origins and unchanged
+plane counts across XY levels. The first snapshot fixes the aggregate Z domain;
+retiring an edge stack does not move that domain. Appends within it are supported.
+Outward growth is refused before publication until geometry-aware refresh exists.
+
+An aggregate cannot change between flat and stack behavior. Mixed inputs are
+explicitly refused: the next increment needs at most two stable aggregates per
+acquisition and engine support to keep the flat picture visible throughout Z.
+This increment proves each homogeneous aggregate, not that mixed display behavior.
+Existing geometry-only publications keep their old semantics; previously derived
+acquired pictures whose geometry would change need a new aggregate.
+
+The depth tests cover all eight reported capture heights without changing
+originals, stack offsets and unequal depths, C/T and sparse Z coverage, acquired
+black and later gap fill, both bake modes, retirement and fail-closed validation.
+Browser tests measure eight flat footprints and stack visibility at three
+specimen heights, fine/coarse coverage, one source and zero idle refetches.

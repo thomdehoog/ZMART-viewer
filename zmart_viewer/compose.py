@@ -288,6 +288,11 @@ class Mosaic:
                     math.ceil(size / voxel)
                     for size, voxel in zip(self.extent_um, self.voxel_um(level), strict=True)
                 )
+                if self.has_acquired_regions:
+                    depth = self.extent_um[0] / self.voxel_um(level)[0]
+                    # Physical extent round-trips must not invent a final Z plane.
+                    if math.isclose(depth, round(depth), rel_tol=0, abs_tol=1e-7):
+                        found = (round(depth), *found[1:])
                 self._shape[level] = found
                 return found
             placed = self.placements(level)
