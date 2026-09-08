@@ -312,11 +312,14 @@ def test_virtual_extended_levels_work_in_a_spawned_worker(tmp_path):
 
 
 @pytest.mark.parametrize("bake", [False, True])
-def test_browser_sparse_aggregate_refresh_pixels_and_requests(browser, built_dist, tmp_path, bake):
+@pytest.mark.parametrize("native", [False, True])
+def test_browser_sparse_aggregate_refresh_pixels_and_requests(browser, built_dist, tmp_path, bake, native):
     from pixels import image_middle
     from test_manifest_refresh_browser import _wait_for_picture
     from test_published_transfer import write_position
     from test_transparent_2d_browser import READ_ALPHA
+
+    from zmart_viewer.compose import MEAN_REDUCTION
 
     write_position(tmp_path, "black.ome.zarr", 0, 0)
     write_position(tmp_path, "signal.ome.zarr", 512, 2400)
@@ -349,6 +352,8 @@ def test_browser_sparse_aggregate_refresh_pixels_and_requests(browser, built_dis
             "order": ["black.ome.zarr", "signal.ome.zarr"],
         },
     }
+    if native:
+        payload["composition"]["pyramid_reduction"] = MEAN_REDUCTION
     try:
         assert page.request.post(f"{address}/api/stores/open", data=payload).ok
         page.goto(address)
@@ -400,6 +405,7 @@ def test_browser_sparse_aggregate_refresh_pixels_and_requests(browser, built_dis
         print(
             {
                 "bake": bake,
+                "native": native,
                 "fine_alpha": first,
                 "coarse_alpha": coarse,
                 "change_data_requests": len(changed_requests),

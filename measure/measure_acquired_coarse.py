@@ -17,7 +17,7 @@ import numpy as np
 import zarr
 
 from zmart_viewer import pieces
-from zmart_viewer.compose import Composer
+from zmart_viewer.compose import MEAN_REDUCTION, Composer
 from zmart_viewer.published import STORE, PublishedTransfer
 
 
@@ -114,6 +114,7 @@ def main():
         "channels": 1,
         "timepoints": 1,
         "dtype": "uint16",
+        "pyramid_reduction": MEAN_REDUCTION,
         "viewer_cache": "cold per request",
         "os_file_cache": "not flushed",
         "modes": [],
@@ -125,7 +126,11 @@ def main():
                 folder,
                 dict.fromkeys(names, 1),
                 canvas,
-                composition={"regions": "complete", "order": names},
+                composition={
+                    "regions": "complete",
+                    "order": names,
+                    "pyramid_reduction": MEAN_REDUCTION,
+                },
                 bake=bake,
             )
             publication_seconds = time.perf_counter() - started

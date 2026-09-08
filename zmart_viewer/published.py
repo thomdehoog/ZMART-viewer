@@ -194,7 +194,9 @@ class PublishedTransfer(ComposedPicture):
             raise ValueError("source_revisions must map completed position names to revisions")
         versions, canvas, composition = dict(versions), deepcopy(canvas), deepcopy(composition)
         if composition is not None and (
-            not isinstance(composition, dict) or set(composition) != {"regions", "order"}
+            not isinstance(composition, dict)
+            or not {"regions", "order"} <= composition.keys()
+            or composition.keys() - {"regions", "order", "pyramid_reduction"}
         ):
             raise ValueError("composition must contain explicit regions and order")
         if not bake and composition is None:
@@ -271,6 +273,10 @@ class PublishedTransfer(ComposedPicture):
                 affected.update(a for a, b in zip(before, after) if a != b)
             if bake != self.bake:
                 affected.update(versions.keys() | old_versions.keys())
+            if (composition or {}).get("pyramid_reduction") != (old_composition or {}).get(
+                "pyramid_reduction"
+            ):
+                affected.update(versions.keys() | old_versions.keys())
             tiles = []
             for name in versions:
                 if name not in changed:
@@ -333,7 +339,11 @@ class PublishedTransfer(ComposedPicture):
                         ]
                         for tile in tiles
                     }
-                mosaic = mosaic.with_acquired_regions(regions, order=composition["order"])
+                mosaic = mosaic.with_acquired_regions(
+                    regions,
+                    order=composition["order"],
+                    pyramid_reduction=composition.get("pyramid_reduction"),
+                )
                 while max(mosaic.shape(mosaic.levels - 1)[-2:]) > self._piece:
                     mosaic.levels += 1
 

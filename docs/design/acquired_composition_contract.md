@@ -35,7 +35,9 @@ added to original stores, and a snapshot owns its copy of the supplied regions.
 - The spatial index includes only cells intersecting acquired regions.
 - Fine composition reads original pixels only for acquired regions.
 - Coarse pixels reduce the composed finer image on a common XY lattice. They
-  do not select between independently averaged source pixels at overlap edges.
+  reuse native means only when the declared reducer matches and acquired pixel
+  ownership is constant within each reduction cell. Misaligned overlap edges
+  still compose before reducing.
 - The same mean reducer is used by composition and the existing baker, with
   edge padding and rounding preserved.
 - Binary coarse coverage is the union of contributing fine acquired pixels,
@@ -139,6 +141,9 @@ changed by this increment.
 
 ## Cold coarse-read cost
 
+The measurements below describe the initial L0-only implementation at `c3b1e00`;
+the following section records the guarded native-pyramid improvement.
+
 `measure/measure_acquired_coarse.py NEW_DIRECTORY` measures a fixed 100-position
 fixture: separate 1024x1024 uint16 images on a 10x10 grid, six native mean-pyramid
 levels, one channel, plane and timepoint. Every request starts with empty viewer
@@ -152,7 +157,48 @@ and 12.6 ms with bake on (no original reads). L4 and L5 were baked; L2 was virtu
 Initial virtual publication took 0.317 s; enabling baking took 3.578 s.
 
 These are single cold-request measurements, not acquisition throughput or bridge
-latency. They establish a real cost gap: acquired composition currently reduces
-L0 even when complete original pyramids exist. Reusing those pyramids needs a
-separate correctness-preserving change; independent reductions cannot simply
-replace compose-before-reduce at misaligned overlaps or sparse coverage edges.
+latency. They established a real cost gap: acquired composition reduced L0 even
+when complete original pyramids existed.
+
+## Guarded native-pyramid reuse
+
+A producer may add `"pyramid_reduction": "mean-xy2-edge-round"` to `composition`
+on both open and subsequent announcements. This explicitly guarantees that every
+source's native levels are consecutive applications of the shared `halve_xy`
+reducer: 2x2 XY mean, edge replication for odd dimensions, NumPy nearest-even
+rounding, cast back to the original dtype. Z, C and T are not reduced. A completed
+source revision must include all these native levels. Originals remain untouched.
+
+The OME `type: mean` label alone does not establish this rounding convention.
+For example, the record writer's `_halve` truncates integer means. Undeclared
+pyramids retain L0-derived composition, and unsupported declarations are refused.
+Do not set this declaration merely because a producer writes a mean pyramid.
+
+The existing composer reads native levels only if source placement and acquired
+region XY edges are aligned to the requested reduction lattice, and native shape,
+dtype, T/C room and sample-center translations match the expected pyramid.
+Aligned sparse regions, black pixels and aligned overlaps use the same path as
+complete stores. Ineligible chunks reduce finer composed chunks until safe native
+levels are reached, or L0 if necessary. Levels beyond a source's pyramid use that
+same reduction path. An ineligible source does not disable reuse in other chunks.
+Eligibility conservatively considers every region of each intersecting source.
+
+The declaration is persisted in the existing composition snapshot and travels to
+workers. Changing it dirties the aggregate so cached slabs and baked chunks cannot
+retain the previous interpretation. Idle snapshots and whole-source client refresh
+are otherwise unchanged; no notification or operator-specific mechanism is added.
+
+Repeating the same 100-position fixture with this declaration measured L2 at
+45.3 ms (bake off) / 26.1 ms (on), reading four originals at L2 rather than L0.
+Virtual L5 took 250.6 ms and read 100 originals at L5; baked L5 took 12.1 ms and
+read none. Enabling baking took 570.2 ms. All encoded hashes match the L0-only
+baseline and both bake modes. These remain single samples, not a latency bound.
+The browser still sees one aggregate; 100 original stores are opened internally
+on the cold virtual L5 request. Baking continues to avoid that fan-out.
+
+`tests/test_acquired_native_pyramids.py` compares against independent fine-image
+reductions and coverage for aligned and misaligned overlaps, sparse gaps, black
+pixels, C/Z/T, native/extended levels, bad native transforms, per-chunk eligibility,
+undeclared truncating means, publication rewrites, declaration changes and reopen.
+The sparse browser cases run both with and without the declaration, bake off/on.
+Operator adoption and producer qualification are not part of this increment.
