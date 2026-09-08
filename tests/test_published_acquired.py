@@ -11,7 +11,7 @@ from test_acquired_composition import pixels, region, source
 from test_server import request
 
 from zmart_viewer import pieces
-from zmart_viewer.published import STORE, PublishedTransfer
+from zmart_viewer.published import STACK_STORE, STORE, PublishedTransfer
 from zmart_viewer.server import make_server
 
 CANVAS = {"x_um": [0, 64], "y_um": [0, 8]}
@@ -207,7 +207,7 @@ def test_http_sparse_contract_cannot_silently_be_dropped(tmp_path, bake):
         assert {url for row in answer["layers"] for url in row["sources"]} == {
             answer["layers"][0]["sources"][0]
         }
-        assert STORE in answer["layers"][0]["sources"][0]
+        assert STACK_STORE in answer["layers"][0]["sources"][0]
         publication = {key: payload[key] for key in ("path", "source_revisions", "composition")}
         assert post("/api/announce", {"publications": [publication]})[0] == 200
         del publication["composition"]
@@ -248,8 +248,8 @@ def test_complete_stores_append_retire_and_keep_one_aggregate_at_100(tmp_path, b
                 "composition": {"regions": "complete", "order": names[:landed]},
             }
             published.announce([publication])
-            assert published.entries(library.entries()) == [(number, tmp_path, STORE)]
-        view = published.views[number][0]
+            assert published.entries(library.entries()) == [(number, tmp_path, STACK_STORE)]
+        view = published.views[number][0].outputs[STACK_STORE]
         made = view.composer()
         for level in range(made.mosaic.levels):
             mask = made.coverage_for(level, 1, 0, 0, moment=1, channel=1)
@@ -268,7 +268,7 @@ def test_complete_stores_append_retire_and_keep_one_aggregate_at_100(tmp_path, b
             assert not list(view._shown.glob("*/c"))
         print({"bake": bake, "positions": 100, "aggregate_sources": 1})
     finally:
-        pieces.forget(tmp_path / STORE)
+        pieces.forget(tmp_path / STACK_STORE)
         published.close()
 
 
@@ -313,7 +313,9 @@ def test_virtual_extended_levels_work_in_a_spawned_worker(tmp_path):
 
 @pytest.mark.parametrize("bake", [False, True])
 @pytest.mark.parametrize("native", [False, True])
-def test_browser_sparse_aggregate_refresh_pixels_and_requests(browser, built_dist, tmp_path, bake, native):
+def test_browser_sparse_aggregate_refresh_pixels_and_requests(
+    browser, built_dist, tmp_path, bake, native
+):
     from pixels import image_middle
     from test_manifest_refresh_browser import _wait_for_picture
     from test_published_transfer import write_position

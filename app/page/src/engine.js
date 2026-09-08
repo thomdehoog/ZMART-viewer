@@ -818,6 +818,22 @@ function applyOrder(manager, names) {
  * again, and its layers are left exactly as they are while that happens. This is the
  * one case where nothing is added to the scene and yet something must still happen.
  */
+function keepFlatDepthLocal(layer) {
+  for (const source of layer.dataSources) {
+    const place = () => {
+      const transform = source.loadState?.transform;
+      const space = transform?.outputSpace.value;
+      if (!space?.names.includes("z")) return;
+      transform.restoreState({ ...transform.toJSON(), outputDimensions:
+        Object.fromEntries(space.names.map((name, i) =>
+          [name === "z" ? "z'" : name, [space.scales[i], space.units[i]]])),
+      });
+    };
+    layer.registerDisposer(source.changed.add(place));
+    place();
+  }
+}
+
 export function syncLayers(viewer, specs, { reread = false } = {}) {
   const manager = viewer.layerManager;
   const wanted = new Set(specs.map((spec) => spec.name));
@@ -890,6 +906,7 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
       spec.name,
       rest.length ? { ...spec, source: stores.slice(0, firstShare) } : spec,
     );
+    if (spec.persistentFlat) keepFlatDepthLocal(managed.layer);
     // Building from the description already applied everything in it, including
     // the images; record them so the next pass does not add them a second time.
     sourcesApplied.set(managed.layer, new Set(stores));
@@ -1005,7 +1022,9 @@ function pinTheAxesThatMeasureDistance(viewer) {
   // round -- depth, height, width -- so reversing them is what puts width across
   // the window and depth into the screen, which is what the `xy` layout asked for
   // in App.jsx expects. The two belong together; see the note above.
-  const facing = distances.slice(0, 3).reverse();
+  const facing = distances.every(name => ["x", "y", "z"].includes(name))
+    ? ["x", "y", "z"].filter(name => distances.includes(name))
+    : distances.slice(0, 3).reverse();
   const current = viewer.navigationState.pose.displayDimensions.value;
   // Left alone when it is already right. Handing the engine the same answer it
   // already had is not free: it counts as a change, and everything downstream

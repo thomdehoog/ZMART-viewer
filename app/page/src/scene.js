@@ -212,7 +212,17 @@ export function restingWindow(spec, volumetric) {
 export function layersFor(config, mode, layerState, groupState, groupOrder,
                           volumeMode = "max", volume = {}) {
   const volumetric = mode === "volume";
-  const rows = config.layers.map((spec, index) => ({ spec, index }));
+  const rows = config.layers.flatMap((spec, index) => {
+    if (volumetric || !spec.sourceDepths) return [{ spec, index }];
+    return ["flat", "stack"].flatMap(depth => {
+      const indices = spec.sourceDepths.flatMap((kind, i) => kind === depth ? [i] : []);
+      if (!indices.length) return [];
+      const selected = { ...spec, depth };
+      for (const key of ["sources", "coverageSources", "sourceIds", "sourceRevisions", "frameCounts"])
+        if (spec[key]) selected[key] = indices.map(i => spec[key][i]);
+      return [{ spec: selected, index }];
+    });
+  });
   const ordered = groupOrder.flatMap((group) =>
     rows.filter(({ spec }) => (spec.group || "") === group),
   );
@@ -232,7 +242,8 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     const isMask = spec.kind === "segmentation";
     const layer = {
       type: isMask ? "segmentation" : "image",
-      name: engineName(spec),
+      name: engineName(spec) + (spec.depth ? `__${spec.depth}` : ""),
+      persistentFlat: spec.depth === "flat",
       // A row may be drawn from several stores -- several positions of the same
       // acquisition type. The engine takes the list and places each one using the
       // stage position recorded inside it.
@@ -328,9 +339,10 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     }
     return layer;
   });
-  if (volumetric || !config.transparentBackground) return layers;
+  if (volumetric) return layers;
   // Black underpainting supplies acquisition coverage independently of intensity.
-  // All coverage goes below all channels, so it cannot obscure another channel.
+  // Coverage goes below its flat/stack channel block, so acquired black can
+  // cover an earlier picture without obscuring channels in its own block.
   // One tiled source per image source; the layer count does not grow with positions.
   const coverage = layers.flatMap((layer, index) => {
     const sources = all[index].spec.coverageSources;
@@ -341,10 +353,25 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       sourceIds: layer.sourceIds?.map(id => `${id}/coverage`),
       sourceRevisions: layer.sourceRevisions,
       frameCounts: layer.frameCounts, localPosition: layer.localPosition,
-      visible: layer.visible, opacity: 1, blend: "additive",
+      persistentFlat: layer.persistentFlat,
+      visible: layer.visible, opacity: 1,
+      blend: all[index].spec.depth ? "default" : "additive",
       shader: "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
         + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }",
     }];
   });
-  return [...coverage, ...layers];
+  const result = [], handled = new Set();
+  for (let i = 0; i < layers.length; ++i) {
+    const spec = all[i].spec;
+    const group = spec.group || "";
+    if (handled.has(group)) continue;
+    handled.add(group);
+    for (const depth of [undefined, "flat", "stack"]) {
+      const selected = layers.filter((_, j) => (all[j].spec.group || "") === group
+        && all[j].spec.depth === depth);
+      const names = new Set(selected.map(layer => `__coverage__${layer.name}`));
+      result.push(...coverage.filter(layer => names.has(layer.name)), ...selected);
+    }
+  }
+  return result;
 }
