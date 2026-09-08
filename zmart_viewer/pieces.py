@@ -20,7 +20,7 @@ from pathlib import Path
 
 from zmart_viewer.record.gateway import live_run_holding
 
-from .building import OURS, GovernedRun
+from .building import OURS, ComposedPicture, GovernedRun
 from .compose import (
     Composer,
     Mosaic,
@@ -657,7 +657,7 @@ class TemporarilyUnanswerable(Exception):
     """This piece cannot be answered right now — which is not the same as absent."""
 
 
-_composers: dict[Path, tuple[tuple | None, Composer | GovernedRun | None]] = {}
+_composers: dict[Path, tuple[tuple | None, Composer | ComposedPicture | None]] = {}
 _guard = threading.Lock()
 
 _REFUSED_FOR_SECONDS = 2.0
@@ -676,7 +676,7 @@ def _what_it_was_built_from(store: Path) -> dict | None:
     held = json.loads(described.read_text(encoding="utf-8"))
     ours = (held.get("attributes") or {}).get(OURS)
 
-    if isinstance(ours, dict) and (ours.get("built_from") or ours.get("governed_from")):
+    if isinstance(ours, dict) and any(ours.get(key) for key in ("built_from", "governed_from", "published_from")):
         return ours
 
     return None
@@ -708,7 +708,7 @@ def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
     return read_the_transfer(Path(ours["built_from"]))
 
 
-def _composer_for(store: Path) -> Composer | GovernedRun | None:
+def _composer_for(store: Path) -> Composer | ComposedPicture | None:
     """The composer for this picture, opened once and kept."""
     store = store.resolve()
     mark = _the_pictures_mark(store)
@@ -773,10 +773,15 @@ def _composer_for(store: Path) -> Composer | GovernedRun | None:
             return made
 
 
-def _the_serving_behind(store: Path, ours: dict | None) -> Composer | GovernedRun | None:
+def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPicture | None:
     """What answers for this store: a composer, a governed run, or nothing."""
     if ours is None:
         return None
+
+    if ours.get("published_from"):
+        from .published import PublishedTransfer
+
+        return PublishedTransfer(store, piece=int(ours.get("piece") or 512))
 
     governs = ours.get("governed_from")
 
@@ -815,7 +820,7 @@ def a_manifest_governs(store: Path) -> bool:
     where = Path(store).resolve()
     held = _composer_for(where)
 
-    if GovernedRun is not None and isinstance(held, GovernedRun):
+    if isinstance(held, ComposedPicture):
         return True
 
     if held is None:
@@ -847,7 +852,7 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
     level, moment, channel, plane, row, column = address
     composer = None
 
-    if GovernedRun is not None and isinstance(held, GovernedRun):
+    if isinstance(held, ComposedPicture):
         try:
             composer = held.composer()
         except Exception as problem:
@@ -904,7 +909,7 @@ def a_sample_behind(store: Path, channel: int = 0):
 
     try:
         composer = (
-            held.composer() if GovernedRun is not None and isinstance(held, GovernedRun) else held
+            held.composer() if isinstance(held, ComposedPicture) else held
         )
         level = composer.mosaic.levels - 1
         deep, down, across = composer.grid(level)
@@ -944,7 +949,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
 
     try:
         composer = (
-            held.composer() if GovernedRun is not None and isinstance(held, GovernedRun) else held
+            held.composer() if isinstance(held, ComposedPicture) else held
         )
         depth, height, width = composer.mosaic.shape(level)
         moments, channels = composer.mosaic.frame_room
@@ -1016,7 +1021,7 @@ def forget_composer(store: Path) -> None:
 def catch_up_governed_runs() -> None:
     """Nudge every opened governed picture after an acquisition announcement."""
     with _guard:
-        governed = [held for _mark, held in _composers.values() if isinstance(held, GovernedRun)]
+        governed = [held for _mark, held in _composers.values() if isinstance(held, ComposedPicture)]
 
     for held in governed:
         held.request_catch_up()

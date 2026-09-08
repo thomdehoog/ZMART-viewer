@@ -69,6 +69,7 @@ class Demo:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bake", action="store_true", help="bake the combined coarse overview (off by default)")
     parser.add_argument(
         "--output",
         type=Path,
@@ -95,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         allow_open=False,
         allow_selection=True,
         transparent_background=True,
+        bake=args.bake,
     )
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()

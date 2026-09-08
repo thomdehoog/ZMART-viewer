@@ -96,7 +96,7 @@ def test_refused_composer_never_becomes_dense(monkeypatch, tmp_path):
     assert coverage.requires_geometry(tmp_path)
 
 
-def test_baked_overview_only_advertises_supported_coverage(monkeypatch, tmp_path):
+def test_baked_overview_serves_coverage_at_extended_levels(monkeypatch, tmp_path):
     group = zarr.open_group(tmp_path, mode="w", zarr_format=2)
     group.attrs["multiscales"] = [
         {
@@ -113,9 +113,10 @@ def test_baked_overview_only_advertises_supported_coverage(monkeypatch, tmp_path
     monkeypatch.setattr(coverage.pieces, "_composer_for", lambda _: composer)
     try:
         root = json.loads(coverage.answer(tmp_path, "zarr.json"))
-        assert root["attributes"]["ome"]["multiscales"][0]["datasets"] == [{"path": "0"}]
-        assert coverage.answer(tmp_path, "1/zarr.json") is None
-        assert coverage.answer(tmp_path, "1/c/0/0/0") is None
+        assert root["attributes"]["ome"]["multiscales"][0]["datasets"] == [{"path": "0"}, {"path": "1"}]
+        assert json.loads(coverage.answer(tmp_path, "1/zarr.json"))["shape"] == [1, 16, 16]
+        coarse = gzip.decompress(coverage.answer(tmp_path, "1/c/0/0/0"))
+        assert np.frombuffer(coarse, np.uint8).sum() == 16 * 16
         chunk = gzip.decompress(coverage.answer(tmp_path, "0/c/0/0/0"))
         assert np.frombuffer(chunk, np.uint8).sum() == 32 * 32
         assert composer.tile_reads == 0
