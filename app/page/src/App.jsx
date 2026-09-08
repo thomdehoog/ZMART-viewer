@@ -1449,13 +1449,8 @@ export default function App() {
         said = null; // not readable, so treat it as a plain "something changed"
       }
       if (said?.imageWrittenInPlace && engine.current) {
-        // Said outright, so there is no need to wait and find out: drop
-        // every decoded piece and let the safe refresh pump refetch each
-        // one behind the picture already on screen. This is the ONE
-        // invalidation — a surgical "named dirty pieces" ladder was
-        // measured against it (in-container and on the T400) and retired:
-        // the whole-source path passed the storm identity gates clean
-        // while the ladder kept failing its own delivery gates.
+        // Only unversioned stores need this hint. Revisioned sources refresh
+        // once through syncSources when catchUp observes a newer publication.
         letGoOfDecodedPieces(engine.current);
         askAgain();
         return;
