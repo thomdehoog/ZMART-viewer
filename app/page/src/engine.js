@@ -404,15 +404,26 @@ async function keepHandingOver() {
 export const lettingGo = { times: 0, asked: 0 };
 
 export function letGoOfDecodedPieces(viewer) {
-  // The pieces are held by objects shared with the worker that decodes them, and the
-  // engine keeps its side of that conversation as a plain map. Anything in it that knows
-  // how to let go is asked to; that is the sources holding image, and asking one that
-  // holds nothing costs nothing.
+  // Legacy write hints cover unversioned stores only. Revisioned sources are
+  // refreshed by syncSources, even when the same write also emits a legacy hint.
   const shared = viewer.chunkManager?.rpc?.objects;
   if (!shared) return 0;
+  const remembered = viewer.chunkManager?.memoize?.map;
+  const excluded = new Set();
+  for (const managed of viewer.layerManager.managedLayers) {
+    const spec = specApplied.get(managed);
+    if (!spec) continue;
+    for (const { url, revision } of revisionsFor(spec).values()) {
+      if (!Number.isFinite(revision) || !remembered) continue;
+      for (const key of memoEntriesForStableSource(remembered.keys(), url).decoded) {
+        excluded.add(remembered.get(key));
+      }
+    }
+  }
   let asked = 0;
   for (const [, held] of shared) {
-    if (!held || typeof held.invalidateCache !== "function") continue;
+    if (!held || excluded.has(held) || typeof held.invalidateCache !== "function") continue;
+    excluded.add(held);
     held.invalidateCache();
     asked += 1;
   }
@@ -517,7 +528,7 @@ function forgetWhatWasReadAbout(chunkManager, url) {
  * decoded holder is asked to clear its own chunks, while holders belonging to
  * every other stable URL remain untouched.
  */
-function forgetOneStableSource(chunkManager, url) {
+function forgetOneStableSource(chunkManager, url, refreshed = new Set()) {
   const remembered = chunkManager?.memoize?.map;
   const removed = { metadata: 0, decoded: 0 };
   if (!remembered) return removed;
@@ -527,7 +538,8 @@ function forgetOneStableSource(chunkManager, url) {
   }
   for (const question of matching.decoded) {
     const holder = remembered.get(question);
-    if (holder && typeof holder.invalidateCache === "function") {
+    if (holder && !refreshed.has(holder) && typeof holder.invalidateCache === "function") {
+      refreshed.add(holder);
       holder.invalidateCache();
       removed.decoded += 1;
     }
@@ -616,12 +628,12 @@ function syncSources(
       const store = source.spec.url.split("|")[0];
       const identity = growing.get(store);
       if (identity == null) continue;
-      if (!refreshed || !refreshed.has(identity)) {
-        const removed = forgetOneStableSource(chunkManager, store);
+      if (!refreshed || !refreshed.sources.has(identity)) {
+        const removed = forgetOneStableSource(chunkManager, store, refreshed?.holders);
         sourceRefreshing.sources.push(identity);
         sourceRefreshing.metadataEntries += removed.metadata;
         sourceRefreshing.decodedEntries += removed.decoded;
-        if (refreshed) refreshed.add(identity);
+        if (refreshed) refreshed.sources.add(identity);
       }
     }
   }
@@ -813,7 +825,8 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
   // The stores already forgotten on this pass, so that a store feeding several
   // rows is forgotten once rather than once per row. See syncSources.
   const forgotten = new Set();
-  const refreshed = new Set();
+  // Coverage and channel rows can share decoded holders despite different IDs.
+  const refreshed = { sources: new Set(), holders: new Set() };
   sourceRefreshing.passes += 1;
   sourceRefreshing.sources = [];
   sourceRefreshing.metadataEntries = 0;

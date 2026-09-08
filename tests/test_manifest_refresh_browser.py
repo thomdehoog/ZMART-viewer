@@ -341,6 +341,114 @@ def test_one_run_commit_makes_no_requests_for_an_unrelated_live_run(browser, bui
             page.close()
 
 
+def test_whole_source_refresh_runs_once_despite_legacy_hints_and_idle_checks(
+    browser, built_dist, tmp_path
+):
+    one = _run(tmp_path / "one", "run-one")
+    two = _run(tmp_path / "two", "run-two")
+    one.write_and_publish("posA", some_specimen(1200))
+    two.write_and_publish("posA", some_specimen(2200))
+    loads = [
+        {"path": one.folder, "stores": ["views/live/live.ome.zarr"], "name": "one"},
+        {"path": two.folder, "stores": ["views/live/live.ome.zarr"], "name": "two"},
+    ]
+    with _serving(built_dist, loads=loads, transparent_background=True) as address:
+        page = browser.new_page(viewport={"width": 1200, "height": 900})
+        page.add_init_script("globalThis.zmartLiveCheckMs = 500")
+        requested = []
+        page.on("request", lambda request: requested.append(urlsplit(request.url).path))
+        try:
+            _open(page, address, 1)
+            _wait_for_revision(page, 1, dataset=1)
+            _wait_for_picture(page)
+            page.evaluate("""() => {
+              globalThis.testInvalidations = [];
+              const seen = new Set();
+              for (const [key, holder] of window.zmartViewer.chunkManager.memoize.map) {
+                if (!holder?.invalidateCache || seen.has(holder)) continue;
+                seen.add(holder);
+                const measured = {key, calls: 0};
+                testInvalidations.push(measured);
+                const original = holder.invalidateCache;
+                holder.invalidateCache = function(...args) {
+                  measured.calls += 1;
+                  return original.apply(this, args);
+                };
+              }
+            }""")
+            assert page.evaluate("testInvalidations.length") > 0
+            before = image_middle(page)
+            page.screenshot(path=str(tmp_path / "before.png"))
+            for revision, intensity in [(2, 3000), (3, 300)]:
+                mark = len(requested)
+                page.evaluate("testInvalidations.forEach(item => { item.calls = 0; })")
+                if revision == 2:
+                    one.write_and_publish("posB", some_specimen(intensity))
+                else:
+                    one.replace_a_position("posB", some_specimen(intensity))
+                # A generic legacy write hint may arrive alongside manifest SSE.
+                hint = page.request.post(
+                    f"{address}/api/announce", data={"wrote_image_in_place": True}
+                )
+                assert hint.ok and hint.json()["told"] > 0
+                _wait_for_revision(page, revision)
+                _wait_for_picture(page)
+                after = image_middle(page)
+                changed = int(np.count_nonzero(np.any(before != after, axis=2)))
+                assert changed > 100
+                page.screenshot(path=str(tmp_path / f"revision-{revision}.png"))
+                calls = page.evaluate("testInvalidations")
+                changed_holders = [item for item in calls if item["calls"]]
+                assert changed_holders
+                assert all(item["calls"] == 1 for item in changed_holders)
+                assert all("/data/0/" in item["key"] for item in changed_holders)
+                assert any("__zmart_coverage__" in item["key"] for item in changed_holders)
+                image_requests = [path for path in requested[mark:] if path.startswith("/data/")]
+                assert image_requests
+                assert all(path.startswith("/data/0/") for path in image_requests)
+
+                idle_mark = len(requested)
+                hint = page.request.post(
+                    f"{address}/api/announce", data={"wrote_image_in_place": True}
+                )
+                assert hint.ok and hint.json()["told"] > 0
+                page.wait_for_timeout(1800)
+                assert page.evaluate("testInvalidations") == calls
+                assert not [path for path in requested[idle_mark:] if path.startswith("/data/")]
+                print(f"revision {revision}: {len(changed_holders)} holders refreshed once, "
+                      f"{len(image_requests)} data requests, {changed} changed pixels; "
+                      "duplicate hint + idle: 0 invalidations, 0 data requests")
+                before = after
+        finally:
+            page.close()
+
+
+def test_legacy_hint_still_refreshes_an_unversioned_store(browser, built_dist, tmp_path):
+    import zarr
+    from test_timelapse import _write_a_growing_timelapse
+
+    store = tmp_path / "position.ome.zarr"
+    _write_a_growing_timelapse(store, frames=1)
+    loads = [{"path": tmp_path, "stores": [store.name], "name": "position"}]
+    with _serving(built_dist, loads=loads) as address:
+        page = browser.new_page(viewport={"width": 1000, "height": 800})
+        try:
+            page.goto(address)
+            _wait_for_picture(page)
+            before = image_middle(page)
+            assert not any(row.get("sourceRevisions") for row in page.evaluate("zmartConfig.layers"))
+            zarr.open_group(str(store), mode="a")["0"][0] = 500
+            hint = page.request.post(
+                f"{address}/api/announce", data={"wrote_image_in_place": True}
+            )
+            assert hint.ok and hint.json()["told"] > 0
+            page.wait_for_function("zmartLetGo.asked > 0")
+            _wait_for_picture(page)
+            assert float(image_middle(page).mean()) < float(before.mean()) - 10
+        finally:
+            page.close()
+
+
 def test_suppressed_sse_hint_is_recovered_by_conditional_check(
     browser, built_dist, tmp_path, monkeypatch
 ):
