@@ -156,11 +156,10 @@ class Mosaic:
                 )
             base = tile.copies[0]
             if (
-                len(tile.copies) < self.levels
-                or base.dtype != self.dtype
+                base.dtype != self.dtype
                 or base.outer_shape != self.tiles[0].copies[0].outer_shape
             ):
-                raise ValueError("Acquired sources must agree on levels, dtype and T/C dimensions")
+                raise ValueError("Acquired sources must agree on dtype and T/C dimensions")
             for level, copy in enumerate(tile.copies[: self.levels]):
                 expected = (
                     base.voxel_um[0],
@@ -233,6 +232,9 @@ class Mosaic:
 
     def voxel_um(self, level: int) -> tuple[float, float, float]:
         """How large one voxel of the built picture is at this resolution."""
+        if self.has_acquired_regions:
+            z, y, x = self.tiles[0].copies[0].voxel_um
+            return z, y * 2**level, x * 2**level
         return self.tiles[0].copies[level].voxel_um
 
     def lands_at(self, tile: Tile, level: int) -> tuple[int, int, int]:
@@ -1069,7 +1071,7 @@ class Composer:
         if declared is not None:
             return int(declared[level])
 
-        return int(self.mosaic.tiles[0].copies[level].chunks[0])
+        return int(self.mosaic.tiles[0].copies[0 if self._acquired else level].chunks[0])
 
     # -- building ------------------------------------------------------------
 
@@ -1457,7 +1459,7 @@ class Composer:
                             self._a_slab_read_back(baked, level, low_z, row, column)
 
         if self._warm_store is not None:
-            for level in sorted(self.pinned_levels, reverse=True):
+            for level in ([0] if self._acquired else sorted(self.pinned_levels, reverse=True)):
                 for tile, _ in self.mosaic.placements(level):
                     copy = tile.copies[level]
                     blocks = [
@@ -1626,7 +1628,10 @@ class Composer:
         try:
             covering = self._tiles_in_each_piece(level).get((row, column), ())
 
-            if not any(_tile_has_the_frame(tile, level, moment, channel) for tile, _ in covering):
+            if not any(
+                _tile_has_the_frame(tile, 0 if self._acquired else level, moment, channel)
+                for tile, _ in covering
+            ):
                 return None
 
             slab = self._slab_for(level, plane, row, column, moment, channel)
@@ -1653,7 +1658,10 @@ class Composer:
         try:
             covering = self._tiles_in_each_piece(level).get((row, column), ())
 
-            if not any(_tile_has_the_frame(tile, level, moment, channel) for tile, _ in covering):
+            if not any(
+                _tile_has_the_frame(tile, 0 if self._acquired else level, moment, channel)
+                for tile, _ in covering
+            ):
                 return None
 
             slab = self._slab_for(level, plane, row, column, moment, channel)

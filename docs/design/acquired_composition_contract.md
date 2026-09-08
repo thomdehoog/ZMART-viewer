@@ -1,9 +1,9 @@
-# Acquired composition: first implementation increment
+# Acquired composition and completed publication
 
 `Mosaic.with_acquired_regions(regions, order=...)` creates a new composition
-snapshot from separate, unchanged original stores. This is a shared Python
-composition contract, not yet the external live-publication API or operator
-integration. Existing publication and rig Z behavior are unchanged.
+snapshot from separate, unchanged original stores. The external completed-folder
+publication API now uses this contract when `composition` is supplied. Operator
+integration and rig Z behavior are unchanged.
 
 Every source name must occur exactly once in `order` and have an explicit list
 in `regions`. An empty list means no acquired content. Missing information is
@@ -57,14 +57,70 @@ Coarse composition uses the existing chunk/slab caches and reads finer composed
 chunks as needed. This correctness increment is not a claim of optimized large
 sparse-source throughput. It does not create another full-resolution mosaic.
 
-Next, the existing completed-publication path must bind regions and source order
-to its revision, compute dirty ground for region/order changes, and expose the
-aggregate with baking either off or on. Order-only changes such as raising a
-target must not rewrite originals. Do not enable sparse operator publication
-before that wiring and its retry, refresh and browser tests pass.
+## Completed-folder API
+
+Open through `POST /api/stores/open`:
+
+```json
+{
+  "path": "C:/runs/example/positions",
+  "canvas": {"x_um": [0, 10000], "y_um": [0, 8000]},
+  "bake": false,
+  "source_revisions": {"a.ome.zarr": 1, "b.ome.zarr": 1},
+  "composition": {"regions": "complete", "order": ["a.ome.zarr", "b.ome.zarr"]}
+}
+```
+
+`"complete"` is the producer's explicit guarantee that every voxel in each
+named store's T/C/Z room was acquired. The adapter derives rectangles from the
+original geometry; the producer need not maintain a duplicate region list.
+It is not a default for unknown stores. For sparse stores, replace `"complete"`
+with a map from every source name to its acquired-region list as defined above.
+Filenames, brightness and absent chunk files cannot establish completeness.
+
+Announce the next complete snapshot using the existing `POST /api/announce`:
+`{"publications": [{"path": ..., "source_revisions": ..., "composition": ...}]}`.
+The canvas and bake mode are held by the open view. Explicit composition requires
+explicit completed revisions; metadata polling is not a substitute. Source
+revisions track pixel changes; `order` separately determines back-to-front
+precedence. An order-only raise does not rewrite or reread original metadata.
+
+The resulting source is `.zmart-viewer/overview.ome.zarr` in either bake mode;
+the historical filename does not restrict it to overview workflows. Image and
+coverage addresses stay stable as positions append or retire. Both modes declare
+the same levels, extending XY reduction until the canvas fits one coarse chunk.
+Bake off composes requested chunks without writing image chunks. Bake on uses
+the existing chunk baker, retaining virtual full-resolution reads.
+
+Pixel, coverage or order changes advance one aggregate revision. Identical
+snapshots perform no image work. Dirty ground is conservatively the union of
+old/new acquired footprints of affected sources, at chunk granularity; all
+C/Z/T planes of those XY chunks are reconsidered. Unrelated baked chunks and
+cached composition survive. This is not minimal per-voxel or per-C/Z/T dirtiness.
+The existing whole-source client refresh updates image and coverage together.
+
+Reopening with a different bake flag is supported without changing the aggregate
+address. Old baked files are ignored while baking is off; accumulated dirty
+ground, including retired positions, is rebuilt when baking resumes. Existing
+original stores are never edited. Interrupted publication fails closed until
+retry, including interrupted order changes.
+
+This API still requires at least one source, fixed matching C/Z/T geometry,
+at least two mean-pyramid levels and an integer-aligned common voxel lattice.
+Mixed flat/stack sources and growing Z domains are the next increment. Legacy
+folder opening and the earlier complete-rectangle bake API remain unchanged;
+they are not a fallback for a refused explicit composition snapshot.
 
 `tests/test_acquired_composition.py` covers fine/coarse numerical pixels, opaque
 black coverage, gap filling, partial/empty chunks, overlap order, C/Z/T,
 snapshot validation, real workers, unchanged original bytes, odd canvas edges
 and reuse of the existing chunk baker without a level-zero copy. These are
 backend tests, not proof of mixed-Z operator rendering.
+
+`tests/test_published_acquired.py` adds publication/recovery and bake-switch tests,
+100 small-position source-count checks, and real-browser fine/coarse alpha,
+pixel-change, request and idle-refresh assertions in both bake modes. The
+100-position fixture uses 8x8 images with two T/C/Z values; it is a capability
+check, not evidence of production acquisition throughput. Cold coarse requests
+may read substantial fine data. No release default or operator installation is
+changed by this increment.

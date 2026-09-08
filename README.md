@@ -243,10 +243,12 @@ The experimental operator branch's **Bake coarse overview (experimental)**
 checkbox selects this path before Connect. It affects overview scans only; focus and target sources
 keep their existing representation. Leave it unchecked for the original path.
 
-Shared sparse composition is being added incrementally. Its first Python-level
-[acquired-region contract](docs/design/acquired_composition_contract.md) is
-implemented and tested; it is not yet wired into external live publication or
-the operator. Do not enable sparse stores through the rectangular adapter above.
+The explicit [acquired-composition publication API](docs/design/acquired_composition_contract.md)
+now aggregates complete or sparse stores with baking off or on. Complete-store
+producers declare completeness; sparse producers supply acquired regions. Both
+use the same aggregate and separate original files. This new API is not yet
+integrated into the operator. Do not pass sparse stores to the legacy rectangular
+adapter above.
 
 ## Try the time slider
 

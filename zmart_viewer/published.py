@@ -1,4 +1,4 @@
-"""Optional coarse baking of completed external position stores.
+"""Publish aggregate pictures from completed external position stores.
 
 The acquisition supplies stable specimen bounds and completed-store revisions.
 Pixels stay in their original stores; only coarse chunks are materialized here.
@@ -13,6 +13,7 @@ import threading
 from copy import deepcopy
 from pathlib import Path
 
+from .acquired import AcquiredRegion
 from .building import ComposedPicture, _after_a_windows_reader, _holding_the_bake_lock
 from .compose import (
     Composer,
@@ -37,16 +38,18 @@ class PublishedFolders:
         self.views = {}
         self._lock = threading.RLock()
 
-    def open(self, number, *, canvas=None, versions=None):
+    def open(self, number, *, canvas=None, versions=None, composition=None, bake=True):
         dataset = self.library.dataset(number)
         bounds = canvas if canvas is not None else self.canvas
         if not bounds:
             raise ValueError("A live baked folder needs its full specimen canvas bounds")
         view = PublishedTransfer(dataset.root / STORE)
+        if composition is not None and versions is None:
+            raise ValueError("Acquired composition needs explicit completed source revisions")
         automatic = versions is None
         if automatic:
             versions = self._versions_on_disk(dataset.root)
-        view.publish(dataset.root, versions, bounds)
+        view.publish(dataset.root, versions, bounds, composition=composition, bake=bake)
         with self._lock:
             self.views[number] = (view, bounds, automatic)
 
@@ -65,7 +68,13 @@ class PublishedFolders:
                 for number, (view, canvas, _automatic) in self.views.items():
                     dataset = self.library.dataset(number)
                     if dataset and dataset.root == folder:
-                        view.publish(folder, publication["source_revisions"], canvas)
+                        view.publish(
+                            folder,
+                            publication["source_revisions"],
+                            canvas,
+                            composition=publication.get("composition"),
+                            bake=view.bake,
+                        )
                         matched = True
                 if not matched:
                     raise ValueError(f"No baked folder is open at {folder}")
@@ -154,11 +163,29 @@ class PublishedTransfer(ComposedPicture):
     def revision(self) -> int:
         return self._state["revision"] if self._state else 0
 
-    def publish(self, folder: Path, versions: dict[str, int], canvas: dict) -> int:
+    @property
+    def bake(self) -> bool:
+        return (self._state or {}).get("bake", True)
+
+    def publish(
+        self,
+        folder: Path,
+        versions: dict[str, int],
+        canvas: dict,
+        *,
+        composition: dict | None = None,
+        bake: bool = True,
+    ) -> int:
         """Publish a complete snapshot; identical snapshots perform no pixel I/O."""
         if not isinstance(versions, dict):
             raise ValueError("source_revisions must map completed position names to revisions")
-        versions, canvas = dict(versions), deepcopy(canvas)
+        versions, canvas, composition = dict(versions), deepcopy(canvas), deepcopy(composition)
+        if composition is not None and (
+            not isinstance(composition, dict) or set(composition) != {"regions", "order"}
+        ):
+            raise ValueError("composition must contain explicit regions and order")
+        if not bake and composition is None:
+            raise ValueError("An unbaked external aggregate needs explicit acquired composition")
         self._shown.mkdir(parents=True, exist_ok=True)
         with self._lock, _holding_the_bake_lock(self._shown):
             pending = self._shown / "pending.json"
@@ -168,9 +195,18 @@ class PublishedTransfer(ComposedPicture):
             if (self._shown / "publication.json").exists():
                 self._read_snapshot()
             old_versions = (self._state or {}).get("versions", {})
+            old_composition = (self._state or {}).get("composition")
+            if self._state and (composition is None) != (old_composition is None):
+                raise ValueError("The acquisition cannot change its acquired-coverage contract")
             if self._state and canvas != self._state["canvas"]:
                 raise ValueError("The baked canvas cannot change within an open acquisition")
-            if self._state and versions == old_versions and not recovering:
+            if (
+                self._state
+                and versions == old_versions
+                and composition == old_composition
+                and bake == self.bake
+                and not recovering
+            ):
                 return self.revision
             if not versions:
                 raise ValueError("A baked overview needs at least one completed position")
@@ -179,7 +215,7 @@ class PublishedTransfer(ComposedPicture):
                     raise ValueError(
                         "Position names must name OME-Zarr stores directly in the folder"
                     )
-                if not isinstance(revision, int) or revision < old_versions.get(name, 0):
+                if type(revision) is not int or revision < old_versions.get(name, 0):
                     raise ValueError("Completed position revisions must not regress")
             for axis in ("x_um", "y_um"):
                 low, high = canvas[axis]
@@ -195,6 +231,33 @@ class PublishedTransfer(ComposedPicture):
             }
             if recovering:
                 changed = versions.keys() | old_versions.keys()
+            affected = set(changed)
+            if composition is not None:
+                old_regions = (old_composition or {}).get("regions", {})
+                regions, order = composition["regions"], composition["order"]
+                if (regions != "complete" and not isinstance(regions, dict)) or not isinstance(
+                    order, list
+                ):
+                    raise ValueError(
+                        "Composition regions must be 'complete' or a map, and order a list"
+                    )
+                if any(not isinstance(name, str) for name in order):
+                    raise ValueError("Composition order must contain source names")
+                if isinstance(regions, dict) and isinstance(old_regions, dict):
+                    affected.update(
+                        name
+                        for name in versions.keys() | old_versions.keys()
+                        if regions.get(name) != old_regions.get(name)
+                    )
+                elif regions != old_regions:
+                    affected.update(versions.keys() | old_versions.keys())
+                old_order = (old_composition or {}).get("order", [])
+                common = set(old_order) & set(order)
+                before = [name for name in old_order if name in common]
+                after = [name for name in order if name in common]
+                affected.update(a for a, b in zip(before, after) if a != b)
+            if bake != self.bake:
+                affected.update(versions.keys() | old_versions.keys())
             tiles = []
             for name in versions:
                 if name not in changed:
@@ -245,6 +308,21 @@ class PublishedTransfer(ComposedPicture):
                 averaged=averaged,
                 omero=attrs.get("omero"),
             )
+            if composition is not None:
+                regions = composition["regions"]
+                if regions == "complete":
+                    moments, channels = mosaic.frame_room
+                    regions = {
+                        tile.name: [
+                            AcquiredRegion(t, c, (0, 0, 0), tile.copies[0].shape).as_written()
+                            for t in range(moments)
+                            for c in range(channels)
+                        ]
+                        for tile in tiles
+                    }
+                mosaic = mosaic.with_acquired_regions(regions, order=composition["order"])
+                while max(mosaic.shape(mosaic.levels - 1)[-2:]) > self._piece:
+                    mosaic.levels += 1
 
             def geometry(of):
                 return (
@@ -277,8 +355,23 @@ class PublishedTransfer(ComposedPicture):
                 int(level): {tuple(chunk) for chunk in chunks}
                 for level, chunks in (recovering or {}).get("dirty", {}).items()
             }
+            unbaked_dirty = {
+                int(level): {tuple(chunk) for chunk in chunks}
+                for level, chunks in (self._state or {}).get("unbaked_dirty", {}).items()
+            }
+            if bake:
+                for level, chunks in unbaked_dirty.items():
+                    dirty.setdefault(level, set()).update(chunks)
             for source in (previous, made):
                 if source is None:
+                    continue
+                if mosaic.has_acquired_regions:
+                    for level in range(mosaic.levels):
+                        dirty.setdefault(level, set()).update(
+                            cell
+                            for cell, tiles_here in source._tiles_in_each_piece(level).items()
+                            if any(tile.name in affected for tile, _ in tiles_here)
+                        )
                     continue
                 for tile in source.mosaic.tiles:
                     if tile.name not in changed:
@@ -308,7 +401,7 @@ class PublishedTransfer(ComposedPicture):
                 made.inherit_the_unchanged(previous, dirty, stale=stale)
             self._shown.mkdir(parents=True, exist_ok=True)
             description = json.loads(made.group_json())
-            baked = self._declare_levels(made, description)
+            baked = self._declare_levels(made, description, bake=bake)
             _atomic_json(
                 pending,
                 {
@@ -337,20 +430,27 @@ class PublishedTransfer(ComposedPicture):
                 reached = {(row // 2, col // 2) for row, col in reached}
                 if reached:
                     self._rehalve_one_level(level, sorted(reached), frames)
+            for level, chunks in dirty.items():
+                unbaked_dirty.setdefault(level, set()).update(chunks)
             state = {
                 "revision": self.revision + 1,
                 "versions": versions,
                 "canvas": canvas,
+                "composition": composition,
+                "bake": bake,
+                "unbaked_dirty": {}
+                if bake
+                else {str(level): sorted(chunks) for level, chunks in unbaked_dirty.items()},
                 "mosaic": the_mosaic_written_down(mosaic),
             }
-            _atomic_json(self._shown / "publication.json", state)
-            if not (self._shown / "zarr.json").exists():
+            if not (self._shown / "zarr.json").exists() or bake != self.bake:
                 description["attributes"]["zmart"] = {
                     "published_from": str(folder.resolve()),
                     "piece": self._piece,
                     "baked": baked,
                 }
                 _atomic_json(self._shown / "zarr.json", description)
+            _atomic_json(self._shown / "publication.json", state)
             (self._shown / "pending.json").unlink()
             self._state = state
             self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
@@ -359,7 +459,7 @@ class PublishedTransfer(ComposedPicture):
                 previous.stop_warming()
             return self.revision
 
-    def _declare_levels(self, made: Composer, description: dict) -> list[int]:
+    def _declare_levels(self, made: Composer, description: dict, *, bake=True) -> list[int]:
         datasets = description["attributes"]["ome"]["multiscales"][0]["datasets"]
         for level in range(made.mosaic.levels):
             path = self._shown / str(level)
@@ -367,6 +467,12 @@ class PublishedTransfer(ComposedPicture):
             if not (path / "zarr.json").exists():
                 _atomic_json(path / "zarr.json", json.loads(made.array_json(level)))
         baked = sorted(level for level in made.pinned_levels if level > 0)
+        if not bake:
+            return []
+        if made.mosaic.has_acquired_regions:
+            return sorted(
+                set(baked) | set(range(made.mosaic.tiles[0].keeps - 1, made.mosaic.levels))
+            )
         level = made.mosaic.levels - 1
         metadata = json.loads(made.array_json(level))
         while max(metadata["shape"][-2:]) > self._piece:
