@@ -27,6 +27,7 @@ IMAGE_SUFFIX = ".ome.zarr"
 
 OURS = "zmart"
 MEAN_REDUCTION = "mean-xy2-edge-round"
+MEAN_CROP_REDUCTION = "mean-xy2-crop-f32-rint-int"
 
 
 @dataclass
@@ -111,6 +112,7 @@ class Mosaic:
     omero: dict | None = None
     extent_um: tuple[float, float, float] | None = None
     pyramid_reduction: str | None = None
+    xy_origin: str = "center"
 
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
         default_factory=dict, repr=False
@@ -123,7 +125,12 @@ class Mosaic:
         return any(tile.acquired_regions is not None for tile in self.tiles)
 
     def with_acquired_regions(
-        self, regions: dict, *, order: list[str], pyramid_reduction: str | None = None
+        self,
+        regions: dict,
+        *,
+        order: list[str],
+        pyramid_reduction: str | None = None,
+        xy_origin: str = "center",
     ) -> Mosaic:
         """A new snapshot with exact coverage and back-to-front source order.
 
@@ -145,8 +152,10 @@ class Mosaic:
             raise ValueError("Acquired sources must have unique names")
         if not self.averaged:
             raise ValueError("Acquired composition requires a mean pyramid")
-        if pyramid_reduction not in (None, MEAN_REDUCTION):
+        if pyramid_reduction not in (None, MEAN_REDUCTION, MEAN_CROP_REDUCTION):
             raise ValueError("Unsupported acquired pyramid reduction")
+        if xy_origin not in ("center", "corner"):
+            raise ValueError("XY origin must be center or corner")
         made = []
         for name in order:
             tile = tiles[name]
@@ -215,6 +224,7 @@ class Mosaic:
             self.omero,
             self.extent_um,
             pyramid_reduction=pyramid_reduction,
+            xy_origin=xy_origin,
         )
 
     @property
@@ -707,6 +717,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         **({"extent_um": list(mosaic.extent_um)} if mosaic.extent_um is not None else {}),
         **({"averaged": True} if mosaic.averaged else {}),
         **({"pyramid_reduction": mosaic.pyramid_reduction} if mosaic.pyramid_reduction else {}),
+        **({"xy_origin": mosaic.xy_origin} if mosaic.xy_origin != "center" else {}),
         # Only where the tiles said something. A picture whose tiles named no
         # channels writes no key, exactly as it did before this was carried.
         **({"omero": mosaic.omero} if mosaic.omero else {}),
@@ -786,6 +797,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
             },
             order=[tile.name for tile in tiles],
             pyramid_reduction=held.get("pyramid_reduction"),
+            xy_origin=held.get("xy_origin", "center"),
         )
     return mosaic
 
@@ -1220,17 +1232,29 @@ class Composer:
         Aligned region edges preserve gaps and overlap order. Misaligned sources
         or regions need compose-before-reduce, including odd-sized tile edges.
         """
-        if self.mosaic.pyramid_reduction != MEAN_REDUCTION:
+        reduction = self.mosaic.pyramid_reduction
+        if reduction not in (MEAN_REDUCTION, MEAN_CROP_REDUCTION):
             return False
         factor = 2**level
         for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
             if level >= len(tile.copies) or any(n % factor for n in at[1:]):
                 return False
             base, copy = tile.copies[0], tile.copies[level]
+            if reduction == MEAN_CROP_REDUCTION:
+                dtype = np.dtype(base.dtype)
+                # Four <=16-bit integers sum exactly in float32. Cropping and
+                # edge replication agree only while both dimensions divide evenly.
+                if (
+                    dtype.kind not in "iu"
+                    or dtype.itemsize > 2
+                    or any(n % factor for n in base.shape[1:])
+                ):
+                    return False
+            shift = 0 if self.mosaic.xy_origin == "corner" else (factor - 1) / 2
             expected_corner = (
                 base.corner_um[0],
-                base.corner_um[1] + (factor - 1) * base.voxel_um[1] / 2,
-                base.corner_um[2] + (factor - 1) * base.voxel_um[2] / 2,
+                base.corner_um[1] + shift * base.voxel_um[1],
+                base.corner_um[2] + shift * base.voxel_um[2],
             )
             if (
                 copy.shape
@@ -1751,6 +1775,9 @@ class Composer:
 
             if self.mosaic.averaged:
                 at = [at[axis] + (voxel[axis] - base[axis]) / 2 for axis in range(3)]
+            if self.mosaic.xy_origin == "corner":
+                at[1] += base[1] / 2
+                at[2] += base[2] / 2
 
             datasets.append(
                 {

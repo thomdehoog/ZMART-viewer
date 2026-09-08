@@ -196,7 +196,7 @@ class PublishedTransfer(ComposedPicture):
         if composition is not None and (
             not isinstance(composition, dict)
             or not {"regions", "order"} <= composition.keys()
-            or composition.keys() - {"regions", "order", "pyramid_reduction"}
+            or composition.keys() - {"regions", "order", "pyramid_reduction", "xy_origin"}
         ):
             raise ValueError("composition must contain explicit regions and order")
         if not bake and composition is None:
@@ -213,6 +213,10 @@ class PublishedTransfer(ComposedPicture):
             old_composition = (self._state or {}).get("composition")
             if self._state and (composition is None) != (old_composition is None):
                 raise ValueError("The acquisition cannot change its acquired-coverage contract")
+            if self._state and (composition or {}).get("xy_origin", "center") != (
+                old_composition or {}
+            ).get("xy_origin", "center"):
+                raise ValueError("The acquisition cannot change its XY coordinate convention")
             if self._state and canvas != self._state["canvas"]:
                 raise ValueError("The baked canvas cannot change within an open acquisition")
             if (
@@ -343,6 +347,7 @@ class PublishedTransfer(ComposedPicture):
                     regions,
                     order=composition["order"],
                     pyramid_reduction=composition.get("pyramid_reduction"),
+                    xy_origin=composition.get("xy_origin", "center"),
                 )
                 while max(mosaic.shape(mosaic.levels - 1)[-2:]) > self._piece:
                     mosaic.levels += 1
