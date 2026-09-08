@@ -8,7 +8,7 @@ import pytest
 import zarr
 from test_published_depth import CANVAS, at_depth, composition
 
-from zmart_viewer.published import STACK_STORE, STORE, PublishedAcquisition
+from zmart_viewer.published import STACK_STORE, STORE, PublishedAcquisition, PublishedTransfer
 
 
 def focused(folder, name, x, height, *, reference=None, depth=3):
@@ -24,6 +24,98 @@ def focused(folder, name, x, height, *, reference=None, depth=3):
             }
         }
     return path
+
+
+def test_interrupted_bake_can_reopen_and_recover(tmp_path, monkeypatch):
+    name = "flat.ome.zarr"
+    path = focused(tmp_path, name, 256.75, 70, depth=1)
+    view = PublishedAcquisition(tmp_path, piece=64)
+    view.publish(tmp_path, {name: 1}, CANVAS, composition=composition([name]), bake=True)
+    group = zarr.open_group(str(path), mode="r+")
+    for level in range(3):
+        group[str(level)][:] = 2000
+    replace_piece = PublishedTransfer._replace_one_piece
+
+    def interrupted(output, *args, **kwargs):
+        replace_piece(output, *args, **kwargs)
+        raise OSError("interrupted baked write")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PublishedTransfer, "_replace_one_piece", interrupted)
+        with pytest.raises(OSError, match="interrupted baked write"):
+            view.publish(tmp_path, {name: 2}, CANVAS, composition=composition([name]), bake=True)
+    view.close()
+    view = PublishedAcquisition(tmp_path, piece=64)
+    try:
+        with pytest.raises(RuntimeError, match="needs recovery"):
+            view.outputs[STORE].composer()
+        view.publish(tmp_path, {name: 2}, CANVAS, composition=composition([name]), bake=True)
+        made = view.outputs[STORE].composer()
+        assert made.values_for(0, 0, 0, 4)[0, 2] == 2000
+        assert made.values_for(2, 0, 0, 1)[0, 2] == 2000
+        assert not (tmp_path / STORE / "pending.json").exists()
+        assert view.outputs[STORE].revision == 2
+    finally:
+        view.close()
+
+
+@pytest.mark.parametrize("depth", [1, 3])
+@pytest.mark.parametrize("reopen", [False, True])
+def test_interrupted_fractional_bake_can_retire(tmp_path, monkeypatch, depth, reopen):
+    name = "position.ome.zarr"
+    focused(tmp_path, name, 256.75, 60, reference=61.3, depth=depth)
+    view = PublishedAcquisition(tmp_path, piece=64)
+    view.publish(tmp_path, {name: 1}, CANVAS, composition=composition([name]), bake=True)
+    output_name = STORE if depth == 1 else STACK_STORE
+    corner = view.outputs[output_name].composer().mosaic.tiles[0].copies[0].corner_um
+    replace_piece = PublishedTransfer._replace_one_piece
+
+    def interrupted(output, *args, **kwargs):
+        replace_piece(output, *args, **kwargs)
+        raise OSError("interrupted baked write")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PublishedTransfer, "_replace_one_piece", interrupted)
+        with pytest.raises(OSError, match="interrupted baked write"):
+            view.publish(tmp_path, {name: 2}, CANVAS, composition=composition([name]), bake=True)
+    if reopen:
+        view.close()
+        view = PublishedAcquisition(tmp_path, piece=64)
+    try:
+        view.publish(tmp_path, {}, CANVAS, composition=composition([]), bake=True)
+        made = view.outputs[output_name].composer()
+        assert made.mosaic.tiles[0].copies[0].corner_um == corner
+        for level in range(made.mosaic.levels):
+            col = (257 // 2**level) // 64
+            for plane in range(depth):
+                assert not made.coverage_for(level, plane, 0, col).any()
+                assert made.values_for(level, plane, 0, col) is None
+        assert not (tmp_path / output_name / "pending.json").exists()
+    finally:
+        view.close()
+
+
+@pytest.mark.parametrize("bake", [False, True])
+def test_relative_stack_offsets_survive_public_acquisition_composition(tmp_path, bake):
+    names = ["a.ome.zarr", "b.ome.zarr"]
+    focused(tmp_path, names[0], 0, 60, reference=61.3)
+    focused(tmp_path, names[1], 256, 104.5, reference=104.5)
+    view = PublishedAcquisition(tmp_path, piece=64)
+    try:
+        view.publish(
+            tmp_path, dict.fromkeys(names, 1), CANVAS, composition=composition(names), bake=bake
+        )
+        made = view.outputs[STACK_STORE].composer()
+        assert made.mosaic.corner_um[0] == pytest.approx(-1.3)
+        assert made.mosaic.shape(0)[0] == 4
+        for level in range(made.mosaic.levels):
+            col, x = divmod(256 // 2**level, 64)
+            # At shared relative Z=0, A is on its second plane and B on its first.
+            assert made.values_for(level, 1, 0, 0)[0, 0] == 1800
+            assert made.values_for(level, 1, 0, col)[0, x] == 1000
+            assert not made.coverage_for(level, 0, 0, col)[0, x]
+    finally:
+        view.close()
 
 
 @pytest.mark.parametrize("bake", [False, True])
@@ -194,18 +286,18 @@ def test_browser_mixed_relative_depth(browser, built_dist, tmp_path, bake, flat_
         )
         assert response.ok, response.text()
 
-    def pixels(z, zoom=1):
+    def pixels(z, zoom=1, moment=1):
         page.evaluate(
-            """([z,zoom]) => {
+            """([z,zoom,moment]) => {
           const p=zmartViewer.navigationState.position, s=p.coordinateSpace.value;
           const at=Float32Array.from(p.value);
           for(const [axis,um] of Object.entries({x:192,y:64,z})) {
             const i=s.names.indexOf(axis); if(i>=0) at[i]=um/(s.scales[i]*1e6);
           }
-          if(s.names.includes('t')) at[s.names.indexOf('t')]=1;
+          if(s.names.includes('t')) at[s.names.indexOf('t')]=moment;
           p.value=at; zmartViewer.navigationState.zoomFactor.value=zoom;
         }""",
-            [z, zoom],
+            [z, zoom, moment],
         )
         _wait_for_picture(page)
         return page.evaluate(
@@ -272,8 +364,35 @@ def test_browser_mixed_relative_depth(browser, built_dist, tmp_path, bake, flat_
         publish(acquired["order"], acquired=acquired)
         page.wait_for_timeout(1800)
         assert pixels(0)[0] == [0, 0, 0, 255]
-        assert pixels(10)[0] == measured[0][0]
+        assert pixels(0, 4)[0] == [0, 0, 0, 255]
+        assert pixels(0, 4)[1][3] == 0
+        # Stack-over-flat is fixed; source order applies within each depth kind.
+        acquired["order"] = [names[1], "black.ome.zarr", names[0]]
+        publish(acquired["order"], acquired=acquired)
+        assert pixels(0)[0] == [0, 0, 0, 255]
         page.screenshot(path=str(tmp_path / "mixed-black-and-gap.png"))
+        assert pixels(10)[0] == measured[0][0]
+        # Acquired coverage is specific to channel and time, not their union.
+        acquired["regions"]["black.ome.zarr"] = [
+            r
+            for r in acquired["regions"]["black.ome.zarr"]
+            if r["frame"] == 1 and r["channel"] == 0
+        ]
+        publish(acquired["order"], acquired=acquired)
+        page.wait_for_timeout(1800)
+        flat_t0 = pixels(10, moment=0)[0]
+        assert pixels(0, moment=0)[0] == flat_t0
+        assert pixels(0, moment=1)[0] == [0, 0, 0, 255]
+        page.evaluate("""() => {
+          const spec=zmartConfig.layers[0], prefix=`${spec.group} · ${spec.name}`;
+          for(const m of zmartViewer.layerManager.managedLayers)
+            if([`${prefix}__flat`,`${prefix}__stack`,
+                `__coverage__${prefix}__flat`,`__coverage__${prefix}__stack`].includes(m.name))
+              m.setVisible(false);
+        }""")
+        flat_c1 = pixels(10)[0]
+        assert max(flat_c1[:3]) > 0
+        assert pixels(0)[0] == flat_c1
         mark = len(requests)
         publish(acquired["order"], acquired=acquired)
         page.wait_for_timeout(2200)

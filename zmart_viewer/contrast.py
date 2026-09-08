@@ -403,13 +403,30 @@ def _thinned(shape, taken, most: int):
 
 
 def measure_here(
-    store: str | Path,
+    store: str | Path | list[Path],
     *,
     channel: int | None = None,
     box=((0.0, 0.0), (1.0, 1.0)),
     bins: int = HISTOGRAM_BINS,
 ) -> dict | None:
-    """The brightness of the part of a picture an operator is looking at."""
+    """Measure one logical picture, optionally split into common-canvas sources."""
+    import numpy as np
+
+    stores = store if isinstance(store, list) else [store]
+    samples = [_values_here(Path(one), channel=channel, box=box) for one in stores]
+    samples = [values for values in samples if values is not None and values.size]
+    if not samples:
+        return None
+    values = np.concatenate(samples)
+    return {
+        "window": _window(values, volumetric=False),
+        "volumeWindow": _window(values, volumetric=True),
+        "histogram": _histogram(values, bins=bins),
+    }
+
+
+def _values_here(store: Path, *, channel, box):
+    """Bounded brightness samples from one source, shared by single/mixed pictures."""
     import numpy as np
     import zarr
 
@@ -481,11 +498,7 @@ def measure_here(
     if values.size == 0:
         return None
 
-    return {
-        "window": _window(values, volumetric=False),
-        "volumeWindow": _window(values, volumetric=True),
-        "histogram": _histogram(values, bins=bins),
-    }
+    return values
 
 
 def _window(values, *, volumetric: bool) -> tuple[float, float]:

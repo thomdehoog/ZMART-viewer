@@ -23,6 +23,7 @@ from .compose import (
     _read_one_tile,
     _refuse_tiles_that_disagree,
     read_the_mosaic_as_written,
+    the_frame_room_of,
     the_mosaic_written_down,
 )
 from .library import _description_file, _read_attrs_at, discover
@@ -225,7 +226,7 @@ class PublishedAcquisition:
         for name in (STORE, STACK_STORE):
             if (folder / name / "publication.json").exists():
                 output = PublishedTransfer(folder / name, piece)
-                output.composer()
+                output._read_snapshot()
                 self.outputs[name] = output
 
     @property
@@ -304,6 +305,12 @@ class PublishedAcquisition:
             if reference is None:
                 reference = tile.copies[0].corner_um[0]
             sources[name] = (revision, kind, tile, reference)
+        channel_counts = {
+            the_frame_room_of(tile.copies[0].outer_shape)[1] for _, _, tile, _ in sources.values()
+        }
+        channel_counts.update(output._held.mosaic.frame_room[1] for output in self.outputs.values())
+        if len(channel_counts) > 1:
+            raise ValueError("Flat and stack sources in an acquisition must share a channel count")
         outputs = dict(self.outputs)
         try:
             with ExitStack() as prepared:
@@ -523,7 +530,16 @@ class PublishedTransfer(ComposedPicture):
                 affected.update(versions.keys() | old_versions.keys())
             tiles = []
             for name in versions:
-                if name not in changed:
+                retired = (
+                    composition is not None
+                    and isinstance(composition["regions"], dict)
+                    and composition["regions"].get(name) == []
+                    and versions[name] == old_versions.get(name)
+                    and references.get(name) == old_references.get(name)
+                )
+                # Retired sources need only their committed geometry, even during recovery.
+                # Re-reading would discard aggregate sampling and relative-Z placement.
+                if name not in changed or (retired and name in kept):
                     tiles.append(kept[name])
                     continue
                 tile = (_tiles or {}).get(name) or _read_one_tile(folder / name)

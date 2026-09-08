@@ -9,8 +9,10 @@ Original OME-Zarr stores remain separate and unmodified.
 store's geometry. Sparse producers instead supply source-local acquired regions,
 including C and T. Coverage never depends on brightness or the presence of a Zarr
 chunk: acquired zero remains opaque even when its chunk is absent on disk.
-`composition.order` is the complete bottom-to-top overlap order. Reordering does
-not rewrite originals.
+`composition.order` names all originals and sets bottom-to-top overlap order
+within each depth kind. Stacks always render above flats; cross-kind interleaving
+or raising a flat above a stack is not supported by this two-source display.
+Reordering does not rewrite originals.
 
 Flat placement is a display convention in the aggregate: Z = 0 on a private
 depth axis, visible through stack navigation. Stacks subtract their specimen-frame
@@ -39,11 +41,17 @@ refresh remains revision-driven; an identical publication does no invalidation.
 
 ## Supported geometry
 
-Sources within each aggregate must have compatible C/T axes, spatial sampling,
+Flat and stack outputs of one acquisition must have the same channel count;
+their time lengths may differ. Sources within each aggregate must have compatible C/T axes, spatial sampling,
 native pyramid layouts and a common relative Z lattice. The canvas and published
 Z domain are fixed for that acquisition. A later stack extending that domain, or
 changing sampling, is refused explicitly instead of silently misplaced; changing
 geometry requires a new acquisition. Flats and stacks may arrive in either order.
+
+Auto measures a sampled channel distribution across the common-canvas sources,
+not an exact current-plane/occlusion histogram. It retains the existing nonzero
+sampling policy; an all-black image keeps its current window. This measurement
+policy does not determine acquired coverage or displayed opacity.
 
 `tests/test_mixed_acquisition.py` verifies both baking modes, both arrival orders,
 original-byte preservation, C/T values, relative planes, acquired black, sparse
