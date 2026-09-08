@@ -239,7 +239,13 @@ Sparse regions remain in original source-local voxel coordinates.
 
 Stacks retain specimen-Z origins and relative offsets. Their common positive
 spacing must match at every level, with integer-aligned origins and unchanged
-plane counts across XY levels. The first snapshot fixes the aggregate Z domain;
+plane counts across XY levels. Subtraction roundoff in equivalent spacings is
+normalized once in the derived descriptions: accumulated error over a whole
+stack must not exceed the existing 1e-7-voxel alignment tolerance. The first
+snapshot selects the spacing; subsequent snapshots reuse that persisted spacing,
+including after the original reference stack retires or the publisher reopens.
+Original metadata and the composer's exact geometry checks remain unchanged.
+The first snapshot fixes the aggregate Z domain;
 retiring an edge stack does not move that domain. Appends within it are supported.
 Outward growth is refused before publication until geometry-aware refresh exists.
 
@@ -253,5 +259,9 @@ acquired pictures whose geometry would change need a new aggregate.
 The depth tests cover all eight reported capture heights without changing
 originals, stack offsets and unequal depths, C/T and sparse Z coverage, acquired
 black and later gap fill, both bake modes, retirement and fail-closed validation.
-Browser tests measure eight flat footprints and stack visibility at three
+Browser tests measure eight flat footprints and stack visibility at four
 specimen heights, fine/coarse coverage, one source and zero idle refetches.
+The stack tests also compare rendered RGBA values across those heights and zoom:
+corresponding local planes match and successive planes differ.
+Actual-writer stack tests cover spacing roundoff, both source orders and bake
+modes, pixel/coverage values, retirement, reopen, append and unchanged originals.
