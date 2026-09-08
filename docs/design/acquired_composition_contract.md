@@ -202,3 +202,29 @@ pixels, C/Z/T, native/extended levels, bad native transforms, per-chunk eligibil
 undeclared truncating means, publication rewrites, declaration changes and reopen.
 The sparse browser cases run both with and without the declaration, bake off/on.
 Operator adoption and producer qualification are not part of this increment.
+
+## Corner-coordinate producer adapter
+
+`composition.xy_origin` accepts `"center"` (default) or `"corner"`. This describes
+XY only; Z stays a plane coordinate. Corner sources keep a constant translation
+across native levels. The aggregate converts its output XY translations to sample
+centers by adding half the level's voxel size, so every level covers the same
+specimen rectangle. No original metadata is rewritten. The convention is fixed
+for an open acquisition; changing it requires a new acquisition because it changes
+geometry, not merely pixels.
+
+The additional explicit reducer `"mean-xy2-crop-f32-rint-int"` describes successive
+2x2 XY means with float32 accumulation, integer nearest-even rounding and dtype
+preservation, cropping odd edges. It matches the inspected acquisition writer.
+Native reuse for this reducer is limited to signed/unsigned integers of at most
+16 bits and source dimensions divisible by the requested reduction factor. Those
+means are exact in float32 and no cropped edge is encountered. Other dtypes or odd
+level dimensions retain L0-derived composition; the declaration does not override
+geometry/coverage eligibility. It must still describe completed native levels.
+
+`tests/test_corner_pyramids.py` qualifies the actual writer when
+`ZMART_OPERATOR_SOURCE` points to a microscopy checkout. It generates synthetic
+vendor TIFFs in scratch, invokes the real position writer, and checks original
+bytes, native reads, coverage and browser fine/coarse placement in both bake modes.
+Generic qualification tests run without that external checkout. The actual writer
+is never imported by viewer production code, and no operator-name exception exists.
