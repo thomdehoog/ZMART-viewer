@@ -37,6 +37,7 @@ from .compose import (
     Mosaic,
     Tile,
     _read_one_tile,
+    halve_xy,
     read_the_transfer,
     the_mosaic_written_down,
 )
@@ -326,18 +327,7 @@ def _bake_the_coarse_ground(
         level += 1
         height, width = -(-height // 2), -(-width // 2)
         voxel = [voxel[0], voxel[1] * 2, voxel[2] * 2]
-        evened = np.pad(
-            whole,
-            [(0, 0)] * (len(room) + 1)
-            + [(0, height * 2 - whole.shape[-2]), (0, width * 2 - whole.shape[-1])],
-            mode="edge",
-        )
-        whole = (
-            evened.reshape(*room, depth, height, 2, width, 2)
-            .mean(axis=(-3, -1))
-            .round()
-            .astype(composer.mosaic.dtype)
-        )
+        whole = halve_xy(whole)
         made = zarr.create_array(
             store=str(store / str(level)),
             shape=(*room, depth, height, width),
@@ -714,8 +704,6 @@ class ComposedPicture:
                 top, left = row * self._piece, column * self._piece
                 bottom = min(top + self._piece, height)
                 right = min(left + self._piece, width)
-                wanted = (bottom - top, right - left)
-
                 for address in frames:
                     source = below[
                         (
@@ -726,21 +714,7 @@ class ComposedPicture:
                         )
                     ]
                     self.accounting["last_bake_zarr_ops"] += 1
-                    evened = np.pad(
-                        source,
-                        (
-                            (0, 0),
-                            (0, 2 * wanted[0] - source.shape[-2]),
-                            (0, 2 * wanted[1] - source.shape[-1]),
-                        ),
-                        mode="edge",
-                    )
-                    above[(*address, slice(None), slice(top, bottom), slice(left, right))] = (
-                        evened.reshape(deep, wanted[0], 2, wanted[1], 2)
-                        .mean(axis=(2, 4))
-                        .round()
-                        .astype(above.dtype)
-                    )
+                    above[(*address, slice(None), slice(top, bottom), slice(left, right))] = halve_xy(source)
                     self.accounting["last_bake_zarr_ops"] += 1
 
         planes = -(-deep // int(above.chunks[-3]))
@@ -853,17 +827,7 @@ class ComposedPicture:
                         col0 - 2 * left : col0 - 2 * left + cols,
                     ] = part
 
-            evened = np.pad(
-                canvas[None],
-                ((0, 0), (0, 2 * wanted[0] - src_h), (0, 2 * wanted[1] - src_w)),
-                mode="edge",
-            )
-            halved = (
-                evened.reshape(1, wanted[0], 2, wanted[1], 2)
-                .mean(axis=(2, 4))
-                .round()
-                .astype(served_recipe["dtype"])
-            )
+            halved = halve_xy(canvas[None])
             buffer = np.full((1, piece, piece), served_recipe["fill"], served_recipe["dtype"])
             buffer[0, : wanted[0], : wanted[1]] = halved[0]
 

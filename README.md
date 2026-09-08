@@ -243,6 +243,11 @@ The experimental operator branch's **Bake coarse overview (experimental)**
 checkbox selects this path before Connect. It affects overview scans only; focus and target sources
 keep their existing representation. Leave it unchecked for the original path.
 
+Shared sparse composition is being added incrementally. Its first Python-level
+[acquired-region contract](docs/design/acquired_composition_contract.md) is
+implemented and tested; it is not yet wired into external live publication or
+the operator. Do not enable sparse stores through the rectangular adapter above.
+
 ## Try the time slider
 
 If your data is a timelapse — the same specimen imaged repeatedly — the viewer

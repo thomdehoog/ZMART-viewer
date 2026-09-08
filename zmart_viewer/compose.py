@@ -15,11 +15,13 @@ import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
 import zarr
+
+from .acquired import AcquiredRegion
 
 IMAGE_SUFFIX = ".ome.zarr"
 
@@ -59,6 +61,7 @@ class Tile:
     turned: float = 0.0
     axes: tuple[str, ...] = ()
     moments: frozenset[int] | None = None
+    acquired_regions: tuple[AcquiredRegion, ...] | None = None
 
     def footprint(self, level: int, at: tuple[int, int, int]) -> tuple[int, int, int, int]:
         """The box this tile occupies across the specimen once it is turned."""
@@ -114,6 +117,101 @@ class Mosaic:
     _room: tuple[int, int] | None = field(default=None, repr=False)
 
     @property
+    def has_acquired_regions(self) -> bool:
+        return any(tile.acquired_regions is not None for tile in self.tiles)
+
+    def with_acquired_regions(self, regions: dict, *, order: list[str]) -> Mosaic:
+        """A new snapshot with exact coverage and back-to-front source order.
+
+        Every source must have an explicit list (empty is valid). Records use
+        full-resolution source-local voxels and the storage frame/channel names.
+        This does not read pixels, mutate the input mosaic, or edit originals.
+        """
+        tiles = {tile.name: tile for tile in self.tiles}
+        if (
+            not isinstance(regions, dict)
+            or set(regions) != set(tiles)
+            or not isinstance(order, list)
+            or any(not isinstance(n, str) for n in order)
+            or len(order) != len(tiles)
+            or set(order) != set(tiles)
+        ):
+            raise ValueError("Coverage and order must name every source exactly once")
+        if len(tiles) != len(self.tiles) or not tiles:
+            raise ValueError("Acquired sources must have unique names")
+        if not self.averaged:
+            raise ValueError("Acquired composition requires a mean pyramid")
+        made = []
+        for name in order:
+            tile = tiles[name]
+            if not isinstance(regions[name], list):
+                raise ValueError("Each source needs an explicit acquired-region list")
+            if tile.turned or tile.axes not in (
+                ("z", "y", "x"),
+                ("c", "z", "y", "x"),
+                ("t", "c", "z", "y", "x"),
+            ):
+                raise ValueError(
+                    "Acquired composition requires unrotated ZYX, CZYX or TCZYX sources"
+                )
+            base = tile.copies[0]
+            if (
+                len(tile.copies) < self.levels
+                or base.dtype != self.dtype
+                or base.outer_shape != self.tiles[0].copies[0].outer_shape
+            ):
+                raise ValueError("Acquired sources must agree on levels, dtype and T/C dimensions")
+            for level, copy in enumerate(tile.copies[: self.levels]):
+                expected = (
+                    base.voxel_um[0],
+                    base.voxel_um[1] * 2**level,
+                    base.voxel_um[2] * 2**level,
+                )
+                if copy.voxel_um != expected or copy.shape[0] != base.shape[0]:
+                    raise ValueError(
+                        "Acquired composition requires XY-halved levels with unchanged Z"
+                    )
+            if base.voxel_um != self.voxel_um(0):
+                raise ValueError("Acquired sources must use a common voxel spacing")
+            offsets = [
+                (a - b) / v
+                for a, b, v in zip(base.corner_um, self.corner_um, base.voxel_um, strict=True)
+            ]
+            if any(
+                not math.isfinite(n) or not math.isclose(n, round(n), abs_tol=1e-7, rel_tol=0)
+                for n in offsets
+            ):
+                raise ValueError("Acquired sources must be aligned to the aggregate's voxel grid")
+            acquired = tuple(AcquiredRegion.from_written(record) for record in regions[name])
+            frames, channels = the_frame_room_of(base.outer_shape)
+            for region in acquired:
+                if (
+                    region.frame >= frames
+                    or region.channel >= channels
+                    or any(
+                        a + b > extent
+                        for a, b, extent in zip(
+                            region.origin, region.shape, base.shape, strict=True
+                        )
+                    )
+                ):
+                    raise ValueError("Acquired region extends outside its source")
+                low, high = region.bounds(tuple(round(n) for n in offsets))
+                if any(a < 0 or b > size for a, b, size in zip(low, high, self.shape(0), strict=True)):
+                    raise ValueError("Acquired region extends outside the aggregate canvas")
+            made.append(replace(tile, acquired_regions=acquired))
+        return Mosaic(
+            made,
+            self.levels,
+            self.axes,
+            self.dtype,
+            self.corner_um,
+            self.averaged,
+            self.omero,
+            self.extent_um,
+        )
+
+    @property
     def frame_room(self) -> tuple[int, int]:
         """How many (moments, channels) the tiles' stores keep room for."""
         if self._room is None:
@@ -161,6 +259,11 @@ class Mosaic:
         found = self._shape.get(level)
 
         if found is None:
+            if self.has_acquired_regions and level > 0:
+                z, y, x = self.shape(0)
+                found = (z, math.ceil(y / 2**level), math.ceil(x / 2**level))
+                self._shape[level] = found
+                return found
             if self.extent_um is not None:
                 found = tuple(
                     math.ceil(size / voxel)
@@ -586,7 +689,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
 
 
 def the_mosaic_written_down(mosaic: Mosaic) -> dict:
-    """The whole geometry of a picture, as one plain description."""
+    """Geometry, acquired regions and source order in one composition snapshot."""
     return {
         "levels": mosaic.levels,
         "axes": list(mosaic.axes),
@@ -603,6 +706,12 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
                 "store": tile.store.as_posix(),
                 "turned": tile.turned,
                 "axes": list(tile.axes),
+                **({"moments": sorted(tile.moments)} if tile.moments is not None else {}),
+                **(
+                    {"acquired_regions": [r.as_written() for r in tile.acquired_regions]}
+                    if tile.acquired_regions is not None
+                    else {}
+                ),
                 "copies": [
                     {
                         "held_in": copy.held_in.as_posix(),
@@ -629,6 +738,10 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
             store=Path(one["store"]),
             turned=float(one.get("turned", 0.0)),
             axes=tuple(one["axes"]),
+            moments=frozenset(one["moments"]) if "moments" in one else None,
+            acquired_regions=tuple(AcquiredRegion.from_written(r) for r in one["acquired_regions"])
+            if "acquired_regions" in one
+            else None,
             copies=[
                 Copy(
                     held_in=Path(copy["held_in"]),
@@ -644,7 +757,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
         )
         for one in held["tiles"]
     ]
-    return Mosaic(
+    mosaic = Mosaic(
         tiles=tiles,
         levels=int(held["levels"]),
         axes=tuple(held["axes"]),
@@ -654,6 +767,16 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
         extent_um=tuple(held["extent_um"]) if "extent_um" in held else None,
         averaged=bool(held.get("averaged", False)),
     )
+    if mosaic.has_acquired_regions:
+        return mosaic.with_acquired_regions(
+            {
+                tile.name: [r.as_written() for r in tile.acquired_regions]
+                for tile in tiles
+                if tile.acquired_regions is not None
+            },
+            order=[tile.name for tile in tiles],
+        )
+    return mosaic
 
 
 PIECE = 512
@@ -734,6 +857,24 @@ def _build_in_worker(
     return _WORKING_ON._slab_for(level, plane, row, column, moment, channel)
 
 
+def halve_xy(values: np.ndarray) -> np.ndarray:
+    """The shared mean-pyramid reducer: edge padding and integer rounding."""
+    h, w = values.shape[-2:]
+    even = np.pad(values, [(0, 0)] * (values.ndim - 2) + [(0, h % 2), (0, w % 2)], mode="edge")
+    return (
+        even.reshape(*values.shape[:-2], (h + 1) // 2, 2, (w + 1) // 2, 2)
+        .mean(axis=(-3, -1))
+        .round()
+        .astype(values.dtype)
+    )
+
+
+def _acquired_bounds(tile, at, moment, channel):
+    for region in tile.acquired_regions:
+        if region.frame == moment and region.channel == channel:
+            yield region.bounds(at)
+
+
 class Composer:
     """Answers for a picture that is never stored, out of the tiles that are."""
 
@@ -747,6 +888,9 @@ class Composer:
         pinning: bool = True,
     ) -> None:
         self.mosaic = mosaic
+        self._acquired = mosaic.has_acquired_regions
+        if self._acquired and any(tile.acquired_regions is None for tile in mosaic.tiles):
+            raise ValueError("Every source in acquired composition needs explicit coverage")
         self.piece = piece
         self._weighing_at_most = weighing_at_most
         self._workers = max(1, int(workers or 1))
@@ -944,7 +1088,26 @@ class Composer:
 
             index: dict[tuple[int, int], list] = {}
 
-            for tile, at in self.mosaic.placements(level):
+            for tile, at in self.mosaic.placements(0 if self._acquired else level):
+                if self._acquired:
+                    factor = 2**level
+                    cells = set()
+                    for region in tile.acquired_regions:
+                        low, high = region.bounds(at)
+                        cells.update(
+                            (row, col)
+                            for row in range(
+                                low[1] // (factor * self.piece),
+                                (high[1] - 1) // (factor * self.piece) + 1,
+                            )
+                            for col in range(
+                                low[2] // (factor * self.piece),
+                                (high[2] - 1) // (factor * self.piece) + 1,
+                            )
+                        )
+                    for cell in cells:
+                        index.setdefault(cell, []).append((tile, at))
+                    continue
                 held = tile.copies[level].shape
 
                 for row in range(at[1] // self.piece, (at[1] + held[1] - 1) // self.piece + 1):
@@ -1049,6 +1212,8 @@ class Composer:
         channel: int = 0,
     ) -> np.ndarray:
         """Lay the tiles into one column of ground, for every plane of one file."""
+        if self._acquired and level > 0:
+            return self._reduce_composed_slab(level, plane, row, column, moment, channel)
         building_began = time.perf_counter()
         depth = self.slab_depth(level)
         low_z = (plane // depth) * depth
@@ -1074,28 +1239,83 @@ class Composer:
             if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
                 continue
 
-            from_z, to_z = max(low_z, at[0]), min(high_z, at[0] + held[0])
-            from_y, to_y = max(top, at[1]), min(bottom, at[1] + held[1])
-            from_x, to_x = max(left, at[2]), min(right, at[2] + held[2])
-            slab[
-                from_z - low_z : to_z - low_z,
-                from_y - top : to_y - top,
-                from_x - left : to_x - left,
-            ] = self._read_from(
-                copy,
-                (from_z - at[0], from_y - at[1], from_x - at[2]),
-                (to_z - at[0], to_y - at[1], to_x - at[2]),
-                outer,
+            bounds = (
+                _acquired_bounds(tile, at, moment, channel)
+                if self._acquired
+                else [(at, tuple(a + b for a, b in zip(at, held, strict=True)))]
             )
+            for low, high in bounds:
+                start = tuple(max(a, b) for a, b in zip((low_z, top, left), low, strict=True))
+                end = tuple(min(a, b) for a, b in zip((high_z, bottom, right), high, strict=True))
+                if any(a >= b for a, b in zip(start, end, strict=True)):
+                    continue
+                destination = tuple(
+                    slice(a - o, b - o)
+                    for a, b, o in zip(start, end, (low_z, top, left), strict=True)
+                )
+                slab[destination] = self._read_from(
+                    copy,
+                    tuple(a - o for a, o in zip(start, at, strict=True)),
+                    tuple(b - o for b, o in zip(end, at, strict=True)),
+                    outer,
+                )
 
         self.costs["build_ms"] += (time.perf_counter() - building_began) * 1000
         self.costs["slabs_built"] += 1
+        return slab
+
+    def _reduce_composed_slab(self, level, plane, row, column, moment, channel):
+        """Compose before reducing, so gaps and overlap use the finest pixel owners."""
+        depth = self.slab_depth(level)
+        low_z = (plane // depth) * depth
+        deep, height, width = self.mosaic.shape(level - 1)
+        high_z = min(low_z + depth, deep)
+        top, left = 2 * row * self.piece, 2 * column * self.piece
+        h, w = min(2 * self.piece, height - top), min(2 * self.piece, width - left)
+        source = np.zeros((high_z - low_z, h, w), dtype=self.mosaic.dtype)
+        for z in range(low_z, high_z):
+            for y in range(0, h, self.piece):
+                for x in range(0, w, self.piece):
+                    block = self.values_for(
+                        level - 1,
+                        z,
+                        2 * row + y // self.piece,
+                        2 * column + x // self.piece,
+                        moment,
+                        channel,
+                    )
+                    if block is not None:
+                        source[z - low_z, y : y + self.piece, x : x + self.piece] = block[
+                            : min(self.piece, h - y), : min(self.piece, w - x)
+                        ]
+        reduced = halve_xy(source)
+        slab = np.zeros((high_z - low_z, self.piece, self.piece), dtype=self.mosaic.dtype)
+        slab[:, : reduced.shape[1], : reduced.shape[2]] = reduced
         return slab
 
     def coverage_for(self, level, plane, row, column, moment=0, channel=0):
         """Binary acquired ground, from the same placements used to build pixels."""
         mask = np.zeros((self.piece, self.piece), dtype=np.uint8)
         top, left = row * self.piece, column * self.piece
+        if self._acquired:
+            factor = 2**level
+            for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
+                if not _tile_has_the_frame(tile, 0, moment, channel):
+                    continue
+                for low, high in _acquired_bounds(tile, at, moment, channel):
+                    if not low[0] <= plane < high[0]:
+                        continue
+                    y0, y1 = (
+                        max(top, low[1] // factor),
+                        min(top + self.piece, math.ceil(high[1] / factor)),
+                    )
+                    x0, x1 = (
+                        max(left, low[2] // factor),
+                        min(left + self.piece, math.ceil(high[2] / factor)),
+                    )
+                    if y0 < y1 and x0 < x1:
+                        mask[y0 - top : y1 - top, x0 - left : x1 - left] = 1
+            return mask
         native = min(level, self.mosaic.levels - 1)
         factor = 2 ** (level - native)
         index = self._tiles_in_each_piece(native)
@@ -1103,7 +1323,8 @@ class Composer:
             [index.get((row, column), ())]
             if factor == 1
             else (
-                tiles for (r, c), tiles in index.items()
+                tiles
+                for (r, c), tiles in index.items()
                 if r // factor == row and c // factor == column
             )
         )
@@ -1114,9 +1335,15 @@ class Composer:
                 continue
             if not at[0] <= plane < at[0] + size[0]:
                 continue
-            y0, y1 = max(top, at[1] // factor), min(top + self.piece, math.ceil((at[1] + size[1]) / factor))
-            x0, x1 = max(left, at[2] // factor), min(left + self.piece, math.ceil((at[2] + size[2]) / factor))
-            mask[y0 - top:y1 - top, x0 - left:x1 - left] = 1
+            y0, y1 = (
+                max(top, at[1] // factor),
+                min(top + self.piece, math.ceil((at[1] + size[1]) / factor)),
+            )
+            x0, x1 = (
+                max(left, at[2] // factor),
+                min(left + self.piece, math.ceil((at[2] + size[2]) / factor)),
+            )
+            mask[y0 - top : y1 - top, x0 - left : x1 - left] = 1
         return mask
 
     def _slab_for(
