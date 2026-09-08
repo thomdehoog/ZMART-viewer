@@ -28,6 +28,7 @@ from .compose import (
     read_the_transfer,
     the_piece_address,
 )
+from .published import PublishedTransfer
 
 # The folder a view's list lived in for a while, beside the images rather than
 # inside one. Still read, so a run written that way keeps working.
@@ -779,8 +780,6 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPi
         return None
 
     if ours.get("published_from"):
-        from .published import PublishedTransfer
-
         return PublishedTransfer(store, piece=int(ours.get("piece") or 512))
 
     governs = ours.get("governed_from")
@@ -866,7 +865,7 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
 
     baked = Path(store).joinpath(*inside.strip("/").split("/"))
 
-    if baked.is_file():
+    if baked.is_file() and (not isinstance(held, PublishedTransfer) or held.bake):
         return baked.read_bytes()
 
     try:

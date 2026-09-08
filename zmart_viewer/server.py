@@ -1155,11 +1155,21 @@ class _Handler(SimpleHTTPRequestHandler):
         published = self._scratch["published"]
         asked_bake = bool(payload.get("bake", published.bake))
         canvas = payload.get("canvas", published.canvas)
-        if asked_bake and live_run_holding(target) is None:
+        if (asked_bake or "composition" in payload) and live_run_holding(target) is None:
             number = None
             try:
+                if "composition" in payload and not isinstance(payload["composition"], dict):
+                    raise ValueError(
+                        "composition must explicitly describe acquired coverage and order"
+                    )
                 number = self._library.open(target)
-                published.open(number, canvas=canvas, versions=payload.get("source_revisions"))
+                published.open(
+                    number,
+                    canvas=canvas,
+                    versions=payload.get("source_revisions"),
+                    composition=payload.get("composition"),
+                    bake=asked_bake,
+                )
             except (ValueError, OSError, KeyError, TypeError) as why:
                 if number is not None:
                     self._library.close(number)
