@@ -1385,7 +1385,9 @@ def make_server(
     registry = SourceRegistry(
         library,
         watching=live,
-        wants_the_bake=lambda run_root: bake or Path(run_root).resolve() in scratch.get("bake_live", ()),
+        wants_the_bake=lambda run_root: (
+            bake or Path(run_root).resolve() in scratch.get("bake_live", ())
+        ),
     )
 
     measurements = Measurements(fixed_window=window)
@@ -1473,8 +1475,21 @@ def make_server(
                         True,
                     )
                 ]
+                if published.source_depth(root_number, name) is not None:
+                    channel = channels(store_path)[0]
+                    found = [
+                        (
+                            None,
+                            channel["name"],
+                            channel["color"],
+                            channel.get("range"),
+                            channel.get("active", True),
+                        )
+                    ]
 
             frames = written_timepoints(store_path)
+            revision = published.source_revision(root_number, name)
+            depth = published.source_depth(root_number, name)
 
             for index, channel_name, color, declared_range, active in found:
                 key = (root_number, index, channel_name)
@@ -1492,8 +1507,8 @@ def make_server(
                     )
                     merged[key] = {
                         **base,
-                        **({"sourceRevisions": [published.source_revision(root_number)]}
-                           if published.source_revision(root_number) is not None else {}),
+                        **({"sourceRevisions": [revision]} if revision is not None else {}),
+                        **({"sourceDepths": [depth]} if depth is not None else {}),
                         "sources": [address],
                         "name": channel_name,
                         "group": group,
@@ -1508,6 +1523,10 @@ def make_server(
                 else:
                     row["sources"].append(address)
                     row["frameCounts"].append(frames)
+                    if revision is not None:
+                        row["sourceRevisions"].append(revision)
+                    if depth is not None:
+                        row["sourceDepths"].append(depth)
 
                     if frames and (row.get("frames") or 0) < frames:
                         row["frames"] = frames
@@ -1549,9 +1568,11 @@ def make_server(
         # Group order follows first appearance, which follows the sorted store
         # names, so the panel does not reshuffle itself between runs.
         groups = list(dict.fromkeys(row["group"] for row in rows))
-        if transparent_background:
+        if transparent_background or any(row.get("sourceDepths") for row in rows):
             for row in rows:
                 if row.get("kind", "image") != "image":
+                    continue
+                if not transparent_background and not row.get("sourceDepths"):
                     continue
                 # Only fixed, single-source dense rows can omit coverage. Live
                 # rows must keep the same strategy as sources arrive; covering

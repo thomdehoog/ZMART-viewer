@@ -308,7 +308,7 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
         names = ["a.ome.zarr", "b.ome.zarr"]
         at_depth(tmp_path, names[0], 0, 60, depth=3, plane_step=800)
         at_depth(tmp_path, names[1], 256, 61.3, depth=4, plane_step=800)
-        positions, zoom, center = [60, 61.3, 62.6, 65.2], 1, 192
+        positions, zoom, center = [0, 1.3, 2.6, 3.9], 1, 192
 
     server = make_server(
         port=0,
@@ -375,7 +375,7 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
         plane_pixels = []
         for index, z in enumerate(positions):
             alpha = look(z, zoom)
-            tiles = 8 if kind == "flat" else (2 if index in (1, 2) else 1)
+            tiles = 8 if kind == "flat" else (2 if index < 3 else 1)
             assert alpha["opaque"] == pytest.approx(tiles * (128 / zoom) ** 2, rel=0.02), alpha
             assert alpha["clear"] > 1000 and alpha["partial"] == 0
             if kind == "flat":
@@ -389,13 +389,12 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
         if kind == "stack":
             actual = np.array(plane_pixels)
             np.testing.assert_array_equal(
-                actual[:, :, 3], [[255, 0], [255, 255], [255, 255], [0, 255]]
+                actual[:, :, 3], [[255, 255], [255, 255], [255, 255], [0, 255]]
             )
             # Each step must change the image itself, not just its coverage.
             assert np.all(np.diff(actual[:3, 0, :3].max(axis=1)) > 25), plane_pixels
-            assert np.all(np.diff(actual[1:, 1, :3].max(axis=1)) > 25), plane_pixels
-            np.testing.assert_array_equal(actual[0, 0], actual[1, 1])
-            np.testing.assert_array_equal(actual[1, 0], actual[2, 1])
+            assert np.all(np.diff(actual[:, 1, :3].sum(axis=1)) > 25), plane_pixels
+            np.testing.assert_array_equal(actual[:3, 0], actual[:3, 1])
             assert actual[3, 1, :3].sum() > actual[2, 0, :3].sum() + 25
             np.testing.assert_allclose(stack_pixels(zoom * 2), actual[-1], atol=1, rtol=0)
         page.screenshot(path=str(tmp_path / f"{kind}-{bake}-coarse.png"))

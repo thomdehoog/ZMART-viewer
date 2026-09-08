@@ -10,6 +10,7 @@ import json
 import math
 import os
 import threading
+from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -27,6 +28,8 @@ from .compose import (
 from .library import _description_file, _read_attrs_at, discover
 
 STORE = ".zmart-viewer/overview.ome.zarr"
+STACK_STORE = ".zmart-viewer/stack.ome.zarr"
+ACQUISITION_RENDERING_VERSION = 1
 
 
 def _place_depth(tiles, *, spacing=None):
@@ -68,9 +71,7 @@ def _place_depth(tiles, *, spacing=None):
     tiles = [
         replace(
             tile,
-            copies=[
-                replace(copy, voxel_um=(spacing, *copy.voxel_um[1:])) for copy in tile.copies
-            ],
+            copies=[replace(copy, voxel_um=(spacing, *copy.voxel_um[1:])) for copy in tile.copies],
         )
         for tile in tiles
     ]
@@ -111,7 +112,15 @@ class PublishedFolders:
             created = dataset is None
             number = self.library.open(path) if created else dataset.number
             held = self.views.get(number)
-            view = held[0] if held else PublishedTransfer(root / STORE)
+            view = (
+                held[0]
+                if held
+                else (
+                    PublishedAcquisition(root)
+                    if composition is not None
+                    else PublishedTransfer(root / STORE)
+                )
+            )
             try:
                 if automatic:
                     versions = self._versions_on_disk(root)
@@ -169,14 +178,29 @@ class PublishedFolders:
                 if number not in self.views:
                     result.append((number, root, name))
                 elif number not in seen:
-                    result.append((number, root, STORE))
+                    view = self.views[number][0]
+                    names = view.sources if isinstance(view, PublishedAcquisition) else [STORE]
+                    result.extend((number, root, name) for name in names)
                     seen.add(number)
             return result
 
-    def source_revision(self, number):
+    def source_revision(self, number, name=STORE):
         with self._lock:
             held = self.views.get(number)
-            return held[0].revision if held else None
+            if not held:
+                return None
+            view = held[0]
+            return (
+                view.outputs[name].revision
+                if isinstance(view, PublishedAcquisition)
+                else view.revision
+            )
+
+    def source_depth(self, number, name):
+        held = self.views.get(number)
+        if held and isinstance(held[0], PublishedAcquisition):
+            return "flat" if name == STORE else "stack"
+        return None
 
     def close(self):
         with self._lock:
@@ -189,6 +213,143 @@ def _atomic_json(path: Path, value: dict) -> None:
     arriving = path.with_name(path.name + ".publishing")
     arriving.write_text(json.dumps(value), encoding="utf-8")
     _after_a_windows_reader(os.replace, arriving, path)
+
+
+class PublishedAcquisition:
+    """One acquisition, at most two pictures: persistent flats and relative-Z stacks."""
+
+    def __init__(self, folder, piece=512):
+        self.folder, self.piece = folder, piece
+        self.outputs = {}
+        self._sources = {}
+        for name in (STORE, STACK_STORE):
+            if (folder / name / "publication.json").exists():
+                output = PublishedTransfer(folder / name, piece)
+                output.composer()
+                self.outputs[name] = output
+
+    @property
+    def sources(self):
+        return [name for name in (STORE, STACK_STORE) if name in self.outputs]
+
+    @property
+    def revision(self):
+        return sum(output.revision for output in self.outputs.values())
+
+    @property
+    def bake(self):
+        return next(iter(self.outputs.values())).bake if self.outputs else True
+
+    def close(self):
+        for output in self.outputs.values():
+            output.close()
+
+    def publish(self, folder, versions, canvas, *, composition=None, bake=True):
+        if not isinstance(versions, dict) or (not versions and not self.outputs):
+            raise ValueError("An acquisition needs completed source revisions")
+        if not isinstance(composition, dict) or not {"regions", "order"} <= composition.keys():
+            raise ValueError("An acquisition needs explicit acquired coverage and order")
+        regions, order = composition["regions"], composition["order"]
+        if (
+            not isinstance(order, list)
+            or any(not isinstance(n, str) for n in order)
+            or len(order) != len(versions)
+            or set(order) != set(versions)
+            or (
+                regions != "complete"
+                and (not isinstance(regions, dict) or set(regions) != set(versions))
+            )
+        ):
+            raise ValueError("Coverage and order must name every source exactly once")
+        explicit = composition.get("z_references", {})
+        if not isinstance(explicit, dict) or explicit.keys() - versions.keys():
+            raise ValueError("Z references must name completed sources")
+        sources = {}
+        for name, revision in versions.items():
+            if Path(name).name != name or not name.endswith(".ome.zarr"):
+                raise ValueError("Position names must name OME-Zarr stores directly in the folder")
+            cached = self._sources.get(name)
+            if cached and cached[0] == revision:
+                sources[name] = cached
+                continue
+            tile = _read_one_tile(folder / name)
+            # Nearest-neighbour sampling onto the aggregate grid moves a footprint by
+            # at most half a finest voxel. Apply the same shift to every native level;
+            # original pixels, metadata and authoritative source-local coverage stay intact.
+            base = tile.copies[0]
+            shift = [0.0]
+            for axis, key in ((1, "y_um"), (2, "x_um")):
+                start, step = base.corner_um[axis], base.voxel_um[axis]
+                low = canvas[key][0]
+                shift.append(low + math.floor((start - low) / step + 0.5) * step - start)
+            tile = replace(
+                tile,
+                copies=[
+                    replace(
+                        copy,
+                        corner_um=tuple(a + b for a, b in zip(copy.corner_um, shift, strict=True)),
+                    )
+                    for copy in tile.copies
+                ],
+            )
+            kind = STORE if tile.copies[0].shape[0] == 1 else STACK_STORE
+            if cached and cached[1] != kind:
+                raise ValueError("A published position cannot change between flat and stack")
+            model = _read_attrs_at(tile.store).get("zmart_microscopy", {}).get("z_coordinate", {})
+            reference = None
+            if model.get("frame") == "specimen":
+                reference = model.get("acquisition_provenance", {}).get(
+                    "requested_stage_focus_z_um"
+                )
+            if reference is None:
+                reference = tile.copies[0].corner_um[0]
+            sources[name] = (revision, kind, tile, reference)
+        outputs = dict(self.outputs)
+        try:
+            with ExitStack() as prepared:
+                commits = []
+                for kind in (STORE, STACK_STORE):
+                    names = [name for name in order if sources[name][1] == kind]
+                    if not names and kind not in outputs:
+                        continue
+                    if kind not in outputs:
+                        outputs[kind] = PublishedTransfer(folder / kind, self.piece)
+                    output = outputs[kind]
+                    part = deepcopy(composition)
+                    if names:
+                        part["order"] = names
+                        part["regions"] = (
+                            regions if regions == "complete" else {n: regions[n] for n in names}
+                        )
+                        part["z_references"] = {n: explicit.get(n, sources[n][3]) for n in names}
+                        revisions = {n: versions[n] for n in names}
+                        tiles = {n: sources[n][2] for n in names}
+                    else:
+                        # Keep the published geometry/address, but remove every acquired region.
+                        part = deepcopy(output._state["composition"])
+                        revisions = output._state["versions"]
+                        part["regions"] = {n: [] for n in revisions}
+                        tiles = {}
+                    commits.append(
+                        prepared.enter_context(
+                            output.prepare(
+                                folder,
+                                revisions,
+                                canvas,
+                                composition=part,
+                                bake=bake,
+                                _tiles=tiles,
+                            )
+                        )
+                    )
+                for commit in commits:
+                    commit()
+        except Exception:
+            for name in outputs.keys() - self.outputs.keys():
+                outputs[name].close()
+            raise
+        self.outputs, self._sources = outputs, sources
+        return self.revision
 
 
 class PublishedTransfer(ComposedPicture):
@@ -248,14 +409,30 @@ class PublishedTransfer(ComposedPicture):
         composition: dict | None = None,
         bake: bool = True,
     ) -> int:
-        """Publish a complete snapshot; identical snapshots perform no pixel I/O."""
+        """Validate and commit one completed aggregate snapshot."""
+        with self.prepare(folder, versions, canvas, composition=composition, bake=bake) as commit:
+            return commit()
+
+    @contextmanager
+    def prepare(
+        self,
+        folder: Path,
+        versions: dict[str, int],
+        canvas: dict,
+        *,
+        composition: dict | None = None,
+        bake: bool = True,
+        _tiles=None,
+    ):
+        """Validate a snapshot, then yield its commit; unchanged snapshots do no pixel I/O."""
         if not isinstance(versions, dict):
             raise ValueError("source_revisions must map completed position names to revisions")
         versions, canvas, composition = dict(versions), deepcopy(canvas), deepcopy(composition)
         if composition is not None and (
             not isinstance(composition, dict)
             or not {"regions", "order"} <= composition.keys()
-            or composition.keys() - {"regions", "order", "pyramid_reduction", "xy_origin"}
+            or composition.keys()
+            - {"regions", "order", "pyramid_reduction", "xy_origin", "z_references"}
         ):
             raise ValueError("composition must contain explicit regions and order")
         if not bake and composition is None:
@@ -285,7 +462,8 @@ class PublishedTransfer(ComposedPicture):
                 and bake == self.bake
                 and not recovering
             ):
-                return self.revision
+                yield lambda: self.revision
+                return
             if not versions:
                 raise ValueError("A baked overview needs at least one completed position")
             for name, revision in versions.items():
@@ -307,6 +485,9 @@ class PublishedTransfer(ComposedPicture):
                 for name in versions.keys() | old_versions.keys()
                 if versions.get(name) != old_versions.get(name)
             }
+            references = (composition or {}).get("z_references", {})
+            old_references = (old_composition or {}).get("z_references", {})
+            changed.update(n for n in versions if references.get(n) != old_references.get(n))
             if recovering:
                 changed = versions.keys() | old_versions.keys()
             affected = set(changed)
@@ -345,9 +526,24 @@ class PublishedTransfer(ComposedPicture):
                 if name not in changed:
                     tiles.append(kept[name])
                     continue
-                tile = _read_one_tile(folder / name)
+                tile = (_tiles or {}).get(name) or _read_one_tile(folder / name)
                 if _read_attrs_at(tile.store)["multiscales"][0].get("type") != "mean":
                     raise ValueError("Coarse baking requires mean-reduced position pyramids")
+                if name in references:
+                    reference = references[name]
+                    if not isinstance(reference, (float, int)) or not math.isfinite(reference):
+                        raise ValueError(
+                            "Z references must be finite specimen heights in micrometres"
+                        )
+                    tile = replace(
+                        tile,
+                        copies=[
+                            replace(
+                                copy, corner_um=(copy.corner_um[0] - reference, *copy.corner_um[1:])
+                            )
+                            for copy in tile.copies
+                        ],
+                    )
                 tiles.append(tile)
             if composition is not None:
                 if previous and (tiles[0].copies[0].shape[0] == 1) != (
@@ -370,7 +566,7 @@ class PublishedTransfer(ComposedPicture):
                     depth_origin, depth_extent = held.corner_um[0], held.extent_um[0]
             _refuse_tiles_that_disagree(tiles)
             first = tiles[0]
-            if first.keeps < 2:
+            if first.keeps < 2 and composition is None:
                 raise ValueError(
                     "Coarse baking requires a position pyramid with at least two levels"
                 )
@@ -460,117 +656,124 @@ class PublishedTransfer(ComposedPicture):
                 ):
                     raise ValueError(f"{tile.name} extends outside the declared specimen canvas")
 
-            made = Composer(mosaic, piece=self._piece)
-            # A failed publication can touch ground absent from both the old
-            # snapshot and the retry (for example, an appended tile withdrawn
-            # before retry). Retain those chunks until recovery completes.
-            dirty = {
-                int(level): {tuple(chunk) for chunk in chunks}
-                for level, chunks in (recovering or {}).get("dirty", {}).items()
-            }
-            unbaked_dirty = {
-                int(level): {tuple(chunk) for chunk in chunks}
-                for level, chunks in (self._state or {}).get("unbaked_dirty", {}).items()
-            }
-            if bake:
-                for level, chunks in unbaked_dirty.items():
-                    dirty.setdefault(level, set()).update(chunks)
-            for source in (previous, made):
-                if source is None:
-                    continue
-                if mosaic.has_acquired_regions:
-                    for level in range(mosaic.levels):
-                        dirty.setdefault(level, set()).update(
-                            cell
-                            for cell, tiles_here in source._tiles_in_each_piece(level).items()
-                            if any(tile.name in affected for tile, _ in tiles_here)
-                        )
-                    continue
-                for tile in source.mosaic.tiles:
-                    if tile.name not in changed:
-                        continue
-                    for level in range(mosaic.levels):
-                        at = source.mosaic.lands_at(tile, level)
-                        size = tile.copies[level].shape
-                        deep, rows, cols = made.grid(level)
-                        dirty.setdefault(level, set()).update(
-                            (row, col)
-                            for row in range(
-                                max(0, at[1] // self._piece),
-                                min(rows, (at[1] + size[1] - 1) // self._piece + 1),
-                            )
-                            for col in range(
-                                max(0, at[2] // self._piece),
-                                min(cols, (at[2] + size[2] - 1) // self._piece + 1),
-                            )
-                        )
-            if previous:
-                stale = frozenset(
-                    copy.held_in
-                    for name, tile in kept.items()
-                    if name in changed
-                    for copy in tile.copies
-                )
-                made.inherit_the_unchanged(previous, dirty, stale=stale)
-            self._shown.mkdir(parents=True, exist_ok=True)
-            description = json.loads(made.group_json())
-            baked = self._declare_levels(made, description, bake=bake)
-            _atomic_json(
-                pending,
-                {
-                    "versions": versions,
-                    "dirty": {str(level): sorted(chunks) for level, chunks in dirty.items()},
-                },
-            )
-            moments, channels = mosaic.frame_room
-            for level in baked:
-                if level >= mosaic.levels:
-                    break
-                for row, col in sorted(dirty.get(level, ())):
-                    for moment in range(moments):
-                        for channel in range(channels):
-                            for plane in range(made.grid(level)[0]):
-                                self._replace_one_piece(
-                                    made, level, plane, row, col, moment=moment, channel=channel
-                                )
-            reached = dirty.get(mosaic.levels - 1, set())
-            frames = (
-                [()]
-                if (moments, channels) == (1, 1)
-                else [(moment, channel) for moment in range(moments) for channel in range(channels)]
-            )
-            for level in (one for one in baked if one >= mosaic.levels):
-                reached = {(row // 2, col // 2) for row, col in reached}
-                if reached:
-                    self._rehalve_one_level(level, sorted(reached), frames)
-            for level, chunks in dirty.items():
-                unbaked_dirty.setdefault(level, set()).update(chunks)
-            state = {
-                "revision": self.revision + 1,
-                "versions": versions,
-                "canvas": canvas,
-                "composition": composition,
-                "bake": bake,
-                "unbaked_dirty": {}
-                if bake
-                else {str(level): sorted(chunks) for level, chunks in unbaked_dirty.items()},
-                "mosaic": the_mosaic_written_down(mosaic),
-            }
-            if not (self._shown / "zarr.json").exists() or bake != self.bake:
-                description["attributes"]["zmart"] = {
-                    "published_from": str(folder.resolve()),
-                    "piece": self._piece,
-                    "baked": baked,
+            def commit():
+                made = Composer(mosaic, piece=self._piece)
+                # A failed publication can touch ground absent from both the old
+                # snapshot and the retry (for example, an appended tile withdrawn
+                # before retry). Retain those chunks until recovery completes.
+                dirty = {
+                    int(level): {tuple(chunk) for chunk in chunks}
+                    for level, chunks in (recovering or {}).get("dirty", {}).items()
                 }
-                _atomic_json(self._shown / "zarr.json", description)
-            _atomic_json(self._shown / "publication.json", state)
-            (self._shown / "pending.json").unlink()
-            self._state = state
-            self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
-            self._held = made
-            if previous is not None:
-                previous.stop_warming()
-            return self.revision
+                unbaked_dirty = {
+                    int(level): {tuple(chunk) for chunk in chunks}
+                    for level, chunks in (self._state or {}).get("unbaked_dirty", {}).items()
+                }
+                if bake:
+                    for level, chunks in unbaked_dirty.items():
+                        dirty.setdefault(level, set()).update(chunks)
+                for source in (previous, made):
+                    if source is None:
+                        continue
+                    if mosaic.has_acquired_regions:
+                        for level in range(mosaic.levels):
+                            dirty.setdefault(level, set()).update(
+                                cell
+                                for cell, tiles_here in source._tiles_in_each_piece(level).items()
+                                if any(tile.name in affected for tile, _ in tiles_here)
+                            )
+                        continue
+                    for tile in source.mosaic.tiles:
+                        if tile.name not in changed:
+                            continue
+                        for level in range(mosaic.levels):
+                            at = source.mosaic.lands_at(tile, level)
+                            size = tile.copies[level].shape
+                            deep, rows, cols = made.grid(level)
+                            dirty.setdefault(level, set()).update(
+                                (row, col)
+                                for row in range(
+                                    max(0, at[1] // self._piece),
+                                    min(rows, (at[1] + size[1] - 1) // self._piece + 1),
+                                )
+                                for col in range(
+                                    max(0, at[2] // self._piece),
+                                    min(cols, (at[2] + size[2] - 1) // self._piece + 1),
+                                )
+                            )
+                if previous:
+                    stale = frozenset(
+                        copy.held_in
+                        for name, tile in kept.items()
+                        if name in changed
+                        for copy in tile.copies
+                    )
+                    made.inherit_the_unchanged(previous, dirty, stale=stale)
+                self._shown.mkdir(parents=True, exist_ok=True)
+                description = json.loads(made.group_json())
+                baked = self._declare_levels(made, description, bake=bake)
+                _atomic_json(
+                    pending,
+                    {
+                        "versions": versions,
+                        "dirty": {str(level): sorted(chunks) for level, chunks in dirty.items()},
+                    },
+                )
+                moments, channels = mosaic.frame_room
+                for level in baked:
+                    if level >= mosaic.levels:
+                        break
+                    for row, col in sorted(dirty.get(level, ())):
+                        for moment in range(moments):
+                            for channel in range(channels):
+                                for plane in range(made.grid(level)[0]):
+                                    self._replace_one_piece(
+                                        made, level, plane, row, col, moment=moment, channel=channel
+                                    )
+                reached = dirty.get(mosaic.levels - 1, set())
+                frames = (
+                    [()]
+                    if (moments, channels) == (1, 1)
+                    else [
+                        (moment, channel)
+                        for moment in range(moments)
+                        for channel in range(channels)
+                    ]
+                )
+                for level in (one for one in baked if one >= mosaic.levels):
+                    reached = {(row // 2, col // 2) for row, col in reached}
+                    if reached:
+                        self._rehalve_one_level(level, sorted(reached), frames)
+                for level, chunks in dirty.items():
+                    unbaked_dirty.setdefault(level, set()).update(chunks)
+                state = {
+                    "revision": self.revision + 1,
+                    "versions": versions,
+                    "canvas": canvas,
+                    "composition": composition,
+                    "bake": bake,
+                    "unbaked_dirty": {}
+                    if bake
+                    else {str(level): sorted(chunks) for level, chunks in unbaked_dirty.items()},
+                    "mosaic": the_mosaic_written_down(mosaic),
+                }
+                if not (self._shown / "zarr.json").exists() or bake != self.bake:
+                    description["attributes"]["zmart"] = {
+                        "published_from": str(folder.resolve()),
+                        "piece": self._piece,
+                        "baked": baked,
+                    }
+                    _atomic_json(self._shown / "zarr.json", description)
+                _atomic_json(self._shown / "publication.json", state)
+                (self._shown / "pending.json").unlink()
+                self._state = state
+                self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
+                self._held = made
+                if previous is not None:
+                    previous.stop_warming()
+                return self.revision
+
+            yield commit
 
     def _declare_levels(self, made: Composer, description: dict, *, bake=True) -> list[int]:
         datasets = description["attributes"]["ome"]["multiscales"][0]["datasets"]
@@ -584,7 +787,7 @@ class PublishedTransfer(ComposedPicture):
             return []
         if made.mosaic.has_acquired_regions:
             return sorted(
-                set(baked) | set(range(made.mosaic.tiles[0].keeps - 1, made.mosaic.levels))
+                set(baked) | set(range(max(1, made.mosaic.tiles[0].keeps - 1), made.mosaic.levels))
             )
         level = made.mosaic.levels - 1
         metadata = json.loads(made.array_json(level))
