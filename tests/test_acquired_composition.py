@@ -8,6 +8,7 @@ import pytest
 import zarr
 
 from zmart_viewer.compose import (
+    MEAN_REDUCTION,
     Composer,
     Mosaic,
     _read_one_tile,
@@ -243,11 +244,14 @@ def test_invalid_coverage_snapshot_is_refused_on_reopen(tmp_path, corruption):
         read_the_mosaic_as_written(written)
 
 
-def test_worker_builds_the_same_sparse_czt_pixels(tmp_path):
+@pytest.mark.parametrize("x,width", [(3, 3), (0, 4)])
+def test_worker_builds_the_same_sparse_czt_pixels(tmp_path, x, width):
     tile = source(tmp_path, "a.ome.zarr", 840)
     base = Mosaic([tile], 3, ("z", "y", "x"), "uint16", averaged=True)
     snapshot = base.with_acquired_regions(
-        {tile.name: [region(3, 3, t=1, c=1, z=1)]}, order=[tile.name]
+        {tile.name: [region(x, width, t=1, c=1, z=1)]},
+        order=[tile.name],
+        pyramid_reduction=MEAN_REDUCTION,
     )
     alone, worker = Composer(snapshot, piece=4), Composer(snapshot, piece=4, workers=2)
     try:

@@ -26,6 +26,7 @@ from .acquired import AcquiredRegion
 IMAGE_SUFFIX = ".ome.zarr"
 
 OURS = "zmart"
+MEAN_REDUCTION = "mean-xy2-edge-round"
 
 
 @dataclass
@@ -109,6 +110,7 @@ class Mosaic:
 
     omero: dict | None = None
     extent_um: tuple[float, float, float] | None = None
+    pyramid_reduction: str | None = None
 
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
         default_factory=dict, repr=False
@@ -120,7 +122,9 @@ class Mosaic:
     def has_acquired_regions(self) -> bool:
         return any(tile.acquired_regions is not None for tile in self.tiles)
 
-    def with_acquired_regions(self, regions: dict, *, order: list[str]) -> Mosaic:
+    def with_acquired_regions(
+        self, regions: dict, *, order: list[str], pyramid_reduction: str | None = None
+    ) -> Mosaic:
         """A new snapshot with exact coverage and back-to-front source order.
 
         Every source must have an explicit list (empty is valid). Records use
@@ -141,6 +145,8 @@ class Mosaic:
             raise ValueError("Acquired sources must have unique names")
         if not self.averaged:
             raise ValueError("Acquired composition requires a mean pyramid")
+        if pyramid_reduction not in (None, MEAN_REDUCTION):
+            raise ValueError("Unsupported acquired pyramid reduction")
         made = []
         for name in order:
             tile = tiles[name]
@@ -208,6 +214,7 @@ class Mosaic:
             self.averaged,
             self.omero,
             self.extent_um,
+            pyramid_reduction=pyramid_reduction,
         )
 
     @property
@@ -699,6 +706,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         "corner_um": list(mosaic.corner_um),
         **({"extent_um": list(mosaic.extent_um)} if mosaic.extent_um is not None else {}),
         **({"averaged": True} if mosaic.averaged else {}),
+        **({"pyramid_reduction": mosaic.pyramid_reduction} if mosaic.pyramid_reduction else {}),
         # Only where the tiles said something. A picture whose tiles named no
         # channels writes no key, exactly as it did before this was carried.
         **({"omero": mosaic.omero} if mosaic.omero else {}),
@@ -777,6 +785,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
                 if tile.acquired_regions is not None
             },
             order=[tile.name for tile in tiles],
+            pyramid_reduction=held.get("pyramid_reduction"),
         )
     return mosaic
 
@@ -871,10 +880,11 @@ def halve_xy(values: np.ndarray) -> np.ndarray:
     )
 
 
-def _acquired_bounds(tile, at, moment, channel):
+def _acquired_bounds(tile, at, moment, channel, level=0):
+    factor = 2**level
     for region in tile.acquired_regions:
         if region.frame == moment and region.channel == channel:
-            yield region.bounds(at)
+            yield tuple((z, y // factor, x // factor) for z, y, x in region.bounds(at))
 
 
 class Composer:
@@ -1204,6 +1214,48 @@ class Composer:
         self.costs["read_ms"] += (time.perf_counter() - reading_began) * 1000
         return out
 
+    def _can_read_native(self, level, row, column):
+        """Reuse means only when no reduction cell mixes acquired pixel owners.
+
+        Aligned region edges preserve gaps and overlap order. Misaligned sources
+        or regions need compose-before-reduce, including odd-sized tile edges.
+        """
+        if self.mosaic.pyramid_reduction != MEAN_REDUCTION:
+            return False
+        factor = 2**level
+        for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
+            if level >= len(tile.copies) or any(n % factor for n in at[1:]):
+                return False
+            base, copy = tile.copies[0], tile.copies[level]
+            expected_corner = (
+                base.corner_um[0],
+                base.corner_um[1] + (factor - 1) * base.voxel_um[1] / 2,
+                base.corner_um[2] + (factor - 1) * base.voxel_um[2] / 2,
+            )
+            if (
+                copy.shape
+                != (
+                    base.shape[0],
+                    math.ceil(base.shape[1] / factor),
+                    math.ceil(base.shape[2] / factor),
+                )
+                or copy.outer_shape != base.outer_shape
+                or copy.dtype != base.dtype
+                or any(
+                    not math.isclose(a, b, abs_tol=1e-7, rel_tol=0)
+                    for a, b in zip(copy.corner_um, expected_corner, strict=True)
+                )
+            ):
+                return False
+            if any(
+                n % factor
+                for region in tile.acquired_regions
+                for bound in region.bounds(at)
+                for n in bound[1:]
+            ):
+                return False
+        return True
+
     def _build_slab(
         self,
         level: int,
@@ -1214,7 +1266,7 @@ class Composer:
         channel: int = 0,
     ) -> np.ndarray:
         """Lay the tiles into one column of ground, for every plane of one file."""
-        if self._acquired and level > 0:
+        if self._acquired and level > 0 and not self._can_read_native(level, row, column):
             return self._reduce_composed_slab(level, plane, row, column, moment, channel)
         building_began = time.perf_counter()
         depth = self.slab_depth(level)
@@ -1238,14 +1290,17 @@ class Composer:
             )
             held = copy.shape
 
-            if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
-                continue
-
             bounds = (
-                _acquired_bounds(tile, at, moment, channel)
+                _acquired_bounds(tile, at, moment, channel, level)
                 if self._acquired
                 else [(at, tuple(a + b for a, b in zip(at, held, strict=True)))]
             )
+            if self._acquired:
+                at = (at[0], at[1] // 2**level, at[2] // 2**level)
+
+            if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
+                continue
+
             for low, high in bounds:
                 start = tuple(max(a, b) for a, b in zip((low_z, top, left), low, strict=True))
                 end = tuple(min(a, b) for a, b in zip((high_z, bottom, right), high, strict=True))
