@@ -176,6 +176,25 @@ WebView2 engine (Chromium), so the 3-D rendering runs on your graphics card. If
 a native window cannot open, the address is printed so you can open it in a
 browser instead.
 
+### Try transparent live refresh
+
+After building the page, run this from the repository root:
+
+```bash
+python demos/show_source_refresh.py
+```
+
+The native window starts with one of six synthetic positions. **Add position**
+fills another footprint; **Rewrite last** changes an acquired image. The
+checkerboard lies below the viewer, black acquired pixels stay opaque, and the
+demo controls sit above it. **Repeat unchanged hint** sends a notification
+without advancing the revision; it should not refetch image data.
+
+Each launch keeps a fresh dataset and window profile under
+`testdata/source_refresh_demo/` (ignored by Git). Use `--output PATH` to choose
+another writable location. Closing the window stops its server. This exercises
+the shared viewer's revisioned-source path, not the operator integration.
+
 ## Try the time slider
 
 If your data is a timelapse — the same specimen imaged repeatedly — the viewer
