@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from . import pieces
-from .building import GovernedRun
+from .building import ComposedPicture
 from .library import _read_array_description, _read_attrs_at
 from .record.gateway import live_run_holding
 
@@ -37,7 +37,7 @@ def requires_geometry(store: Path) -> bool:
 def answer(store: Path, inside: str) -> bytes | None:
     """Serve a Zarr 3 coverage group using the source's own axes and transforms."""
     held = pieces._composer_for(store)
-    composer = held.composer() if isinstance(held, GovernedRun) else held
+    composer = held.composer() if isinstance(held, ComposedPicture) else held
     if composer is None and pieces.the_map_inside(store) is not None:
         raise ValueError("coverage unavailable for a refused or legacy linked image")
     if composer is None and live_run_holding(store) is not None:
@@ -48,10 +48,6 @@ def answer(store: Path, inside: str) -> bytes | None:
         return None
     scale = multiscales[0]
     datasets = scale.get("datasets", [])
-    if composer:
-        # Baking may add coarser image levels without adding tile copies to the
-        # compositor. Let NG sample the supported coverage levels at those zooms.
-        datasets = datasets[: composer.mosaic.levels]
     multiscales = [{**scale, "datasets": datasets}]
     if inside == "zarr.json":
         return json.dumps(

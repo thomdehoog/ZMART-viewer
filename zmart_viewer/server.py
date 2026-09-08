@@ -25,7 +25,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from zmart_viewer.record.gateway import answer_from_a_live_run
+from zmart_viewer.record.gateway import answer_from_a_live_run, live_run_holding
 
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
@@ -396,27 +396,16 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def _a_governed_piece_behind(self, target: Path) -> tuple[Path, str] | None:
         """The (store, piece address) when this FILE is a governed chunk."""
-        parents = target.parents
-
-        if len(parents) < 5:
-            return None
-
-        store = parents[4]
-        parts = target.relative_to(store).parts
-
-        if len(parts) != 5 or parts[1] != "c":
-            return None
-
-        if not all(one.isdecimal() for one in (parts[0], *parts[2:])):
-            return None
-
-        if not (store / "zarr.json").is_file():
-            return None
-
-        if not pieces.a_manifest_governs(store):
-            return None
-
-        return store, "/".join(parts)
+        for arity in (7, 5):
+            if len(target.parents) < arity:
+                continue
+            store = target.parents[arity - 1]
+            inside = target.relative_to(store).as_posix()
+            if pieces.the_piece_address(inside) is None or not (store / "zarr.json").is_file():
+                continue
+            if pieces.a_manifest_governs(store):
+                return store, inside
+        return None
 
     def _pointed_at(self, rel: str) -> tuple[Path, int, int | None] | None:
         """The file that really holds this piece, when the picture was never written."""
@@ -733,8 +722,17 @@ class _Handler(SimpleHTTPRequestHandler):
         )
 
     def _serve_announcement(self, payload: object) -> None:
-        """Accept the legacy optional hint used by generic live folders."""
+        """Publish completed folder snapshots, or accept a legacy change hint."""
         in_place = bool(isinstance(payload, dict) and payload.get("wrote_image_in_place"))
+        if isinstance(payload, dict) and "publications" in payload:
+            try:
+                self._scratch["published"].announce(payload["publications"])
+            except (ValueError, KeyError, TypeError) as why:
+                self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
+                return
+            except OSError as why:
+                self._send_json({"error": str(why)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
         covering = None
 
         try:
@@ -1154,6 +1152,22 @@ class _Handler(SimpleHTTPRequestHandler):
 
         target = Path(path.strip()).expanduser()
 
+        published = self._scratch["published"]
+        asked_bake = bool(payload.get("bake", published.bake))
+        canvas = payload.get("canvas", published.canvas)
+        if asked_bake and live_run_holding(target) is None:
+            number = None
+            try:
+                number = self._library.open(target)
+                published.open(number, canvas=canvas, versions=payload.get("source_revisions"))
+            except (ValueError, OSError, KeyError, TypeError) as why:
+                if number is not None:
+                    self._library.close(number)
+                self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(self._config())
+            return
+
         try:
             opened = loading.load(
                 target,
@@ -1332,6 +1346,8 @@ def make_server(
     panel_side: str = "right",
     transparent_background: bool = False,
     open_from: Path | None = None,
+    bake: bool = False,
+    canvas: dict | None = None,
 ) -> ThreadingHTTPServer:
     """Create (but do not start) the viewer's web server.
 
@@ -1352,11 +1368,18 @@ def make_server(
             name=spec.get("name"),
         )
 
-    scratch: dict = {}
+    from .published import PublishedFolders
+
+    published = PublishedFolders(library, bake=bake, canvas=canvas)
+    scratch: dict = {"published": published}
+    if bake:
+        for dataset in library.datasets():
+            if live_run_holding(dataset.root) is None:
+                published.open(dataset.number)
     registry = SourceRegistry(
         library,
         watching=live,
-        wants_the_bake=lambda run_root: Path(run_root).resolve() in scratch.get("bake_live", ()),
+        wants_the_bake=lambda run_root: bake or Path(run_root).resolve() in scratch.get("bake_live", ()),
     )
 
     measurements = Measurements(fixed_window=window)
@@ -1365,6 +1388,7 @@ def make_server(
     building_config = threading.Lock()
 
     def config_now() -> dict:
+        published_revision = published.refresh()
         (
             live_bindings,
             live_numbers,
@@ -1375,6 +1399,7 @@ def make_server(
         revision = (
             library.revision(excluding=live_numbers),
             live_etag,
+            published_revision,
         )
 
         if last_built["revision"] == revision:
@@ -1403,7 +1428,7 @@ def make_server(
         live_numbers: frozenset[int],
     ) -> dict:
         """Describe every row the layer panel should show, and its group."""
-        entries = library.entries()
+        entries = published.entries(library.entries())
         present = [name for _, _, name in entries]
         labels = layer_names(present)
         groups_named = group_labels(library.datasets())
@@ -1461,6 +1486,8 @@ def make_server(
                     )
                     merged[key] = {
                         **base,
+                        **({"sourceRevisions": [published.source_revision(root_number)]}
+                           if published.source_revision(root_number) is not None else {}),
                         "sources": [address],
                         "name": channel_name,
                         "group": group,
@@ -1563,6 +1590,7 @@ def make_server(
 
         def shutdown(self):
             registry.stop()
+            published.close()
 
             for own in ("scenes", "replays"):
                 made = scratch.pop(own, None)

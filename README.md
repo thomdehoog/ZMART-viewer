@@ -195,6 +195,54 @@ Each launch keeps a fresh dataset and window profile under
 another writable location. Closing the window stops its server. This exercises
 the shared viewer's revisioned-source path, not the operator integration.
 
+### Optional live coarse overview (experimental)
+
+Baking is **off by default**. Add `--bake` to the refresh demo above to exercise
+the governed-run baker. For an external folder of completed position stores,
+the shared server also accepts `make_server(..., bake=True, canvas=...)`, where
+`canvas` is the full fixed specimen area, for example
+`{"x_um": [0, 10000], "y_um": [0, 5000]}` in micrometres.
+
+The external-folder adapter exposes one source. Fine chunks read the original
+positions; coarse chunks are baked under `.zmart-viewer/overview.ome.zarr` in
+that folder. It does not copy level 0. Coverage is independent of intensity:
+empty ground is transparent and acquired black pixels remain opaque.
+
+Acquisition integrations should open the folder with `POST /api/stores/open`:
+
+```json
+{"path": "PATH_TO_POSITIONS", "bake": true,
+ "canvas": {"x_um": [0, 10000], "y_um": [0, 5000]},
+ "source_revisions": {"P000.ome.zarr": 1}}
+```
+
+After completed writes, send the full current position-revision mapping using
+`POST /api/announce`:
+
+```json
+{"publications": [{"path": "PATH_TO_POSITIONS",
+                   "source_revisions": {"P000.ome.zarr": 2, "P001.ome.zarr": 1}}]}
+```
+
+Unchanged mappings do no pixel work. Changes patch affected coarse chunks, then
+advance one aggregate revision. Neuroglancer refreshes that **whole source**;
+chunk-selective client invalidation is not implemented. Publication belongs on
+the acquisition's background publisher, not in capture or status callbacks.
+Without explicit revisions, the standalone server uses position metadata file
+timestamps; chunk-only rewrites must supply explicit revisions.
+
+This adapter supports unrotated ZYX, CZYX and TCZYX positions with matching,
+fixed C/Z/T geometry and at least two mean-reduced pyramid levels. Other
+reduction methods are refused because the shared coarse baker averages pixels.
+It is for complete rectangular position footprints, not already-sparse
+resolved mosaics. Changing the canvas or source geometry, or removing the last
+position, requires opening a new acquisition. An interrupted bake refuses reads
+until publication retries.
+
+The experimental operator branch's **Bake coarse overview (experimental)**
+checkbox selects this path before Connect. It affects overview scans only; focus and target sources
+keep their existing representation. Leave it unchecked for the original path.
+
 ## Try the time slider
 
 If your data is a timelapse — the same specimen imaged repeatedly — the viewer

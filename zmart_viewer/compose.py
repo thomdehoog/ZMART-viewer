@@ -105,6 +105,7 @@ class Mosaic:
     averaged: bool = False
 
     omero: dict | None = None
+    extent_um: tuple[float, float, float] | None = None
 
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
         default_factory=dict, repr=False
@@ -160,6 +161,13 @@ class Mosaic:
         found = self._shape.get(level)
 
         if found is None:
+            if self.extent_um is not None:
+                found = tuple(
+                    math.ceil(size / voxel)
+                    for size, voxel in zip(self.extent_um, self.voxel_um(level), strict=True)
+                )
+                self._shape[level] = found
+                return found
             placed = self.placements(level)
             found = tuple(
                 max(at[axis] + tile.copies[level].shape[axis] for tile, at in placed)
@@ -584,6 +592,8 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         "axes": list(mosaic.axes),
         "dtype": mosaic.dtype,
         "corner_um": list(mosaic.corner_um),
+        **({"extent_um": list(mosaic.extent_um)} if mosaic.extent_um is not None else {}),
+        **({"averaged": True} if mosaic.averaged else {}),
         # Only where the tiles said something. A picture whose tiles named no
         # channels writes no key, exactly as it did before this was carried.
         **({"omero": mosaic.omero} if mosaic.omero else {}),
@@ -641,6 +651,8 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
         dtype=held["dtype"],
         corner_um=tuple(held["corner_um"]),
         omero=held.get("omero"),
+        extent_um=tuple(held["extent_um"]) if "extent_um" in held else None,
+        averaged=bool(held.get("averaged", False)),
     )
 
 
@@ -1084,14 +1096,26 @@ class Composer:
         """Binary acquired ground, from the same placements used to build pixels."""
         mask = np.zeros((self.piece, self.piece), dtype=np.uint8)
         top, left = row * self.piece, column * self.piece
-        for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
-            size = tile.copies[level].shape
-            if not _tile_has_the_frame(tile, level, moment, channel):
+        native = min(level, self.mosaic.levels - 1)
+        factor = 2 ** (level - native)
+        index = self._tiles_in_each_piece(native)
+        cells = (
+            [index.get((row, column), ())]
+            if factor == 1
+            else (
+                tiles for (r, c), tiles in index.items()
+                if r // factor == row and c // factor == column
+            )
+        )
+        candidates = {tile.name: (tile, at) for tiles in cells for tile, at in tiles}
+        for tile, at in candidates.values():
+            size = tile.copies[native].shape
+            if not _tile_has_the_frame(tile, native, moment, channel):
                 continue
             if not at[0] <= plane < at[0] + size[0]:
                 continue
-            y0, y1 = max(top, at[1]), min(top + self.piece, at[1] + size[1])
-            x0, x1 = max(left, at[2]), min(left + self.piece, at[2] + size[2])
+            y0, y1 = max(top, at[1] // factor), min(top + self.piece, math.ceil((at[1] + size[1]) / factor))
+            x0, x1 = max(left, at[2] // factor), min(left + self.piece, math.ceil((at[2] + size[2]) / factor))
             mask[y0 - top:y1 - top, x0 - left:x1 - left] = 1
         return mask
 

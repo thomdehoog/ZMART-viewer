@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import numpy as np
+import pytest
 from pixels import image_middle
 from show_source_refresh import Demo, picture
 from test_manifest_refresh_browser import _open, _serving, _wait_for_picture, _wait_for_revision
@@ -26,11 +27,12 @@ def test_demo_keeps_six_positions_and_can_rewrite_when_full(tmp_path):
     assert pixels.max() < 4095
 
 
+@pytest.mark.parametrize("bake", [False, True])
 def test_saved_demo_buttons_publish_rewrite_and_leave_idle_data_cached(
-    browser, built_dist, tmp_path
+    browser, built_dist, tmp_path, bake
 ):
     demo = Demo(tmp_path / "run")
-    with _serving(built_dist, demo._run, transparent_background=True) as address:
+    with _serving(built_dist, demo._run, transparent_background=True, bake=bake) as address:
         page = browser.new_page(viewport={"width": 1500, "height": 950})
         requested, errors = [], []
         page.on("request", lambda request: requested.append(urlsplit(request.url).path))
