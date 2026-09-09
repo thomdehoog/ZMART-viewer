@@ -113,6 +113,7 @@ def declare_a_built_picture(
 
     store = where / the_scene_folder_name(name)
     store.mkdir(parents=True, exist_ok=True)
+    (store / "baked.json").unlink(missing_ok=True)
 
     for kept in sorted(store.glob("[0-9]*")):
         if kept.is_dir() and (int(kept.name) >= mosaic.levels or (kept / "c").exists()):
@@ -175,6 +176,7 @@ def declare_a_governed_picture(
 
         store = where / the_scene_folder_name(name)
         store.mkdir(parents=True, exist_ok=True)
+        (store / "baked.json").unlink(missing_ok=True)
 
         for kept in sorted(store.glob("[0-9]*")):
             if kept.is_dir() and (
