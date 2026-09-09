@@ -1560,10 +1560,8 @@ class Composer:
                                 while self._answering:
                                     time.sleep(0.005)
 
-                                try:
-                                    self._a_block_of(copy, (z, y, x))
-                                except Exception:
-                                    continue
+                                for outer in np.ndindex(copy.outer_shape):
+                                    self._a_block_of(copy, (z, y, x), outer)
 
         self._blocks_prefilled = True
 
