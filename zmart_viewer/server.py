@@ -1175,8 +1175,11 @@ class _Handler(SimpleHTTPRequestHandler):
                     composition=payload.get("composition"),
                     bake=asked_bake,
                 )
-            except (ValueError, OSError, KeyError, TypeError) as why:
+            except (ValueError, KeyError, TypeError) as why:
                 self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
+                return
+            except OSError as why:
+                self._send_json({"error": str(why)}, HTTPStatus.SERVICE_UNAVAILABLE)
                 return
             self._send_json(self._config())
             return

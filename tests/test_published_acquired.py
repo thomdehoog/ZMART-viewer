@@ -325,6 +325,34 @@ def test_http_sparse_contract_cannot_silently_be_dropped(tmp_path, bake):
         thread.join(5)
 
 
+@pytest.mark.parametrize("route,method,payload", [
+    ("/api/stores/open", "open", {"composition": {"regions": "complete"}}),
+    ("/api/announce", "announce", {"publications": []}),
+])
+@pytest.mark.parametrize("failure,expected", [(ValueError, 400), (OSError, 503)])
+def test_publication_http_distinguishes_invalid_input_from_io_failure(
+    tmp_path, monkeypatch, route, method, payload, failure, expected
+):
+    from zmart_viewer.published import PublishedFolders
+
+    def fail(*args, **kwargs):
+        raise failure("publication unavailable")
+
+    monkeypatch.setattr(PublishedFolders, method, fail)
+    server = make_server(port=0, data_dir=tmp_path, live=True, allow_open=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, _, body = request(server.server_address[1], route, "POST",
+                                  json.dumps({"path": str(tmp_path), **payload}).encode())
+        assert status == expected
+        assert json.loads(body)["error"] == "publication unavailable"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
+
+
 @pytest.mark.parametrize("bake", [False, True])
 def test_complete_stores_append_retire_and_keep_one_aggregate_at_100(tmp_path, bake):
     from zmart_viewer.library import Library
