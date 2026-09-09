@@ -831,12 +831,14 @@ class ComposedPicture:
             buffer = np.full((1, piece, piece), served_recipe["fill"], served_recipe["dtype"])
             buffer[0, : wanted[0], : wanted[1]] = halved[0]
 
+            staged = staging / "c" / str(plane) / str(row) / str(column)
             if np.all(buffer == served_recipe["fill"]):
+                # A retry may replace a nonzero chunk staged before interruption.
+                staged.unlink(missing_ok=True)
                 continue
 
-            staged = staging / "c" / str(plane) / str(row)
-            staged.mkdir(parents=True, exist_ok=True)
-            (staged / str(column)).write_bytes(
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            staged.write_bytes(
                 packing.encode(np.ascontiguousarray(buffer).tobytes())
             )
 

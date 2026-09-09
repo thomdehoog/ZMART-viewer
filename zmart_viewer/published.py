@@ -736,17 +736,6 @@ class PublishedTransfer(ComposedPicture):
                     },
                 )
                 moments, channels = mosaic.frame_room
-                for level in baked:
-                    if level >= mosaic.levels:
-                        break
-                    for row, col in sorted(dirty.get(level, ())):
-                        for moment in range(moments):
-                            for channel in range(channels):
-                                for plane in range(made.grid(level)[0]):
-                                    self._replace_one_piece(
-                                        made, level, plane, row, col, moment=moment, channel=channel
-                                    )
-                reached = dirty.get(mosaic.levels - 1, set())
                 frames = (
                     [()]
                     if (moments, channels) == (1, 1)
@@ -756,6 +745,23 @@ class PublishedTransfer(ComposedPicture):
                         for channel in range(channels)
                     ]
                 )
+                for level in baked:
+                    if level >= mosaic.levels:
+                        break
+                    # Sparse levels share one XY reduction grid. Once the level
+                    # below is baked, propagate its changes instead of recomposing
+                    # a larger footprint from originals at every ancestor.
+                    if mosaic.has_acquired_regions and level - 1 in baked:
+                        self._rehalve_one_level(level, sorted(dirty.get(level, ())), frames)
+                        continue
+                    for row, col in sorted(dirty.get(level, ())):
+                        for moment in range(moments):
+                            for channel in range(channels):
+                                for plane in range(made.grid(level)[0]):
+                                    self._replace_one_piece(
+                                        made, level, plane, row, col, moment=moment, channel=channel
+                                    )
+                reached = dirty.get(mosaic.levels - 1, set())
                 for level in (one for one in baked if one >= mosaic.levels):
                     reached = {(row // 2, col // 2) for row, col in reached}
                     if reached:

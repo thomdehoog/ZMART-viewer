@@ -17,6 +17,110 @@ from zmart_viewer.server import make_server
 CANVAS = {"x_um": [0, 64], "y_um": [0, 8]}
 
 
+@pytest.mark.parametrize("frames,channels,depth", [(1, 1, 1), (2, 2, 2)])
+@pytest.mark.parametrize("value", [0, 80])
+def test_misaligned_bake_updates_ancestors_without_reopening_distant_originals(
+    tmp_path, monkeypatch, frames, channels, depth, value
+):
+    from test_published_transfer import write_position
+
+    from zmart_viewer.compose import MEAN_REDUCTION, Composer
+
+    canvas = {"x_um": [0, 2049], "y_um": [0, 129]}
+    for name, x, initial_value in (("a.ome.zarr", 1, 120), ("far.ome.zarr", 1537, 240)):
+        write_position(tmp_path, name, x, initial_value, frames=frames, channels=channels, depth=depth)
+    versions = {"a.ome.zarr": 1, "far.ome.zarr": 1}
+    composition = {
+        "regions": "complete",
+        "order": list(versions),
+        "pyramid_reduction": MEAN_REDUCTION,
+    }
+    view = PublishedTransfer(tmp_path / STORE, piece=64)
+    view.publish(tmp_path, versions, canvas, composition=composition)
+    view.close()
+    # A reopened publisher cannot rely on original pixels surviving in RAM.
+    view = PublishedTransfer(tmp_path / STORE, piece=64)
+    write_position(
+        tmp_path, "new.ome.zarr", 145, value, frames=frames, channels=channels, depth=depth
+    )
+    versions["new.ome.zarr"] = 1
+    composition["order"].append("new.ome.zarr")
+    reads = set()
+    read = Composer._read_from
+
+    def counted(self, copy, *args):
+        reads.add(copy.held_in.parent.name)
+        return read(self, copy, *args)
+
+    monkeypatch.setattr(Composer, "_read_from", counted)
+    try:
+        view.publish(tmp_path, versions, canvas, composition=composition)
+        assert reads and reads <= {"a.ome.zarr", "new.ome.zarr"}
+        assert view.accounting["last_bake_pieces_rehalved"] > 0
+        assert not (view._shown / "0/c").exists()
+        fine = np.zeros((frames, channels, depth, 129, 2049), dtype="uint16")
+        fine[..., :128, 1:129] = 120
+        fine[..., :128, 145:273] = value
+        fine[..., :128, 1537:1665] = 240
+        described = json.loads((view._shown / "zarr.json").read_text())
+        baked = described["attributes"]["zmart"]["baked"]
+        for level in range(view.composer().mosaic.levels):
+            if level in baked:
+                actual = zarr.open_array(str(view._shown / str(level)), mode="r")[:]
+                np.testing.assert_array_equal(
+                    actual, fine.squeeze(axis=(0, 1)) if frames == channels == 1 else fine
+                )
+            h, w = fine.shape[-2:]
+            fine = np.pad(fine, [(0, 0)] * 3 + [(0, h % 2), (0, w % 2)], mode="edge")
+            fine = (
+                fine.reshape(frames, channels, depth, (h + 1) // 2, 2, (w + 1) // 2, 2)
+                .mean(axis=(-3, -1))
+                .round()
+                .astype("uint16")
+            )
+        mask = view.composer().coverage_for(0, 0, 0, 2)
+        assert mask[0, 16] == 0 and mask[0, 17] == 1  # gap then acquired pixels
+    finally:
+        view.close()
+
+
+def test_interrupted_ancestor_bake_clears_staged_pixels_when_retried_as_black(
+    tmp_path, monkeypatch
+):
+    from test_published_transfer import write_position
+
+    for name, value in (("a.ome.zarr", 120), ("b.ome.zarr", 0)):
+        write_position(tmp_path, name, 1, value)
+    versions = {"a.ome.zarr": 1, "b.ome.zarr": 1}
+    composition = {"regions": "complete", "order": list(versions)}
+    canvas = {"x_um": [0, 1024], "y_um": [0, 128]}
+    view = PublishedTransfer(tmp_path / STORE, piece=64)
+    try:
+        view.publish(tmp_path, versions, canvas, composition=composition)
+        real = view._rehalve_one_piece_directly
+
+        def interrupted(*args):
+            real(*args)
+            raise OSError("interrupted after staging ancestor")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(view, "_rehalve_one_piece_directly", interrupted)
+            with pytest.raises(OSError, match="after staging ancestor"):
+                view.publish(
+                    tmp_path,
+                    versions,
+                    canvas,
+                    composition={**composition, "order": list(reversed(versions))},
+                )
+        view.publish(tmp_path, versions, canvas, composition=composition)
+        for level in range(2, view.composer().mosaic.levels):
+            assert not zarr.open_array(str(view._shown / str(level)), mode="r")[:].any()
+        assert view.composer().coverage_for(0, 0, 0, 0)[0, 1] == 1
+        assert not (view._shown / "pending.json").exists()
+    finally:
+        view.close()
+
+
 def snapshot():
     return {
         "regions": {
