@@ -1172,15 +1172,16 @@ export default function App() {
   // would only reach it on the next pass, which is too late to be any use.
   const engine = React.useRef(null);
   const [config, setConfig] = React.useState(null);
-  const [mode, setMode] = React.useState("flat");
+  const [requestedMode, setMode] = React.useState("flat");
   const [requestedViews, setRequestedViews] = React.useState({});
   const rememberedPosition = React.useRef({});
+  const cameraOnReopen = React.useRef(null);
   const views = React.useMemo(() => viewChoices(config?.layers || []), [config]);
   const hasLegacy = (config?.layers || []).some(spec => !spec.view);
+  const mode = views.length && !hasLegacy ? "flat" : requestedMode;
   const chosenViews = React.useMemo(() => selectedViews(config?.layers || [], requestedViews), [config, requestedViews]);
   const included = React.useMemo(() => new Set((config?.layers || [])
     .flatMap((spec, i) => inSelectedView(spec, chosenViews) && (mode === "flat" || !spec.view) ? [i] : [])), [config, chosenViews, mode]);
-  React.useEffect(() => { if (views.length && !hasLegacy) setMode("flat"); }, [views, hasLegacy]);
   const transparentBackground = config?.transparentBackground === true && mode === "flat";
   React.useEffect(() => {
     document.documentElement.toggleAttribute("data-transparent-background", transparentBackground);
@@ -1681,7 +1682,18 @@ export default function App() {
   React.useEffect(() => {
     if (!viewer) return undefined;
     setFramed(false);
-    return chooseScaleWhenTheImagesAreMeasured(viewer, () => setFramed(true));
+    return chooseScaleWhenTheImagesAreMeasured(viewer, () => {
+      const camera = cameraOnReopen.current;
+      if (camera) {
+        const position = viewer.navigationState.position, space = position.coordinateSpace.value;
+        position.value = Float32Array.from(space.names, (name, i) =>
+          camera.position[name] === undefined ? position.value[i] : camera.position[name] / space.scales[i]);
+        viewer.navigationState.zoomFactor.setPhysicalScale(camera.zoomMeters, 1);
+        viewer.perspectiveNavigationState.zoomFactor.setPhysicalScale(camera.perspectiveZoomMeters, 1);
+        cameraOnReopen.current = null;
+      }
+      setFramed(true);
+    });
   }, [viewer]);
 
   React.useEffect(() => {
@@ -2134,8 +2146,24 @@ export default function App() {
                 setStoreBusy(true);
                 setStoreNotice(null);
                 const result = await closeGroup(group);
+                if (result.error) {
+                  setStoreNotice(result.error);
+                  setStoreBusy(false);
+                  return;
+                }
                 if (result.config) applyConfig(result.config);
-                if (result.error) setStoreNotice(result.error);
+                cameraOnReopen.current = null;
+                if (viewer?.navigationState.position.coordinateSpace.value.valid && result.config?.layers.length) {
+                  const position = viewer.navigationState.position, space = position.coordinateSpace.value;
+                  cameraOnReopen.current = {
+                    position: Object.fromEntries(space.names.map((name, i) =>
+                      [name, position.value[i] * space.scales[i]])),
+                    zoomMeters: viewer.navigationState.zoomFactor.value
+                      * viewer.navigationState.zoomFactor.canonicalVoxelPhysicalSize,
+                    perspectiveZoomMeters: viewer.perspectiveNavigationState.zoomFactor.value
+                      * viewer.perspectiveNavigationState.zoomFactor.canonicalVoxelPhysicalSize,
+                  };
+                }
                 // The engine is built again, and what was closed goes with
                 // it. Removing the layer alone did not: whatever was opened
                 // NEXT came up with most of its tiles unpainted, while the

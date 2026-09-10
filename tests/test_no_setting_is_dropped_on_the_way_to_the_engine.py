@@ -127,6 +127,8 @@ SETTLED_WHEN_THE_LAYER_IS_BUILT = {
     "source",
     "frameCounts",
     "localPosition",
+    "persistentFlat",
+    "boundaryHeld",
 }
 
 
