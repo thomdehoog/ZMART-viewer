@@ -274,14 +274,17 @@ def test_top_holds_each_acquisition_with_shared_folder_and_slider(
         thread.join(5)
 
 
+@pytest.mark.parametrize("input_format", ["v2", "v3", "v3-sharded"])
 @pytest.mark.parametrize("bake", [False, True])
-def test_named_view_switching_pixels_requests_and_reopen(browser, built_dist, tmp_path, bake):
+def test_named_view_switching_pixels_requests_and_reopen(
+    browser, built_dist, tmp_path, bake, input_format
+):
     originals = tmp_path / "positions"
     originals.mkdir()
     flat = np.full((1, 1, 1, 128, 128), 100, dtype="uint16")
     stack = np.stack([np.full((128, 128), n, dtype="uint16") for n in (0, 200, 400)])[None, None]
-    write_tile(originals, "flat.ome.zarr", flat, x=0)
-    write_tile(originals, "stack.ome.zarr", stack, x=192)
+    write_tile(originals, "flat.ome.zarr", flat, x=0, input_format=input_format)
+    write_tile(originals, "stack.ome.zarr", stack, x=192, input_format=input_format)
     names = ["flat.ome.zarr", "stack.ome.zarr"]
     payload = {
         "path": str(originals),
@@ -382,11 +385,71 @@ def test_named_view_switching_pixels_requests_and_reopen(browser, built_dist, tm
         assert page.request.post(address + "/api/announce", data={"publications": [publication]}).ok
         page.wait_for_timeout(2300)
         assert not [u for u in requests[mark:] if "/data/" in u]
+        live_changes = []
+        for change in ("rewrite", "append"):
+            before = image_middle(page)
+            before_alpha = page.evaluate(READ_ALPHA)
+            if change == "rewrite":
+                stack[..., 2, :, :] = 550
+                write_tile(originals, "stack.ome.zarr", stack, x=192, input_format=input_format)
+                payload["source_revisions"]["stack.ome.zarr"] = 2
+            else:
+                write_tile(
+                    originals,
+                    "gap.ome.zarr",
+                    np.full((1, 1, 1, 128, 64), 300, dtype="uint16"),
+                    x=128,
+                    input_format=input_format,
+                )
+                payload["source_revisions"]["gap.ome.zarr"] = 1
+                payload["composition"]["order"].append("gap.ome.zarr")
+            mark = len(requests)
+            publication = {k: payload[k] for k in ("path", "source_revisions", "composition")}
+            response = page.request.post(
+                address + "/api/announce", data={"publications": [publication]}
+            )
+            assert response.ok, response.text()
+            revision = 2 if change == "rewrite" else 3
+            page.wait_for_function(
+                "revision => zmartConfig.layers.every(row => row.sourceRevisions[0] === revision)",
+                arg=revision,
+            )
+            _wait_for_picture(page)
+            # A config revision can arrive before its asynchronous image fetch.
+            from time import monotonic
+
+            deadline = monotonic() + 10
+            difference = 0
+            while monotonic() < deadline:
+                difference = int(np.count_nonzero(np.any(image_middle(page) != before, axis=2)))
+                if difference > 1000:
+                    break
+                page.wait_for_timeout(100)
+            assert difference > 1000, (input_format, change, requests[mark:])
+            if change == "append":
+                assert page.evaluate(READ_ALPHA)["opaque"] > before_alpha["opaque"]
+            chunks = [u for u in requests[mark:] if "/data/" in u and "/c/" in u]
+            assert chunks and len(chunks) == len(set(chunks)), chunks
+            mark = len(requests)
+            page.wait_for_timeout(2300)
+            assert not [u for u in requests[mark:] if "/data/" in u]
+            assert len(page.evaluate("zmartScene.filter(l => l.type === 'image')")) == 2
+            live_changes.append(
+                {
+                    "change": change,
+                    "changed_pixels": difference,
+                    "chunk_requests": len(chunks),
+                    "idle_refetches": 0,
+                }
+            )
+            page.screenshot(path=str(tmp_path / f"{input_format}-{change}-{bake}.png"))
         assert not any("flat.ome.zarr/" in u or "stack.ome.zarr/" in u for u in requests)
         assert not errors, errors
         print(
             {
                 "bake": bake,
+                "input_format": input_format,
+                "live_changes": live_changes,
                 "slice_top_changed_pixels": changed,
                 "slice_alpha": slice_alpha,
                 "top_alpha": top_alpha,

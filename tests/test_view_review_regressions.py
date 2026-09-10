@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 import pytest
-from test_view_sampling import write_tile
+from test_view_sampling import INPUT_FORMATS, write_tile
 
 from zmart_viewer import pieces
 from zmart_viewer.compose import Composer, read_the_mosaic_as_written
@@ -63,7 +63,11 @@ def fresh(output):
 
 
 @pytest.mark.parametrize("different_spacing", [False, True])
-def test_shared_folder_publication_owners_advance_independently(tmp_path, different_spacing):
+@pytest.mark.parametrize("input_format", INPUT_FORMATS)
+@pytest.mark.parametrize("bake", [False, True])
+def test_shared_folder_publication_owners_advance_independently(
+    tmp_path, different_spacing, input_format, bake
+):
     import zarr
 
     from zmart_viewer.library import Library
@@ -78,11 +82,18 @@ def test_shared_folder_publication_owners_advance_independently(tmp_path, differ
         for name in ("a", "b"):
             folder = tmp_path / name
             folder.mkdir()
-            tile = write_tile(folder, "p.ome.zarr", np.ones((1, 1, 2, 8, 8), dtype="uint16"))
+            tile = write_tile(
+                folder,
+                "p.ome.zarr",
+                np.ones((1, 1, 2, 8, 8), dtype="uint16"),
+                input_format=input_format,
+            )
             if name == "b" and different_spacing:
                 group = zarr.open_group(str(tile.store), mode="r+")
                 attrs = dict(group.attrs)
-                for level in attrs["ome"]["multiscales"][0]["datasets"]:
+                for level in (attrs if input_format == "v2" else attrs["ome"])["multiscales"][0][
+                    "datasets"
+                ]:
                     scale = level["coordinateTransformations"][0]["scale"]
                     scale[2:] = [2, scale[3] * 0.5, scale[4] * 0.5]
                 group.attrs.update(attrs)
@@ -91,7 +102,7 @@ def test_shared_folder_publication_owners_advance_independently(tmp_path, differ
                 canvas=canvas,
                 versions={"p.ome.zarr": 1},
                 composition=composition,
-                bake=False,
+                bake=bake,
                 views={"path": str(tmp_path / "view"), "acquisition": name},
             )
         assert len(library.datasets()) == 2
