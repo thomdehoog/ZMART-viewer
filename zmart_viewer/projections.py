@@ -97,7 +97,9 @@ def _source_window(copy, t, c, y, x, height, width):
     return np.asarray(copy.array[outer + (slice(None), slice(y, y + height), slice(x, x + width))])
 
 
-def write_projection(source, destination, method, *, regions="complete", revision=0, piece=256):
+def write_projection(
+    source, destination, method, *, regions="complete", revision=0, piece=256, xy_origin="center"
+):
     """Write one complete derived product transactionally; unchanged inputs are no-ops.
 
     The caller supplies a completed revision and the output location. No folder
@@ -108,6 +110,8 @@ def write_projection(source, destination, method, *, regions="complete", revisio
         regions = canonical_regions(regions)
     if source == destination or source in destination.parents or destination in source.parents:
         raise ValueError("Projection output must be separate from the source store")
+    if xy_origin not in ("center", "corner"):
+        raise ValueError("Projection XY origin must be center or corner")
     if not destination.name.endswith(".ome.zarr"):
         raise ValueError("Projection output must name an OME-Zarr store, not a run folder")
     if destination.exists():
@@ -119,6 +123,7 @@ def write_projection(source, destination, method, *, regions="complete", revisio
             and owner.get("declared_regions") == regions
             and owner.get("recipe") == PROJECTION_RECIPE
             and owner.get("pyramid_reduction") == MEAN_REDUCTION
+            and owner.get("xy_origin", "center") == xy_origin
         ):
             return destination
     attrs = _read_attrs_at(source)
@@ -145,6 +150,7 @@ def write_projection(source, destination, method, *, regions="complete", revisio
     )
     recipe = {
         "recipe": PROJECTION_RECIPE,
+        "xy_origin": xy_origin,
         "source": str(source),
         "revision": revision,
         "method": method,
@@ -164,9 +170,7 @@ def write_projection(source, destination, method, *, regions="complete", revisio
         ),
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(
-        tempfile.mkdtemp(prefix=".projection-", dir=destination.parent)
-    )
+    staging = Path(tempfile.mkdtemp(prefix=".projection-", dir=destination.parent))
     retired = None
     try:
         group = zarr.open_group(str(staging), mode="w", zarr_format=3)
@@ -239,6 +243,7 @@ def write_projection(source, destination, method, *, regions="complete", revisio
         datasets = []
         for level in range(len(arrays)):
             factor = 2**level
+            center_shift = (factor - 1) / 2 if xy_origin == "center" else 0
             datasets.append(
                 {
                     "path": str(level),
@@ -257,8 +262,8 @@ def write_projection(source, destination, method, *, regions="complete", revisio
                             "translation": [
                                 *outer_offset,
                                 0,
-                                base.corner_um[1] + base.voxel_um[1] * (factor - 1) / 2,
-                                base.corner_um[2] + base.voxel_um[2] * (factor - 1) / 2,
+                                base.corner_um[1] + base.voxel_um[1] * center_shift,
+                                base.corner_um[2] + base.voxel_um[2] * center_shift,
                             ],
                         },
                     ],

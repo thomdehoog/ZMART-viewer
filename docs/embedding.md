@@ -15,15 +15,25 @@ native global Z bounds but clamps the sampled plane in the source's native
 coordinates, even when another acquisition changes shared coordinate units.
 Projections call it without a viewer and remain visible through Z. Slice uses
 the ordinary spatial transform.
+The binding expects one aggregate source per layer, not per-position sources.
 
 On a geometry revision, use `refreshGeometry` once per source and share the
 refresh/metadata-dedup sets for that update. `geometryRefreshPending` reports
 an outstanding read. Unchanged status does not request a refresh. Image-only
 revisions use the existing source invalidation, not an additional polling loop.
+Keep the last observed revisions across mode switches: retiring a layer does not
+retire its decoded cache. Geometry refresh waits for a newly selected source to
+bind before updating reusable chunks, and is cancelled if that source closes.
 
 `neuroglancer-growth.mjs` exports the shared Neuroglancer metadata-growth patch
 and `applyGrowthPatches(lib)`. Build both frontend and worker against this patch;
 patching just the frontend leaves stale worker chunk bounds.
+Apply the patches before compiling. Compile `workerEntry(lib, name)` into the
+worker's original bundle path on every build; this preserves the original import
+entry so rebuilding actually reads changed source modules. A stale patch body is
+an explicit build error requiring `npm ci`, never a marker-only success.
+The static `/embedding.js` route permits cross-origin imports and is revalidated
+instead of cached as an immutable hashed asset.
 
 This feature is isolated as `0.5.0.dev0`; it is not a release or a main-branch
 deployment. The wheel build certificate includes both shared JavaScript files.

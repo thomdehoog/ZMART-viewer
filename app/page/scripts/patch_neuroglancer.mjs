@@ -49,7 +49,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { growthPatches } from "../../../zmart_viewer/neuroglancer-growth.mjs";
+import { applyGrowthPatches } from "../../../zmart_viewer/neuroglancer-growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "..", "node_modules", "neuroglancer", "lib");
@@ -73,7 +73,6 @@ const modulesOnly = process.argv.includes("--modules-only");
 const SUPERSEDED = "zmartPumpRefreshesWithoutDeadline";
 
 const PATCHES = [
-  ...growthPatches(lib),
   // Keep an opaque image opaque under translucent annotations and scale bars.
   ...[
     { indent: "      ", drawing: "annotations" },
@@ -173,6 +172,7 @@ emit(sampledColor * uColorFactor, 0u);`,
   },
 ];
 
+applyGrowthPatches(lib);
 let failed = false;
 for (const patch of PATCHES) {
   const targets = modulesOnly ? [patch.file] : [patch.file, patch.also];

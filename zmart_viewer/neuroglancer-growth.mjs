@@ -1,13 +1,27 @@
 import { join } from "node:path";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 export function applyGrowthPatches(lib) {
   for (const { file, marker, anchor, replacement } of growthPatches(lib)) {
     const held = readFileSync(file, "utf8");
-    if (held.includes(marker)) continue;
+    if (held.includes(replacement)) continue;
+    if (held.includes(marker)) throw new Error(`Outdated Neuroglancer growth patch: ${file}. Run npm ci before rebuilding.`);
     if (!held.includes(anchor)) throw new Error(`Neuroglancer growth patch anchor missing: ${file}`);
     writeFileSync(file, held.replace(anchor, replacement));
   }
+}
+
+// Always rebuild from the package's entry imports, never from yesterday's bundle.
+export function workerEntry(lib, name) {
+  const file = join(lib, name);
+  const entry = join(lib, name.replace(".js", ".entry.js"));
+  const source = readFileSync(file, "utf8");
+  if (source.length < 50 * 1024 && /\bimport\b/.test(source)) {
+    writeFileSync(entry, source);
+  } else if (!existsSync(entry)) {
+    throw new Error(`Original worker entry missing: ${name}. Run npm ci before rebuilding.`);
+  }
+  return entry;
 }
 
 // Bounds-only Zarr growth retains the loaded source and its GPU chunks. Layout

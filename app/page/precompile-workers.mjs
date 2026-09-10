@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { rename } from "node:fs/promises";
 import { statSync } from "node:fs";
+import { workerEntry } from "../../zmart_viewer/neuroglancer-growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "node_modules", "neuroglancer", "lib");
@@ -28,7 +29,7 @@ const lib = join(here, "node_modules", "neuroglancer", "lib");
 const workers = ["chunk_worker.bundle.js", "async_computation.bundle.js"];
 
 for (const name of workers) {
-  const entry = join(lib, name);
+  const entry = workerEntry(lib, name);
   // Compile to a temporary file first, then overwrite the stub — esbuild cannot
   // safely read and write the same path in one step.
   const out = join(lib, name.replace(".js", ".compiled.js"));
@@ -43,8 +44,8 @@ for (const name of workers) {
     conditions: ["default"],
     legalComments: "none",
   });
-  await rename(out, entry);
-  const kb = Math.round(statSync(entry).size / 1024);
+  await rename(out, join(lib, name));
+  const kb = Math.round(statSync(join(lib, name)).size / 1024);
   if (kb < 50) {
     throw new Error(
       `Worker ${name} compiled to only ${kb} KB — expected a few hundred KB. ` +

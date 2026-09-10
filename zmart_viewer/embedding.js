@@ -127,6 +127,18 @@ export function refreshGeometry(source, chunkManager, refreshed, forgotten) {
   pendingGeometry.set(source, attempt);
   let retry = false;
   const read = async () => {
+    // A newly selected view can still hold decoded chunks from its previous
+    // visit. Wait for its initial source binding so refreshMetadata can refresh
+    // those reusable chunks as well as the metadata.
+    if (!source.loadState && !source.wasDisposed) await new Promise(resolve => {
+      const done = () => {
+        stop();
+        source.unregisterDisposer(done);
+        resolve();
+      };
+      const stop = source.changed.add(() => { if (source.loadState) done(); });
+      source.registerDisposer(done);
+    });
     if (pendingGeometry.get(source) !== attempt) return;
     if (source.layer.wasDisposed || !source.layer.dataSources.includes(source)) {
       pendingGeometry.delete(source);

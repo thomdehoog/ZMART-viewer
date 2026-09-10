@@ -236,7 +236,14 @@ class ViewSet:
                     regions = snapshot["regions"]
                     regions = regions if regions == "complete" else regions[name]
                     recipe = json.dumps(
-                        [str(folder / name), revision, regions, PROJECTION_RECIPE, MEAN_REDUCTION],
+                        [
+                            str(folder / name),
+                            revision,
+                            regions,
+                            PROJECTION_RECIPE,
+                            MEAN_REDUCTION,
+                            snapshot.get("xy_origin", "center"),
+                        ],
                         sort_keys=True,
                     )
                     suffix = sha256(recipe.encode()).hexdigest()[:20]
@@ -255,7 +262,12 @@ class ViewSet:
                         destination = temporary / key / derived
                         arrivals.append((destination, source / derived))
                     store = write_projection(
-                        folder / name, destination, key, revision=revision, regions=regions
+                        folder / name,
+                        destination,
+                        key,
+                        revision=revision,
+                        regions=regions,
+                        xy_origin=snapshot.get("xy_origin", "center"),
                     )
                     if destination != source / derived:
                         candidates[derived] = _read_one_tile(store)
@@ -265,7 +277,6 @@ class ViewSet:
                 snapshot["order"] = [names[name] for name in composition["order"]]
                 snapshot["z_references"] = dict.fromkeys(projected_versions, 0)
                 snapshot["pyramid_reduction"] = MEAN_REDUCTION
-                snapshot["xy_origin"] = "center"
             prepared.append((output, source, projected_versions, snapshot, candidates))
         if arrivals:
             # Validate actual projected geometry, not the originals: projection
