@@ -30,7 +30,6 @@ from zmart_viewer.record.model import rounded_up
 from zmart_viewer.record.shardlink import how_the_array_is_stored
 
 from .compose import (
-    LEGACY_MEAN_REDUCTION,
     OURS,
     PIECE,
     Composer,
@@ -41,6 +40,7 @@ from .compose import (
     halve_xy,
     read_the_transfer,
     the_mosaic_written_down,
+    uses_legacy_mean,
 )
 
 _BAKE_PROCESSES = min(4, os.cpu_count() or 1)
@@ -330,7 +330,7 @@ def _bake_the_coarse_ground(
         level += 1
         height, width = -(-height // 2), -(-width // 2)
         voxel = [voxel[0], voxel[1] * 2, voxel[2] * 2]
-        whole = halve_xy(whole, legacy=composer.mosaic.pyramid_reduction in (None, LEGACY_MEAN_REDUCTION))
+        whole = halve_xy(whole, legacy=uses_legacy_mean(composer.mosaic.pyramid_reduction))
         made = zarr.create_array(
             store=str(store / str(level)),
             shape=(*room, depth, height, width),

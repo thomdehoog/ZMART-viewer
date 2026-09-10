@@ -1176,10 +1176,11 @@ export default function App() {
   const [requestedViews, setRequestedViews] = React.useState({});
   const rememberedPosition = React.useRef({});
   const views = React.useMemo(() => viewChoices(config?.layers || []), [config]);
+  const hasLegacy = (config?.layers || []).some(spec => !spec.view);
   const chosenViews = React.useMemo(() => selectedViews(config?.layers || [], requestedViews), [config, requestedViews]);
   const included = React.useMemo(() => new Set((config?.layers || [])
-    .flatMap((spec, i) => inSelectedView(spec, chosenViews) ? [i] : [])), [config, chosenViews]);
-  React.useEffect(() => { if (views.length) setMode("flat"); }, [views]);
+    .flatMap((spec, i) => inSelectedView(spec, chosenViews) && (mode === "flat" || !spec.view) ? [i] : [])), [config, chosenViews, mode]);
+  React.useEffect(() => { if (views.length && !hasLegacy) setMode("flat"); }, [views, hasLegacy]);
   const transparentBackground = config?.transparentBackground === true && mode === "flat";
   React.useEffect(() => {
     document.documentElement.toggleAttribute("data-transparent-background", transparentBackground);
@@ -1596,7 +1597,7 @@ export default function App() {
   React.useEffect(() => {
     if (!viewer || !lookAt || !config) return undefined;
     const named = config.layers
-      .filter((spec) => (spec.group || "") === lookAt && inSelectedView(spec, chosenViews))
+      .filter((spec, i) => (spec.group || "") === lookAt && included.has(i))
       .map((spec) => engineName(spec));
     if (!named.length) return undefined;
     // Given a moment for the engine to take the new sources on: the bounds
@@ -1611,7 +1612,7 @@ export default function App() {
     // it, and naming it here reaches a constant before it exists -- which
     // took the whole page down with "Cannot access 'scene' before
     // initialization" (2026-08-21).
-  }, [viewer, lookAt, config, chosenViews]);
+  }, [viewer, lookAt, config, included]);
   React.useEffect(() => {
     if (!revealing || !config) return undefined;
     // How many pieces this acquisition has to arrive: the stores of its one
@@ -2038,16 +2039,17 @@ export default function App() {
       <main style={styles.stage}>
         <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed} />
         <div style={styles.topBar}>
-          {views.length ? views.map(({ id, acquisition, keys }) => (
+          {views.map(({ id, label, keys }) => (
             <label key={id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {views.length > 1 ? acquisition : "View"}
-              <select aria-label={`${acquisition} view`} value={chosenViews[id]}
+              {views.length > 1 ? label : "View"}
+              <select aria-label={`${label} view`} value={chosenViews[id]} disabled={mode !== "flat"}
                 style={styles.button}
                 onChange={event => setRequestedViews(previous => ({ ...previous, [id]: event.target.value }))}>
                 {keys.map(key => <option key={key} value={key}>{VIEW_LABELS[key]}</option>)}
               </select>
             </label>
-          )) : <ModeToggle mode={mode} onChange={setMode} />}
+          ))}
+          {(!views.length || hasLegacy) && <ModeToggle mode={mode} onChange={setMode} />}
           <BringItBack viewer={viewer} />
           <ThemeToggle />
         </div>

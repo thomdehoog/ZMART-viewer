@@ -21,11 +21,13 @@ export function viewChoices(layers) {
     const { view } = spec;
     if (!view) continue;
     const id = acquisitionKey(spec);
-    if (!choices.has(id)) choices.set(id, { acquisition: view.acquisition, keys: new Set() });
+    if (!choices.has(id)) choices.set(id, { acquisition: view.acquisition, group: spec.group, keys: new Set() });
     choices.get(id).keys.add(viewKey(view));
   }
-  return [...choices].map(([id, {acquisition, keys}]) => ({
-    id, acquisition, keys: Object.keys(VIEW_LABELS).filter(key => keys.has(key)),
+  return [...choices].map(([id, {acquisition, group, keys}]) => ({
+    id, acquisition, label: [...choices.values()].filter(c => c.acquisition === acquisition).length > 1
+      ? `${group} / ${acquisition}` : acquisition,
+    keys: Object.keys(VIEW_LABELS).filter(key => keys.has(key)),
   }));
 }
 

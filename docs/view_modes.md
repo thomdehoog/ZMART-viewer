@@ -15,6 +15,14 @@ display Z=0: Slice intersects that plane, while Top holds it across the view's Z
 range. Stack reference heights map to display Z=0; internal spacing is retained.
 Neither mode changes the original OME-Zarr coordinates. Absolute-Z placement and
 new 3D controls are not included. Existing legacy-volume behavior is unchanged.
+On a mixed page, 3D displays legacy datasets only; returning to 2D restores the
+selected named views. Top retains each aggregate's boundary plane even when
+another acquisition extends the shared Z slider, using local sampling rather
+than repeated volumes or publication on slider movements.
+
+For sparse positions, "boundary" means the declared array boundary, not the
+first/last acquired pixel. A missing declared boundary plane remains transparent
+when held; Top does not fill holes or infer acquired depth from intensity.
 
 ## Publish from separate originals
 
@@ -50,12 +58,17 @@ bounding box. Later entries in `order` cover earlier entries wherever acquired,
 including black pixels. Revisions identify completed, readable writes; increment
 the affected position's revision after rewriting it. Re-announcing identical
 revisions and composition does no work.
+Original revision high-water marks survive removal and reopening: re-adding a
+position cannot roll its projection back to an older revision. Region-list order
+and duplicate identical regions do not constitute a change; source `order` does.
 
 `z_references` is explicit when supplied. Otherwise the viewer uses the recorded
 requested focus reference in acquisition provenance, or the source's first-plane
 origin. It does not infer a focus plane from brightness. Inputs must satisfy the
 existing unrotated, aligned positive-Z-spacing geometry contract. Normalize raw
 instrument plane order upstream; this API is not a Leica raw-file importer.
+References must produce offsets on the shared voxel lattice; off-lattice focus
+references are rejected, never silently snapped.
 
 Use `regions: "complete"` only when the entire declared position is acquired.
 For sparse producers, supply a map from each position name to acquired regions:
@@ -103,6 +116,11 @@ float32. Sum uses uint32, int32 or float32 respectively, with 64-bit accumulatio
 An out-of-range or nonfinite result is rejected; it never wraps or saturates.
 Display contrast is measured from projection values, not capped at 65535.
 Integer XY means round to nearest even; floating means retain fractional values.
+Named views default to `pyramid_reduction: "mean-xy2-edge-from-originals"`:
+coarse means are computed from original signal unless the producer explicitly
+certifies a supported input-pyramid recipe. This avoids treating a rounded float
+input pyramid as fractional data. Older unversioned compositions retain their
+historical rounding; all baking and on-demand paths share that decision.
 
 Revision-named projection products are immutable so a failed update cannot change
 the old published image. Previous products are deliberately retained; automatic
@@ -124,6 +142,8 @@ requires a separate relocation workflow, not editing just the view filename.
 Announce updates through the existing `POST /api/announce` publications list,
 using the original folder's path, new revision map and composition. Do not proxy
 image chunks through the producer: the renderer reads the viewer HTTP service.
+Multiple acquisitions may publish into the same `run/view` folder. Each owns its
+named outputs and options; announcing one original folder does not update another.
 
 Publication performs work synchronously at this API boundary. Call it from the
 producer's existing asynchronous/coalesced publication worker, not an acquisition
@@ -149,6 +169,10 @@ npm run build --prefix app/page
 python -m pip wheel . --no-deps --wheel-dir dist
 ```
 
+The successful frontend build records input/output hashes. Wheel creation rejects
+missing, changed or incomplete build output and replaces only its owned frontend
+staging directory, so retired hashed bundles cannot survive a subsequent build.
+
 The wheel includes the page and Neuroglancer workers. To serve saved views from an
 installed package:
 
@@ -156,7 +180,8 @@ installed package:
 from pathlib import Path
 from zmart_viewer.server import make_server
 
-server = make_server(port=8848, data_dir=Path("run/view"), live=False)
+server = make_server(port=8848, data_dir=Path("run/view"), live=False,
+                     loads=[{"path": "run/view"}])
 try:
     server.serve_forever()
 finally:

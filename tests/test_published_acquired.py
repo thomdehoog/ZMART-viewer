@@ -381,7 +381,7 @@ def test_complete_stores_append_retire_and_keep_one_aggregate_at_100(tmp_path, b
             }
             published.announce([publication])
             assert published.entries(library.entries()) == [(number, tmp_path, STACK_STORE)]
-        view = published.views[number][0].outputs[STACK_STORE]
+        view = published.views[number, None][0].outputs[STACK_STORE]
         made = view.composer()
         for level in range(made.mosaic.levels):
             mask = made.coverage_for(level, 1, 0, 0, moment=1, channel=1)

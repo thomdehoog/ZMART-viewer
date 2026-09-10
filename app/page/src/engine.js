@@ -41,6 +41,7 @@
  */
 
 import { makeLayer, deleteLayer } from "neuroglancer/unstable/layer/index.js";
+import { WatchableValue } from "neuroglancer/unstable/trackable_value.js";
 import {
   advancingSourceRevisions,
   memoEntriesForStableSource,
@@ -866,16 +867,46 @@ function applyOrder(manager, names) {
  * again, and its layers are left exactly as they are while that happens. This is the
  * one case where nothing is added to the scene and yet something must still happen.
  */
-function keepFlatDepthLocal(layer) {
+function keepDepthLocal(layer, viewer = null) {
+  // Top samples a clamped local Z while retaining its native global slider range.
+  // Persistent flats use the same local axis but do not follow the slider.
+  const follow = () => {
+    if (!viewer) return;
+    const global = viewer.navigationState.position;
+    const gs = global.coordinateSpace.value, ls = layer.localCoordinateSpace.value;
+    const gi = gs.names.indexOf("z"), li = ls.names.indexOf("z'");
+    if (gi < 0 || li < 0) return;
+    const bounds = ls.bounds;
+    const offset = bounds.voxelCenterAtIntegerCoordinates[li] ? 0 : 0.5;
+    const lo = Math.ceil(bounds.lowerBounds[li] - offset) + offset;
+    const hi = Math.floor(bounds.upperBounds[li] - offset) + offset;
+    const z = Math.min(hi, Math.max(lo, global.value[gi] * gs.scales[gi] / ls.scales[li]));
+    const position = Float32Array.from(layer.localPosition.value);
+    position[li] = z;
+    if (position[li] !== layer.localPosition.value[li]) layer.localPosition.value = position;
+  };
+  if (viewer) {
+    layer.registerDisposer(viewer.navigationState.position.changed.add(follow));
+    layer.registerDisposer(layer.localCoordinateSpace.changed.add(follow));
+  }
   for (const source of layer.dataSources) {
+    let native;
     const place = () => {
       const transform = source.loadState?.transform;
       const space = transform?.outputSpace.value;
+      if (viewer && transform) {
+        const original = transform.defaultTransform.outputSpace;
+        if (!native) {
+          native = new WatchableValue(original);
+          layer.registerDisposer(viewer.layerSpecification.coordinateSpaceCombiner.bind(native));
+        } else native.value = original;
+      }
       if (!space?.names.includes("z")) return;
       transform.restoreState({ ...transform.toJSON(), outputDimensions:
         Object.fromEntries(space.names.map((name, i) =>
           [name === "z" ? "z'" : name, [space.scales[i], space.units[i]]])),
       });
+      follow();
     };
     layer.registerDisposer(source.changed.add(place));
     place();
@@ -954,7 +985,7 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
       spec.name,
       rest.length ? { ...spec, source: stores.slice(0, firstShare) } : spec,
     );
-    if (spec.persistentFlat) keepFlatDepthLocal(managed.layer);
+    if (spec.persistentFlat || spec.boundaryHeld) keepDepthLocal(managed.layer, spec.boundaryHeld ? viewer : null);
     // Building from the description already applied everything in it, including
     // the images; record them so the next pass does not add them a second time.
     sourcesApplied.set(managed.layer, new Set(stores));

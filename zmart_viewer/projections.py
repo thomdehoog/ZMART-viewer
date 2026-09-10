@@ -12,11 +12,12 @@ from pathlib import Path
 import numpy as np
 import zarr
 
-from .acquired import AcquiredRegion
+from .acquired import AcquiredRegion, canonical_regions
 from .compose import MEAN_REDUCTION, _read_one_tile, halve_xy, the_frame_room_of
 from .library import _read_attrs_at
 
 METHODS = ("min", "max", "sum")
+PROJECTION_RECIPE = 1
 
 
 def projection_dtype(dtype, method):
@@ -103,6 +104,8 @@ def write_projection(source, destination, method, *, regions="complete", revisio
     scanning, workflow inference, notification or projection of a stitched volume.
     """
     source, destination = Path(source).resolve(), Path(destination).resolve()
+    if regions != "complete":
+        regions = canonical_regions(regions)
     if source == destination or source in destination.parents or destination in source.parents:
         raise ValueError("Projection output must be separate from the source store")
     if not destination.name.endswith(".ome.zarr"):
@@ -111,7 +114,12 @@ def write_projection(source, destination, method, *, regions="complete", revisio
         owner = _read_attrs_at(destination).get("zmart_projection", {})
         if owner.get("source") != str(source) or owner.get("method") != method:
             raise ValueError("Refusing to replace output not owned by this position projection")
-        if owner.get("revision") == revision and owner.get("declared_regions") == regions:
+        if (
+            owner.get("revision") == revision
+            and owner.get("declared_regions") == regions
+            and owner.get("recipe") == PROJECTION_RECIPE
+            and owner.get("pyramid_reduction") == MEAN_REDUCTION
+        ):
             return destination
     attrs = _read_attrs_at(source)
     multiscale = attrs["multiscales"][0]
@@ -136,6 +144,7 @@ def write_projection(source, destination, method, *, regions="complete", revisio
         )
     )
     recipe = {
+        "recipe": PROJECTION_RECIPE,
         "source": str(source),
         "revision": revision,
         "method": method,
@@ -145,8 +154,6 @@ def write_projection(source, destination, method, *, regions="complete", revisio
         "pyramid_reduction": MEAN_REDUCTION,
         "source_z_um": [base.corner_um[0], base.voxel_um[0], base.shape[0]],
     }
-    if destination.exists() and _read_attrs_at(destination).get("zmart_projection") == recipe:
-        return destination
     frames, channels = the_frame_room_of(base.outer_shape)
     depth, height, width = base.shape
     # Bound Z-window allocation too, not only output XY size.

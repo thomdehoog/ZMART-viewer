@@ -181,7 +181,8 @@ def test_top_warm_completes_with_run_reuse(tmp_path):
         made.close()
 
 
-def test_legacy_float_rounding_contract_survives(tmp_path):
+@pytest.mark.parametrize("explicit", [False, True])
+def test_legacy_float_rounding_contract_survives(tmp_path, explicit):
     from zmart_viewer.compose import LEGACY_MEAN_REDUCTION
 
     data = np.full((1, 1, 1, 8, 8), 0.25, dtype="float32")
@@ -197,7 +198,7 @@ def test_legacy_float_rounding_contract_survives(tmp_path):
         ]
     }
     mosaic = Mosaic([tile], 3, ("z", "y", "x"), "float32", averaged=True).with_acquired_regions(
-        regions, order=[tile.name], pyramid_reduction=LEGACY_MEAN_REDUCTION
+        regions, order=[tile.name], pyramid_reduction=LEGACY_MEAN_REDUCTION if explicit else None
     )
     made = Composer(mosaic, piece=4)
     try:

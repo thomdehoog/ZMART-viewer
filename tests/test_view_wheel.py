@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -55,6 +56,21 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     (wheel,) = wheel_dir.glob("zmart_viewer-*.whl")
+    with zipfile.ZipFile(wheel) as archive:
+        prefix = "zmart_viewer/_frontend/"
+        packaged = {
+            name[len(prefix) :]: archive.read(name)
+            for name in archive.namelist()
+            if name.startswith(prefix)
+        }
+        expected_files = {
+            p.relative_to(built_dist).as_posix(): p.read_bytes()
+            for p in built_dist.rglob("*")
+            if p.is_file()
+        }
+        assert packaged == expected_files, (
+            "Wheel must contain exactly this build, with no retired assets"
+        )
     installed = tmp_path / "installed"
     result = subprocess.run(
         [

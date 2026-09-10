@@ -39,6 +39,9 @@ packages = ["zmart_viewer", "zmart_viewer.record", "zmart_viewer._frontend"]
 [tool.setuptools.package-dir]
 "zmart_viewer._frontend" = "app/page/dist"
 
+[tool.setuptools.cmdclass]
+build_py = "build_support.BuildPy"
+
 [tool.setuptools.package-data]
 "zmart_viewer._frontend" = ["**/*"]
 

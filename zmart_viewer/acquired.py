@@ -7,6 +7,15 @@ means nothing acquired; absent region information is a different state.
 from dataclasses import dataclass
 
 
+def canonical_regions(records):
+    """Coverage is a set of regions, not an ordered publication instruction."""
+    regions = {AcquiredRegion.from_written(record) for record in records}
+    return [
+        region.as_written()
+        for region in sorted(regions, key=lambda r: (r.frame, r.channel, r.origin, r.shape))
+    ]
+
+
 @dataclass(frozen=True)
 class AcquiredRegion:
     frame: int

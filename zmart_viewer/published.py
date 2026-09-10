@@ -19,7 +19,6 @@ from pathlib import Path
 from .acquired import AcquiredRegion
 from .building import ComposedPicture, _after_a_windows_reader, _holding_the_bake_lock
 from .compose import (
-    LEGACY_MEAN_REDUCTION,
     Composer,
     Mosaic,
     _read_one_tile,
@@ -27,6 +26,7 @@ from .compose import (
     read_the_mosaic_as_written,
     the_frame_room_of,
     the_mosaic_written_down,
+    uses_legacy_mean,
 )
 from .library import _description_file, _read_attrs_at, discover
 
@@ -133,7 +133,7 @@ class PublishedFolders:
             destination = Path(views["path"]).resolve()
             with self._lock:
                 dataset = next((d for d in self.library.datasets() if d.root == destination), None)
-                held = self.views.get(dataset.number) if dataset else None
+                held = self.views.get((dataset.number, views["acquisition"])) if dataset else None
             view = (
                 held[0]
                 if held
@@ -162,7 +162,7 @@ class PublishedFolders:
                 view.publish(path, versions, bounds, composition=composition, bake=bake)
                 with self._lock:
                     number = dataset.number if dataset else self.library.open(destination)
-                    self.views[number] = (view, bounds, False)
+                    self.views[number, view.acquisition] = (view, bounds, False)
                 return number
             except Exception:
                 if not held:
@@ -174,7 +174,7 @@ class PublishedFolders:
             dataset = next((one for one in self.library.datasets() if one.root == root), None)
             created = dataset is None
             number = self.library.open(path) if created else dataset.number
-            held = self.views.get(number)
+            held = self.views.get((number, None))
             view = (
                 held[0]
                 if held
@@ -194,7 +194,7 @@ class PublishedFolders:
                 if created:
                     self.library.close(number)
                 raise
-            self.views[number] = (view, bounds, automatic)
+            self.views[number, None] = (view, bounds, automatic)
             return number
 
     @staticmethod
@@ -210,7 +210,7 @@ class PublishedFolders:
         for publication in publications:
             matched = False
             folder = Path(publication["path"]).resolve()
-            for number, (view, canvas, _automatic) in opened:
+            for (number, _acquisition), (view, canvas, _automatic) in opened:
                 dataset = self.library.dataset(number)
                 if dataset and getattr(view, "source_folder", dataset.root) == folder:
                     view.publish(
@@ -226,11 +226,12 @@ class PublishedFolders:
 
     def refresh(self):
         with self._lock:
-            for number, (view, canvas, automatic) in list(self.views.items()):
+            for key, (view, canvas, automatic) in list(self.views.items()):
+                number, _acquisition = key
                 dataset = self.library.dataset(number)
                 if dataset is None:
                     view.close()
-                    del self.views[number]
+                    del self.views[key]
                 elif automatic:
                     view.publish(dataset.root, self._versions_on_disk(dataset.root), canvas)
             return self.revisions()
@@ -238,16 +239,20 @@ class PublishedFolders:
     def revisions(self):
         """Committed publication state, without starting work or waiting for a bake."""
         with self._lock:
-            return tuple((number, view.revision) for number, (view, _, _) in self.views.items())
+            revisions = {}
+            for (number, _acquisition), (view, _, _) in self.views.items():
+                revisions[number] = revisions.get(number, 0) + view.revision
+            return tuple(revisions.items())
 
     def entries(self, entries):
         with self._lock:
             result, seen = [], set()
             for number, root, name in entries:
-                if number not in self.views:
+                held = self.views.get((number, None))
+                if held is None:
                     result.append((number, root, name))
                 elif number not in seen:
-                    view = self.views[number][0]
+                    view = held[0]
                     names = view.sources if hasattr(view, "sources") else [STORE]
                     result.extend((number, root, name) for name in names)
                     seen.add(number)
@@ -255,14 +260,18 @@ class PublishedFolders:
 
     def source_revision(self, number, name=STORE):
         with self._lock:
-            held = self.views.get(number)
-            if not held:
-                return None
-            view = held[0]
-            return view.outputs[name].revision if hasattr(view, "outputs") else view.revision
+            for (dataset, _acquisition), (view, _, _) in self.views.items():
+                if dataset != number:
+                    continue
+                if hasattr(view, "outputs"):
+                    if name in view.outputs:
+                        return view.outputs[name].revision
+                else:
+                    return view.revision
+            return None
 
     def source_depth(self, number, name):
-        held = self.views.get(number)
+        held = self.views.get((number, None))
         if held and isinstance(held[0], PublishedAcquisition):
             return "flat" if name == STORE else "stack"
         return None
@@ -515,6 +524,7 @@ class PublishedTransfer(ComposedPicture):
                 "z_references",
                 "view",
                 "originals",
+                "original_revisions",
             }
         ):
             raise ValueError("composition must contain explicit regions and order")
@@ -777,10 +787,7 @@ class PublishedTransfer(ComposedPicture):
 
             def commit():
                 made = Composer(mosaic, piece=self._piece)
-                self._bake_legacy_reduction = mosaic.pyramid_reduction in (
-                    None,
-                    LEGACY_MEAN_REDUCTION,
-                )
+                self._bake_legacy_reduction = uses_legacy_mean(mosaic.pyramid_reduction)
                 if geometry_changed or recovering:
                     self._bake_below.clear()
                     self._bake_staging.clear()
@@ -974,10 +981,10 @@ class PublishedTransfer(ComposedPicture):
                 metadata = json.loads(made.array_json(level))
                 if (path / "zarr.json").exists():
                     old = json.loads((path / "zarr.json").read_text(encoding="utf-8"))
-                    # Rank or chunk-shape changes give existing keys a different
-                    # meaning (ZYX files can even become TCZYX directories).
+                    # Retire chunks outside the new extent as well as keys whose
+                    # rank or chunk shape changed meaning.
                     if (
-                        len(old["shape"]) != len(metadata["shape"])
+                        old["shape"] != metadata["shape"]
                         or old["chunk_grid"] != metadata["chunk_grid"]
                     ):
                         chunks = path / "c"
