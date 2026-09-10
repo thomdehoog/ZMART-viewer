@@ -2,11 +2,11 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import numpy as np
 from test_view_sampling import write_tile
@@ -16,6 +16,14 @@ from zmart_viewer.views import ViewSet
 
 def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
     repo = Path(__file__).resolve().parents[1]
+    # Build from the current tracked sources without touching checkout staging.
+    checkout = tmp_path / "source"
+    tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=repo).decode().split("\0")
+    for name in filter(None, tracked):
+        target = checkout / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(repo / name, target)
+    shutil.copytree(built_dist, checkout / "app/page/dist")
     positions = tmp_path / "positions"
     positions.mkdir()
     write_tile(positions, "p.ome.zarr", np.full((1, 1, 3, 8, 8), 40000, dtype="uint16"))
@@ -40,31 +48,24 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
     finally:
         view.close()
     wheel_dir = tmp_path / "wheels"
-    staging = repo / "build/lib/zmart_viewer"
+    staging = checkout / "build/lib/zmart_viewer"
     staging.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile(
-        prefix="retired_test_", suffix=".py", dir=staging, delete=False
-    ) as planted:
-        planted.write(b"raise RuntimeError('retired staging module')\n")
-    orphan = Path(planted.name)
-    try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "wheel",
-                str(repo),
-                "--no-deps",
-                "--no-build-isolation",
-                "--wheel-dir",
-                str(wheel_dir),
-            ],
-            capture_output=True,
-            text=True,
-        )
-    finally:
-        orphan.unlink()
+    (staging / "retired.py").write_text("raise RuntimeError('retired staging module')\n")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            str(checkout),
+            "--no-deps",
+            "--no-build-isolation",
+            "--wheel-dir",
+            str(wheel_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     (wheel,) = wheel_dir.glob("zmart_viewer-*.whl")
     with zipfile.ZipFile(wheel) as archive:
@@ -120,7 +121,7 @@ import zmart_viewer
 from zmart_viewer.server import make_server, _FRONTEND_DIST
 from zmart_viewer.views import ViewSet
 assert 'installed' in pathlib.Path(zmart_viewer.__file__).parts
-assert importlib.metadata.version('zmart-viewer') == '0.3.0'
+assert importlib.metadata.version('zmart-viewer') == '0.4.0'
 assert _FRONTEND_DIST.name == '_frontend'
 with tempfile.TemporaryDirectory() as data:
     saved = pathlib.Path(os.environ['ZMART_TEST_SAVED_VIEW'])
@@ -151,7 +152,7 @@ with tempfile.TemporaryDirectory() as data:
                 assert row['window']['high'] > 65535, row
     finally:
         server.shutdown();server.server_close();worker.join(5)
-print('Installed 0.3.0 page, workers and all five saved views served without the checkout')
+print('Installed 0.4.0 page, workers and all five saved views served without the checkout')
 """,
         ],
         cwd=tmp_path,

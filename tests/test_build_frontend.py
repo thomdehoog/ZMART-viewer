@@ -35,7 +35,8 @@ def test_frontend_build_certificate(tmp_path):
         with pytest.raises(SetupError):
             validate_frontend(page)
         (page / name).write_bytes(original)
-    for name in ("src/new.js", "public/new.js", "dist/retired-worker.js"):
+    for name in ("src/new.js", "public/new.js", "styles/new.css", "dist/retired-worker.js"):
+        (page / name).parent.mkdir(exist_ok=True)
         (page / name).write_text("unexpected")
         with pytest.raises(SetupError):
             validate_frontend(page)

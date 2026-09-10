@@ -1,4 +1,4 @@
-# Named acquisition views in 0.3.0
+# Named acquisition views in 0.4.0
 
 One renderer displays the available views of an acquisition. The dropdown defaults
 to **Slice**, then Top or a projection if Slice is absent. Opening saved data never
@@ -123,7 +123,11 @@ input pyramid as fractional data. Older unversioned compositions retain their
 historical rounding; all baking and on-demand paths share that decision.
 
 Revision-named projection products are immutable so a failed update cannot change
-the old published image. Previous products are deliberately retained; automatic
+the old published image. New products are staged temporarily, validated together
+through the same aggregate preparation path, then promoted. Rejected inputs may
+require temporary computation but leave no permanent projection products.
+Independent view folders can share identical projection products safely.
+Previous products are deliberately retained; automatic
 garbage collection is not implemented. Do not delete products referenced by a
 saved publication. Store paths are local references; moving the complete dataset
 requires a separate relocation workflow, not editing just the view filename.
@@ -147,8 +151,10 @@ named outputs and options; announcing one original folder does not update anothe
 Named acquisitions have separate panel/close identities even at different
 objectives or Z spacings. Geometry never determines their identity; legacy
 datasets retain their existing geometry-based grouping. Within one destination,
-an open original folder has one acquisition owner, so a misspelled second name
-is refused. Independent destination folders remain allowed.
+an original folder has one acquisition owner, recorded by its committed or pending
+publications, so a misspelled second name is refused even after restart.
+Independent destination folders remain allowed. A legacy aggregate only replaces
+its own dataset's sources, never another geometry group in the same folder.
 
 Publication performs work synchronously at this API boundary. Call it from the
 producer's existing asynchronous/coalesced publication worker, not an acquisition
@@ -182,6 +188,8 @@ python -m pip wheel . --no-deps --wheel-dir dist
 
 The successful frontend build records input/output hashes. Wheel creation rejects
 missing, changed or incomplete build output, including changed public assets.
+The certificate covers all page inputs outside dependencies and build output,
+including newly added source directories.
 Each wheel uses fresh temporary staging for the whole package, so neither retired
 Python modules nor hashed bundles can survive a subsequent build. Existing build
 directories are not deleted.
@@ -202,5 +210,5 @@ finally:
 ```
 
 Open `http://127.0.0.1:8848` in a browser. A folder containing any subset of named
-views, or one individual named view, can be opened. The 0.3.0 feature branch does
+views, or one individual named view, can be opened. The 0.4.0 feature branch does
 not update operator pins, deploy to the rig, create a release tag or merge main.

@@ -176,6 +176,29 @@ class TestWatchingTheDisk:
         finally:
             watcher.stop()
 
+    def test_failed_publication_hook_does_not_silence_library_changes(self, caplog):
+        library, told = self._Changing(), Announcements()
+        heard = told.listen()
+        entered = threading.Event()
+        calls = 0
+
+        def fail():
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                entered.set()
+            raise KeyError("publication failure")
+
+        watcher = FolderWatcher(library, told, every=0.01, refresh_publications=fail)
+        watcher.start()
+        try:
+            assert entered.wait(2)
+            library.answer = "changed despite failed publication"
+            assert heard.get(timeout=2) is not None
+            assert "publication failure" in caplog.text
+        finally:
+            watcher.stop()
+
 
 def _serving(tmp_path, **kwargs):
     site = tmp_path / "site"

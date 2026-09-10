@@ -121,6 +121,8 @@ CARRIED_BY_HAND = {
 # `syncSources`, which only ever adds; a position is never quietly removed. And
 # `localPosition` pins which channel inside a shared store this row shows, which is
 # decided by the acquisition rather than by anything the operator can turn.
+# `persistentFlat` and `boundaryHeld` select depth behavior at construction;
+# their view/depth identity changes the layer name when that behavior changes.
 SETTLED_WHEN_THE_LAYER_IS_BUILT = {
     "type",
     "name",
