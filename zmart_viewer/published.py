@@ -7,6 +7,7 @@ Pixels stay in their original stores; only coarse chunks are materialized here.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import shutil
@@ -16,7 +17,7 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
-from .acquired import AcquiredRegion
+from .acquired import AcquiredRegion, canonical_regions
 from .building import ComposedPicture, _after_a_windows_reader, _holding_the_bake_lock
 from .compose import (
     Composer,
@@ -33,6 +34,17 @@ from .library import _description_file, _read_attrs_at, discover
 STORE = ".zmart-viewer/overview.ome.zarr"
 STACK_STORE = ".zmart-viewer/stack.ome.zarr"
 ACQUISITION_RENDERING_VERSION = 1
+
+
+def validate_canvas(canvas):
+    for axis in ("x_um", "y_um"):
+        try:
+            low, high = canvas[axis]
+            valid = all(math.isfinite(value) for value in (low, high)) and high > low
+        except (KeyError, TypeError, ValueError):
+            valid = False
+        if not valid:
+            raise ValueError(f"Invalid specimen canvas bounds for {axis}")
 
 
 def _place_depth(tiles, *, spacing=None, combine=False):
@@ -117,8 +129,36 @@ class PublishedFolders:
         self.canvas = canvas
         self.views = {}
         self._lock = threading.RLock()
+        self._opening_lock = threading.Lock()
 
     def open(self, path, *, canvas=None, versions=None, composition=None, bake=True, views=None):
+        with self._opening_lock:
+            return self._open(
+                path,
+                canvas=canvas,
+                versions=versions,
+                composition=composition,
+                bake=bake,
+                views=views,
+            )
+
+    def _dataset(self, key):
+        root, acquisition = key
+        return next(
+            (
+                d
+                for d in self.library.datasets()
+                if d.root == root
+                and (
+                    d.acquisition == acquisition
+                    if acquisition is not None
+                    else not isinstance(d.acquisition, str)
+                )
+            ),
+            None,
+        )
+
+    def _open(self, path, *, canvas=None, versions=None, composition=None, bake=True, views=None):
         """Open or update the single publisher for a resolved acquisition folder."""
         bounds = canvas if canvas is not None else self.canvas
         if not bounds:
@@ -131,9 +171,18 @@ class PublishedFolders:
             if composition is None or versions is None:
                 raise ValueError("Named views require explicit coverage and completed revisions")
             destination = Path(views["path"]).resolve()
+            key = (destination, views["acquisition"])
             with self._lock:
-                dataset = next((d for d in self.library.datasets() if d.root == destination), None)
-                held = self.views.get((dataset.number, views["acquisition"])) if dataset else None
+                held = self.views.get(key)
+                if any(
+                    root == destination
+                    and owner != key[1]
+                    and getattr(entry[0], "source_folder", None) == Path(path).resolve()
+                    for (root, owner), entry in self.views.items()
+                ):
+                    raise ValueError(
+                        "This original source folder already has an acquisition owner in this view folder"
+                    )
             view = (
                 held[0]
                 if held
@@ -146,9 +195,7 @@ class PublishedFolders:
                 )
             )
             if held and (
-                not isinstance(view, ViewSet)
-                or view.acquisition != views["acquisition"]
-                or view.modes != set(views.get("modes", ("slice", "top")))
+                view.modes != set(views.get("modes", ("slice", "top")))
                 or view.projections != set(views.get("projections", ()))
                 or view.projection_folder
                 != (
@@ -160,42 +207,48 @@ class PublishedFolders:
                 raise ValueError("An open view set cannot change its output options")
             try:
                 view.publish(path, versions, bounds, composition=composition, bake=bake)
+                dataset = self._dataset(key)
+                number = (
+                    dataset.number
+                    if dataset
+                    else self.library.open(destination, names=view.sources, watch=True)
+                )
                 with self._lock:
-                    number = dataset.number if dataset else self.library.open(destination)
-                    self.views[number, view.acquisition] = (view, bounds, False)
+                    self.views[key] = (view, bounds, False)
                 return number
             except Exception:
                 if not held:
                     view.close()
                 raise
         automatic = versions is None
+        root = discover(path)[0].resolve()
+        dataset = self._dataset((root, None))
+        created = dataset is None
+        number = self.library.open(path) if created else dataset.number
         with self._lock:
-            root = discover(path)[0].resolve()
-            dataset = next((one for one in self.library.datasets() if one.root == root), None)
-            created = dataset is None
-            number = self.library.open(path) if created else dataset.number
-            held = self.views.get((number, None))
-            view = (
-                held[0]
-                if held
-                else (
-                    PublishedAcquisition(root)
-                    if composition is not None
-                    else PublishedTransfer(root / STORE)
-                )
+            held = self.views.get((root, None))
+        view = (
+            held[0]
+            if held
+            else (
+                PublishedAcquisition(root)
+                if composition is not None
+                else PublishedTransfer(root / STORE)
             )
-            try:
-                if automatic:
-                    versions = self._versions_on_disk(root)
-                view.publish(root, versions, bounds, composition=composition, bake=bake)
-            except Exception:
-                if not held:
-                    view.close()
-                if created:
-                    self.library.close(number)
-                raise
-            self.views[number, None] = (view, bounds, automatic)
-            return number
+        )
+        try:
+            if automatic:
+                versions = self._versions_on_disk(root)
+            view.publish(root, versions, bounds, composition=composition, bake=bake)
+        except Exception:
+            if not held:
+                view.close()
+            if created:
+                self.library.close(number)
+            raise
+        with self._lock:
+            self.views[root, None] = (view, bounds, automatic)
+        return number
 
     @staticmethod
     def _versions_on_disk(folder):
@@ -210,8 +263,8 @@ class PublishedFolders:
         for publication in publications:
             matched = False
             folder = Path(publication["path"]).resolve()
-            for (number, _acquisition), (view, canvas, _automatic) in opened:
-                dataset = self.library.dataset(number)
+            for key, (view, canvas, _automatic) in opened:
+                dataset = self._dataset(key)
                 if dataset and getattr(view, "source_folder", dataset.root) == folder:
                     view.publish(
                         folder,
@@ -226,29 +279,42 @@ class PublishedFolders:
 
     def refresh(self):
         with self._lock:
-            for key, (view, canvas, automatic) in list(self.views.items()):
-                number, _acquisition = key
-                dataset = self.library.dataset(number)
-                if dataset is None:
-                    view.close()
+            opened = list(self.views.items())
+        for key, (view, canvas, automatic) in opened:
+            dataset = self._dataset(key)
+            if dataset is None:
+                with self._lock:
+                    if self.views.get(key, (None,))[0] is not view:
+                        continue
                     del self.views[key]
-                elif automatic:
+                view.close()
+            elif automatic:
+                try:
                     view.publish(dataset.root, self._versions_on_disk(dataset.root), canvas)
-            return self.revisions()
+                except (OSError, ValueError, OverflowError):
+                    logging.getLogger(__name__).exception("Cannot publish %s", dataset.root)
+        return self.revisions()
 
     def revisions(self):
         """Committed publication state, without starting work or waiting for a bake."""
         with self._lock:
             revisions = {}
-            for (number, _acquisition), (view, _, _) in self.views.items():
-                revisions[number] = revisions.get(number, 0) + view.revision
+            for key, (view, _, _) in self.views.items():
+                dataset = self._dataset(key)
+                if dataset is not None:
+                    revisions[dataset.number] = view.revision
             return tuple(revisions.items())
 
     def entries(self, entries):
         with self._lock:
             result, seen = [], set()
             for number, root, name in entries:
-                held = self.views.get((number, None))
+                dataset = self.library.dataset(number)
+                held = (
+                    self.views.get((root, None))
+                    if dataset and not isinstance(dataset.acquisition, str)
+                    else None
+                )
                 if held is None:
                     result.append((number, root, name))
                 elif number not in seen:
@@ -260,18 +326,21 @@ class PublishedFolders:
 
     def source_revision(self, number, name=STORE):
         with self._lock:
-            for (dataset, _acquisition), (view, _, _) in self.views.items():
-                if dataset != number:
-                    continue
-                if hasattr(view, "outputs"):
-                    if name in view.outputs:
-                        return view.outputs[name].revision
-                else:
-                    return view.revision
-            return None
+            dataset = self.library.dataset(number)
+            if dataset is None:
+                return None
+            acquisition = dataset.acquisition if isinstance(dataset.acquisition, str) else None
+            held = self.views.get((dataset.root, acquisition))
+            if held is None:
+                return None
+            view = held[0]
+            if hasattr(view, "outputs"):
+                return view.outputs[name].revision if name in view.outputs else None
+            return view.revision
 
     def source_depth(self, number, name):
-        held = self.views.get((number, None))
+        dataset = self.library.dataset(number)
+        held = self.views.get((dataset.root, None)) if dataset else None
         if held and isinstance(held[0], PublishedAcquisition):
             return "flat" if name == STORE else "stack"
         return None
@@ -512,6 +581,10 @@ class PublishedTransfer(ComposedPicture):
         if not isinstance(versions, dict):
             raise ValueError("source_revisions must map completed position names to revisions")
         versions, canvas, composition = dict(versions), deepcopy(canvas), deepcopy(composition)
+        if isinstance(composition, dict) and isinstance(composition.get("regions"), dict):
+            composition["regions"] = {
+                name: canonical_regions(regions) for name, regions in composition["regions"].items()
+            }
         if composition is not None and (
             not isinstance(composition, dict)
             or not {"regions", "order"} <= composition.keys()
@@ -579,10 +652,7 @@ class PublishedTransfer(ComposedPicture):
                     )
                 if type(revision) is not int or revision < old_versions.get(name, 0):
                     raise ValueError("Completed position revisions must not regress")
-            for axis in ("x_um", "y_um"):
-                low, high = canvas[axis]
-                if not all(math.isfinite(value) for value in (low, high)) or high <= low:
-                    raise ValueError(f"Invalid specimen canvas bounds for {axis}")
+            validate_canvas(canvas)
 
             previous = self._held
             kept = {tile.name: tile for tile in previous.mosaic.tiles} if previous else {}

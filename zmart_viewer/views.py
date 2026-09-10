@@ -10,10 +10,11 @@ from hashlib import sha256
 from pathlib import Path
 
 from .acquired import canonical_regions
+from .building import _holding_the_bake_lock
 from .compose import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, _read_one_tile
 from .library import _read_attrs_at
 from .projections import METHODS, PROJECTION_RECIPE, write_projection
-from .published import PublishedTransfer
+from .published import PublishedTransfer, validate_canvas
 
 
 def view_metadata(store):
@@ -62,7 +63,6 @@ class ViewSet:
         self.keys = keys
         self.source_folder = None
         self._references = {}
-        self._original_revisions = {}
         for key, output in zip(keys, self.outputs.values()):
             pending_path = output._shown / "pending.json"
             pending = (
@@ -81,20 +81,6 @@ class ViewSet:
             if snapshot.exists():
                 output._read_snapshot()
                 original = output._state["composition"]["originals"]
-                revisions = output._state["composition"].get("original_revisions")
-                if revisions is None:
-                    # Earlier 0.3 previews kept original identity only in each
-                    # immutable projection's provenance.
-                    revisions = dict(output._state["versions"])
-                    if key in METHODS:
-                        revisions = {}
-                        for tile in output._state["mosaic"]["tiles"]:
-                            recipe = _read_attrs_at(Path(tile["store"]))["zmart_projection"]
-                            revisions[Path(recipe["source"]).name] = recipe["revision"]
-                for name, revision in revisions.items():
-                    self._original_revisions[name] = max(
-                        revision, self._original_revisions.get(name, 0)
-                    )
             if original is not None:
                 original = Path(original).resolve()
                 if self.source_folder is not None and self.source_folder != original:
@@ -127,11 +113,44 @@ class ViewSet:
 
     def publish(self, folder, versions, canvas, *, composition, bake=True):
         """Serialize producer snapshots; config/status reads never acquire this lock."""
-        with self._lock:
+        with (
+            self._lock,
+            _holding_the_bake_lock(self.folder / ".publication-locks" / self.acquisition),
+        ):
             return self._publish(folder, versions, canvas, composition=composition, bake=bake)
+
+    def _committed_history(self, folder, canvas):
+        """Read the authority under the acquisition lock, including other open handles."""
+        history = {}
+        for key in ("slice", "top", *METHODS):
+            store = self.folder / f"{self.acquisition}_{key}.zmartview.zarr"
+            path = store / "publication.json"
+            if not path.exists():
+                continue
+            state = json.loads(path.read_text(encoding="utf-8"))
+            contract = state["composition"]
+            if (
+                contract["view"] != self._identity(key)
+                or Path(contract["originals"]).resolve() != folder
+            ):
+                raise ValueError(f"Publication belongs to another source folder or view: {store}")
+            if canvas != state["canvas"]:
+                raise ValueError("The baked canvas cannot change within an open acquisition")
+            if "original_revisions" not in contract:
+                raise ValueError(
+                    f"Preview store {store} has no durable original revision history; "
+                    "open it read-only or publish into a new view folder"
+                )
+            for name, revision in contract["original_revisions"].items():
+                history[name] = max(history.get(name, 0), revision)
+        return history
 
     def _publish(self, folder, versions, canvas, *, composition, bake):
         folder = Path(folder).resolve()
+        validate_canvas(canvas)
+        history = self._committed_history(folder, canvas)
+        if not isinstance(versions, dict):
+            raise ValueError("source_revisions must map completed position names to revisions")
         if self.source_folder is not None and self.source_folder != folder:
             raise ValueError("A view set cannot change its original source folder")
         if not isinstance(composition, dict) or not {"regions", "order"} <= composition.keys():
@@ -146,7 +165,7 @@ class ViewSet:
         if any(Path(name).name != name or not name.endswith(".ome.zarr") for name in versions):
             raise ValueError("View inputs must be separate position OME-Zarr stores")
         if any(
-            type(revision) is not int or revision < self._original_revisions.get(name, 0)
+            type(revision) is not int or revision < history.get(name, 0)
             for name, revision in versions.items()
         ):
             raise ValueError(
@@ -174,7 +193,7 @@ class ViewSet:
         for key, output in zip(self.keys, self.outputs.values()):
             snapshot = deepcopy(composition)
             snapshot["originals"] = str(folder)
-            snapshot["original_revisions"] = {**self._original_revisions, **versions}
+            snapshot["original_revisions"] = {**history, **versions}
             if snapshot.get("pyramid_reduction") is None:
                 # This specifies output arithmetic, not the input pyramids' recipe.
                 snapshot["pyramid_reduction"] = MEAN_FROM_ORIGINALS
@@ -216,5 +235,4 @@ class ViewSet:
             ]
             for commit in commits:
                 commit()
-                self._original_revisions.update(versions)
         return self.revision

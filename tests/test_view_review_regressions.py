@@ -11,7 +11,8 @@ from zmart_viewer.compose import Composer, read_the_mosaic_as_written
 from zmart_viewer.views import ViewSet
 
 
-def test_equivalent_region_order_is_no_write(tmp_path, monkeypatch):
+@pytest.mark.parametrize("direct", [False, True])
+def test_equivalent_region_order_is_no_write(tmp_path, monkeypatch, direct):
     import zarr
 
     from zmart_viewer import published
@@ -35,6 +36,9 @@ def test_equivalent_region_order_is_no_write(tmp_path, monkeypatch):
         projection_folder=tmp_path / "projections",
         piece=4,
     )
+    if direct:
+        view.close()
+        view = published.PublishedTransfer(tmp_path / "aggregate.ome.zarr", piece=4)
     composition = {"regions": {"p.ome.zarr": regions}, "order": ["p.ome.zarr"]}
     canvas = {"x_um": [0, 8], "y_um": [0, 8]}
     try:
@@ -58,7 +62,10 @@ def fresh(output):
     return Composer(read_the_mosaic_as_written(state["mosaic"]), piece=output._piece)
 
 
-def test_shared_folder_publication_owners_advance_independently(tmp_path):
+@pytest.mark.parametrize("different_spacing", [False, True])
+def test_shared_folder_publication_owners_advance_independently(tmp_path, different_spacing):
+    import zarr
+
     from zmart_viewer.library import Library
     from zmart_viewer.published import PublishedFolders
 
@@ -66,12 +73,20 @@ def test_shared_folder_publication_owners_advance_independently(tmp_path):
     published = PublishedFolders(library)
     composition = {"regions": "complete", "order": ["p.ome.zarr"]}
     canvas = {"x_um": [0, 8], "y_um": [0, 8]}
+    numbers = {}
     try:
         for name in ("a", "b"):
             folder = tmp_path / name
             folder.mkdir()
-            write_tile(folder, "p.ome.zarr", np.ones((1, 1, 2, 8, 8), dtype="uint16"))
-            number = published.open(
+            tile = write_tile(folder, "p.ome.zarr", np.ones((1, 1, 2, 8, 8), dtype="uint16"))
+            if name == "b" and different_spacing:
+                group = zarr.open_group(str(tile.store), mode="r+")
+                attrs = dict(group.attrs)
+                for level in attrs["ome"]["multiscales"][0]["datasets"]:
+                    scale = level["coordinateTransformations"][0]["scale"]
+                    scale[2:] = [2, scale[3] * 0.5, scale[4] * 0.5]
+                group.attrs.update(attrs)
+            numbers[name] = published.open(
                 folder,
                 canvas=canvas,
                 versions={"p.ome.zarr": 1},
@@ -79,7 +94,12 @@ def test_shared_folder_publication_owners_advance_independently(tmp_path):
                 bake=False,
                 views={"path": str(tmp_path / "view"), "acquisition": name},
             )
-        assert len(library.datasets()) == 1
+        assert len(library.datasets()) == 2
+        assert numbers["a"] != numbers["b"]
+        cold = Library()
+        cold.open(tmp_path / "view")
+        assert {d.acquisition for d in cold.datasets()} == {"a", "b"}
+        assert len(cold.entries()) == 4
         published.announce(
             [
                 {
@@ -90,26 +110,36 @@ def test_shared_folder_publication_owners_advance_independently(tmp_path):
             ]
         )
         for mode in ("slice", "top"):
-            assert published.source_revision(number, f"a_{mode}.zmartview.zarr") == 2
-            assert published.source_revision(number, f"b_{mode}.zmartview.zarr") == 1
+            assert published.source_revision(numbers["a"], f"a_{mode}.zmartview.zarr") == 2
+            assert published.source_revision(numbers["b"], f"b_{mode}.zmartview.zarr") == 1
         assert len(published.entries(library.entries())) == 4
-        assert published.refresh() == ((number, 6),)
-        library.close(number)
-        assert published.refresh() == ()
-        assert published.views == {}
+        assert dict(published.refresh()) == {numbers["a"]: 4, numbers["b"]: 2}
+        library.close(numbers["a"])
+        assert published.refresh() == ((numbers["b"], 2),)
+        published.announce(
+            [
+                {
+                    "path": str(tmp_path / "b"),
+                    "source_revisions": {"p.ome.zarr": 2},
+                    "composition": composition,
+                }
+            ]
+        )
+        assert published.revisions() == ((numbers["b"], 4),)
     finally:
         published.close()
 
 
 @pytest.mark.parametrize("bake", [False, True])
-def test_default_float_views_preserve_fractional_means(tmp_path, bake):
+@pytest.mark.parametrize("value", [0.25, 0.75])
+def test_default_float_views_preserve_fractional_means(tmp_path, bake, value):
     positions = tmp_path / "positions"
     positions.mkdir()
     # The input pyramids round floats. Without a certified reducer, they must
     # not be substituted for a fractional reduction of the original pixels.
     names = [f"p{i}.ome.zarr" for i in range(4)]
     for i, name in enumerate(names):
-        write_tile(positions, name, np.full((2, 2, 3, 32, 32), 0.25, dtype="float32"), x=32 * i)
+        write_tile(positions, name, np.full((2, 2, 3, 32, 32), value, dtype="float32"), x=32 * i)
     view = ViewSet(tmp_path / "view", acquisition="a", piece=4)
     try:
         view.publish(
@@ -127,7 +157,9 @@ def test_default_float_views_preserve_fractional_means(tmp_path, bake):
                         for c in range(2):
                             values = made.values_for(level, 0, 0, 0, t, c)
                             assert values is not None
-                            assert values[0, 0] == 0.25
+                            assert values[0, 0] == value
+                            if bake and level >= 3:
+                                assert (output._shown / f"{level}/c/{t}/{c}/0/0/0").is_file()
                             assert pieces.built_bytes_behind(
                                 output._shown, f"{level}/c/{t}/{c}/0/0/0"
                             ) == made.bytes_for(level, 0, 0, 0, t, c)

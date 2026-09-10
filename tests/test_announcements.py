@@ -101,7 +101,8 @@ class TestWatchingTheDisk:
         finally:
             watcher.stop()
 
-    def test_it_stays_quiet_about_a_change_the_microscope_has_already_announced(self):
+    @pytest.mark.parametrize("refresh", [None, lambda: ((0, 2),)])
+    def test_it_stays_quiet_about_a_change_the_microscope_has_already_announced(self, refresh):
         """The same write must not be announced twice, once by each mechanism.
 
         Two things notice a write: the application driving the microscope, which
@@ -122,7 +123,7 @@ class TestWatchingTheDisk:
         """
         library, told = self._Changing(), Announcements()
         heard = told.listen()
-        watcher = FolderWatcher(library, told, every=0.01)
+        watcher = FolderWatcher(library, told, every=0.01, refresh_publications=refresh)
         watcher.start()
         try:
             # Let the watcher settle on what the disk looks like now, so that the

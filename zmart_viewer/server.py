@@ -1420,6 +1420,7 @@ def make_server(
     registry = SourceRegistry(
         library,
         watching=live,
+        refresh_publications=published.refresh,
         wants_the_bake=lambda run_root: (
             bake or Path(run_root).resolve() in scratch.get("bake_live", ())
         ),
@@ -1431,7 +1432,7 @@ def make_server(
     building_config = threading.Lock()
 
     def config_now() -> dict:
-        published_revision = published.refresh()
+        published_revision = published.revisions()
         (
             live_bindings,
             live_numbers,
