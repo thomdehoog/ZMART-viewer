@@ -3,8 +3,8 @@
 Date: 2026-09-09
 Target: **0.3.0** for Top, Slice and Projection; 3D rendering is deferred.
 Status: Top, Slice and Min/Max/Sum implemented on the isolated 0.3.0 viewer branch.
-See [usage and limitations](../view_modes.md). 3D and absolute-Z additions remain
-deferred; the operator and rig have not adopted these changes.
+See [usage and limitations](../view_modes.md). The 2026-09-10 clarification below
+supersedes the original focus-relative placement. 3D remains deferred.
 
 ## The four modes
 
@@ -56,23 +56,23 @@ detail to make mode-specific, not evidence that stack boundary holding exists.
 
 ## Z placement
 
-The agreed operator Top view uses **stack-relative Z**: each stack's recorded
-reference/focus plane maps to display Z = 0. Internal physical plane spacing and
-depth are preserved; aligning references does not flatten the stacks.
+Clarified 2026-09-10: **Top counts planes from a common floor**, not micrometres
+from a focus reference. Plane 1 is each stack's lowest plane. Unequal plane counts
+and unequal Z step sizes are allowed; the range is the largest plane count.
+Shorter stacks hold their final plane and single images remain visible.
 
-Absolute Z instead places planes at their physical specimen heights. Placement
-and sampling/visibility are distinct concepts, even though relative Z is part
-of the agreed operator Top-view default. An eventual absolute/relative placement
-control for other modes can be designed separately; it is not a fifth view mode.
+**Slice uses absolute specimen Z**, including single images. Its common grid uses
+the smallest native Z step and nearest-plane sampling. Origin quantization is
+bounded by half that step. Pixels and authoritative coverage share that sampler.
+The operator switches the whole canvas between these coordinate meanings.
 
 Display placement must not rewrite original acquisition coordinates. Preserve
 the separate original OME-Zarr files and their provenance. Existing writer
 conventions need to be inspected before implementing mode switching; this is
 the desired separation of responsibilities, not a statement about every current
 file's metadata.
-For the initial relative-Z implementation, singletons use one declared display
-plane at Z=0. Slice intersects that plane; Top keeps showing it. Absolute-Z
-reconstruction and changes to the operator's writer remain outside this scope.
+Old products must be republished to adopt the versioned placement recipe; original
+specimen coordinates are never edited to implement a display mode.
 
 ## Projection and coverage
 

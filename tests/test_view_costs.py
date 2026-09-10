@@ -74,11 +74,16 @@ def test_top_sampling_runs_cost_and_rewrite(tmp_path, monkeypatch, staggered):
                 counts.update(misses=0, decoded_bytes=0)
                 started = time.perf_counter()
                 representatives = set()
-                for z in range(40):
+                planes = range(cold.mosaic.shape(0)[0])
+                for z in planes:
                     expected = np.zeros((8, 128), dtype="uint16")
                     mask = np.zeros_like(expected, dtype=bool)
                     for data, (depth, start, x) in zip(arrays, layout):
-                        plane = min(depth - 1, max(0, z - start)) if mode == "top" else z - start
+                        plane = (
+                            min(depth - 1, z)
+                            if mode == "top"
+                            else z + int(cold.mosaic.corner_um[0]) - start
+                        )
                         if 0 <= plane < depth:
                             expected[:, x : x + 8] = data[plane]
                             mask[:, x : x + 8] = True
@@ -96,15 +101,13 @@ def test_top_sampling_runs_cost_and_rewrite(tmp_path, monkeypatch, staggered):
                     representatives.add(cold.canonical_plane(2, z, 0, 0))
                 duration = (time.perf_counter() - started) * 1000
                 before = dict(counts)
-                for z in range(40):
+                for z in planes:
                     cold.values_for(2, z, 0, 0)
                 assert counts == before, "Warm Z sweep decoded original chunks again"
                 physical = _chunks(output._shown)
-                expected_bytes = [cold.bytes_for(2, z, 0, 0) for z in range(40)]
+                expected_bytes = [cold.bytes_for(2, z, 0, 0) for z in planes]
                 started = time.perf_counter()
-                served = [
-                    pieces.built_bytes_behind(output._shown, f"2/c/{z}/0/0") for z in range(40)
-                ]
+                served = [pieces.built_bytes_behind(output._shown, f"2/c/{z}/0/0") for z in planes]
                 served_ms = (time.perf_counter() - started) * 1000
                 assert served == expected_bytes
                 report["views"][f"{mode}_{bake}"] = {
@@ -122,9 +125,7 @@ def test_top_sampling_runs_cost_and_rewrite(tmp_path, monkeypatch, staggered):
                     "baked_bytes": sum(v[1] for v in physical.values()),
                 }
                 if mode == "top":
-                    assert (
-                        (len(representatives) >= 35) if staggered else (len(representatives) < 20)
-                    )
+                    assert len(representatives) <= max(depth for depth, _, _ in layout)
                 cold.close()
         # Shrink a contributor, retaining the overall 40-plane domain. No obsolete
         # former representative may remain as a duplicated physical bake chunk.

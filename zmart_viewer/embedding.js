@@ -44,6 +44,37 @@ export function inSelectedView(spec, selected) {
   return !spec.view || selected[acquisitionKey(spec)] === viewKey(spec.view);
 }
 
+/** Keep the last complete framebuffer during an explicitly requested Z change.
+ * No extra reads or timer: the normal chunk arrivals schedule the next draw.
+ * Call cancel before changing XY framing or the layer composition.
+ */
+export function holdCompleteSlice(sliceView, changed = () => {}) {
+  const original = sliceView.updateRendering;
+  let pending = false, size;
+  const setPending = value => {
+    if (pending === value) return;
+    pending = value;
+    changed(value);
+  };
+  sliceView.updateRendering = function () {
+    const { width, height } = this.projectionParameters.value;
+    if (pending && size[0] === width && size[1] === height && !this.isReady()) return;
+    original.call(this);
+    setPending(false);
+  };
+  return {
+    get pending() { return pending; },
+    request() {
+      if (pending || sliceView.renderingStale || !sliceView.isReady()) return;
+      const { width, height } = sliceView.projectionParameters.value;
+      size = [width, height];
+      setPending(true);
+    },
+    cancel() { setPending(false); },
+    dispose() { sliceView.updateRendering = original; setPending(false); },
+  };
+}
+
 export function keepDepthLocal(layer, viewer = null, makeTransform = null) {
   // Top samples a clamped local Z while retaining its native global slider range.
   // Persistent flats use the same local axis but do not follow the slider.

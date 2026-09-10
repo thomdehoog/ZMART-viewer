@@ -17,6 +17,16 @@ Projections call it without a viewer and remain visible through Z. Slice uses
 the ordinary spatial transform.
 The binding expects one aggregate source per layer, not per-position sources.
 
+For Z-slider transitions, `holdCompleteSlice(sliceView, changed)` can retain
+the last complete framebuffer until Neuroglancer reports the requested slice
+ready. Call `request()` immediately before changing Z, `cancel()` before changing
+XY framing or layers, and `dispose()` when the slice view closes. Resizing cancels
+the hold automatically. The `pending` property and `changed(pending)` callback
+let the host label the old picture as loading rather than presenting it as the
+requested plane. This adds no requests, pixel copies, polling, or timeout; the
+engine's existing chunk arrivals drive rendering. An incomplete initial frame
+is not held.
+
 On a geometry revision, use `refreshGeometry` once per source and share the
 refresh/metadata-dedup sets for that update. `geometryRefreshPending` reports
 an outstanding read. Unchanged status does not request a refresh. Image-only

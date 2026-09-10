@@ -2086,7 +2086,9 @@ export default function App() {
             showTheWholePicture for what it cost. */}
         <div style={styles.depthControl}>
           {mode === "flat" && (
-            <AxisSlider viewer={viewer} axis="z" label="Z" orientation="vertical" />
+            <AxisSlider viewer={viewer} axis="z" orientation="vertical"
+              label={!hasLegacy && Object.values(chosenViews).every(key => key === "top") ? "Plane" : "Z"}
+              physicalZ={views.length > 0 && !hasLegacy && Object.values(chosenViews).every(key => key === "slice")} />
           )}
         </div>
         <div style={styles.timeControl}>

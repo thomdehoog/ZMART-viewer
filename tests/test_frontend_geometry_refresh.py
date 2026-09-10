@@ -5,6 +5,47 @@ import subprocess
 from pathlib import Path
 
 
+def test_depth_transition_holds_only_a_complete_unchanged_framebuffer():
+    root = Path(__file__).resolve().parents[1] / "app/page"
+    result = subprocess.run(
+        ["node", "--input-type=module", "--eval", r"""
+        import assert from 'node:assert/strict';
+        import {holdCompleteSlice} from '../../zmart_viewer/embedding.js';
+        let ready = true, draws = 0;
+        const slice = {
+          renderingStale:false, projectionParameters:{value:{width:10,height:10}},
+          isReady:() => ready,
+          updateRendering() { draws++; this.renderingStale = false; },
+        };
+        const original = slice.updateRendering;
+        const changes = [];
+        const hold = holdCompleteSlice(slice, value => changes.push(value));
+        hold.request();
+        ready = false; slice.renderingStale = true;
+        slice.updateRendering();
+        assert.equal(draws,0);
+        hold.request(); // A second slider input still holds the complete frame.
+        assert.equal(hold.pending,true);
+        ready = true; slice.updateRendering();
+        assert.equal(draws,1);
+        assert.deepEqual(changes,[true,false]);
+        hold.request(); ready = false; slice.renderingStale = true;
+        hold.cancel(); // XY or layers changed: the old frame no longer applies.
+        slice.updateRendering();
+        assert.equal(draws,2);
+        hold.request(); // An incomplete frame is not a candidate for holding.
+        assert.equal(hold.pending,false);
+        ready = true; slice.updateRendering(); hold.request(); ready = false;
+        slice.projectionParameters.value.width = 20;
+        slice.updateRendering();
+        assert.equal(hold.pending,false);
+        hold.dispose();
+        assert.equal(slice.updateRendering,original);
+        """], cwd=root, capture_output=True, text=True, timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_geometry_refresh_waits_for_initial_binding_and_cancels_on_disposal():
     root = Path(__file__).resolve().parents[1] / "app/page"
     result = subprocess.run(

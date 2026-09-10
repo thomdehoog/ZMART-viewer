@@ -6,15 +6,17 @@ generates a missing view. Different acquisitions can select different views.
 
 | View | Z behavior |
 | --- | --- |
-| Slice | Show only acquired data intersecting the selected relative-Z plane. |
-| Top | Sample each contributor independently; hold its nearest boundary plane outside its range. |
+| Slice | Cut through the absolute specimen volume at Z in micrometres. |
+| Top | Select plane 1, 2, … from each stack's bottom; hold its last plane above its range. |
 | Min / Max / Sum | Reduce all acquired Z samples of each original position, independently for each T/C, before aggregating positions. |
 
-Top is not a projection. Interior holes stay missing. Single-plane images lie on
-display Z=0: Slice intersects that plane, while Top holds it across the view's Z
-range. Stack reference heights map to display Z=0; internal spacing is retained.
-Neither mode changes the original OME-Zarr coordinates. Absolute-Z placement and
-new 3D controls are not included. Existing legacy-volume behavior is unchanged.
+Top is not a projection. Every stack starts at display index zero (UI plane 1),
+independent of specimen height, focus reference and physical step size. Its range
+is the largest plane count. Shorter stacks hold their last plane; single images
+remain visible. Interior holes stay missing. Slice retains specimen placement,
+including single images, and has no boundary hold. Neither mode changes original
+OME-Zarr coordinates. Existing legacy-volume behavior is unchanged; new 3D
+controls are not included.
 On a mixed page, 3D displays legacy datasets only; returning to 2D restores the
 selected named views. Top retains each aggregate's boundary plane even when
 another acquisition extends the shared Z slider, using local sampling rather
@@ -45,7 +47,6 @@ try:
         composition={
             "regions": "complete",
             "order": ["p001.ome.zarr", "p002.ome.zarr"],
-            "z_references": {"p001.ome.zarr": 120.0, "p002.ome.zarr": 125.0},
         },
         bake=True,
     )
@@ -62,13 +63,23 @@ Original revision high-water marks survive removal and reopening: re-adding a
 position cannot roll its projection back to an older revision. Region-list order
 and duplicate identical regions do not constitute a change; source `order` does.
 
-`z_references` is explicit when supplied. Otherwise the viewer uses the recorded
-requested focus reference in acquisition provenance, or the source's first-plane
-origin. It does not infer a focus plane from brightness. Inputs must satisfy the
-existing unrotated, aligned positive-Z-spacing geometry contract. Normalize raw
-instrument plane order upstream; this API is not a Leica raw-file importer.
-References must produce offsets on the shared voxel lattice; off-lattice focus
-references are rejected, never silently snapped.
+Named views do not use `z_references` or focus provenance for placement.
+Slice uses the smallest native Z step in the acquisition, on a specimen-zero
+anchored grid. Fractional origins are represented at the nearest grid plane
+(maximum half-step quantization). Unequal step sizes are sampled nearest-neighbour
+from the original arrays; coverage uses the same native plane selection. No
+full-resolution resampled copy is written. Top's stored unit Z spacing represents
+an index, not a micrometre measurement. The operator labels it **Plane** and applies
+one mode to the whole canvas; standalone acquisition selections remain independent.
+
+Earlier focus-relative named products must be republished with their original
+source revisions: a versioned placement recipe forces one rebuild, then identical
+announcements are idle again. Merely reopening old saved products does not rewrite
+them. Originals recorded with the old writer's false Z=0 convention require
+correct specimen metadata before they can supply a faithful absolute Slice.
+
+Normalize raw instrument plane order upstream: plane zero must be the lowest
+specimen plane. This API is not a Leica raw-file importer.
 
 Use `regions: "complete"` only when the entire declared position is acquired.
 For sparse producers, supply a map from each position name to acquired regions:
