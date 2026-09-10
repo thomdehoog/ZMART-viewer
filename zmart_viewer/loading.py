@@ -111,6 +111,9 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
     if len(inside) < 2:
         return None
 
+    if all(one.name.endswith(".zmartview.zarr") for one in inside):
+        return None  # Saved alternatives are opened, never composed or generated here.
+
     from .building import declare_a_built_picture, the_scene_folder_name  # deferred
 
     existing = _scene_built_from(scenes / the_scene_folder_name(target.name), target)

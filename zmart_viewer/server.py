@@ -37,6 +37,7 @@ from .contrast import (
 from .library import (
     DESCRIPTION_FILES,
     Library,
+    _read_array_description,
     _read_attrs_at,
     axis_names,
     channel_color,
@@ -53,7 +54,9 @@ from .library import (
 from .live import SourceRegistry, live_rows
 
 _HERE = Path(__file__).resolve().parent
-_FRONTEND_DIST = (_HERE.parent / "app" / "page" / "dist").resolve()
+_FRONTEND_DIST = _HERE / "_frontend"
+if not _FRONTEND_DIST.is_dir():
+    _FRONTEND_DIST = (_HERE.parent / "app" / "page" / "dist").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
@@ -301,11 +304,22 @@ class _Handler(SimpleHTTPRequestHandler):
     def _serve_from_data(self) -> None:
         """Serve one file from an open OME-Zarr store under ``/data``."""
         rel = self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0]
+        number, _, rest = rel.partition("/")
+        image = rest.partition("/")[0]
+        if image.endswith(".zmartview.zarr"):
+            store = self._library.resolve(f"{number}/{image}")
+            if store is not None and (store / "pending.json").exists():
+                self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
+                return
         marker = f"/{coverage.MARKER}/"
         if marker in rel:
             store_rel, inside = rel.split(marker, 1)
             store = self._library.resolve(store_rel)
-            if store is None or not self._transparent_background:
+            if store is None or not (
+                self._transparent_background
+                or (_read_attrs_at(store).get("zmart") or {}).get("view")
+                or _read_attrs_at(store).get("zmart_projection")
+            ):
                 self._send_empty(HTTPStatus.FORBIDDEN)
                 return
             try:
@@ -732,13 +746,21 @@ class _Handler(SimpleHTTPRequestHandler):
         """Publish completed folder snapshots, or accept a legacy change hint."""
         in_place = bool(isinstance(payload, dict) and payload.get("wrote_image_in_place"))
         if isinstance(payload, dict) and "publications" in payload:
+            publisher = self._scratch["published"]
+            before = publisher.revisions()
             try:
-                self._scratch["published"].announce(payload["publications"])
-            except (ValueError, KeyError, TypeError) as why:
-                self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
-                return
-            except OSError as why:
-                self._send_json({"error": str(why)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                publisher.announce(payload["publications"])
+            except (ValueError, KeyError, TypeError, OverflowError, OSError) as why:
+                # Each named view commits atomically. A later view can fail after
+                # an earlier one succeeded; those committed pixels still need notice.
+                if publisher.revisions() != before:
+                    self._announcements.say_something_changed()
+                status = (
+                    HTTPStatus.SERVICE_UNAVAILABLE
+                    if isinstance(why, OSError)
+                    else HTTPStatus.BAD_REQUEST
+                )
+                self._send_json({"error": str(why)}, status)
                 return
         covering = None
 
@@ -1162,7 +1184,9 @@ class _Handler(SimpleHTTPRequestHandler):
         published = self._scratch["published"]
         asked_bake = bool(payload.get("bake", published.bake))
         canvas = payload.get("canvas", published.canvas)
-        if (asked_bake or "composition" in payload) and live_run_holding(target) is None:
+        if (asked_bake or "composition" in payload or "views" in payload) and live_run_holding(
+            target
+        ) is None:
             try:
                 if "composition" in payload and not isinstance(payload["composition"], dict):
                     raise ValueError(
@@ -1174,8 +1198,9 @@ class _Handler(SimpleHTTPRequestHandler):
                     versions=payload.get("source_revisions"),
                     composition=payload.get("composition"),
                     bake=asked_bake,
+                    views=payload.get("views"),
                 )
-            except (ValueError, KeyError, TypeError) as why:
+            except (ValueError, KeyError, TypeError, OverflowError) as why:
                 self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
                 return
             except OSError as why:
@@ -1503,10 +1528,24 @@ def make_server(
             frames = written_timepoints(store_path)
             revision = published.source_revision(root_number, name)
             depth = published.source_depth(root_number, name)
+            source_attrs = _read_attrs_at(store_path)
+            named_view = (source_attrs.get("zmart") or {}).get("view")
+            if named_view or "zmart_projection" in source_attrs:
+                multiscale = source_attrs["multiscales"][0]
+                axes = [axis["name"] for axis in multiscale["axes"]]
+                array = _read_array_description(store_path / multiscale["datasets"][0]["path"])
+                frames = array["shape"][axes.index("t")] if "t" in axes else 1
+            geometry_revision = None
+            if named_view:
+                snapshot_path = store_path / "publication.json"
+                if snapshot_path.exists():
+                    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                    revision = snapshot["revision"]
+                    geometry_revision = snapshot.get("geometry_revision", 0)
 
             for index, channel_name, color, declared_range, active in found:
                 logical_channel = 0 if depth is not None and index is None else index
-                key = (root_number, logical_channel, channel_name)
+                key = (root_number, logical_channel, channel_name, name if named_view else None)
                 row = merged.get(key)
 
                 if row is None:
@@ -1521,6 +1560,15 @@ def make_server(
                     )
                     merged[key] = {
                         **base,
+                        **({"view": named_view} if named_view else {}),
+                        **(
+                            {"acquiredCoverage": True} if "zmart_projection" in source_attrs else {}
+                        ),
+                        **(
+                            {"sourceGeometryRevisions": [geometry_revision]}
+                            if geometry_revision is not None
+                            else {}
+                        ),
                         **({"sourceRevisions": [revision]} if revision is not None else {}),
                         **({"sourceDepths": [depth]} if depth is not None else {}),
                         "sources": [address],
@@ -1582,11 +1630,19 @@ def make_server(
         # Group order follows first appearance, which follows the sorted store
         # names, so the panel does not reshuffle itself between runs.
         groups = list(dict.fromkeys(row["group"] for row in rows))
-        if transparent_background or any(row.get("sourceDepths") for row in rows):
+        if transparent_background or any(
+            row.get("sourceDepths") or row.get("view") or row.get("acquiredCoverage")
+            for row in rows
+        ):
             for row in rows:
                 if row.get("kind", "image") != "image":
                     continue
-                if not transparent_background and not row.get("sourceDepths"):
+                if (
+                    not transparent_background
+                    and not row.get("sourceDepths")
+                    and not row.get("view")
+                    and not row.get("acquiredCoverage")
+                ):
                     continue
                 # Only fixed, single-source dense rows can omit coverage. Live
                 # rows must keep the same strategy as sources arrive; covering

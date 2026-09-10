@@ -838,6 +838,10 @@ def _borrowed_folders(root: Path, names: Iterable[str]) -> list[Path]:
 
 def _one_acquisition_only(root: Path, names: list[str]) -> None:
     """Refuse a load that spans more than one acquisition, saying what it found."""
+    named = [(_read_attrs_at(root / name).get("zmart") or {}).get("view") for name in names]
+    if named and all(isinstance(view, dict) and view.get("acquisition") for view in named):
+        if len({view["acquisition"] for view in named}) == 1:
+            return  # Alternative views may have different Z geometry and display windows.
     families: dict[tuple, list[str]] = {}
 
     for name in names:

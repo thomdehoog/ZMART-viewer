@@ -166,7 +166,8 @@ export function shaderControlsFor(window_, volumetric, weight, colour,
 // different channel. This is the key the panel carries colour and contrast across
 // on, and it never leaves the page.
 export function layerKey(spec) {
-  return `${spec.group}/${spec.name}`;
+  const view = spec.view;
+  return `${spec.group}/${spec.name}` + (view ? `/${view.acquisition}/${view.type}/${view.method || ""}` : "");
 }
 
 // What the engine is told to call a layer. The engine keeps one flat list and
@@ -176,6 +177,7 @@ export function layerKey(spec) {
 // carries the type with it. The panel still shows the short name on screen; this is
 // only what the engine hears.
 export function engineName(spec) {
+  if (spec.view) return layerKey(spec);
   return spec.group ? `${spec.group} · ${spec.name}` : spec.name;
 }
 
@@ -243,7 +245,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     const layer = {
       type: isMask ? "segmentation" : "image",
       name: engineName(spec) + (spec.depth ? `__${spec.depth}` : ""),
-      persistentFlat: spec.depth === "flat",
+      persistentFlat: spec.depth === "flat" || spec.view?.type === "projection",
       // A row may be drawn from several stores -- several positions of the same
       // acquisition type. The engine takes the list and places each one using the
       // stage position recorded inside it.
@@ -268,6 +270,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       // itself look like a new image.
       sourceIds: spec.sourceIds ?? undefined,
       sourceRevisions: spec.sourceRevisions ?? undefined,
+      sourceGeometryRevisions: spec.sourceGeometryRevisions ?? undefined,
     };
     // Where a store holds its channels inside one array, this is what picks the
     // channel: the engine exposes it as a per-layer dimension, and each row pins
@@ -280,7 +283,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       layer.notSelectedAlpha = opacity;
       return layer;
     }
-    layer.shader = shaderFor(volumetric, lut, config.transparentBackground && spec.opaque);
+    layer.shader = shaderFor(volumetric, lut, (config.transparentBackground || spec.view) && spec.opaque);
     // A row that got here is a channel a microscope wrote as its own file, so
     // the engine has to add it to its neighbours from outside -- there is no
     // one program holding both. Adding is safe only while the row is fed by a
@@ -352,10 +355,11 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       source: sources.map(source => `${window.location.origin}${source}`),
       sourceIds: layer.sourceIds?.map(id => `${id}/coverage`),
       sourceRevisions: layer.sourceRevisions,
+      sourceGeometryRevisions: layer.sourceGeometryRevisions,
       frameCounts: layer.frameCounts, localPosition: layer.localPosition,
       persistentFlat: layer.persistentFlat,
       visible: layer.visible, opacity: 1,
-      blend: all[index].spec.depth ? "default" : "additive",
+      blend: all[index].spec.depth || all[index].spec.view ? "default" : "additive",
       shader: "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
         + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }",
     }];

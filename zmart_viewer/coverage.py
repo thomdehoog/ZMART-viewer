@@ -31,6 +31,7 @@ def requires_geometry(store: Path) -> bool:
         pieces.the_map_inside(store) is not None
         or live_run_holding(store) is not None
         or pieces._composer_for(store) is not None
+        or "zmart_projection" in _read_attrs_at(store)
     )
 
 
@@ -124,6 +125,28 @@ def answer(store: Path, inside: str) -> bytes | None:
         # An ordinary position store is dense within its bounds, even if its
         # encoder omitted an all-zero chunk. Do not mistake that for a gap.
         mask = np.zeros((side, side), dtype=np.uint8)
+        projection = attrs.get("zmart_projection")
+        if projection is not None:
+            from .compose import AcquiredRegion
+
+            factor = 2**level
+            for written in projection["regions"]:
+                region = AcquiredRegion.from_written(written)
+                if (region.frame, region.channel) != (
+                    coordinates.get("t", 0),
+                    coordinates.get("c", 0),
+                ):
+                    continue
+                low = [a // factor - index * side for a, index in zip(region.origin[1:], (y, x))]
+                high = [
+                    (a + size + factor - 1) // factor - index * side
+                    for a, size, index in zip(region.origin[1:], region.shape[1:], (y, x))
+                ]
+                if high[0] > 0 and high[1] > 0:
+                    mask[
+                        max(0, low[0]) : min(side, high[0]), max(0, low[1]) : min(side, high[1])
+                    ] = 1
+            return gzip.compress(mask.tobytes(), compresslevel=1, mtime=0)
         mask[: min(side, shape[-2] - y * side), : min(side, shape[-1] - x * side)] = 1
         return gzip.compress(mask.tobytes(), compresslevel=1, mtime=0)
     return None

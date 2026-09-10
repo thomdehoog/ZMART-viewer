@@ -1106,6 +1106,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
  */
 export default function LayerPanel({
   layers,
+  included = null,
   state,
   mode,
   groupOrder = [],
@@ -1140,7 +1141,8 @@ export default function LayerPanel({
 
   // Every row, paired with the position it holds in the panel's own state, so a
   // row can still be controlled after being gathered under its group.
-  const rows = layers.map((layer, index) => ({ layer, index }));
+  const rows = layers.map((layer, index) => ({ layer, index }))
+    .filter(({ index }) => !included || included.has(index));
   const groups = groupOrder.length
     ? groupOrder
     : [...new Set(layers.map((layer) => layer.group || ""))];

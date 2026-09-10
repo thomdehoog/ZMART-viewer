@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 import threading
 from contextlib import ExitStack, contextmanager
 from copy import deepcopy
@@ -18,6 +19,7 @@ from pathlib import Path
 from .acquired import AcquiredRegion
 from .building import ComposedPicture, _after_a_windows_reader, _holding_the_bake_lock
 from .compose import (
+    LEGACY_MEAN_REDUCTION,
     Composer,
     Mosaic,
     _read_one_tile,
@@ -33,11 +35,28 @@ STACK_STORE = ".zmart-viewer/stack.ome.zarr"
 ACQUISITION_RENDERING_VERSION = 1
 
 
-def _place_depth(tiles, *, spacing=None):
+def _place_depth(tiles, *, spacing=None, combine=False):
     """Display flats together; keep stacks on their common specimen-Z lattice."""
     flat = [tile.copies[0].shape[0] == 1 for tile in tiles]
-    if any(flat) and not all(flat):
+    if any(flat) and not all(flat) and not combine:
         raise ValueError("Separate flat and stack aggregates are required for mixed sources")
+    if combine and not all(flat):
+        if spacing is None:
+            spacing = next(t.copies[0].voxel_um[0] for t in tiles if t.copies[0].shape[0] > 1)
+        tiles = [
+            replace(
+                t,
+                copies=[
+                    replace(
+                        c, corner_um=(0.0, *c.corner_um[1:]), voxel_um=(spacing, *c.voxel_um[1:])
+                    )
+                    for c in t.copies
+                ],
+            )
+            if is_flat
+            else t
+            for t, is_flat in zip(tiles, flat)
+        ]
     if all(flat):
         placed = [
             replace(
@@ -99,13 +118,56 @@ class PublishedFolders:
         self.views = {}
         self._lock = threading.RLock()
 
-    def open(self, path, *, canvas=None, versions=None, composition=None, bake=True):
+    def open(self, path, *, canvas=None, versions=None, composition=None, bake=True, views=None):
         """Open or update the single publisher for a resolved acquisition folder."""
         bounds = canvas if canvas is not None else self.canvas
         if not bounds:
             raise ValueError("A live baked folder needs its full specimen canvas bounds")
         if composition is not None and versions is None:
             raise ValueError("Acquired composition needs explicit completed source revisions")
+        if views is not None:
+            from .views import ViewSet
+
+            if composition is None or versions is None:
+                raise ValueError("Named views require explicit coverage and completed revisions")
+            destination = Path(views["path"]).resolve()
+            with self._lock:
+                dataset = next((d for d in self.library.datasets() if d.root == destination), None)
+                held = self.views.get(dataset.number) if dataset else None
+            view = (
+                held[0]
+                if held
+                else ViewSet(
+                    destination,
+                    acquisition=views["acquisition"],
+                    modes=views.get("modes", ("slice", "top")),
+                    projections=views.get("projections", ()),
+                    projection_folder=views.get("projection_path"),
+                )
+            )
+            if held and (
+                not isinstance(view, ViewSet)
+                or view.acquisition != views["acquisition"]
+                or view.modes != set(views.get("modes", ("slice", "top")))
+                or view.projections != set(views.get("projections", ()))
+                or view.projection_folder
+                != (
+                    Path(views["projection_path"]).resolve()
+                    if views.get("projection_path")
+                    else None
+                )
+            ):
+                raise ValueError("An open view set cannot change its output options")
+            try:
+                view.publish(path, versions, bounds, composition=composition, bake=bake)
+                with self._lock:
+                    number = dataset.number if dataset else self.library.open(destination)
+                    self.views[number] = (view, bounds, False)
+                return number
+            except Exception:
+                if not held:
+                    view.close()
+                raise
         automatic = versions is None
         with self._lock:
             root = discover(path)[0].resolve()
@@ -144,22 +206,23 @@ class PublishedFolders:
         if not isinstance(publications, list):
             raise ValueError("publications must be a list of completed folder snapshots")
         with self._lock:
-            for publication in publications:
-                matched = False
-                folder = Path(publication["path"]).resolve()
-                for number, (view, canvas, _automatic) in self.views.items():
-                    dataset = self.library.dataset(number)
-                    if dataset and dataset.root == folder:
-                        view.publish(
-                            folder,
-                            publication["source_revisions"],
-                            canvas,
-                            composition=publication.get("composition"),
-                            bake=view.bake,
-                        )
-                        matched = True
-                if not matched:
-                    raise ValueError(f"No baked folder is open at {folder}")
+            opened = list(self.views.items())
+        for publication in publications:
+            matched = False
+            folder = Path(publication["path"]).resolve()
+            for number, (view, canvas, _automatic) in opened:
+                dataset = self.library.dataset(number)
+                if dataset and getattr(view, "source_folder", dataset.root) == folder:
+                    view.publish(
+                        folder,
+                        publication["source_revisions"],
+                        canvas,
+                        composition=publication.get("composition"),
+                        bake=view.bake,
+                    )
+                    matched = True
+            if not matched:
+                raise ValueError(f"No published folder is open at {folder}")
 
     def refresh(self):
         with self._lock:
@@ -170,6 +233,11 @@ class PublishedFolders:
                     del self.views[number]
                 elif automatic:
                     view.publish(dataset.root, self._versions_on_disk(dataset.root), canvas)
+            return self.revisions()
+
+    def revisions(self):
+        """Committed publication state, without starting work or waiting for a bake."""
+        with self._lock:
             return tuple((number, view.revision) for number, (view, _, _) in self.views.items())
 
     def entries(self, entries):
@@ -180,7 +248,7 @@ class PublishedFolders:
                     result.append((number, root, name))
                 elif number not in seen:
                     view = self.views[number][0]
-                    names = view.sources if isinstance(view, PublishedAcquisition) else [STORE]
+                    names = view.sources if hasattr(view, "sources") else [STORE]
                     result.extend((number, root, name) for name in names)
                     seen.add(number)
             return result
@@ -191,11 +259,7 @@ class PublishedFolders:
             if not held:
                 return None
             view = held[0]
-            return (
-                view.outputs[name].revision
-                if isinstance(view, PublishedAcquisition)
-                else view.revision
-            )
+            return view.outputs[name].revision if hasattr(view, "outputs") else view.revision
 
     def source_depth(self, number, name):
         held = self.views.get(number)
@@ -361,6 +425,10 @@ class PublishedAcquisition:
 
 class PublishedTransfer(ComposedPicture):
     def __init__(self, store: Path, piece: int = 512):
+        pending = store / "pending.json"
+        if pending.exists():
+            piece = json.loads(pending.read_text(encoding="utf-8")).get("piece", piece)
+        piece = (_read_attrs_at(store).get("zmart") or {}).get("piece", piece)
         super().__init__(store, piece)
         self._lock = threading.RLock()
         self._held = None
@@ -439,11 +507,26 @@ class PublishedTransfer(ComposedPicture):
             not isinstance(composition, dict)
             or not {"regions", "order"} <= composition.keys()
             or composition.keys()
-            - {"regions", "order", "pyramid_reduction", "xy_origin", "z_references"}
+            - {
+                "regions",
+                "order",
+                "pyramid_reduction",
+                "xy_origin",
+                "z_references",
+                "view",
+                "originals",
+            }
         ):
             raise ValueError("composition must contain explicit regions and order")
         if not bake and composition is None:
             raise ValueError("An unbaked external aggregate needs explicit acquired composition")
+        view = (composition or {}).get("view")
+        if view is not None and (
+            not isinstance(view, dict)
+            or view.get("type") not in ("top", "slice", "projection")
+            or not isinstance(view.get("acquisition"), str)
+        ):
+            raise ValueError("Named views require an acquisition and top, slice or projection type")
         self._shown.mkdir(parents=True, exist_ok=True)
         with self._lock, _holding_the_bake_lock(self._shown):
             pending = self._shown / "pending.json"
@@ -454,6 +537,12 @@ class PublishedTransfer(ComposedPicture):
                 self._read_snapshot()
             old_versions = (self._state or {}).get("versions", {})
             old_composition = (self._state or {}).get("composition")
+            if self._state and view != (old_composition or {}).get("view"):
+                raise ValueError("A named view's identity cannot change in place")
+            if self._state and (composition or {}).get("originals") != (old_composition or {}).get(
+                "originals"
+            ):
+                raise ValueError("A named view cannot change its original source folder")
             if self._state and (composition is None) != (old_composition is None):
                 raise ValueError("The acquisition cannot change its acquired-coverage contract")
             if self._state and (composition or {}).get("xy_origin", "center") != (
@@ -562,14 +651,19 @@ class PublishedTransfer(ComposedPicture):
                     )
                 tiles.append(tile)
             if composition is not None:
-                if previous and (tiles[0].copies[0].shape[0] == 1) != (
-                    previous.mosaic.tiles[0].copies[0].shape[0] == 1
+                if (
+                    not view
+                    and previous
+                    and (tiles[0].copies[0].shape[0] == 1)
+                    != (previous.mosaic.tiles[0].copies[0].shape[0] == 1)
                 ):
                     raise ValueError("The aggregate cannot change between flat and stack sources")
                 tiles, depth_origin, depth_extent = _place_depth(
-                    tiles, spacing=previous.mosaic.voxel_um(0)[0] if previous else None
+                    tiles,
+                    spacing=previous.mosaic.voxel_um(0)[0] if previous and not view else None,
+                    combine=bool(view),
                 )
-                if previous:
+                if previous and not view:
                     held = previous.mosaic
                     if (
                         depth_origin < held.corner_um[0] - 1e-7
@@ -581,6 +675,8 @@ class PublishedTransfer(ComposedPicture):
                         )
                     depth_origin, depth_extent = held.corner_um[0], held.extent_um[0]
             _refuse_tiles_that_disagree(tiles)
+            if view and len({tile.time_calibration for tile in tiles}) != 1:
+                raise ValueError("View contributors must share their time calibration")
             first = tiles[0]
             if first.keeps < 2 and composition is None:
                 raise ValueError(
@@ -627,6 +723,7 @@ class PublishedTransfer(ComposedPicture):
                 extent_um=extent,
                 averaged=averaged,
                 omero=attrs.get("omero"),
+                sampling="top" if view and view["type"] == "top" else "slice",
             )
             if composition is not None:
                 regions = composition["regions"]
@@ -658,10 +755,16 @@ class PublishedTransfer(ComposedPicture):
                     of.averaged,
                     tuple(of.voxel_um(level) for level in range(of.levels)),
                     of.tiles[0].axes,
+                    of.tiles[0].time_calibration,
                 )
 
-            if previous and geometry(mosaic) != geometry(previous.mosaic):
-                raise ValueError("The baked source's geometry changed; open a new acquisition")
+            geometry_changed = previous is not None and geometry(mosaic) != geometry(
+                previous.mosaic
+            )
+            if geometry_changed:
+                if not view or mosaic.dtype != previous.mosaic.dtype:
+                    raise ValueError("The baked source's geometry changed; open a new acquisition")
+                affected.update(versions.keys() | old_versions.keys())
             for tile in tiles:
                 copy = tile.copies[0]
                 if any(
@@ -674,6 +777,14 @@ class PublishedTransfer(ComposedPicture):
 
             def commit():
                 made = Composer(mosaic, piece=self._piece)
+                self._bake_legacy_reduction = mosaic.pyramid_reduction in (
+                    None,
+                    LEGACY_MEAN_REDUCTION,
+                )
+                if geometry_changed or recovering:
+                    self._bake_below.clear()
+                    self._bake_staging.clear()
+                    self._bake_recipes.clear()
                 # A failed publication can touch ground absent from both the old
                 # snapshot and the retry (for example, an appended tile withdrawn
                 # before retry). Retain those chunks until recovery completes.
@@ -717,7 +828,7 @@ class PublishedTransfer(ComposedPicture):
                                     min(cols, (at[2] + size[2] - 1) // self._piece + 1),
                                 )
                             )
-                if previous:
+                if previous and not geometry_changed:
                     stale = frozenset(
                         copy.held_in
                         for name, tile in kept.items()
@@ -727,14 +838,21 @@ class PublishedTransfer(ComposedPicture):
                     made.inherit_the_unchanged(previous, dirty, stale=stale)
                 self._shown.mkdir(parents=True, exist_ok=True)
                 description = json.loads(made.group_json())
-                baked = self._declare_levels(made, description, bake=bake)
                 _atomic_json(
                     pending,
                     {
                         "versions": versions,
+                        "view": view,
+                        "piece": self._piece,
+                        "originals": (composition or {}).get("originals"),
                         "dirty": {str(level): sorted(chunks) for level, chunks in dirty.items()},
                     },
                 )
+                baked = self._declare_levels(
+                    made, description, bake=bake, redeclare=geometry_changed or bool(recovering)
+                )
+                if bake and previous is not None and mosaic.sampling == "top":
+                    self._discard_obsolete_top_chunks(previous, made, dirty, baked)
                 moments, channels = mosaic.frame_room
                 frames = (
                     [()]
@@ -751,13 +869,21 @@ class PublishedTransfer(ComposedPicture):
                     # Sparse levels share one XY reduction grid. Once the level
                     # below is baked, propagate its changes instead of recomposing
                     # a larger footprint from originals at every ancestor.
-                    if mosaic.has_acquired_regions and level - 1 in baked:
+                    if (
+                        mosaic.has_acquired_regions
+                        and level - 1 in baked
+                        and mosaic.sampling != "top"
+                    ):
                         self._rehalve_one_level(level, sorted(dirty.get(level, ())), frames)
                         continue
                     for row, col in sorted(dirty.get(level, ())):
                         for moment in range(moments):
                             for channel in range(channels):
                                 for plane in range(made.grid(level)[0]):
+                                    if mosaic.sampling == "top" and plane != made.canonical_plane(
+                                        level, plane, row, col, moment, channel
+                                    ):
+                                        continue
                                     self._replace_one_piece(
                                         made, level, plane, row, col, moment=moment, channel=channel
                                     )
@@ -770,6 +896,8 @@ class PublishedTransfer(ComposedPicture):
                     unbaked_dirty.setdefault(level, set()).update(chunks)
                 state = {
                     "revision": self.revision + 1,
+                    "geometry_revision": (self._state or {}).get("geometry_revision", 0)
+                    + int(geometry_changed),
                     "versions": versions,
                     "canvas": canvas,
                     "composition": composition,
@@ -779,11 +907,17 @@ class PublishedTransfer(ComposedPicture):
                     else {str(level): sorted(chunks) for level, chunks in unbaked_dirty.items()},
                     "mosaic": the_mosaic_written_down(mosaic),
                 }
-                if not (self._shown / "zarr.json").exists() or bake != self.bake:
+                if (
+                    not (self._shown / "zarr.json").exists()
+                    or bake != self.bake
+                    or geometry_changed
+                    or recovering
+                ):
                     description["attributes"]["zmart"] = {
                         "published_from": str(folder.resolve()),
                         "piece": self._piece,
                         "baked": baked,
+                        **({"view": view} if view else {}),
                     }
                     _atomic_json(self._shown / "zarr.json", description)
                 _atomic_json(self._shown / "publication.json", state)
@@ -797,13 +931,59 @@ class PublishedTransfer(ComposedPicture):
 
             yield commit
 
-    def _declare_levels(self, made: Composer, description: dict, *, bake=True) -> list[int]:
+    def _discard_obsolete_top_chunks(self, previous, made, dirty, baked):
+        """A changed clamp range can retire a formerly materialized Z representative."""
+        frames, channels = previous.mosaic.frame_room
+        for level in baked:
+            if level >= previous.mosaic.levels:
+                continue
+            for row, col in dirty.get(level, ()):
+                for moment in range(frames):
+                    for channel in range(channels):
+                        for plane in range(previous.grid(level)[0]):
+                            if (
+                                previous.canonical_plane(level, plane, row, col, moment, channel)
+                                != plane
+                            ):
+                                continue
+                            if (
+                                previous.mosaic.frame_room == made.mosaic.frame_room
+                                and level < made.mosaic.levels
+                                and plane < made.grid(level)[0]
+                                and made.canonical_plane(level, plane, row, col, moment, channel)
+                                == plane
+                            ):
+                                continue
+                            outer = (
+                                (str(moment), str(channel)) if (frames, channels) != (1, 1) else ()
+                            )
+                            chunk = self._shown.joinpath(
+                                str(level), "c", *outer, str(plane), str(row), str(col)
+                            )
+                            if chunk.is_file():
+                                _after_a_windows_reader(os.unlink, chunk)
+
+    def _declare_levels(
+        self, made: Composer, description: dict, *, bake=True, redeclare=False
+    ) -> list[int]:
         datasets = description["attributes"]["ome"]["multiscales"][0]["datasets"]
         for level in range(made.mosaic.levels):
             path = self._shown / str(level)
             path.mkdir(exist_ok=True)
-            if not (path / "zarr.json").exists():
-                _atomic_json(path / "zarr.json", json.loads(made.array_json(level)))
+            if redeclare or not (path / "zarr.json").exists():
+                metadata = json.loads(made.array_json(level))
+                if (path / "zarr.json").exists():
+                    old = json.loads((path / "zarr.json").read_text(encoding="utf-8"))
+                    # Rank or chunk-shape changes give existing keys a different
+                    # meaning (ZYX files can even become TCZYX directories).
+                    if (
+                        len(old["shape"]) != len(metadata["shape"])
+                        or old["chunk_grid"] != metadata["chunk_grid"]
+                    ):
+                        chunks = path / "c"
+                        if chunks.exists():
+                            shutil.rmtree(chunks)
+                _atomic_json(path / "zarr.json", metadata)
         baked = sorted(level for level in made.pinned_levels if level > 0)
         if not bake:
             return []
