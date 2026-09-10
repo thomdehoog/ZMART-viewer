@@ -299,8 +299,18 @@ class PublishedFolders:
                 )
             ):
                 raise ValueError("An open view set cannot change its output options")
+            def expose_committed_views():
+                with self._lock:
+                    dataset = self._dataset(key)
+                    names = [name for name, output in view.outputs.items() if output.revision]
+                    number = dataset.number if dataset else self.library.open(
+                        destination, names=names, watch=True,
+                    )
+                    self.views[key] = _Owner(view, bounds, False, number)
+
             try:
-                view.publish(path, versions, bounds, composition=composition, bake=bake)
+                view.publish(path, versions, bounds, composition=composition, bake=bake,
+                             on_commit=expose_committed_views)
                 dataset = self._dataset(key)
                 number = (
                     dataset.number
@@ -311,7 +321,7 @@ class PublishedFolders:
                     self.views[key] = _Owner(view, bounds, False, number)
                 return number
             except Exception:
-                if not held:
+                if not held and key not in self.views:
                     view.close()
                 raise
         automatic = versions is None
@@ -1113,7 +1123,14 @@ class PublishedTransfer(ComposedPicture):
                         **({"view": view} if view else {}),
                     }
                     _atomic_json(self._shown / "zarr.json", description)
-                _atomic_json(self._shown / "publication.json", state)
+                if view:
+                    from . import readable
+                    readable.publish(
+                        self._shown, state,
+                        commit_ledger=lambda: _atomic_json(self._shown / "publication.json", state),
+                    )
+                else:
+                    _atomic_json(self._shown / "publication.json", state)
                 (self._shown / "pending.json").unlink()
                 self._state = state
                 self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns

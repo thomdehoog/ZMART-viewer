@@ -319,6 +319,12 @@ class _Handler(SimpleHTTPRequestHandler):
         image = rest.partition("/")[0]
         if image.endswith(".zmartview.zarr"):
             store = self._library.resolve(f"{number}/{image}")
+            if store is not None:
+                from . import readable
+                with readable.reading(store) as snapshot:
+                    if snapshot is not None:
+                        self._serve_readable(snapshot, rest.partition("/")[2])
+                        return
             if store is not None and (store / "pending.json").exists():
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
                 return
@@ -419,6 +425,35 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         self._send_file(target)
+
+    def _serve_readable(self, store: Path, inside: str) -> None:
+        target = (store / inside).resolve()
+        if not target.is_relative_to(store) or any(part.startswith(".") for part in Path(inside).parts):
+            self._send_empty(HTTPStatus.FORBIDDEN)
+            return
+        prefix = coverage.MARKER + "/"
+        if inside.startswith(prefix):
+            try:
+                body = coverage.answer(store, inside[len(prefix):])
+            except Exception:
+                logging.getLogger(__name__).exception("coverage unavailable for %s", store)
+                self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+        elif pieces.the_piece_address(inside) is not None:
+            try:
+                body = pieces.built_bytes_behind(store, inside)
+            except pieces.TemporarilyUnanswerable:
+                self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+        elif target.is_file():
+            self._send_file(target)
+            return
+        else:
+            body = None
+        if body is None:
+            self._send_empty(HTTPStatus.NOT_FOUND)
+        else:
+            self._send_bytes(body)
 
     def _a_governed_piece_behind(self, target: Path) -> tuple[Path, str] | None:
         """The (store, piece address) when this FILE is a governed chunk."""
@@ -1476,6 +1511,9 @@ def make_server(
             last_built["config"] = built
             return built
 
+    from . import readable
+
+    @readable.with_readers
     def build_config(
         live_document: dict,
         live_bindings,
@@ -1496,6 +1534,10 @@ def make_server(
 
             group = groups_named[root_number]
             store_path = root / name
+            if name.endswith(".zmartview.zarr"):
+                store_path = readable.pinned(store_path) or store_path
+                if not (store_path / "publication.json").exists():
+                    continue
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
             store_paths[address] = store_path
             source_attrs = _read_attrs_at(store_path)

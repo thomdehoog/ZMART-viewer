@@ -112,7 +112,7 @@ class ViewSet:
             for output in self.outputs.values():
                 output.close()
 
-    def publish(self, folder, versions, canvas, *, composition, bake=True):
+    def publish(self, folder, versions, canvas, *, composition, bake=True, on_commit=None):
         """Serialize producer snapshots; config/status reads never acquire this lock."""
         folder = Path(folder).resolve()
         source_key = sha256(os.path.normcase(str(folder)).encode()).hexdigest()
@@ -124,7 +124,8 @@ class ViewSet:
         ):
             self._check_source_owner(folder)
             return self._publish(
-                folder, versions, canvas, composition=composition, bake=bake, staging=staging
+                folder, versions, canvas, composition=composition, bake=bake, staging=staging,
+                on_commit=on_commit,
             )
 
     def _check_source_owner(self, folder):
@@ -170,7 +171,7 @@ class ViewSet:
                 history[name] = max(history.get(name, 0), revision)
         return history
 
-    def _publish(self, folder, versions, canvas, *, composition, bake, staging):
+    def _publish(self, folder, versions, canvas, *, composition, bake, staging, on_commit=None):
         folder = Path(folder).resolve()
         validate_canvas(canvas)
         history = self._committed_history(folder, canvas)
@@ -301,4 +302,6 @@ class ViewSet:
             ]
             for commit in commits:
                 commit()
+                if on_commit is not None:
+                    on_commit()
         return self.revision
