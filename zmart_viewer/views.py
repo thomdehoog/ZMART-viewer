@@ -9,9 +9,10 @@ from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 
-from .compose import MEAN_REDUCTION, _read_one_tile
+from .acquired import canonical_regions
+from .compose import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, _read_one_tile
 from .library import _read_attrs_at
-from .projections import METHODS, write_projection
+from .projections import METHODS, PROJECTION_RECIPE, write_projection
 from .published import PublishedTransfer
 
 
@@ -61,6 +62,7 @@ class ViewSet:
         self.keys = keys
         self.source_folder = None
         self._references = {}
+        self._original_revisions = {}
         for key, output in zip(keys, self.outputs.values()):
             pending_path = output._shown / "pending.json"
             pending = (
@@ -79,6 +81,20 @@ class ViewSet:
             if snapshot.exists():
                 output._read_snapshot()
                 original = output._state["composition"]["originals"]
+                revisions = output._state["composition"].get("original_revisions")
+                if revisions is None:
+                    # Earlier 0.3 previews kept original identity only in each
+                    # immutable projection's provenance.
+                    revisions = dict(output._state["versions"])
+                    if key in METHODS:
+                        revisions = {}
+                        for tile in output._state["mosaic"]["tiles"]:
+                            recipe = _read_attrs_at(Path(tile["store"]))["zmart_projection"]
+                            revisions[Path(recipe["source"]).name] = recipe["revision"]
+                for name, revision in revisions.items():
+                    self._original_revisions[name] = max(
+                        revision, self._original_revisions.get(name, 0)
+                    )
             if original is not None:
                 original = Path(original).resolve()
                 if self.source_folder is not None and self.source_folder != original:
@@ -120,10 +136,22 @@ class ViewSet:
             raise ValueError("A view set cannot change its original source folder")
         if not isinstance(composition, dict) or not {"regions", "order"} <= composition.keys():
             raise ValueError("Named views require authoritative coverage and source order")
+        composition = deepcopy(composition)
+        if isinstance(composition["regions"], dict):
+            composition["regions"] = {
+                name: canonical_regions(regions) for name, regions in composition["regions"].items()
+            }
         if set(composition["order"]) != set(versions) or len(composition["order"]) != len(versions):
             raise ValueError("View order must name every completed position once")
         if any(Path(name).name != name or not name.endswith(".ome.zarr") for name in versions):
             raise ValueError("View inputs must be separate position OME-Zarr stores")
+        if any(
+            type(revision) is not int or revision < self._original_revisions.get(name, 0)
+            for name, revision in versions.items()
+        ):
+            raise ValueError(
+                "Original source revisions must be nonnegative integers and cannot regress"
+            )
         self.source_folder = folder
         references = dict(composition.get("z_references", {}))
         for name in versions:
@@ -146,6 +174,10 @@ class ViewSet:
         for key, output in zip(self.keys, self.outputs.values()):
             snapshot = deepcopy(composition)
             snapshot["originals"] = str(folder)
+            snapshot["original_revisions"] = {**self._original_revisions, **versions}
+            if snapshot.get("pyramid_reduction") is None:
+                # This specifies output arithmetic, not the input pyramids' recipe.
+                snapshot["pyramid_reduction"] = MEAN_FROM_ORIGINALS
             snapshot["z_references"] = references
             snapshot["view"] = self._identity(key)
             source = self.source_folder
@@ -156,7 +188,10 @@ class ViewSet:
                 for name, revision in versions.items():
                     regions = snapshot["regions"]
                     regions = regions if regions == "complete" else regions[name]
-                    recipe = json.dumps([str(folder / name), revision, regions], sort_keys=True)
+                    recipe = json.dumps(
+                        [str(folder / name), revision, regions, PROJECTION_RECIPE, MEAN_REDUCTION],
+                        sort_keys=True,
+                    )
                     suffix = sha256(recipe.encode()).hexdigest()[:20]
                     derived = names[name] = f"{name.removesuffix('.ome.zarr')}_r{suffix}.ome.zarr"
                     store = write_projection(
@@ -181,4 +216,5 @@ class ViewSet:
             ]
             for commit in commits:
                 commit()
+                self._original_revisions.update(versions)
         return self.revision

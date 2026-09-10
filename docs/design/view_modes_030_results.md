@@ -7,6 +7,10 @@ Baseline warmup/stale-marker fix: `aaf77c9`.
 Scope is the viewer only. No operator integration, dependency-pin update, rig
 deployment, main merge, release tag or package-registry publication was performed.
 
+The later [review corrections and reruns](../reviews/viewer_030_review_fixes.md)
+supersede the merge-readiness assessment and wheel evidence below. This document
+retains the original increment's measurements for comparison.
+
 ## Implemented
 
 - Named Slice (default), Top and per-position Min/Max/Sum, accepting any subset.

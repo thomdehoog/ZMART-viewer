@@ -677,7 +677,9 @@ def _what_it_was_built_from(store: Path) -> dict | None:
     held = json.loads(described.read_text(encoding="utf-8"))
     ours = (held.get("attributes") or {}).get(OURS)
 
-    if isinstance(ours, dict) and any(ours.get(key) for key in ("built_from", "governed_from", "published_from")):
+    if isinstance(ours, dict) and any(
+        ours.get(key) for key in ("built_from", "governed_from", "published_from")
+    ):
         return ours
 
     return None
@@ -868,12 +870,33 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
     try:
         may_read_bake = not isinstance(held, PublishedTransfer) or held.bake
         baked = where.joinpath(*inside.strip("/").split("/"))
-        # Legacy dense pictures can declare additional baked levels beyond the
-        # original pyramid. Only Top needs to resolve its logical Z aliases first.
-        if composer.mosaic.sampling != "top" and may_read_bake and baked.is_file():
-            return baked.read_bytes()
-
         if not 0 <= level < composer.mosaic.levels:
+            # Legacy dense pictures may extend their pyramid when baking. Files
+            # alone are not authority: the current metadata must declare the key.
+            if (
+                level >= composer.mosaic.levels
+                and not composer.mosaic.has_acquired_regions
+                and may_read_bake
+            ):
+                root = json.loads((where / "zarr.json").read_text(encoding="utf-8"))
+                datasets = root["attributes"]["ome"]["multiscales"][0]["datasets"]
+                if any(item["path"] == str(level) for item in datasets):
+                    metadata = json.loads(
+                        (where / str(level) / "zarr.json").read_text(encoding="utf-8")
+                    )
+                    shape = metadata["shape"]
+                    chunks = metadata["chunk_grid"]["configuration"]["chunk_shape"]
+                    at = (moment, channel, plane, row, column)[-len(shape) :]
+                    if (
+                        (len(shape) == 5 or moment == 0)
+                        and (len(shape) >= 4 or channel == 0)
+                        and all(
+                            0 <= index < (size + chunk - 1) // chunk
+                            for index, size, chunk in zip(at, shape, chunks)
+                        )
+                        and baked.is_file()
+                    ):
+                        return baked.read_bytes()
             return None
 
         deep, down, across = composer.grid(level)
@@ -915,9 +938,7 @@ def a_sample_behind(store: Path, channel: int = 0):
         return None
 
     try:
-        composer = (
-            held.composer() if isinstance(held, ComposedPicture) else held
-        )
+        composer = held.composer() if isinstance(held, ComposedPicture) else held
         level = composer.mosaic.levels - 1
         deep, down, across = composer.grid(level)
         moments, channels = composer.mosaic.frame_room
@@ -955,9 +976,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
         return None
 
     try:
-        composer = (
-            held.composer() if isinstance(held, ComposedPicture) else held
-        )
+        composer = held.composer() if isinstance(held, ComposedPicture) else held
         depth, height, width = composer.mosaic.shape(level)
         moments, channels = composer.mosaic.frame_room
 
@@ -1028,7 +1047,9 @@ def forget_composer(store: Path) -> None:
 def catch_up_governed_runs() -> None:
     """Nudge every opened governed picture after an acquisition announcement."""
     with _guard:
-        governed = [held for _mark, held in _composers.values() if isinstance(held, ComposedPicture)]
+        governed = [
+            held for _mark, held in _composers.values() if isinstance(held, ComposedPicture)
+        ]
 
     for held in governed:
         held.request_catch_up()

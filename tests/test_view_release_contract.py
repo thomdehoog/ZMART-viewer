@@ -125,7 +125,6 @@ def test_partial_publication_notifies_and_retries_without_blocking_config(tmp_pa
         status, body = _request(address, "/api/stores/open", payload)
         assert status == 200, body
         for options in (
-            {"acquisition": "wrong"},
             {"modes": ["slice"]},
             {"projection_path": str(tmp_path / "elsewhere")},
         ):

@@ -246,6 +246,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       type: isMask ? "segmentation" : "image",
       name: engineName(spec) + (spec.depth ? `__${spec.depth}` : ""),
       persistentFlat: spec.depth === "flat" || spec.view?.type === "projection",
+      boundaryHeld: spec.view?.type === "top",
       // A row may be drawn from several stores -- several positions of the same
       // acquisition type. The engine takes the list and places each one using the
       // stage position recorded inside it.
@@ -358,6 +359,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       sourceGeometryRevisions: layer.sourceGeometryRevisions,
       frameCounts: layer.frameCounts, localPosition: layer.localPosition,
       persistentFlat: layer.persistentFlat,
+      boundaryHeld: layer.boundaryHeld,
       visible: layer.visible, opacity: 1,
       blend: all[index].spec.depth || all[index].spec.view ? "default" : "additive",
       shader: "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
@@ -365,13 +367,14 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     }];
   });
   const result = [], handled = new Set();
+  const block = spec => JSON.stringify([spec.group || "", spec.view?.acquisition]);
   for (let i = 0; i < layers.length; ++i) {
     const spec = all[i].spec;
-    const group = spec.group || "";
+    const group = block(spec);
     if (handled.has(group)) continue;
     handled.add(group);
     for (const depth of [undefined, "flat", "stack"]) {
-      const selected = layers.filter((_, j) => (all[j].spec.group || "") === group
+      const selected = layers.filter((_, j) => block(all[j].spec) === group
         && all[j].spec.depth === depth);
       const names = new Set(selected.map(layer => `__coverage__${layer.name}`));
       result.push(...coverage.filter(layer => names.has(layer.name)), ...selected);

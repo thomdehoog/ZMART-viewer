@@ -29,6 +29,12 @@ OURS = "zmart"
 LEGACY_MEAN_REDUCTION = "mean-xy2-edge-round"
 MEAN_REDUCTION = "mean-xy2-edge-integer-round"
 MEAN_CROP_REDUCTION = "mean-xy2-crop-f32-rint-int"
+MEAN_FROM_ORIGINALS = "mean-xy2-edge-from-originals"
+
+
+def uses_legacy_mean(reduction):
+    """Unversioned pictures retain their historical rounding of float means."""
+    return reduction in (None, LEGACY_MEAN_REDUCTION)
 
 
 @dataclass
@@ -164,6 +170,7 @@ class Mosaic:
             MEAN_REDUCTION,
             LEGACY_MEAN_REDUCTION,
             MEAN_CROP_REDUCTION,
+            MEAN_FROM_ORIGINALS,
         ):
             raise ValueError("Unsupported acquired pyramid reduction")
         if xy_origin not in ("center", "corner"):
@@ -1435,7 +1442,7 @@ class Composer:
                         source[z - low_z, y : y + self.piece, x : x + self.piece] = block[
                             : min(self.piece, h - y), : min(self.piece, w - x)
                         ]
-        reduced = halve_xy(source, legacy=self.mosaic.pyramid_reduction == LEGACY_MEAN_REDUCTION)
+        reduced = halve_xy(source, legacy=uses_legacy_mean(self.mosaic.pyramid_reduction))
         slab = np.zeros((high_z - low_z, self.piece, self.piece), dtype=self.mosaic.dtype)
         slab[:, : reduced.shape[1], : reduced.shape[2]] = reduced
         return slab
