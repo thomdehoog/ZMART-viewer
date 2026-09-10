@@ -5,6 +5,55 @@ import subprocess
 from pathlib import Path
 
 
+def test_geometry_refresh_waits_for_initial_binding_and_cancels_on_disposal():
+    root = Path(__file__).resolve().parents[1] / "app/page"
+    result = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            r"""
+        import assert from 'node:assert/strict';
+        import {RefCounted} from 'neuroglancer/unstable/util/disposable.js';
+        import {NullarySignal} from 'neuroglancer/unstable/util/signal.js';
+        import {refreshGeometry, geometryRefreshPending} from '../../zmart_viewer/embedding.js';
+        for (const dispose of [false, true]) {
+          const source = new RefCounted();
+          source.changed = new NullarySignal();
+          source.spec = {url:'http://test/view/|zarr3:'};
+          source.layer = {dataSources:[source]};
+          let refreshed = 0;
+          source.refreshMetadata = async () => {
+            assert.ok(source.loadState);
+            refreshed++;
+            return true;
+          };
+          const manager = {memoize:{map:new Map()}};
+          const pending = refreshGeometry(source, manager, new Set(), new Set());
+          assert.equal(refreshed, 0);
+          assert.equal(geometryRefreshPending(source), true);
+          if (dispose) {
+            source.layer.dataSources = [];
+            source.dispose();
+          } else {
+            source.loadState = {};
+            source.changed.dispatch();
+          }
+          await pending;
+          assert.equal(refreshed, dispose ? 0 : 1);
+          assert.equal(geometryRefreshPending(source), false);
+          if (!dispose) source.dispose();
+        }
+        """,
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_top_bounds_use_transforms_when_global_depth_units_change():
     root = Path(__file__).resolve().parents[1] / "app/page"
     result = subprocess.run(
