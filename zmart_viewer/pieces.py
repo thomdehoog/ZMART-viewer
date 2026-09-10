@@ -863,14 +863,15 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
                 f"the governed run behind {store} could not derive"
             ) from problem
 
-    baked = Path(store).joinpath(*inside.strip("/").split("/"))
-
-    if baked.is_file() and (not isinstance(held, PublishedTransfer) or held.bake):
-        return baked.read_bytes()
-
+    if composer is None:
+        composer = held
     try:
-        if composer is None:
-            composer = held
+        may_read_bake = not isinstance(held, PublishedTransfer) or held.bake
+        baked = where.joinpath(*inside.strip("/").split("/"))
+        # Legacy dense pictures can declare additional baked levels beyond the
+        # original pyramid. Only Top needs to resolve its logical Z aliases first.
+        if composer.mosaic.sampling != "top" and may_read_bake and baked.is_file():
+            return baked.read_bytes()
 
         if not 0 <= level < composer.mosaic.levels:
             return None
@@ -886,6 +887,13 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
             and 0 <= channel < channels
         ):
             return None
+
+        canonical = composer.canonical_plane(level, plane, row, column, moment, channel)
+        path_parts = inside.strip("/").split("/")
+        path_parts[-3] = str(canonical)
+        baked = Path(store).joinpath(*path_parts)
+        if baked.is_file() and may_read_bake:
+            return baked.read_bytes()
 
         return composer.bytes_for(level, plane, row, column, moment, channel)
     except Exception as problem:

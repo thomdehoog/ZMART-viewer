@@ -6,6 +6,12 @@ import { join } from "node:path";
 export function growthPatches(lib) {
   return [
     {
+      file: join(lib, "layer", "layer_data_source.js"),
+      marker: "  stableStringify,",
+      anchor: "  verifyBoolean,",
+      replacement: "  stableStringify,\n  verifyBoolean,",
+    },
+    {
       file: join(lib, "datasource", "zarr", "frontend.js"),
       marker: "  stableStringify,",
       anchor: "  parseQueryStringParameters,",
@@ -13,14 +19,18 @@ export function growthPatches(lib) {
     },
     {
       file: join(lib, "layer", "layer_data_source.js"),
-      marker: "async refreshMetadata()",
+      marker: "async refreshMetadata(refreshed",
       anchor: "  set spec(spec) {\n    const { layer } = this;",
-      replacement: `  async refreshMetadata() {
+      replacement: `  async refreshMetadata(refreshed = new Set()) {
     this.metadataRefresh?.abort();
-    const request = this.metadataRefresh = new AbortController();
     const held = this.loadState_;
     const owner = this.refCounted_;
-    if (!held || held.error) { this.spec = { ...this.spec }; return; }
+    if (!held || held.error) {
+      this.metadataRefresh = void 0;
+      this.spec = { ...this.spec };
+      return;
+    }
+    const request = this.metadataRefresh = new AbortController();
     const cancel = () => request.abort();
     owner.registerDisposer(cancel);
     const spec = this.spec;
@@ -38,14 +48,33 @@ export function growthPatches(lib) {
         const volume = old.subsourceEntry.subsource.volume;
         return volume ? !volume.canExtend?.(next.subsource.volume) : old.subsourceEntry.id !== "bounds";
       })) {
+        const reusable = new Set();
+        for (const [old, next] of pairs) {
+          for (const sources of old.subsourceEntry.subsource.volume?.sourceCache?.values() ?? []) {
+            for (const { chunkSource } of sources.flat()) {
+              const metadata = next?.subsource.volume?.multiscale.scales.find(
+                scale => scale.url === chunkSource.parameters.url)?.metadata;
+              if (metadata && stableStringify(metadata) === stableStringify(chunkSource.parameters.metadata)) {
+                reusable.add(chunkSource);
+              }
+            }
+          }
+        }
         this.spec = { ...this.spec };
-        return;
+        // Detach old render consumers before invalidating any reusable cache.
+        // Otherwise they request the replacement pixels a second time.
+        for (const chunkSource of reusable) {
+          if (chunkSource.wasDisposed || refreshed.has(chunkSource)) continue;
+          refreshed.add(chunkSource);
+          chunkSource.invalidateCache();
+        }
+        return true;
       }
       const transform = new WatchableCoordinateSpaceTransform(fresh.modelTransform);
       transform.spec = held.transform.spec;
       for (const [old, next] of pairs) {
         const volume = old.subsourceEntry.subsource.volume;
-        if (volume) volume.extendBounds(next.subsource.volume);
+        if (volume) volume.extendBounds(next.subsource.volume, refreshed);
         else old.subsourceEntry = next;
       }
       held.transform.defaultTransform = transform.defaultTransform;
@@ -59,10 +88,12 @@ export function growthPatches(lib) {
       }
       this.messages.clearMessages();
       this.changed.dispatch();
+      return true;
     } catch (error) {
       if (request.signal.aborted || this.loadState_ !== held || owner.wasDisposed) return;
       this.messages.addMessage({ severity: MessageSeverity.error, message: formatErrorMessage(error) });
       this.changed.dispatch();
+      return false;
     } finally {
       owner.unregisterDisposer(cancel);
       if (this.metadataRefresh === request) this.metadataRefresh = void 0;
@@ -74,7 +105,7 @@ export function growthPatches(lib) {
     },
     {
       file: join(lib, "datasource", "zarr", "frontend.js"),
-      marker: "  sourceCache = new Map();",
+      marker: "extendBounds(other, refreshed)",
       anchor: "  volumeType;\n  get dataType() {",
       replacement: `  volumeType;
   sourceCache = new Map();
@@ -89,7 +120,7 @@ export function growthPatches(lib) {
       this.multiscale.scales.every((scale, level) => scale.metadata.shape.every(
         (size, dimension) => size <= other.multiscale.scales[level].metadata.shape[dimension]));
   }
-  extendBounds(other) {
+  extendBounds(other, refreshed) {
     const next = other.multiscale;
     for (const sources of this.sourceCache.values()) {
       for (const { chunkSource: source } of sources.flat()) {
@@ -97,11 +128,12 @@ export function growthPatches(lib) {
         const { spec } = source;
         const permutation = metadata.codecs.layoutInfo[0].physicalToLogicalDimension;
         const upper = Float32Array.from(spec.upperVoxelBound, (_, i) => metadata.shape[permutation[spec.rank - 1 - i]]);
-        if (upper.every((size, i) => size === spec.upperVoxelBound[i])) continue;
         spec.upperVoxelBound.set(upper);
         for (let i = 0; i < spec.rank; i++) spec.upperChunkBound[i] = Math.ceil(upper[i] / spec.chunkDataSize[i]);
         source.parameters.metadata = metadata;
-        source.rpc.invoke("zarr/extendBounds", { id: source.rpcId, upper, shape: metadata.shape });
+        const invalidate = !refreshed.has(source);
+        refreshed.add(source);
+        source.rpc.invoke("zarr/extendBounds", { id: source.rpcId, upper, shape: metadata.shape, invalidate });
       }
     }
     this.multiscale = next;
@@ -144,7 +176,7 @@ function getJsonResource`,
       file: join(lib, "datasource", "zarr", "backend.js"),
       marker: 'registerRPC("zarr/extendBounds"',
       anchor: "export let ZarrVolumeChunkSource = class",
-      replacement: `registerRPC("zarr/extendBounds", function({ id, upper, shape }) {
+      replacement: `registerRPC("zarr/extendBounds", function({ id, upper, shape, invalidate }) {
   const source = this.get(id);
   if (!source) return; // The owner may have closed while this update was in flight.
   const { spec } = source;
@@ -152,7 +184,7 @@ function getJsonResource`,
   for (let i = 0; i < spec.rank; i++) spec.upperChunkBound[i] = Math.ceil(upper[i] / spec.chunkDataSize[i]);
   source.parameters.metadata.shape = shape;
   // A partially filled boundary chunk may now contain additional frames.
-  source.chunkManager.queueManager.invalidateSourceCache(source);
+  if (invalidate) source.chunkManager.queueManager.invalidateSourceCache(source);
 });
 export let ZarrVolumeChunkSource = class`,
     },

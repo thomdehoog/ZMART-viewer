@@ -3,6 +3,10 @@
 Date: 2026-09-08
 Status: Design note for later work; not an implementation request or release claim.
 
+Follow-up, 2026-09-09: [view modes](view_modes.md) records the agreed semantics;
+[isolated implementation plan](view_modes_implementation.md) scopes Top, Slice
+and Projection data work without 3D or changes to the microscope fix branches.
+
 ## Intent
 
 Use the same rendering policy throughout overview, focus and target acquisition. Workflow steps should not decide how the viewer composes images. Different storage layouts may require different readers, but those differences should remain behind a shared viewer/storage interface.

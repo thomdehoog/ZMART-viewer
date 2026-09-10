@@ -26,7 +26,8 @@ from .acquired import AcquiredRegion
 IMAGE_SUFFIX = ".ome.zarr"
 
 OURS = "zmart"
-MEAN_REDUCTION = "mean-xy2-edge-round"
+LEGACY_MEAN_REDUCTION = "mean-xy2-edge-round"
+MEAN_REDUCTION = "mean-xy2-edge-integer-round"
 MEAN_CROP_REDUCTION = "mean-xy2-crop-f32-rint-int"
 
 
@@ -64,6 +65,7 @@ class Tile:
     axes: tuple[str, ...] = ()
     moments: frozenset[int] | None = None
     acquired_regions: tuple[AcquiredRegion, ...] | None = None
+    time_calibration: tuple[float, float, str] = (1.0, 0.0, "second")
 
     def footprint(self, level: int, at: tuple[int, int, int]) -> tuple[int, int, int, int]:
         """The box this tile occupies across the specimen once it is turned."""
@@ -113,6 +115,11 @@ class Mosaic:
     extent_um: tuple[float, float, float] | None = None
     pyramid_reduction: str | None = None
     xy_origin: str = "center"
+    sampling: str = "slice"
+
+    def __post_init__(self):
+        if self.sampling not in ("slice", "top"):
+            raise ValueError("Sampling must be slice or top")
 
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
         default_factory=dict, repr=False
@@ -152,7 +159,12 @@ class Mosaic:
             raise ValueError("Acquired sources must have unique names")
         if not self.averaged:
             raise ValueError("Acquired composition requires a mean pyramid")
-        if pyramid_reduction not in (None, MEAN_REDUCTION, MEAN_CROP_REDUCTION):
+        if pyramid_reduction not in (
+            None,
+            MEAN_REDUCTION,
+            LEGACY_MEAN_REDUCTION,
+            MEAN_CROP_REDUCTION,
+        ):
             raise ValueError("Unsupported acquired pyramid reduction")
         if xy_origin not in ("center", "corner"):
             raise ValueError("XY origin must be center or corner")
@@ -170,10 +182,7 @@ class Mosaic:
                     "Acquired composition requires unrotated ZYX, CZYX or TCZYX sources"
                 )
             base = tile.copies[0]
-            if (
-                base.dtype != self.dtype
-                or base.outer_shape != self.tiles[0].copies[0].outer_shape
-            ):
+            if base.dtype != self.dtype or base.outer_shape != self.tiles[0].copies[0].outer_shape:
                 raise ValueError("Acquired sources must agree on dtype and T/C dimensions")
             for level, copy in enumerate(tile.copies[: self.levels]):
                 expected = (
@@ -211,7 +220,9 @@ class Mosaic:
                 ):
                     raise ValueError("Acquired region extends outside its source")
                 low, high = region.bounds(tuple(round(n) for n in offsets))
-                if any(a < 0 or b > size for a, b, size in zip(low, high, self.shape(0), strict=True)):
+                if any(
+                    a < 0 or b > size for a, b, size in zip(low, high, self.shape(0), strict=True)
+                ):
                     raise ValueError("Acquired region extends outside the aggregate canvas")
             made.append(replace(tile, acquired_regions=acquired))
         return Mosaic(
@@ -225,6 +236,7 @@ class Mosaic:
             self.extent_um,
             pyramid_reduction=pyramid_reduction,
             xy_origin=xy_origin,
+            sampling=self.sampling,
         )
 
     @property
@@ -434,7 +446,25 @@ def _read_one_tile(store: Path) -> Tile:
 
     ours = described.get(OURS)
     turned = float((ours or {}).get("turned_radians") or 0.0)
-    return Tile(name=store.name, store=store, copies=copies, axes=axes, turned=turned)
+    time_scale, time_origin, time_unit = 1.0, 0.0, "second"
+    if "t" in axes:
+        i = axes.index("t")
+        time_unit = multiscale["axes"][i].get("unit", "second")
+        for transform in datasets[0].get("coordinateTransformations", []) + multiscale.get(
+            "coordinateTransformations", []
+        ):
+            if transform["type"] == "scale":
+                time_scale *= transform["scale"][i]
+            elif transform["type"] == "translation":
+                time_origin += transform["translation"][i]
+    return Tile(
+        name=store.name,
+        store=store,
+        copies=copies,
+        axes=axes,
+        turned=turned,
+        time_calibration=(time_scale, time_origin, time_unit),
+    )
 
 
 def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
@@ -719,6 +749,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         "axes": list(mosaic.axes),
         "dtype": mosaic.dtype,
         "corner_um": list(mosaic.corner_um),
+        "sampling": mosaic.sampling,
         **({"extent_um": list(mosaic.extent_um)} if mosaic.extent_um is not None else {}),
         **({"averaged": True} if mosaic.averaged else {}),
         **({"pyramid_reduction": mosaic.pyramid_reduction} if mosaic.pyramid_reduction else {}),
@@ -732,6 +763,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
                 "store": tile.store.as_posix(),
                 "turned": tile.turned,
                 "axes": list(tile.axes),
+                "time_calibration": list(tile.time_calibration),
                 **({"moments": sorted(tile.moments)} if tile.moments is not None else {}),
                 **(
                     {"acquired_regions": [r.as_written() for r in tile.acquired_regions]}
@@ -764,6 +796,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
             store=Path(one["store"]),
             turned=float(one.get("turned", 0.0)),
             axes=tuple(one["axes"]),
+            time_calibration=tuple(one.get("time_calibration", (1.0, 0.0, "second"))),
             moments=frozenset(one["moments"]) if "moments" in one else None,
             acquired_regions=tuple(AcquiredRegion.from_written(r) for r in one["acquired_regions"])
             if "acquired_regions" in one
@@ -792,6 +825,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
         omero=held.get("omero"),
         extent_um=tuple(held["extent_um"]) if "extent_um" in held else None,
         averaged=bool(held.get("averaged", False)),
+        sampling=held.get("sampling", "slice"),
     )
     if mosaic.has_acquired_regions:
         return mosaic.with_acquired_regions(
@@ -885,16 +919,29 @@ def _build_in_worker(
     return _WORKING_ON._slab_for(level, plane, row, column, moment, channel)
 
 
-def halve_xy(values: np.ndarray) -> np.ndarray:
+def halve_xy(values: np.ndarray, *, legacy=False) -> np.ndarray:
     """The shared mean-pyramid reducer: edge padding and integer rounding."""
     h, w = values.shape[-2:]
     even = np.pad(values, [(0, 0)] * (values.ndim - 2) + [(0, h % 2), (0, w % 2)], mode="edge")
-    return (
-        even.reshape(*values.shape[:-2], (h + 1) // 2, 2, (w + 1) // 2, 2)
-        .mean(axis=(-3, -1))
-        .round()
-        .astype(values.dtype)
-    )
+    blocks = even.reshape(*values.shape[:-2], (h + 1) // 2, 2, (w + 1) // 2, 2)
+    if legacy:
+        return blocks.mean(axis=(-3, -1)).round().astype(values.dtype)
+    if values.dtype.kind in "iu" and values.dtype.itemsize == 8:
+        # Divide before adding: even four uint64 maxima cannot overflow.
+        quotient = (blocks // 4).sum(axis=(-3, -1), dtype=values.dtype)
+        remainder = (blocks % 4).sum(axis=(-3, -1), dtype="uint8")
+        quotient += (remainder // 4).astype(values.dtype)
+        residual = remainder % 4
+        return quotient + ((residual > 2) | ((residual == 2) & (quotient % 2 != 0)))
+    mean = blocks.mean(axis=(-3, -1), dtype="float64")
+    return (np.rint(mean) if values.dtype.kind in "iu" else mean).astype(values.dtype)
+
+
+def selected_plane(plane: int, start: int, length: int, *, sampling: str) -> int | None:
+    """Source-global plane selected by a view, before acquired-region masking."""
+    if sampling == "top":
+        return min(max(plane, start), start + length - 1)
+    return plane if start <= plane < start + length else None
 
 
 def _acquired_bounds(tile, at, moment, channel, level=0):
@@ -1093,6 +1140,8 @@ class Composer:
 
     def slab_depth(self, level: int) -> int:
         """How many planes one of the tiles' files holds at this resolution."""
+        if self.mosaic.sampling == "top":
+            return 1  # Original multi-plane blocks are still decoded/cached once.
         declared = getattr(self.mosaic, "slab_depths", None)
 
         if declared is not None:
@@ -1238,7 +1287,7 @@ class Composer:
         or regions need compose-before-reduce, including odd-sized tile edges.
         """
         reduction = self.mosaic.pyramid_reduction
-        if reduction not in (MEAN_REDUCTION, MEAN_CROP_REDUCTION):
+        if reduction not in (MEAN_REDUCTION, LEGACY_MEAN_REDUCTION, MEAN_CROP_REDUCTION):
             return False
         factor = 2**level
         for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
@@ -1319,6 +1368,11 @@ class Composer:
             )
             held = copy.shape
 
+            shift_z = 0
+            if self.mosaic.sampling == "top":
+                chosen = selected_plane(low_z, at[0], held[0], sampling="top")
+                shift_z = low_z - chosen
+
             bounds = (
                 _acquired_bounds(tile, at, moment, channel, level)
                 if self._acquired
@@ -1326,6 +1380,13 @@ class Composer:
             )
             if self._acquired:
                 at = (at[0], at[1] // 2**level, at[2] // 2**level)
+
+            if shift_z:
+                bounds = [
+                    ((low[0] + shift_z, *low[1:]), (high[0] + shift_z, *high[1:]))
+                    for low, high in bounds
+                ]
+                at = (at[0] + shift_z, *at[1:])
 
             if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
                 continue
@@ -1374,7 +1435,7 @@ class Composer:
                         source[z - low_z, y : y + self.piece, x : x + self.piece] = block[
                             : min(self.piece, h - y), : min(self.piece, w - x)
                         ]
-        reduced = halve_xy(source)
+        reduced = halve_xy(source, legacy=self.mosaic.pyramid_reduction == LEGACY_MEAN_REDUCTION)
         slab = np.zeros((high_z - low_z, self.piece, self.piece), dtype=self.mosaic.dtype)
         slab[:, : reduced.shape[1], : reduced.shape[2]] = reduced
         return slab
@@ -1388,8 +1449,13 @@ class Composer:
             for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
                 if not _tile_has_the_frame(tile, 0, moment, channel):
                     continue
+                chosen = selected_plane(
+                    plane, at[0], tile.copies[0].shape[0], sampling=self.mosaic.sampling
+                )
+                if chosen is None:
+                    continue
                 for low, high in _acquired_bounds(tile, at, moment, channel):
-                    if not low[0] <= plane < high[0]:
+                    if not low[0] <= chosen < high[0]:
                         continue
                     y0, y1 = (
                         max(top, low[1] // factor),
@@ -1419,7 +1485,7 @@ class Composer:
             size = tile.copies[native].shape
             if not _tile_has_the_frame(tile, native, moment, channel):
                 continue
-            if not at[0] <= plane < at[0] + size[0]:
+            if selected_plane(plane, at[0], size[0], sampling=self.mosaic.sampling) is None:
                 continue
             y0, y1 = (
                 max(top, at[1] // factor),
@@ -1442,6 +1508,7 @@ class Composer:
         channel: int = 0,
     ) -> np.ndarray:
         """The slab holding this plane, built if it is not already to hand."""
+        plane = self.canonical_plane(level, plane, row, column, moment, channel)
         depth = self.slab_depth(level)
         key = (moment, channel, level, (plane // depth) * depth, row, column)
         pinned = self._pinning and level in self.pinned_levels
@@ -1479,6 +1546,24 @@ class Composer:
 
         return built
 
+    def canonical_plane(self, level, plane, row, column, moment=0, channel=0):
+        """First plane of this constant Top sampling run; no pixel comparison."""
+        if self.mosaic.sampling != "top":
+            return plane
+        first = 0
+        for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
+            if not _tile_has_the_frame(tile, 0, moment, channel):
+                continue
+            depth = tile.copies[0].shape[0]
+            if depth == 1:
+                continue
+            end = at[0] + depth - 1
+            if at[0] < plane < end:
+                return plane
+            if plane >= end:
+                first = max(first, end)
+        return first
+
     @property
     def pinned_levels(self) -> frozenset[int]:
         """The levels warmed ahead of asking and never let go."""
@@ -1510,6 +1595,17 @@ class Composer:
         if self._warm_store is not None and not self._blocks_prefilled:
             return False
 
+        if self.mosaic.sampling == "top":
+            wanted = {
+                (0, 0, level, self.canonical_plane(level, z, row, col), row, col)
+                for level in self.pinned_levels
+                for z in range(self.grid(level)[0])
+                for row in range(self.grid(level)[1])
+                for col in range(self.grid(level)[2])
+            }
+            with self._guard:
+                return wanted <= self._pinned.keys()
+
         wanted = 0
 
         for level in self.pinned_levels:
@@ -1523,7 +1619,7 @@ class Composer:
     def warm_the_coarse_levels(self, stop: threading.Event | None = None) -> None:
         """Build every slab of every pinned level, coarsest first."""
         for level in sorted(self.pinned_levels, reverse=True):
-            baked = self._the_baked_level(level)
+            baked = self._the_baked_level(level) if self.mosaic.sampling == "slice" else None
             depth = self.slab_depth(level)
             deep, down, across = self.grid(level)
             planes = self.mosaic.shape(level)[0]
@@ -1543,7 +1639,7 @@ class Composer:
                             self._a_slab_read_back(baked, level, low_z, row, column)
 
         if self._warm_store is not None:
-            for level in ([0] if self._acquired else sorted(self.pinned_levels, reverse=True)):
+            for level in [0] if self._acquired else sorted(self.pinned_levels, reverse=True):
                 for tile, _ in self.mosaic.placements(level):
                     copy = tile.copies[level]
                     blocks = [
@@ -1770,6 +1866,9 @@ class Composer:
         """The built picture described as an ordinary OME-Zarr multiscale image."""
         base = self.mosaic.voxel_um(0)
         grown = self.mosaic.frame_room != (1, 1)
+        time_scale, time_origin, time_unit = (
+            self.mosaic.tiles[0].time_calibration if self.mosaic.tiles else (1.0, 0.0, "second")
+        )
         datasets = []
 
         for level in range(self.mosaic.levels):
@@ -1788,11 +1887,11 @@ class Composer:
                     "coordinateTransformations": [
                         {
                             "type": "scale",
-                            "scale": ([1.0, 1.0] if grown else []) + list(voxel),
+                            "scale": ([time_scale, 1.0] if grown else []) + list(voxel),
                         },
                         {
                             "type": "translation",
-                            "translation": ([0.0, 0.0] if grown else []) + at,
+                            "translation": ([time_origin, 0.0] if grown else []) + at,
                         },
                     ],
                 }
@@ -1800,7 +1899,7 @@ class Composer:
 
         axes = (
             [
-                {"name": "t", "type": "time", "unit": "second"},
+                {"name": "t", "type": "time", "unit": time_unit},
                 {"name": "c", "type": "channel"},
             ]
             if grown

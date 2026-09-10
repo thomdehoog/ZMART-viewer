@@ -551,6 +551,43 @@ function revisionsFor(spec) {
   return sourceRevisionsFor(sourceList(spec), spec.sourceIds, spec.sourceRevisions);
 }
 
+const geometrySeen = new WeakMap();
+const pendingGeometry = new WeakMap();
+function geometryFor(spec) {
+  return new Map(sourceList(spec).map((url, i) => [url.split("|")[0], spec.sourceGeometryRevisions?.[i]]));
+}
+
+function refreshGeometry(source, chunkManager, refreshed, forgotten) {
+  const previous = pendingGeometry.get(source);
+  if (previous) clearTimeout(previous.timer);
+  const attempt = {};
+  pendingGeometry.set(source, attempt);
+  let retry = false;
+  const read = async () => {
+    if (pendingGeometry.get(source) !== attempt) return;
+    if (source.layer.wasDisposed || !source.layer.dataSources.includes(source)) {
+      pendingGeometry.delete(source);
+      return;
+    }
+    const store = source.spec.url.split("|")[0];
+    if (retry || !forgotten.has(store)) {
+      forgetWhatWasReadAbout(chunkManager, store);
+      forgotten.add(store);
+    }
+    const completed = await source.refreshMetadata(refreshed);
+    if (pendingGeometry.get(source) !== attempt) return;
+    if (completed === false) {
+      // Retry a failed request, not an unchanged acquisition or periodic cache refresh.
+      retry = true;
+      attempt.timer = setTimeout(read, 1000);
+    } else {
+      pendingGeometry.delete(source);
+      source.changed.dispatch();
+    }
+  };
+  void read();
+}
+
 // -- bringing the engine into line with the panel -----------------------------
 //
 // This is the heart of the module: given the scene the panel wants, change as
@@ -590,6 +627,17 @@ function syncSources(
   // contrast drag, on the same thread the engine draws with.
   const already = sourcesApplied.get(layer) || new Set();
   const fresh = wanted.filter((url) => !already.has(url));
+  const counts = spec.frameCounts;
+  const lastCounts = framesSeen.get(layer);
+  const grown =
+    reread && Array.isArray(counts) && lastCounts
+      ? wanted.filter((url, at) => lastCounts.get(url) !== undefined
+                                   && lastCounts.get(url) !== counts[at])
+      : [];
+  const grownStores = new Set(grown.map((url) => url.split("|")[0]));
+  if (Array.isArray(counts)) {
+    framesSeen.set(layer, new Map(wanted.map((url, at) => [url, counts[at]])));
+  }
 
   // A valid higher revision means the run committed something new into a
   // stable aggregate source this layer is already drawing. Only the pixels
@@ -617,6 +665,10 @@ function syncSources(
   const revisions = revisionsFor(spec);
   const lastRevisions = revisionsSeen.get(layer);
   const advanced = advancingSourceRevisions(lastRevisions, revisions);
+  const previousGeometry = geometrySeen.get(layer);
+  const geometry = geometryFor(spec);
+  geometrySeen.set(layer, geometry);
+  const geometryChanged = new Set();
   if (revisions.size) {
     revisionsSeen.set(layer, rememberedSourceRevisions(revisions));
   }
@@ -628,6 +680,14 @@ function syncSources(
       const store = source.spec.url.split("|")[0];
       const identity = growing.get(store);
       if (identity == null) continue;
+      if (grownStores.has(store) || (previousGeometry?.has(store) && previousGeometry.get(store) !== geometry.get(store))) {
+        geometryChanged.add(store);
+        // Metadata extension/replacement owns this geometry change. Do not also
+        // invalidate its decoded chunks through the pixels-only path below.
+        refreshGeometry(source, chunkManager, refreshed.holders, forgotten);
+        sourceRefreshing.sources.push(identity);
+        continue;
+      }
       if (!refreshed || !refreshed.sources.has(identity)) {
         const removed = forgetOneStableSource(chunkManager, store, refreshed?.holders);
         sourceRefreshing.sources.push(identity);
@@ -650,16 +710,6 @@ function syncSources(
   //
   // A row with no time axis reports no counts and so is never re-read at all, which
   // is right: nothing about it can grow.
-  const counts = spec.frameCounts;
-  const lastCounts = framesSeen.get(layer);
-  const grown =
-    reread && Array.isArray(counts) && lastCounts
-      ? wanted.filter((url, at) => lastCounts.get(url) !== undefined
-                                   && lastCounts.get(url) !== counts[at])
-      : [];
-  if (Array.isArray(counts)) {
-    framesSeen.set(layer, new Map(wanted.map((url, at) => [url, counts[at]])));
-  }
   if (grown.length) {
     // Re-read changed metadata while keeping acquired pixels drawable. The NG
     // bounds-refresh patch extends compatible Zarr sources in place; replacing
@@ -680,6 +730,7 @@ function syncSources(
       // The stores that did not grow are left completely alone. This is the line
       // that turns a thousand positions from six thousand requests into six.
       if (!growing.has(store)) continue;
+      if (geometryChanged.has(store)) continue;
       // And a store that did grow is forgotten once, not once per row that reads
       // from it. A store holding two channels feeds two rows, and forgetting per
       // row meant the second row throwing away the very files the first had just
@@ -688,11 +739,8 @@ function syncSources(
       // has to be brought up to date -- it is only the forgetting that is shared.
       // The second row then finds the first row's request already in flight and
       // waits for it rather than making one of its own.
-      if (!forgotten || !forgotten.has(store)) {
-        forgetWhatWasReadAbout(chunkManager, store);
-        if (forgotten) forgotten.add(store);
-      }
-      void source.refreshMetadata();
+      refreshGeometry(source, chunkManager, refreshed.holders, forgotten);
+      sourceRefreshing.sources.push(store);
     }
   }
 
@@ -910,6 +958,7 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
     // Building from the description already applied everything in it, including
     // the images; record them so the next pass does not add them a second time.
     sourcesApplied.set(managed.layer, new Set(stores));
+    geometrySeen.set(managed.layer, geometryFor(spec));
     specApplied.set(managed, spec);
     if (rest.length) {
       const feed = feedFor(managed.layer);
@@ -1013,6 +1062,13 @@ export function syncLayers(viewer, specs, { reread = false } = {}) {
  * have nothing better to offer than the engine's own choice, and replacing a
  * possibly-odd view with a certainly-wrong one is not an improvement.
  */
+export function keepSpatialAxes(viewer) {
+  const place = () => pinTheAxesThatMeasureDistance(viewer);
+  const stop = viewer.navigationState.position.coordinateSpace.changed.add(place);
+  place();
+  return stop;
+}
+
 function pinTheAxesThatMeasureDistance(viewer) {
   const space = viewer.navigationState.position.coordinateSpace.value;
   if (!space?.names) return;
@@ -1484,7 +1540,7 @@ export function lookAtWhatOpened(viewer, named) {
   return true;
 }
 
-function whenTheSourcesHaveSettled(viewer, ready, act) {
+export function whenTheSourcesHaveSettled(viewer, ready, act) {
   const { position } = viewer.navigationState;
   // Axes, not images: a space with no axes is the placeholder described above.
   // The moment it has any, the engine knows how big a voxel is.
@@ -1506,7 +1562,8 @@ function whenTheSourcesHaveSettled(viewer, ready, act) {
     sourcesStillWaiting(viewer) === 0 &&
     viewer.layerManager.managedLayers.every((managed) =>
       (managed.layer?.dataSources ?? []).every(
-        (source) => source.loadState !== undefined,
+        (source) => source.loadState !== undefined && !pendingGeometry.has(source)
+          && !source.metadataRefresh,
       ),
     );
   let stop = () => {};

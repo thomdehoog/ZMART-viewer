@@ -30,6 +30,7 @@ from zmart_viewer.record.model import rounded_up
 from zmart_viewer.record.shardlink import how_the_array_is_stored
 
 from .compose import (
+    LEGACY_MEAN_REDUCTION,
     OURS,
     PIECE,
     Composer,
@@ -329,7 +330,7 @@ def _bake_the_coarse_ground(
         level += 1
         height, width = -(-height // 2), -(-width // 2)
         voxel = [voxel[0], voxel[1] * 2, voxel[2] * 2]
-        whole = halve_xy(whole)
+        whole = halve_xy(whole, legacy=composer.mosaic.pyramid_reduction in (None, LEGACY_MEAN_REDUCTION))
         made = zarr.create_array(
             store=str(store / str(level)),
             shape=(*room, depth, height, width),
@@ -511,6 +512,7 @@ def _a_tile_stamped(
         axes=pattern.axes,
         turned=pattern.turned,
         moments=moments,
+        time_calibration=pattern.time_calibration,
     )
 
 
@@ -622,6 +624,7 @@ class ComposedPicture:
         self._bake_below = {}
         self._bake_staging = {}
         self._bake_recipes = {}
+        self._bake_legacy_reduction = True
         self.accounting = dict.fromkeys((
             "last_bake_arrays_opened", "last_bake_stagings_built",
             "last_bake_zarr_ops", "last_bake_pieces_rehalved",
@@ -716,7 +719,7 @@ class ComposedPicture:
                         )
                     ]
                     self.accounting["last_bake_zarr_ops"] += 1
-                    above[(*address, slice(None), slice(top, bottom), slice(left, right))] = halve_xy(source)
+                    above[(*address, slice(None), slice(top, bottom), slice(left, right))] = halve_xy(source, legacy=self._bake_legacy_reduction)
                     self.accounting["last_bake_zarr_ops"] += 1
 
         planes = -(-deep // int(above.chunks[-3]))
@@ -829,7 +832,7 @@ class ComposedPicture:
                         col0 - 2 * left : col0 - 2 * left + cols,
                     ] = part
 
-            halved = halve_xy(canvas[None])
+            halved = halve_xy(canvas[None], legacy=self._bake_legacy_reduction)
             buffer = np.full((1, piece, piece), served_recipe["fill"], served_recipe["dtype"])
             buffer[0, : wanted[0], : wanted[1]] = halved[0]
 

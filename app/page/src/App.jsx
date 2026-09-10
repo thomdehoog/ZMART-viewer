@@ -8,6 +8,8 @@ import {
   putTheViewBack,
   whatIsOnScreen,
   chooseScaleWhenTheImagesAreMeasured,
+  keepSpatialAxes,
+  whenTheSourcesHaveSettled,
   watchTheReplay,
   letGoOfDecodedPieces,
   lettingGo,
@@ -20,6 +22,7 @@ import {
 import ScaleBar from "./ScaleBar.jsx";
 import AxisSlider from "./AxisSlider.jsx";
 import { LOOKUP_TABLE_NAMES, engineName, layerKey, layersFor } from "./scene.js";
+import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "./named-views.js";
 import { liveStateProblem } from "./live-refresh.js";
 
 // The two ways of looking at a volume, and the only thing the operator has to
@@ -1170,6 +1173,13 @@ export default function App() {
   const engine = React.useRef(null);
   const [config, setConfig] = React.useState(null);
   const [mode, setMode] = React.useState("flat");
+  const [requestedViews, setRequestedViews] = React.useState({});
+  const rememberedPosition = React.useRef({});
+  const views = React.useMemo(() => viewChoices(config?.layers || []), [config]);
+  const chosenViews = React.useMemo(() => selectedViews(config?.layers || [], requestedViews), [config, requestedViews]);
+  const included = React.useMemo(() => new Set((config?.layers || [])
+    .flatMap((spec, i) => inSelectedView(spec, chosenViews) ? [i] : [])), [config, chosenViews]);
+  React.useEffect(() => { if (views.length) setMode("flat"); }, [views]);
   const transparentBackground = config?.transparentBackground === true && mode === "flat";
   React.useEffect(() => {
     document.documentElement.toggleAttribute("data-transparent-background", transparentBackground);
@@ -1586,7 +1596,7 @@ export default function App() {
   React.useEffect(() => {
     if (!viewer || !lookAt || !config) return undefined;
     const named = config.layers
-      .filter((spec) => (spec.group || "") === lookAt)
+      .filter((spec) => (spec.group || "") === lookAt && inSelectedView(spec, chosenViews))
       .map((spec) => engineName(spec));
     if (!named.length) return undefined;
     // Given a moment for the engine to take the new sources on: the bounds
@@ -1601,7 +1611,7 @@ export default function App() {
     // it, and naming it here reaches a constant before it exists -- which
     // took the whole page down with "Cannot access 'scene' before
     // initialization" (2026-08-21).
-  }, [viewer, lookAt, config]);
+  }, [viewer, lookAt, config, chosenViews]);
   React.useEffect(() => {
     if (!revealing || !config) return undefined;
     // How many pieces this acquisition has to arrive: the stores of its one
@@ -1622,7 +1632,9 @@ export default function App() {
 
   const scene = React.useMemo(() => {
     if (!config || layerState.length !== config.layers.length) return null;
-    const layers = layersFor(config, mode, layerState, groupState, groupOrder, volumeMode,
+    const indices = [...included];
+    const layers = layersFor({ ...config, layers: indices.map(i => config.layers[i]) }, mode,
+                              indices.map(i => layerState[i]), groupState, groupOrder, volumeMode,
                               { gain: volumeGain, attenuation: volumeAttenuation,
                                 depthSamples },
                               revealing);
@@ -1636,6 +1648,7 @@ export default function App() {
     config,
     mode,
     layerState,
+    included,
     revealing,
     groupState,
     groupOrder,
@@ -1661,6 +1674,11 @@ export default function App() {
   // shows anyway.
   React.useEffect(() => {
     if (!viewer) return undefined;
+    return keepSpatialAxes(viewer);
+  }, [viewer]);
+
+  React.useEffect(() => {
+    if (!viewer) return undefined;
     setFramed(false);
     return chooseScaleWhenTheImagesAreMeasured(viewer, () => setFramed(true));
   }, [viewer]);
@@ -1679,13 +1697,14 @@ export default function App() {
     // whatever now happens to sit in that slot.
     const space = viewer.navigationState.position.coordinateSpace.value;
     const looking = space?.valid
-      ? Object.fromEntries(
+      ? { ...rememberedPosition.current, ...Object.fromEntries(
           space.names.map((name, index) => [
             name,
             viewer.navigationState.position.value[index],
           ]),
-        )
+        ) }
       : null;
+    if (looking) rememberedPosition.current = looking;
     const zoom = viewer.navigationState.zoomFactor.value;
     const perspectiveZoom = viewer.perspectiveNavigationState.zoomFactor.value;
 
@@ -1753,20 +1772,13 @@ export default function App() {
       }
     };
     lookAgain();
-    // The coordinate space settles a moment after the images are attached, so
-    // it is worth looking once more shortly afterwards -- but ONLY if the
-    // axes themselves changed in the meantime. The engine keeps the position
-    // steady across everything milder (a timelapse gaining a frame only moves
-    // a bound), so on a live run this delayed restore used to fight the
-    // operator: every landing armed a quarter-second window in which moving
-    // the T or Z slider was silently undone by a stale capture. Caught by
-    // the written-moments slider gate the day the time axis went live.
-    const namesAtArming = space?.names?.join(",");
-    const settled = setTimeout(() => {
+    // A replacement can recreate identically named axes with new identities.
+    // Restore after those sources load; revision-only refreshes leave navigation alone.
+    const axesAtArming = space?.ids?.join(",");
+    return whenTheSourcesHaveSettled(viewer, () => true, () => {
       const now = viewer.navigationState.position.coordinateSpace.value;
-      if (now?.names?.join(",") !== namesAtArming) lookAgain();
-    }, 250);
-    return () => clearTimeout(settled);
+      if (now?.ids?.join(",") !== axesAtArming) lookAgain();
+    });
   }, [viewer, scene, config, mode, layerState]);
 
   // Start listening to the layer that holds drawn targets, so the list beside the
@@ -1892,8 +1904,8 @@ export default function App() {
   const selected = React.useMemo(() => {
     const rows = config?.layers || [];
     const at = rows.findIndex((spec) => layerKey(spec) === selectedKey);
-    return at >= 0 ? at : 0;
-  }, [config, selectedKey]);
+    return at >= 0 && included.has(at) ? at : ([...included][0] ?? 0);
+  }, [config, selectedKey, included]);
 
   const setGroup = (name, change) =>
     setGroupState((current) => ({ ...current, [name]: { ...current[name], ...change } }));
@@ -2026,7 +2038,16 @@ export default function App() {
       <main style={styles.stage}>
         <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed} />
         <div style={styles.topBar}>
-          <ModeToggle mode={mode} onChange={setMode} />
+          {views.length ? views.map(({ id, acquisition, keys }) => (
+            <label key={id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {views.length > 1 ? acquisition : "View"}
+              <select aria-label={`${acquisition} view`} value={chosenViews[id]}
+                style={styles.button}
+                onChange={event => setRequestedViews(previous => ({ ...previous, [id]: event.target.value }))}>
+                {keys.map(key => <option key={key} value={key}>{VIEW_LABELS[key]}</option>)}
+              </select>
+            </label>
+          )) : <ModeToggle mode={mode} onChange={setMode} />}
           <BringItBack viewer={viewer} />
           <ThemeToggle />
         </div>
@@ -2085,6 +2106,7 @@ export default function App() {
           {config && (
             <LayerPanel
               layers={config.layers}
+              included={included}
               state={layerState}
               mode={mode}
               groupOrder={groupOrder}
