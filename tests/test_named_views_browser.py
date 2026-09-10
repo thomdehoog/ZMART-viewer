@@ -87,7 +87,8 @@ def test_same_folder_acquisitions_cover_instead_of_add(browser, built_dist, tmp_
             view.close()
 
 
-def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path):
+@pytest.mark.parametrize("legacy_spacing", [1, 0.5])
+def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path, legacy_spacing):
     originals = tmp_path / "positions"
     originals.mkdir()
     write_tile(originals, "p.ome.zarr", np.full((1, 1, 3, 64, 64), 200, dtype="uint16"))
@@ -98,12 +99,22 @@ def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path
         {"x_um": [0, 64], "y_um": [0, 64]},
         composition={"regions": "complete", "order": ["p.ome.zarr"]},
     )
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    tile = write_tile(legacy, "p.ome.zarr", np.full((1, 1, 3, 64, 64), 200, dtype="uint16"))
+    group = zarr.open_group(str(tile.store), mode="r+")
+    metadata = dict(group.attrs)
+    for level in metadata["ome"]["multiscales"][0]["datasets"]:
+        scale = level["coordinateTransformations"][0]["scale"]
+        scale[2:] = [value * legacy_spacing for value in scale[2:]]
+    group.attrs.update(metadata)
     server = make_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,
         live=False,
-        loads=[{"path": str(originals)}, {"path": str(tmp_path / "view")}],
+        allow_open=True,
+        loads=[{"path": str(legacy), "name": "positions"}, {"path": str(tmp_path / "view")}],
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -126,6 +137,18 @@ def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path
         )
         _wait_for_picture(page)
         assert page.get_by_role("combobox", name="a view").is_enabled()
+        page.evaluate("zmartViewer.navigationState.zoomFactor.value = 0.75")
+        physical_zoom = "zmartViewer.navigationState.zoomFactor.value * zmartViewer.navigationState.zoomFactor.canonicalVoxelPhysicalSize"
+        before = page.evaluate(physical_zoom)
+        page.get_by_role("button", name="3D", exact=True).click()
+        page.wait_for_function("zmartScene.some(l => l.volumeRendering)")
+        page.get_by_role("button", name="close positions", exact=True).click()
+        page.wait_for_function(
+            "zmartScene.some(l => l.boundaryHeld) && !zmartScene.some(l => l.volumeRendering)"
+        )
+        _wait_for_picture(page)
+        assert page.get_by_role("combobox", name="a view").is_enabled()
+        assert page.evaluate(physical_zoom) == pytest.approx(before, rel=1e-6)
         assert not errors, errors
     finally:
         page.close()
@@ -136,8 +159,9 @@ def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path
 
 
 @pytest.mark.parametrize("bake", [False, True])
+@pytest.mark.parametrize("long_spacing", [1, 2])
 def test_top_holds_each_acquisition_with_shared_folder_and_slider(
-    browser, built_dist, tmp_path, bake
+    browser, built_dist, tmp_path, bake, long_spacing
 ):
     server = make_server(
         port=0,
@@ -163,7 +187,13 @@ def test_top_holds_each_acquisition_with_shared_folder_and_slider(
             source = tmp_path / acquisition
             source.mkdir()
             data = np.stack([np.full((128, 128), v, dtype="uint16") for v in values])[None, None]
-            write_tile(source, "p.ome.zarr", data, x=x, z=z)
+            tile = write_tile(source, "p.ome.zarr", data, x=x, z=z)
+            if acquisition == "long":
+                group = zarr.open_group(str(tile.store), mode="r+")
+                metadata = dict(group.attrs)
+                for level in metadata["ome"]["multiscales"][0]["datasets"]:
+                    level["coordinateTransformations"][0]["scale"][2] = long_spacing
+                group.attrs.update(metadata)
             payload = {
                 "path": str(source),
                 "bake": bake,
@@ -184,6 +214,25 @@ def test_top_holds_each_acquisition_with_shared_folder_and_slider(
             page.get_by_role("combobox", name=f"{acquisition} view").select_option("top")
         _wait_for_picture(page)
         page.evaluate("zmartViewer.display.canvas.style.background = '#ff00ff'")
+        bounds = page.evaluate("""() => {
+          const s=zmartViewer.navigationState.position.coordinateSpace.value, i=s.names.indexOf('z');
+          return [s.bounds.lowerBounds[i]*s.scales[i]*1e6, s.bounds.upperBounds[i]*s.scales[i]*1e6];
+        }""")
+        assert bounds == pytest.approx([-2 - 0.5 * long_spacing, -2 + 6.5 * long_spacing], abs=1e-5)
+        reached = []
+        for plane in range(7):
+            selected = page.evaluate(
+                """z => {
+              const p=zmartViewer.navigationState.position, s=p.coordinateSpace.value, i=s.names.indexOf('z');
+              const v=Float32Array.from(p.value); v[i]=z*1e-6/s.scales[i]; p.value=v;
+              const layer=zmartViewer.layerManager.managedLayers.find(m => m.name.includes('long') && m.layer.localCoordinateSpace.value.names.includes("z'"));
+              const ls=layer.layer.localCoordinateSpace.value, li=ls.names.indexOf("z'");
+              return layer.layer.localPosition.value[li]*ls.scales[li]*1e6;
+            }""",
+                -2 + plane * long_spacing,
+            )
+            reached.append(selected)
+        assert reached == pytest.approx([-2 + p * long_spacing for p in range(7)], abs=1e-5)
         for zoom in (0.5, 4):
             counts = []
             for z in (-2, 0, 1, 4):

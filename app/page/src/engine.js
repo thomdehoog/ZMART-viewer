@@ -41,7 +41,7 @@
  */
 
 import { makeLayer, deleteLayer } from "neuroglancer/unstable/layer/index.js";
-import { WatchableValue } from "neuroglancer/unstable/trackable_value.js";
+import { WatchableCoordinateSpaceTransform } from "neuroglancer/unstable/coordinate_transform.js";
 import {
   advancingSourceRevisions,
   memoEntriesForStableSource,
@@ -890,16 +890,20 @@ function keepDepthLocal(layer, viewer = null) {
     layer.registerDisposer(layer.localCoordinateSpace.changed.add(follow));
   }
   for (const source of layer.dataSources) {
-    let native;
+    let native, lastDefault;
     const place = () => {
       const transform = source.loadState?.transform;
       const space = transform?.outputSpace.value;
       if (viewer && transform) {
-        const original = transform.defaultTransform.outputSpace;
+        const original = transform.defaultTransform;
         if (!native) {
-          native = new WatchableValue(original);
-          layer.registerDisposer(viewer.layerSpecification.coordinateSpaceCombiner.bind(native));
-        } else native.value = original;
+          native = new WatchableCoordinateSpaceTransform(original);
+          layer.registerDisposer(viewer.layerSpecification.coordinateSpaceCombiner.bind(native.outputSpace));
+        } else if (original !== lastDefault) {
+          native.defaultTransform = original;
+          native.reset();
+        }
+        lastDefault = original;
       }
       if (!space?.names.includes("z")) return;
       transform.restoreState({ ...transform.toJSON(), outputDimensions:

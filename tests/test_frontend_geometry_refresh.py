@@ -5,6 +5,63 @@ import subprocess
 from pathlib import Path
 
 
+def test_top_bounds_use_transforms_when_global_depth_units_change():
+    root = Path(__file__).resolve().parents[1] / "app/page"
+    result = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            r"""
+        import assert from 'node:assert/strict';
+        import {readFileSync} from 'node:fs';
+        import {CoordinateSpaceCombiner, WatchableCoordinateSpaceTransform,
+          makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox,
+          emptyInvalidCoordinateSpace} from 'neuroglancer/unstable/coordinate_transform.js';
+        import {WatchableValue} from 'neuroglancer/unstable/trackable_value.js';
+        import {NullarySignal} from 'neuroglancer/unstable/util/signal.js';
+        const code = readFileSync('src/engine.js', 'utf8').split('function keepDepthLocal(')[1]
+          .split('export function syncLayers')[0];
+        const keep = new Function('WatchableCoordinateSpaceTransform', 'WatchableValue',
+          'return function keepDepthLocal('+code)(WatchableCoordinateSpaceTransform, WatchableValue);
+        const space = (scale, depth) => makeCoordinateSpace({names:['z'], units:['m'],
+          scales:Float64Array.of(scale), boundingBoxes:[makeIdentityTransformedBoundingBox({
+            lowerBounds:Float64Array.of(0), upperBounds:Float64Array.of(depth)})]});
+        for (const reverse of [false,true]) {
+          const global = new WatchableValue(emptyInvalidCoordinateSpace);
+          const combiner = new CoordinateSpaceCombiner(global, () => true);
+          const viewer = {layerSpecification:{coordinateSpaceCombiner:combiner},
+            navigationState:{position:{changed:new NullarySignal(), coordinateSpace:global}}};
+          const sources = [], disposers = [];
+          for (const [scale,depth] of (reverse ? [[2e-6,5],[1e-6,2]] : [[1e-6,2],[2e-6,5]])) {
+            const source = {changed:new NullarySignal(), loadState:{transform:
+              new WatchableCoordinateSpaceTransform(makeIdentityTransform(space(scale,depth)))}};
+            sources.push(source);
+            const local = new WatchableValue(emptyInvalidCoordinateSpace);
+            keep({dataSources:[source], localCoordinateSpace:local,
+              registerDisposer:d => disposers.push(d)}, viewer);
+          }
+          const bounds = () => [global.value.bounds.lowerBounds[0]*global.value.scales[0],
+                                global.value.bounds.upperBounds[0]*global.value.scales[0]];
+          assert.ok(Math.abs(bounds()[0]) < 1e-12);
+          assert.ok(Math.abs(bounds()[1]-10e-6) < 1e-12, JSON.stringify(bounds()));
+          // A metadata replacement must also update the native global range.
+          const long = sources[reverse ? 0 : 1];
+          long.loadState.transform = new WatchableCoordinateSpaceTransform(makeIdentityTransform(space(2e-6,7)));
+          long.changed.dispatch();
+          assert.ok(Math.abs(bounds()[1]-14e-6) < 1e-12, JSON.stringify(bounds()));
+          for (const dispose of disposers.reverse()) dispose();
+          assert.equal(combiner.bindings.size, 0);
+        }
+    """,
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
     script = Path(__file__).resolve().parents[1] / "app/page/scripts/patch_neuroglancer_growth.mjs"
     result = subprocess.run(
