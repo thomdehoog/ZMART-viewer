@@ -17,15 +17,21 @@ from zmart_viewer.compose import (
     the_mosaic_written_down,
 )
 
+INPUT_FORMATS = ("v2", "v3", "v3-sharded")
 
-def write_tile(root, name, data, *, x=0, z=0, z_chunk=3):
-    group = zarr.open_group(str(root / name), mode="w", zarr_format=3)
+
+def write_tile(root, name, data, *, x=0, z=0, z_chunk=3, input_format="v3"):
+    assert input_format in INPUT_FORMATS
+    group = zarr.open_group(
+        str(root / name), mode="w", zarr_format=2 if input_format == "v2" else 3
+    )
     datasets = []
     image = data
     for level in range(3):
-        group.create_array(
-            str(level), data=image, chunks=(1, 1, z_chunk, 4, 4), dimension_names=list("tczyx")
-        )
+        options = {} if input_format == "v2" else {"dimension_names": list("tczyx")}
+        if input_format == "v3-sharded":
+            options["shards"] = (1, 1, z_chunk * 2, 8, 8)
+        group.create_array(str(level), data=image, chunks=(1, 1, z_chunk, 4, 4), **options)
         factor = 2**level
         datasets.append(
             {
@@ -43,7 +49,7 @@ def write_tile(root, name, data, *, x=0, z=0, z_chunk=3):
             h, w = image.shape[-2:]
             image = image.reshape(*image.shape[:-2], h // 2, 2, w // 2, 2).mean((-3, -1))
             image = np.rint(image).astype(data.dtype)
-    group.attrs["ome"] = {
+    metadata = {
         "version": "0.5",
         "multiscales": [
             {
@@ -60,6 +66,11 @@ def write_tile(root, name, data, *, x=0, z=0, z_chunk=3):
             }
         ],
     }
+    if input_format == "v2":
+        metadata["multiscales"][0]["version"] = "0.4"
+        group.attrs["multiscales"] = metadata["multiscales"]
+    else:
+        group.attrs["ome"] = metadata
     return _read_one_tile(root / name)
 
 
