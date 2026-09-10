@@ -238,6 +238,16 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 (name fixed by base class)
 
+        if self.path == "/embedding.js":
+            data = (_HERE / "embedding.js").read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         if self.path.startswith("/data/"):
             self._serve_from_data()
             return
@@ -1487,6 +1497,8 @@ def make_server(
             store_path = root / name
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
             store_paths[address] = store_path
+            source_attrs = _read_attrs_at(store_path)
+            named_view = (source_attrs.get("zmart") or {}).get("view")
 
             if "c" in axis_names(store_path):
                 found = [
@@ -1511,7 +1523,7 @@ def make_server(
                         True,
                     )
                 ]
-                if published.source_depth(root_number, name) is not None:
+                if published.source_depth(root_number, name) is not None or named_view:
                     declared = _read_attrs_at(store_path).get("omero", {}).get("channels", [])
                     channel = described_channels(declared if isinstance(declared, list) else [], 1)[
                         0
@@ -1529,8 +1541,6 @@ def make_server(
             frames = written_timepoints(store_path)
             revision = published.source_revision(root_number, name)
             depth = published.source_depth(root_number, name)
-            source_attrs = _read_attrs_at(store_path)
-            named_view = (source_attrs.get("zmart") or {}).get("view")
             if named_view or "zmart_projection" in source_attrs:
                 multiscale = source_attrs["multiscales"][0]
                 axes = [axis["name"] for axis in multiscale["axes"]]

@@ -165,7 +165,7 @@ def write_projection(source, destination, method, *, regions="complete", revisio
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
-        tempfile.mkdtemp(prefix=f".{destination.name}.building-", dir=destination.parent)
+        tempfile.mkdtemp(prefix=".projection-", dir=destination.parent)
     )
     retired = None
     try:

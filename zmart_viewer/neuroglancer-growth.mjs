@@ -1,4 +1,14 @@
 import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+
+export function applyGrowthPatches(lib) {
+  for (const { file, marker, anchor, replacement } of growthPatches(lib)) {
+    const held = readFileSync(file, "utf8");
+    if (held.includes(marker)) continue;
+    if (!held.includes(anchor)) throw new Error(`Neuroglancer growth patch anchor missing: ${file}`);
+    writeFileSync(file, held.replace(anchor, replacement));
+  }
+}
 
 // Bounds-only Zarr growth retains the loaded source and its GPU chunks. Layout
 // changes still use Neuroglancer's ordinary source replacement. These patches

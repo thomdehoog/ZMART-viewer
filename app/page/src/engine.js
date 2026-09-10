@@ -466,56 +466,6 @@ export function sourcesStillWaiting(viewer) {
   return total;
 }
 
-/**
- * Forget what the engine was told about one store, so that asking again really asks.
- *
- * Neuroglancer remembers the answer to every question it has asked about a store —
- * the small files describing how many frames there are, how big a voxel is, where
- * the copies of the image live. That memory is the right thing almost always: opening
- * the same acquisition in a second window, or coming back to it later, costs
- * nothing. But it is held for as long as the page is open and there is no time
- * limit on it, so when a timelapse grows the engine will keep answering "two
- * frames" from memory and never look at the disk again. Handing a data source its
- * own address back is not enough on its own: it does make the engine resolve the
- * store afresh, but the resolving is answered out of the same memory, so nothing
- * is re-read and nothing changes. That was measured — after an announcement the
- * page asked for no description files at all.
- *
- * So the remembered answers about this one store are dropped first. What is dropped
- * is only what was *read* about it. The pieces of image themselves are remembered
- * separately, and those entries are left strictly alone — they are recognisable
- * because they name the kind of object that holds decoded image rather than a file
- * that was fetched. Dropping one of those would not free anything (the layer is
- * still using it) but it would make the engine build a second one beside it and
- * fetch every piece again, which is the exact cost this whole path exists to avoid.
- *
- * Two things are worth knowing if you are changing this:
- *
- * - Removing the entry does not throw anything away. It only means the next question
- *   is answered by looking rather than by remembering. Anything still in use is held
- *   by the layer using it and stays alive.
- * - These entries are never removed on their own. Neuroglancer takes a reference each
- *   time one is used and never gives it back, so they last as long as the page does.
- *   That is why forgetting has to be done deliberately here, and also why doing so is
- *   safe: there is no tidying-up already scheduled that this could collide with.
- */
-function forgetWhatWasReadAbout(chunkManager, url) {
-  const remembered = chunkManager?.memoize?.map;
-  if (!remembered) return;
-  // The address the panel writes ends in the name of the reader to use --
-  // ".../pos001.ome.zarr/|zarr2:". The files themselves sit under the part before
-  // that, which ends in a slash, so it cannot accidentally match a differently
-  // named store that merely starts the same way (pos001 against pos0011).
-  const folder = url.split("|")[0];
-  if (!folder) return;
-  for (const question of [...remembered.keys()]) {
-    if (!question.includes(folder)) continue;
-    // Anything naming a class of object is a holder of decoded image, not a file
-    // that was read. Leave those exactly where they are; see above for why.
-    if (question.includes('"constructorId"')) continue;
-    remembered.delete(question);
-  }
-}
 
 /**
  * Drop cached knowledge and decoded absence for one aggregate source only.
@@ -553,41 +503,11 @@ function revisionsFor(spec) {
 }
 
 const geometrySeen = new WeakMap();
-const pendingGeometry = new WeakMap();
 function geometryFor(spec) {
   return new Map(sourceList(spec).map((url, i) => [url.split("|")[0], spec.sourceGeometryRevisions?.[i]]));
 }
 
-function refreshGeometry(source, chunkManager, refreshed, forgotten) {
-  const previous = pendingGeometry.get(source);
-  if (previous) clearTimeout(previous.timer);
-  const attempt = {};
-  pendingGeometry.set(source, attempt);
-  let retry = false;
-  const read = async () => {
-    if (pendingGeometry.get(source) !== attempt) return;
-    if (source.layer.wasDisposed || !source.layer.dataSources.includes(source)) {
-      pendingGeometry.delete(source);
-      return;
-    }
-    const store = source.spec.url.split("|")[0];
-    if (retry || !forgotten.has(store)) {
-      forgetWhatWasReadAbout(chunkManager, store);
-      forgotten.add(store);
-    }
-    const completed = await source.refreshMetadata(refreshed);
-    if (pendingGeometry.get(source) !== attempt) return;
-    if (completed === false) {
-      // Retry a failed request, not an unchanged acquisition or periodic cache refresh.
-      retry = true;
-      attempt.timer = setTimeout(read, 1000);
-    } else {
-      pendingGeometry.delete(source);
-      source.changed.dispatch();
-    }
-  };
-  void read();
-}
+import { refreshGeometry, geometryRefreshPending } from "../../../zmart_viewer/embedding.js";
 
 // -- bringing the engine into line with the panel -----------------------------
 //
@@ -867,54 +787,10 @@ function applyOrder(manager, names) {
  * again, and its layers are left exactly as they are while that happens. This is the
  * one case where nothing is added to the scene and yet something must still happen.
  */
+import { keepDepthLocal as keepEmbeddedDepthLocal } from "../../../zmart_viewer/embedding.js";
+
 function keepDepthLocal(layer, viewer = null) {
-  // Top samples a clamped local Z while retaining its native global slider range.
-  // Persistent flats use the same local axis but do not follow the slider.
-  const follow = () => {
-    if (!viewer) return;
-    const global = viewer.navigationState.position;
-    const gs = global.coordinateSpace.value, ls = layer.localCoordinateSpace.value;
-    const gi = gs.names.indexOf("z"), li = ls.names.indexOf("z'");
-    if (gi < 0 || li < 0) return;
-    const bounds = ls.bounds;
-    const offset = bounds.voxelCenterAtIntegerCoordinates[li] ? 0 : 0.5;
-    const lo = Math.ceil(bounds.lowerBounds[li] - offset) + offset;
-    const hi = Math.floor(bounds.upperBounds[li] - offset) + offset;
-    const z = Math.min(hi, Math.max(lo, global.value[gi] * gs.scales[gi] / ls.scales[li]));
-    const position = Float32Array.from(layer.localPosition.value);
-    position[li] = z;
-    if (position[li] !== layer.localPosition.value[li]) layer.localPosition.value = position;
-  };
-  if (viewer) {
-    layer.registerDisposer(viewer.navigationState.position.changed.add(follow));
-    layer.registerDisposer(layer.localCoordinateSpace.changed.add(follow));
-  }
-  for (const source of layer.dataSources) {
-    let native, lastDefault;
-    const place = () => {
-      const transform = source.loadState?.transform;
-      const space = transform?.outputSpace.value;
-      if (viewer && transform) {
-        const original = transform.defaultTransform;
-        if (!native) {
-          native = new WatchableCoordinateSpaceTransform(original);
-          layer.registerDisposer(viewer.layerSpecification.coordinateSpaceCombiner.bind(native.outputSpace));
-        } else if (original !== lastDefault) {
-          native.defaultTransform = original;
-          native.reset();
-        }
-        lastDefault = original;
-      }
-      if (!space?.names.includes("z")) return;
-      transform.restoreState({ ...transform.toJSON(), outputDimensions:
-        Object.fromEntries(space.names.map((name, i) =>
-          [name === "z" ? "z'" : name, [space.scales[i], space.units[i]]])),
-      });
-      follow();
-    };
-    layer.registerDisposer(source.changed.add(place));
-    place();
-  }
+  return keepEmbeddedDepthLocal(layer, viewer, value => new WatchableCoordinateSpaceTransform(value));
 }
 
 export function syncLayers(viewer, specs, { reread = false } = {}) {
@@ -1597,7 +1473,7 @@ export function whenTheSourcesHaveSettled(viewer, ready, act) {
     sourcesStillWaiting(viewer) === 0 &&
     viewer.layerManager.managedLayers.every((managed) =>
       (managed.layer?.dataSources ?? []).every(
-        (source) => source.loadState !== undefined && !pendingGeometry.has(source)
+        (source) => source.loadState !== undefined && !geometryRefreshPending(source)
           && !source.metadataRefresh,
       ),
     );

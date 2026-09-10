@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
+import tomllib
 from test_view_sampling import write_tile
 
 from zmart_viewer.views import ViewSet
@@ -86,6 +87,8 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
                 for p in (repo / "zmart_viewer").rglob("*.py")
             }
         )
+        expected_files.update({name: (repo / "zmart_viewer" / name).read_bytes()
+                               for name in ("embedding.js", "neuroglancer-growth.mjs")})
         assert packaged == expected_files, (
             "Wheel must contain exactly this build, with no retired assets"
         )
@@ -110,6 +113,7 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
         "PYTHONPATH": str(installed),
         "ZMART_TEST_SAVED_VIEW": str(tmp_path / "view"),
         "ZMART_TEST_EXPECTED": json.dumps(expected),
+        "ZMART_TEST_VERSION": tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"],
     }
     result = subprocess.run(
         [
@@ -121,7 +125,7 @@ import zmart_viewer
 from zmart_viewer.server import make_server, _FRONTEND_DIST
 from zmart_viewer.views import ViewSet
 assert 'installed' in pathlib.Path(zmart_viewer.__file__).parts
-assert importlib.metadata.version('zmart-viewer') == '0.4.0'
+assert importlib.metadata.version('zmart-viewer') == os.environ['ZMART_TEST_VERSION']
 assert _FRONTEND_DIST.name == '_frontend'
 with tempfile.TemporaryDirectory() as data:
     saved = pathlib.Path(os.environ['ZMART_TEST_SAVED_VIEW'])
@@ -131,6 +135,9 @@ with tempfile.TemporaryDirectory() as data:
     address = 'http://127.0.0.1:'+str(server.server_address[1])
     try:
         page = urllib.request.urlopen(address).read().decode()
+        embedding = urllib.request.urlopen(address+'/embedding.js')
+        assert 'javascript' in embedding.headers['Content-Type']
+        assert b'EMBEDDING_API_VERSION = 1' in embedding.read()
         assets = re.findall(r'(?:src|href)="(/assets/[^\"]+)"',page)
         assert assets
         for asset in assets:
@@ -152,7 +159,7 @@ with tempfile.TemporaryDirectory() as data:
                 assert row['window']['high'] > 65535, row
     finally:
         server.shutdown();server.server_close();worker.join(5)
-print('Installed 0.4.0 page, workers and all five saved views served without the checkout')
+print('Installed page, embedding API, workers and all five saved views served without the checkout')
 """,
         ],
         cwd=tmp_path,
