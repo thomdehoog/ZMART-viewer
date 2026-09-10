@@ -19,7 +19,7 @@ experiment, with no possibility of it disturbing the instrument.
 
 ## What is on screen
 
-Version 0.3.0 adds named **Slice**, **Top** and per-position **Min/Max/Sum** views,
+Version 0.4.0 adds named **Slice**, **Top** and per-position **Min/Max/Sum** views,
 with sparse coverage and optional per-view coarse baking. Slice is the standalone
 default. See [named views: API, storage and limits](docs/view_modes.md) and the
 [verification record](docs/design/view_modes_030_results.md).

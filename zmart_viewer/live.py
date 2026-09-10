@@ -159,9 +159,12 @@ class FolderWatcher:
         last = None
 
         while not self._stop.is_set():
-            try:
-                if self._refresh_publications:
+            if self._refresh_publications:
+                try:
                     self._refresh_publications()
+                except Exception:
+                    logging.getLogger(__name__).exception("Cannot refresh publications")
+            try:
                 now = (
                     self._library.revision(excluding=self._excluding)
                     if callable(self._excluding) or self._excluding

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,13 +15,10 @@ from setuptools.errors import SetupError
 def validate_frontend(page):
     try:
         manifest = json.loads((page / "dist/build-manifest.json").read_text())
-        inputs = [p for p in page.iterdir() if p.is_file()]
-        inputs += [
-            p
-            for folder in ("src", "scripts", "public")
-            for p in (page / folder).rglob("*")
-            if p.is_file()
-        ]
+        inputs = []
+        for folder, directories, files in os.walk(page):
+            directories[:] = [d for d in directories if d not in ("node_modules", "dist")]
+            inputs.extend(Path(folder) / name for name in files)
         outputs = [
             p for p in (page / "dist").rglob("*") if p.is_file() and p.name != "build-manifest.json"
         ]

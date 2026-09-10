@@ -1179,6 +1179,9 @@ export default function App() {
   const views = React.useMemo(() => viewChoices(config?.layers || []), [config]);
   const hasLegacy = (config?.layers || []).some(spec => !spec.view);
   const mode = views.length && !hasLegacy ? "flat" : requestedMode;
+  React.useEffect(() => {
+    if (views.length && !hasLegacy) setMode("flat");
+  }, [views, hasLegacy]);
   const chosenViews = React.useMemo(() => selectedViews(config?.layers || [], requestedViews), [config, requestedViews]);
   const included = React.useMemo(() => new Set((config?.layers || [])
     .flatMap((spec, i) => inSelectedView(spec, chosenViews) && (mode === "flat" || !spec.view) ? [i] : [])), [config, chosenViews, mode]);

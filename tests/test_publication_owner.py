@@ -8,7 +8,7 @@ from test_acquired_composition import source
 from test_published_acquired import CANVAS
 from test_server import request
 
-from zmart_viewer.published import STORE, PublishedTransfer
+from zmart_viewer.published import STACK_STORE, PublishedTransfer
 from zmart_viewer.server import make_server
 
 
@@ -40,7 +40,7 @@ def test_concurrent_folder_and_store_opens_share_owner(tmp_path, preloaded):
         assert numbers == [0, 0]
         assert len(library.datasets()) == len(published.views) == 1
         assert published.refresh() == ((0, 1),)
-        assert published.entries(library.entries()) == [(0, tmp_path, STORE)]
+        assert published.entries(library.entries()) == [(0, tmp_path, STACK_STORE)]
     finally:
         published.close()
 
@@ -76,7 +76,7 @@ def test_http_reopen_retains_identity_and_idle_revision(tmp_path, monkeypatch, f
         assert status == 200, reopened
         assert sources(reopened) == sources(original)
         assert len(reopened["layers"]) == len(original["layers"])
-        state = tmp_path / STORE / "publication.json"
+        state = tmp_path / STACK_STORE / "publication.json"
         assert json.loads(state.read_text())["revision"] == 2
         mark = state.stat().st_mtime_ns
 

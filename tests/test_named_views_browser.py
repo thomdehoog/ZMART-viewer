@@ -149,6 +149,17 @@ def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path
         _wait_for_picture(page)
         assert page.get_by_role("combobox", name="a view").is_enabled()
         assert page.evaluate(physical_zoom) == pytest.approx(before, rel=1e-6)
+        page.get_by_label("open images", exact=True).click()
+        window = page.get_by_role("dialog", name="load data")
+        window.get_by_label("legacy", exact=True).click()
+        page.get_by_label("open legacy", exact=True).click()
+        page.wait_for_function("zmartConfig.groups.includes('legacy')")
+        _wait_for_picture(page)
+        assert page.evaluate(
+            "zmartScene.some(l => l.boundaryHeld) && !zmartScene.some(l => l.volumeRendering)"
+        )
+        assert page.get_by_role("combobox", name="a view").is_enabled()
+        page.screenshot(path=str(tmp_path / "legacy-reopened-in-2d.png"))
         assert not errors, errors
     finally:
         page.close()

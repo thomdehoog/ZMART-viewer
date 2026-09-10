@@ -158,7 +158,7 @@ def test_default_float_views_preserve_fractional_means(tmp_path, bake, value):
                             values = made.values_for(level, 0, 0, 0, t, c)
                             assert values is not None
                             assert values[0, 0] == value
-                            if bake and level >= 3:
+                            if bake and level >= 2:
                                 assert (output._shown / f"{level}/c/{t}/{c}/0/0/0").is_file()
                             assert pieces.built_bytes_behind(
                                 output._shown, f"{level}/c/{t}/{c}/0/0/0"

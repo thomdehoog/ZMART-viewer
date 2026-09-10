@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from contextlib import ExitStack
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from .acquired import canonical_regions
 from .building import _holding_the_bake_lock
@@ -113,11 +115,35 @@ class ViewSet:
 
     def publish(self, folder, versions, canvas, *, composition, bake=True):
         """Serialize producer snapshots; config/status reads never acquire this lock."""
+        folder = Path(folder).resolve()
+        source_key = sha256(os.path.normcase(str(folder)).encode()).hexdigest()
         with (
             self._lock,
+            _holding_the_bake_lock(self.folder / ".publication-locks" / "sources" / source_key),
             _holding_the_bake_lock(self.folder / ".publication-locks" / self.acquisition),
+            ExitStack() as staging,
         ):
-            return self._publish(folder, versions, canvas, composition=composition, bake=bake)
+            self._check_source_owner(folder)
+            return self._publish(
+                folder, versions, canvas, composition=composition, bake=bake, staging=staging
+            )
+
+    def _check_source_owner(self, folder):
+        """Committed and recoverable publications own their originals across restarts."""
+        for store in self.folder.glob("*.zmartview.zarr"):
+            for filename in ("publication.json", "pending.json"):
+                path = store / filename
+                try:
+                    state = json.loads(path.read_text(encoding="utf-8"))
+                except FileNotFoundError:
+                    # Another acquisition may finish and remove its pending marker.
+                    continue
+                contract = state["composition"] if filename == "publication.json" else state
+                original = contract.get("originals")
+                if original is not None and Path(original).resolve() == folder:
+                    owner = contract["view"]["acquisition"]
+                    if owner != self.acquisition:
+                        raise ValueError(f"Source folder already has owner {owner!r}: {store}")
 
     def _committed_history(self, folder, canvas):
         """Read the authority under the acquisition lock, including other open handles."""
@@ -145,7 +171,7 @@ class ViewSet:
                 history[name] = max(history.get(name, 0), revision)
         return history
 
-    def _publish(self, folder, versions, canvas, *, composition, bake):
+    def _publish(self, folder, versions, canvas, *, composition, bake, staging):
         folder = Path(folder).resolve()
         validate_canvas(canvas)
         history = self._committed_history(folder, canvas)
@@ -189,7 +215,8 @@ class ViewSet:
                     )
                     cached = self._references[name] = (versions[name], reference)
                 references[name] = cached[1]
-        prepared = []
+        prepared, arrivals = [], []
+        temporary = None
         for key, output in zip(self.keys, self.outputs.values()):
             snapshot = deepcopy(composition)
             snapshot["originals"] = str(folder)
@@ -201,6 +228,7 @@ class ViewSet:
             snapshot["view"] = self._identity(key)
             source = self.source_folder
             projected_versions = versions
+            candidates = {}
             if key in METHODS:
                 source = self.projection_folder / key
                 coverage, projected_versions, names = {}, {}, {}
@@ -213,9 +241,24 @@ class ViewSet:
                     )
                     suffix = sha256(recipe.encode()).hexdigest()[:20]
                     derived = names[name] = f"{name.removesuffix('.ome.zarr')}_r{suffix}.ome.zarr"
+                    destination = source / derived
+                    if not destination.exists():
+                        if temporary is None:
+                            self.projection_folder.mkdir(parents=True, exist_ok=True)
+                            temporary = Path(
+                                staging.enter_context(
+                                    TemporaryDirectory(
+                                        prefix=".publishing-", dir=self.projection_folder
+                                    )
+                                )
+                            )
+                        destination = temporary / key / derived
+                        arrivals.append((destination, source / derived))
                     store = write_projection(
-                        folder / name, source / derived, key, revision=revision, regions=regions
+                        folder / name, destination, key, revision=revision, regions=regions
                     )
+                    if destination != source / derived:
+                        candidates[derived] = _read_one_tile(store)
                     coverage[derived] = _read_attrs_at(store)["zmart_projection"]["regions"]
                     projected_versions[derived] = revision
                 snapshot["regions"] = coverage
@@ -223,7 +266,36 @@ class ViewSet:
                 snapshot["z_references"] = dict.fromkeys(projected_versions, 0)
                 snapshot["pyramid_reduction"] = MEAN_REDUCTION
                 snapshot["xy_origin"] = "center"
-            prepared.append((output, source, projected_versions, snapshot))
+            prepared.append((output, source, projected_versions, snapshot, candidates))
+        if arrivals:
+            # Validate actual projected geometry, not the originals: projection
+            # can legitimately normalize differing input Z spacings and dtypes.
+            with ExitStack() as preflight:
+                for output, source, revisions, snapshot, candidates in prepared:
+                    preflight.enter_context(
+                        output.prepare(
+                            source,
+                            revisions,
+                            canvas,
+                            composition=snapshot,
+                            bake=bake,
+                            _tiles=candidates or None,
+                        )
+                    )
+            for temporary_store, destination in arrivals:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                # Independent view folders may share immutable projection products.
+                with _holding_the_bake_lock(
+                    destination.parent / ".publication-locks" / destination.name
+                ):
+                    if destination.exists():
+                        if (
+                            _read_attrs_at(destination).get("zmart_projection")
+                            != _read_attrs_at(temporary_store)["zmart_projection"]
+                        ):
+                            raise ValueError(f"Projection product has another owner: {destination}")
+                    else:
+                        os.replace(temporary_store, destination)
         # Validate all views before advancing any publication. Projection inputs
         # are immutable, so a rejected product cannot change the previous picture.
         with ExitStack() as stack:
@@ -231,7 +303,7 @@ class ViewSet:
                 stack.enter_context(
                     output.prepare(source, revisions, canvas, composition=snapshot, bake=bake)
                 )
-                for output, source, revisions, snapshot in prepared
+                for output, source, revisions, snapshot, _ in prepared
             ]
             for commit in commits:
                 commit()

@@ -1,5 +1,3 @@
 include build_support.py
-include app/page/*.json app/page/*.js app/page/*.mjs app/page/index.html
-recursive-include app/page/src *
-recursive-include app/page/scripts *
-recursive-include app/page/public *
+recursive-include app/page *
+prune app/page/node_modules

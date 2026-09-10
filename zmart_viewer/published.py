@@ -16,6 +16,7 @@ from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from typing import NamedTuple
 
 from .acquired import AcquiredRegion, canonical_regions
 from .building import ComposedPicture, _after_a_windows_reader, _holding_the_bake_lock
@@ -120,6 +121,13 @@ def _place_depth(tiles, *, spacing=None, combine=False):
     return tiles, lower, planes * spacing
 
 
+class _Owner(NamedTuple):
+    view: object
+    canvas: dict
+    automatic: bool
+    dataset: int
+
+
 class PublishedFolders:
     """Server-owned optional views, driven by its existing publication requests."""
 
@@ -143,6 +151,9 @@ class PublishedFolders:
             )
 
     def _dataset(self, key):
+        held = self.views.get(key)
+        if held is not None:
+            return self.library.dataset(held.dataset)
         root, acquisition = key
         return next(
             (
@@ -157,6 +168,14 @@ class PublishedFolders:
             ),
             None,
         )
+
+    def _owner_for(self, number):
+        dataset = self.library.dataset(number)
+        if dataset is None:
+            return None
+        acquisition = dataset.acquisition if isinstance(dataset.acquisition, str) else None
+        held = self.views.get((dataset.root, acquisition))
+        return held if held is not None and held.dataset == number else None
 
     def _open(self, path, *, canvas=None, versions=None, composition=None, bake=True, views=None):
         """Open or update the single publisher for a resolved acquisition folder."""
@@ -214,7 +233,7 @@ class PublishedFolders:
                     else self.library.open(destination, names=view.sources, watch=True)
                 )
                 with self._lock:
-                    self.views[key] = (view, bounds, False)
+                    self.views[key] = _Owner(view, bounds, False, number)
                 return number
             except Exception:
                 if not held:
@@ -247,7 +266,7 @@ class PublishedFolders:
                 self.library.close(number)
             raise
         with self._lock:
-            self.views[root, None] = (view, bounds, automatic)
+            self.views[root, None] = _Owner(view, bounds, automatic, number)
         return number
 
     @staticmethod
@@ -263,7 +282,7 @@ class PublishedFolders:
         for publication in publications:
             matched = False
             folder = Path(publication["path"]).resolve()
-            for key, (view, canvas, _automatic) in opened:
+            for key, (view, canvas, _automatic, _number) in opened:
                 dataset = self._dataset(key)
                 if dataset and getattr(view, "source_folder", dataset.root) == folder:
                     view.publish(
@@ -280,26 +299,27 @@ class PublishedFolders:
     def refresh(self):
         with self._lock:
             opened = list(self.views.items())
-        for key, (view, canvas, automatic) in opened:
-            dataset = self._dataset(key)
-            if dataset is None:
-                with self._lock:
-                    if self.views.get(key, (None,))[0] is not view:
-                        continue
-                    del self.views[key]
-                view.close()
-            elif automatic:
-                try:
+        for key, (view, canvas, automatic, _number) in opened:
+            try:
+                dataset = self._dataset(key)
+                if dataset is None:
+                    with self._lock:
+                        if self.views.get(key, (None,))[0] is not view:
+                            continue
+                        del self.views[key]
+                    view.close()
+                elif automatic:
                     view.publish(dataset.root, self._versions_on_disk(dataset.root), canvas)
-                except (OSError, ValueError, OverflowError):
-                    logging.getLogger(__name__).exception("Cannot publish %s", dataset.root)
+            except Exception:
+                # This background boundary must keep other owners observable.
+                logging.getLogger(__name__).exception("Cannot refresh publication %s", key)
         return self.revisions()
 
     def revisions(self):
         """Committed publication state, without starting work or waiting for a bake."""
         with self._lock:
             revisions = {}
-            for key, (view, _, _) in self.views.items():
+            for key, (view, _, _, _number) in self.views.items():
                 dataset = self._dataset(key)
                 if dataset is not None:
                     revisions[dataset.number] = view.revision
@@ -311,7 +331,7 @@ class PublishedFolders:
             for number, root, name in entries:
                 dataset = self.library.dataset(number)
                 held = (
-                    self.views.get((root, None))
+                    self._owner_for(number)
                     if dataset and not isinstance(dataset.acquisition, str)
                     else None
                 )
@@ -326,11 +346,7 @@ class PublishedFolders:
 
     def source_revision(self, number, name=STORE):
         with self._lock:
-            dataset = self.library.dataset(number)
-            if dataset is None:
-                return None
-            acquisition = dataset.acquisition if isinstance(dataset.acquisition, str) else None
-            held = self.views.get((dataset.root, acquisition))
+            held = self._owner_for(number)
             if held is None:
                 return None
             view = held[0]
@@ -339,15 +355,14 @@ class PublishedFolders:
             return view.revision
 
     def source_depth(self, number, name):
-        dataset = self.library.dataset(number)
-        held = self.views.get((dataset.root, None)) if dataset else None
-        if held and isinstance(held[0], PublishedAcquisition):
+        held = self._owner_for(number)
+        if held and isinstance(held[0], PublishedAcquisition) and name in held[0].outputs:
             return "flat" if name == STORE else "stack"
         return None
 
     def close(self):
         with self._lock:
-            for view, _, _ in self.views.values():
+            for view, _, _, _number in self.views.values():
                 view.close()
             self.views.clear()
 
