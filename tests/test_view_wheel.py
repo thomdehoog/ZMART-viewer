@@ -6,6 +6,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import numpy as np
 from test_view_sampling import write_tile
@@ -39,35 +40,51 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
     finally:
         view.close()
     wheel_dir = tmp_path / "wheels"
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            str(repo),
-            "--no-deps",
-            "--no-build-isolation",
-            "--wheel-dir",
-            str(wheel_dir),
-        ],
-        capture_output=True,
-        text=True,
-    )
+    staging = repo / "build/lib/zmart_viewer"
+    staging.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(
+        prefix="retired_test_", suffix=".py", dir=staging, delete=False
+    ) as planted:
+        planted.write(b"raise RuntimeError('retired staging module')\n")
+    orphan = Path(planted.name)
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "wheel",
+                str(repo),
+                "--no-deps",
+                "--no-build-isolation",
+                "--wheel-dir",
+                str(wheel_dir),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        orphan.unlink()
     assert result.returncode == 0, result.stdout + result.stderr
     (wheel,) = wheel_dir.glob("zmart_viewer-*.whl")
     with zipfile.ZipFile(wheel) as archive:
-        prefix = "zmart_viewer/_frontend/"
+        prefix = "zmart_viewer/"
         packaged = {
             name[len(prefix) :]: archive.read(name)
             for name in archive.namelist()
             if name.startswith(prefix)
         }
         expected_files = {
-            p.relative_to(built_dist).as_posix(): p.read_bytes()
+            "_frontend/" + p.relative_to(built_dist).as_posix(): p.read_bytes()
             for p in built_dist.rglob("*")
             if p.is_file()
         }
+        expected_files.update(
+            {
+                p.relative_to(repo / "zmart_viewer").as_posix(): p.read_bytes()
+                for p in (repo / "zmart_viewer").rglob("*.py")
+            }
+        )
         assert packaged == expected_files, (
             "Wheel must contain exactly this build, with no retired assets"
         )

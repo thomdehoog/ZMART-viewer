@@ -4,7 +4,9 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from setuptools.command.bdist_wheel import bdist_wheel
 from setuptools.command.build_py import build_py
 from setuptools.errors import SetupError
 
@@ -14,7 +16,10 @@ def validate_frontend(page):
         manifest = json.loads((page / "dist/build-manifest.json").read_text())
         inputs = [p for p in page.iterdir() if p.is_file()]
         inputs += [
-            p for folder in ("src", "scripts") for p in (page / folder).rglob("*") if p.is_file()
+            p
+            for folder in ("src", "scripts", "public")
+            for p in (page / folder).rglob("*")
+            if p.is_file()
         ]
         outputs = [
             p for p in (page / "dist").rglob("*") if p.is_file() and p.name != "build-manifest.json"
@@ -46,3 +51,16 @@ class BuildPy(build_py):
         if frontend.exists():
             shutil.rmtree(frontend)
         super().run()
+
+
+class Wheel(bdist_wheel):
+    def run(self):
+        # Neither an old Python module nor an old asset may leak from build/lib.
+        # Only this invocation's temporary staging is removed on exit.
+        with TemporaryDirectory(prefix="zmart-wheel-") as staging:
+            build = self.reinitialize_command("build", reinit_subcommands=True)
+            build.build_base = staging
+            build.build_lib = str(Path(staging) / "lib")
+            self.bdist_dir = str(Path(staging) / "wheel")
+            self.skip_build = False
+            super().run()
