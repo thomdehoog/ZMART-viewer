@@ -131,11 +131,13 @@ class FolderWatcher:
         *,
         every: float = 1.0,
         excluding=frozenset(),
+        refresh_publications=None,
     ) -> None:
         self._library = library
         self._announcements = announcements
         self._every = every
         self._excluding = excluding
+        self._refresh_publications = refresh_publications
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -158,6 +160,8 @@ class FolderWatcher:
 
         while not self._stop.is_set():
             try:
+                if self._refresh_publications:
+                    self._refresh_publications()
                 now = (
                     self._library.revision(excluding=self._excluding)
                     if callable(self._excluding) or self._excluding
@@ -628,7 +632,14 @@ class SourceRegistry:
     it; how change is noticed lives here.
     """
 
-    def __init__(self, library, *, watching: bool, wants_the_bake: Callable | None = None):
+    def __init__(
+        self,
+        library,
+        *,
+        watching: bool,
+        wants_the_bake: Callable | None = None,
+        refresh_publications=None,
+    ):
         self.announcements = Announcements(when_changed=catch_up_governed_runs)
         self.runs = LiveRegistry(library, wants_the_bake=wants_the_bake)
         self.runs.refresh()
@@ -636,7 +647,12 @@ class SourceRegistry:
 
         if watching:
             self._watchers = [
-                FolderWatcher(library, self.announcements, excluding=self.runs.dataset_numbers),
+                FolderWatcher(
+                    library,
+                    self.announcements,
+                    excluding=self.runs.dataset_numbers,
+                    refresh_publications=refresh_publications,
+                ),
                 ManifestWatcher(self.runs.trackers, self.announcements),
             ]
 

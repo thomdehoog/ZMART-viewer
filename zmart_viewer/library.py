@@ -736,17 +736,22 @@ def _acquisition_type_in(store_name: str) -> str:
     return front or stem
 
 
-Acquisition = tuple[tuple[float, ...], tuple[str, ...] | None]
+Acquisition = tuple[tuple[float, ...], tuple[str, ...] | None] | str
 
 
 def _acquisition_of(root: Path, name: str) -> Acquisition:
     """What kind of acquisition one store says it is, read from the store itself."""
+    view = (_read_attrs_at(root / name).get("zmart") or {}).get("view")
+    if isinstance(view, dict) and view.get("acquisition"):
+        return view["acquisition"]
     declared = declared_channels(root / name)
     return voxel_size(root / name), tuple(declared) if declared is not None else None
 
 
 def _same_acquisition(one: Acquisition | None, other: Acquisition | None) -> bool:
     """Whether two stores can be pieces of the same acquisition."""
+    if isinstance(one, str) or isinstance(other, str):
+        return one == other
     if one is None or other is None:
         return True
 
@@ -768,7 +773,7 @@ def _kind_of_acquisition(root: Path, names: list[str]) -> Acquisition | None:
     for name in names:
         found = _acquisition_of(root, name)
 
-        if found[0] or found[1] is not None:
+        if isinstance(found, str) or found[0] or found[1] is not None:
             return found
 
     return None
@@ -840,8 +845,7 @@ def _one_acquisition_only(root: Path, names: list[str]) -> None:
     """Refuse a load that spans more than one acquisition, saying what it found."""
     named = [(_read_attrs_at(root / name).get("zmart") or {}).get("view") for name in names]
     if named and all(isinstance(view, dict) and view.get("acquisition") for view in named):
-        if len({view["acquisition"] for view in named}) == 1:
-            return  # Alternative views may have different Z geometry and display windows.
+        return  # Named acquisitions own their identity, independently of geometry.
     families: dict[tuple, list[str]] = {}
 
     for name in names:
@@ -939,6 +943,31 @@ class Library:
         root = parent.resolve()
         _one_acquisition_only(root, list(chosen))
         watched = watch if watch is not None else (names is None)
+
+        kinds = {store: _acquisition_of(root, store) for store in chosen}
+        if all(isinstance(kind, str) for kind in kinds.values()):
+            with self._lock:
+                self._let_go.difference_update((root, store) for store in chosen)
+                first = self._next
+                for kind in dict.fromkeys(kinds.values()):
+                    stores = [store for store in chosen if kinds[store] == kind]
+                    number = self._next
+                    self._next += 1
+                    label = name or kind
+                    if any(d.name == label for d in self._datasets.values()):
+                        label = f"{label} ({number})"
+                    self._datasets[number] = Dataset(
+                        number=number,
+                        root=root,
+                        name=label,
+                        stores=stores,
+                        channels=_channels_of(root, stores),
+                        live=bool(watched),
+                        watch=bool(watched),
+                        acquisition=kind,
+                        borrows=_borrowed_folders(root, stores),
+                    )
+                return first
 
         with self._lock:
             self._let_go.difference_update((root, store) for store in chosen)
@@ -1075,7 +1104,9 @@ class Library:
                     if folder not in dataset.borrows:
                         dataset.borrows.append(folder)
 
-                if dataset.acquisition is None and (kind[0] or kind[1] is not None):
+                if dataset.acquisition is None and (
+                    isinstance(kind, str) or kind[0] or kind[1] is not None
+                ):
                     dataset.acquisition = kind
 
                 return
@@ -1085,7 +1116,12 @@ class Library:
         self._datasets[number] = Dataset(
             number=number,
             root=root,
-            name=self._heading_for(root, name, number),
+            name=(
+                kind
+                if isinstance(kind, str)
+                and not any(d.name == kind for d in self._datasets.values())
+                else self._heading_for(root, name, number)
+            ),
             stores=[name],
             channels=_channels_of(root, [name]),
             live=True,
