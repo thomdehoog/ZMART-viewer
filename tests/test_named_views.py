@@ -12,6 +12,31 @@ from zmart_viewer.views import ViewSet
 
 
 @pytest.mark.parametrize("bake", [False, True])
+def test_named_publication_places_off_grid_positions_without_editing_originals(tmp_path, bake):
+    source = tmp_path / "positions"
+    source.mkdir()
+    name = "p.ome.zarr"
+    write_tile(source, name, np.full((1, 1, 1, 8, 8), 80, dtype="uint16"), x=0.3)
+    original = {p: p.read_bytes() for p in source.rglob("*") if p.is_file()}
+    views = ViewSet(tmp_path / "view", acquisition="a", projections=("max",),
+                    projection_folder=tmp_path / "projections", piece=4)
+    try:
+        views.publish(source, {name: 1}, {"x_um": [0, 16], "y_um": [0, 8]},
+                      composition={"regions": "complete", "order": [name]}, bake=bake)
+        for output in views.outputs.values():
+            made = output.composer()
+            assert made.mosaic.tiles[0].copies[0].corner_um[2] == pytest.approx(0)
+            for level in range(3):
+                image = made.values_for(level, 0, 0, 0)
+                width = min(4, 8 // 2**level)
+                np.testing.assert_array_equal(image[:width, :width], 80)
+                assert made.coverage_for(level, 0, 0, 0)[:width, :width].all()
+        assert all(p.read_bytes() == before for p, before in original.items())
+    finally:
+        views.close()
+
+
+@pytest.mark.parametrize("bake", [False, True])
 def test_later_acquisition_fills_only_its_sparse_gap(tmp_path, bake):
     source = tmp_path / "positions"
     source.mkdir()

@@ -19,12 +19,14 @@ def validate_frontend(page):
         for folder, directories, files in os.walk(page):
             directories[:] = [d for d in directories if d not in ("node_modules", "dist")]
             inputs.extend(Path(folder) / name for name in files)
+        inputs.extend(page / "../../zmart_viewer" / name
+                      for name in ("embedding.js", "neuroglancer-growth.mjs"))
         outputs = [
             p for p in (page / "dist").rglob("*") if p.is_file() and p.name != "build-manifest.json"
         ]
         for paths, expected in ((inputs, manifest["inputs"]), (outputs, manifest["outputs"])):
             actual = {
-                p.relative_to(page).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                Path(os.path.relpath(p, page)).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in paths
             }
             if actual != expected:

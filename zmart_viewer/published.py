@@ -431,25 +431,6 @@ class PublishedAcquisition:
                 sources[name] = cached
                 continue
             tile = _read_one_tile(folder / name)
-            # Nearest-neighbour sampling onto the aggregate grid moves a footprint by
-            # at most half a finest voxel. Apply the same shift to every native level;
-            # original pixels, metadata and authoritative source-local coverage stay intact.
-            base = tile.copies[0]
-            shift = [0.0]
-            for axis, key in ((1, "y_um"), (2, "x_um")):
-                start, step = base.corner_um[axis], base.voxel_um[axis]
-                low = canvas[key][0]
-                shift.append(low + math.floor((start - low) / step + 0.5) * step - start)
-            tile = replace(
-                tile,
-                copies=[
-                    replace(
-                        copy,
-                        corner_um=tuple(a + b for a, b in zip(copy.corner_um, shift, strict=True)),
-                    )
-                    for copy in tile.copies
-                ],
-            )
             kind = STORE if tile.copies[0].shape[0] == 1 else STACK_STORE
             if cached and cached[1] != kind:
                 raise ValueError("A published position cannot change between flat and stack")
@@ -727,6 +708,21 @@ class PublishedTransfer(ComposedPicture):
                     tiles.append(kept[name])
                     continue
                 tile = (_tiles or {}).get(name) or _read_one_tile(folder / name)
+                if composition is not None:
+                    # One nearest-neighbour placement rule for legacy and named views.
+                    # Shift every native level equally, by at most half a finest XY voxel;
+                    # originals and source-local acquired regions remain untouched.
+                    base = tile.copies[0]
+                    shift = [0.0]
+                    for axis, key in ((1, "y_um"), (2, "x_um")):
+                        start, step = base.corner_um[axis], base.voxel_um[axis]
+                        low = canvas[key][0]
+                        shift.append(low + math.floor((start - low) / step + 0.5) * step - start)
+                    tile = replace(tile, copies=[
+                        replace(copy, corner_um=tuple(
+                            a + b for a, b in zip(copy.corner_um, shift, strict=True)
+                        )) for copy in tile.copies
+                    ])
                 if _read_attrs_at(tile.store)["multiscales"][0].get("type") != "mean":
                     raise ValueError("Coarse baking requires mean-reduced position pyramids")
                 if name in references:

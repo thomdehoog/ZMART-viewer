@@ -20,10 +20,9 @@ def test_top_bounds_use_transforms_when_global_depth_units_change():
           emptyInvalidCoordinateSpace} from 'neuroglancer/unstable/coordinate_transform.js';
         import {WatchableValue} from 'neuroglancer/unstable/trackable_value.js';
         import {NullarySignal} from 'neuroglancer/unstable/util/signal.js';
-        const code = readFileSync('src/engine.js', 'utf8').split('function keepDepthLocal(')[1]
-          .split('export function syncLayers')[0];
-        const keep = new Function('WatchableCoordinateSpaceTransform', 'WatchableValue',
-          'return function keepDepthLocal('+code)(WatchableCoordinateSpaceTransform, WatchableValue);
+        const {keepDepthLocal} = await import('../../zmart_viewer/embedding.js');
+        const keep = (layer, viewer) => keepDepthLocal(layer, viewer,
+          transform => new WatchableCoordinateSpaceTransform(transform));
         const space = (scale, depth) => makeCoordinateSpace({names:['z'], units:['m'],
           scales:Float64Array.of(scale), boundingBoxes:[makeIdentityTransformedBoundingBox({
             lowerBounds:Float64Array.of(0), upperBounds:Float64Array.of(depth)})]});
@@ -53,6 +52,34 @@ def test_top_bounds_use_transforms_when_global_depth_units_change():
           for (const dispose of disposers.reverse()) dispose();
           assert.equal(combiner.bindings.size, 0);
         }
+        // Another acquisition changes local units, not this source's plane lattice.
+        for (const depth of [1, 5]) {
+          const scale = depth === 1 ? 1e-6 : 2e-6;
+          const native = makeCoordinateSpace({names:['z'], units:['m'],
+            scales:Float64Array.of(scale), boundingBoxes:[makeIdentityTransformedBoundingBox({
+              lowerBounds:Float64Array.of(-0.5), upperBounds:Float64Array.of(depth-0.5)})]});
+          const global = new WatchableValue(space(1e-6, 40));
+          const combiner = new CoordinateSpaceCombiner(global, () => true);
+          const position = {changed:new NullarySignal(), coordinateSpace:global, value:Float32Array.of(0)};
+          const viewer = {layerSpecification:{coordinateSpaceCombiner:combiner},
+            navigationState:{position}};
+          const source = {changed:new NullarySignal(), loadState:{transform:
+            new WatchableCoordinateSpaceTransform(makeIdentityTransform(native))}};
+          const local = new WatchableValue(makeCoordinateSpace({names:["z'"], units:['m'],
+            scales:Float64Array.of(1.133333e-6)}));
+          const localPosition = {value:Float32Array.of(0)};
+          const disposers = [];
+          keep({dataSources:[source], localCoordinateSpace:local, localPosition,
+            registerDisposer:d => disposers.push(d)}, viewer);
+          for (const requested of [-20, 0, 20]) {
+            position.value = Float32Array.of(requested);
+            position.changed.dispatch();
+            const actual = localPosition.value[0]*local.value.scales[0];
+            const wanted = Math.max(0, Math.min((depth-1)*scale, requested*global.value.scales[0]));
+            assert.ok(Math.abs(actual-wanted) < 1e-11, `${actual} != ${wanted}`);
+          }
+          for (const dispose of disposers.reverse()) dispose();
+        }
     """,
         ],
         cwd=root,
@@ -63,7 +90,7 @@ def test_top_bounds_use_transforms_when_global_depth_units_change():
 
 
 def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
-    script = Path(__file__).resolve().parents[1] / "app/page/scripts/patch_neuroglancer_growth.mjs"
+    script = Path(__file__).resolve().parents[1] / "zmart_viewer/neuroglancer-growth.mjs"
     result = subprocess.run(
         [
             "node",
