@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=70.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -41,6 +41,7 @@ packages = ["zmart_viewer", "zmart_viewer.record", "zmart_viewer._frontend"]
 
 [tool.setuptools.cmdclass]
 build_py = "build_support.BuildPy"
+bdist_wheel = "build_support.Wheel"
 
 [tool.setuptools.package-data]
 "zmart_viewer._frontend" = ["**/*"]

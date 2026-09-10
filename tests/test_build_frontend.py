@@ -13,6 +13,7 @@ def test_frontend_build_certificate(tmp_path):
     page = tmp_path / "page"
     (page / "src").mkdir(parents=True)
     (page / "scripts").mkdir()
+    (page / "public").mkdir()
     (page / "dist").mkdir()
     for name in ("src/app.js", "dist/index.html", "dist/async_computation.bundle.js"):
         (page / name).write_text(name)
@@ -34,7 +35,7 @@ def test_frontend_build_certificate(tmp_path):
         with pytest.raises(SetupError):
             validate_frontend(page)
         (page / name).write_bytes(original)
-    for name in ("src/new.js", "dist/retired-worker.js"):
+    for name in ("src/new.js", "public/new.js", "dist/retired-worker.js"):
         (page / name).write_text("unexpected")
         with pytest.raises(SetupError):
             validate_frontend(page)
