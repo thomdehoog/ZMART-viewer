@@ -18,11 +18,21 @@ def test_named_publication_places_off_grid_positions_without_editing_originals(t
     name = "p.ome.zarr"
     write_tile(source, name, np.full((1, 1, 1, 8, 8), 80, dtype="uint16"), x=0.3)
     original = {p: p.read_bytes() for p in source.rglob("*") if p.is_file()}
-    views = ViewSet(tmp_path / "view", acquisition="a", projections=("max",),
-                    projection_folder=tmp_path / "projections", piece=4)
+    views = ViewSet(
+        tmp_path / "view",
+        acquisition="a",
+        projections=("max",),
+        projection_folder=tmp_path / "projections",
+        piece=4,
+    )
     try:
-        views.publish(source, {name: 1}, {"x_um": [0, 16], "y_um": [0, 8]},
-                      composition={"regions": "complete", "order": [name]}, bake=bake)
+        views.publish(
+            source,
+            {name: 1},
+            {"x_um": [0, 16], "y_um": [0, 8]},
+            composition={"regions": "complete", "order": [name]},
+            bake=bake,
+        )
         for output in views.outputs.values():
             made = output.composer()
             assert made.mosaic.tiles[0].copies[0].corner_um[2] == pytest.approx(0)
@@ -222,13 +232,13 @@ def test_named_views_reopen_pixels_coverage_and_idle(tmp_path, bake):
             output = views.outputs[f"overview_{mode}.zmartview.zarr"]
             output.close()
             made = output.composer()
-            # The singleton's display placement is zero, not its acquired height.
-            placed = [
-                (data, mask, 0 if data.shape[2] == 1 else z, x) for data, mask, z, x in originals
-            ]
-            for z in (0, 2, 10, 12, 15, 24, 25):
+            # Top aligns every bottom; Slice retains every specimen origin.
+            placed = [(data, mask, 0 if mode == "top" else z, x) for data, mask, z, x in originals]
+            for z in range(made.mosaic.shape(0)[0]):
                 for level in range(3):
-                    expected, coverage = oracle(placed, mode, z, 1, 1, level)
+                    expected, coverage = oracle(
+                        placed, mode, z + int(made.mosaic.corner_um[0]), 1, 1, level
+                    )
                     actual = made.values_for(level, z, 0, 0, 1, 1)
                     if actual is None:
                         actual = np.zeros((4, 4))

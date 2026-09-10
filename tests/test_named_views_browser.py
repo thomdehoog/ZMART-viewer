@@ -68,6 +68,10 @@ def test_same_folder_acquisitions_cover_instead_of_add(browser, built_dist, tmp_
             for name in ("a", "b"):
                 page.get_by_role("combobox", name=f"{name} view").select_option(mode)
             _wait_for_picture(page)
+            if mode == "top":
+                assert page.get_by_text("Plane", exact=True).is_visible()
+            elif mode == "slice":
+                assert "µm" in page.get_by_label("z position value").inner_text()
             page.evaluate("""() => {
               const p=zmartViewer.navigationState.position, v=Float32Array.from(p.value), n=p.coordinateSpace.value.names;
               for(const [axis,value] of Object.entries({z:0,x:32,y:32})) if(n.includes(axis)) v[n.indexOf(axis)]=value;
@@ -229,7 +233,9 @@ def test_top_holds_each_acquisition_with_shared_folder_and_slider(
           const s=zmartViewer.navigationState.position.coordinateSpace.value, i=s.names.indexOf('z');
           return [s.bounds.lowerBounds[i]*s.scales[i]*1e6, s.bounds.upperBounds[i]*s.scales[i]*1e6];
         }""")
-        assert bounds == pytest.approx([-2 - 0.5 * long_spacing, -2 + 6.5 * long_spacing], abs=1e-5)
+        # Top counts planes from the common floor, irrespective of the
+        # original specimen origin or physical spacing of either acquisition.
+        assert bounds == pytest.approx([-0.5, 6.5], abs=1e-5)
         reached = []
         for plane in range(7):
             selected = page.evaluate(
@@ -240,10 +246,10 @@ def test_top_holds_each_acquisition_with_shared_folder_and_slider(
               const ls=layer.layer.localCoordinateSpace.value, li=ls.names.indexOf("z'");
               return layer.layer.localPosition.value[li]*ls.scales[li]*1e6;
             }""",
-                -2 + plane * long_spacing,
+                plane,
             )
             reached.append(selected)
-        assert reached == pytest.approx([-2 + p * long_spacing for p in range(7)], abs=1e-5)
+        assert reached == pytest.approx(list(range(7)), abs=1e-5)
         for zoom in (0.5, 4):
             counts = []
             for z in (-2, 0, 1, 4):

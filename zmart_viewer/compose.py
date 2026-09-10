@@ -48,6 +48,9 @@ class Copy:
     voxel_um: tuple[float, float, float]
     corner_um: tuple[float, float, float]
     outer_shape: tuple[int, ...] = ()
+    # Native (first-plane specimen Z, step, count) when a Slice source is
+    # sampled onto the aggregate Z grid. Pixels remain in the original array.
+    z_sampling: tuple[float, float, int] | None = None
     presence: object | None = field(default=None, repr=False, compare=False)
     _opened: zarr.Array | None = field(default=None, repr=False)
 
@@ -58,6 +61,13 @@ class Copy:
             self._opened = zarr.open_array(str(self.held_in), mode="r")
 
         return self._opened
+
+    def source_plane(self, plane):
+        if self.z_sampling is None:
+            return plane
+        origin, step, count = self.z_sampling
+        physical = self.corner_um[0] + plane * self.voxel_um[0]
+        return min(count - 1, max(0, math.floor((physical - origin) / step + 0.5)))
 
 
 @dataclass
@@ -786,6 +796,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
                         "voxel_um": list(copy.voxel_um),
                         "corner_um": list(copy.corner_um),
                         **({"outer_shape": list(copy.outer_shape)} if copy.outer_shape else {}),
+                        **({"z_sampling": list(copy.z_sampling)} if copy.z_sampling else {}),
                     }
                     for copy in tile.copies
                 ],
@@ -817,6 +828,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
                     voxel_um=tuple(copy["voxel_um"]),
                     corner_um=tuple(copy["corner_um"]),
                     outer_shape=tuple(copy.get("outer_shape", ())),
+                    z_sampling=tuple(copy["z_sampling"]) if copy.get("z_sampling") else None,
                 )
                 for copy in one["copies"]
             ],
@@ -1256,6 +1268,15 @@ class Composer:
         outer: tuple[int, ...],
     ) -> np.ndarray:
         """A rectangle of one tile, assembled out of whichever blocks hold it."""
+        if copy.z_sampling is not None:
+            indices = [copy.source_plane(p) for p in range(low[0], high[0])]
+            # Read a contiguous native block once, even when several output
+            # planes select the same native plane. The normal block cache applies.
+            native = replace(copy, z_sampling=None, _opened=copy.array)
+            values = self._read_from(
+                native, (indices[0], *low[1:]), (indices[-1] + 1, *high[1:]), outer
+            )
+            return values[np.asarray(indices) - indices[0]]
         self.tile_reads += 1
         reading_began = time.perf_counter()
         size = copy.chunks

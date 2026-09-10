@@ -64,7 +64,6 @@ class ViewSet:
         }
         self.keys = keys
         self.source_folder = None
-        self._references = {}
         for key, output in zip(keys, self.outputs.values()):
             pending_path = output._shown / "pending.json"
             pending = (
@@ -198,23 +197,6 @@ class ViewSet:
                 "Original source revisions must be nonnegative integers and cannot regress"
             )
         self.source_folder = folder
-        references = dict(composition.get("z_references", {}))
-        for name in versions:
-            if name not in references:
-                cached = self._references.get(name)
-                if cached is None or cached[0] != versions[name]:
-                    attrs = _read_attrs_at(folder / name)
-                    model = attrs.get("zmart_microscopy", {}).get("z_coordinate", {})
-                    reference = model.get("acquisition_provenance", {}).get(
-                        "requested_stage_focus_z_um"
-                    )
-                    reference = (
-                        reference
-                        if reference is not None
-                        else _read_one_tile(folder / name).copies[0].corner_um[0]
-                    )
-                    cached = self._references[name] = (versions[name], reference)
-                references[name] = cached[1]
         prepared, arrivals = [], []
         temporary = None
         for key, output in zip(self.keys, self.outputs.values()):
@@ -224,7 +206,9 @@ class ViewSet:
             if snapshot.get("pyramid_reduction") is None:
                 # This specifies output arithmetic, not the input pyramids' recipe.
                 snapshot["pyramid_reduction"] = MEAN_FROM_ORIGINALS
-            snapshot["z_references"] = references
+            # Named placement comes from the mode and original geometry, never
+            # from a focus reference left over from relative-Z publication.
+            snapshot.pop("z_references", None)
             snapshot["view"] = self._identity(key)
             source = self.source_folder
             projected_versions = versions
@@ -275,7 +259,6 @@ class ViewSet:
                     projected_versions[derived] = revision
                 snapshot["regions"] = coverage
                 snapshot["order"] = [names[name] for name in composition["order"]]
-                snapshot["z_references"] = dict.fromkeys(projected_versions, 0)
                 snapshot["pyramid_reduction"] = MEAN_REDUCTION
             prepared.append((output, source, projected_versions, snapshot, candidates))
         if arrivals:

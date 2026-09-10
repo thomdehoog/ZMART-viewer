@@ -33,7 +33,7 @@ function axisInfo(viewer, name) {
   const min = integerCentres ? Math.ceil(lower) : Math.ceil(lower - 0.5) + 0.5;
   const max = integerCentres ? Math.floor(upper) : Math.floor(upper - 0.5) + 0.5;
   if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) return null;
-  return { index, min, max, value: position.value[index] };
+  return { index, min, max, value: position.value[index], unitUm: space.scales[index] * 1e6 };
 }
 
 /**
@@ -51,6 +51,7 @@ export default function AxisSlider({
   limit = null,
   ranges = null,
   orientation = "horizontal",
+  physicalZ = false,
 }) {
   const [axis, setAxis] = React.useState(null);
   const committedMoments = React.useMemo(() => momentsInRanges(ranges), [ranges]);
@@ -190,7 +191,7 @@ export default function AxisSlider({
   // Only one plane or frame to look at is not a choice, so no control is offered.
   // This is how a still image ends up with no time slider and a single plane with
   // no Z slider, without anything having to know which is which.
-  if (count < 2) return null;
+  if (count < 2 && !physicalZ) return null;
 
   // Standing up rather than lying down. The two arrangements hold exactly the same
   // controls in the same order -- play, name, slider, where you are -- so only the
@@ -217,7 +218,7 @@ export default function AxisSlider({
         upright={upright}
         min={allowed ? 0 : reachable.min}
         max={allowed ? allowed.length - 1 : reachable.max}
-        step={allowed ? 1 : 0.5}
+        step={allowed || label === "Plane" ? 1 : 0.5}
         value={value}
         onChange={(event) => moveTo(Number(event.target.value))}
         aria-label={`${axisName} position`}
@@ -229,6 +230,7 @@ export default function AxisSlider({
         {...(upright ? { orient: "vertical" } : null)}
       />
       <output aria-label={`${axisName} position value`} style={styles.axisValue}>
+        {physicalZ ? `${Number((axis.value * axis.unitUm).toFixed(3))} µm · ` : null}
         {stepNumber} / {count}
         {allowed && declared > count ? ` of ${declared}` : null}
       </output>

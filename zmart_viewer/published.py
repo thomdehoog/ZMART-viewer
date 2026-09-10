@@ -37,6 +37,35 @@ STACK_STORE = ".zmart-viewer/stack.ome.zarr"
 ACQUISITION_RENDERING_VERSION = 1
 
 
+def _sampled_regions(copy, records):
+    """Compile source-local acquisition coverage onto the displayed Z grid.
+
+    Serialized mosaics carry this compiled coverage; reopen must not map it twice.
+    Pixels and coverage both use Copy.source_plane, including nearest-plane ties.
+    """
+    if copy.z_sampling is None:
+        return records
+    mapped = []
+    for record in records:
+        region = AcquiredRegion.from_written(record)
+        if region.origin[0] + region.shape[0] > copy.z_sampling[2]:
+            raise ValueError("Acquired region extends outside its source")
+        planes = [
+            p
+            for p in range(copy.shape[0])
+            if region.origin[0] <= copy.source_plane(p) < region.origin[0] + region.shape[0]
+        ]
+        if planes:
+            mapped.append(
+                replace(
+                    region,
+                    origin=(planes[0], *region.origin[1:]),
+                    shape=(planes[-1] - planes[0] + 1, *region.shape[1:]),
+                ).as_written()
+            )
+    return mapped
+
+
 def validate_canvas(canvas):
     for axis in ("x_um", "y_um"):
         try:
@@ -48,12 +77,58 @@ def validate_canvas(canvas):
             raise ValueError(f"Invalid specimen canvas bounds for {axis}")
 
 
-def _place_depth(tiles, *, spacing=None, combine=False):
-    """Display flats together; keep stacks on their common specimen-Z lattice."""
+def _place_depth(tiles, *, spacing=None, combine=False, mode=None):
+    """Place named Top on the floor and Slice on the specimen sampling grid.
+
+    Originals are never edited. Slice uses nearest-plane placement on a grid
+    anchored at specimen zero (at most half a Z voxel of quantization). Keeping
+    that phase fixed prevents positions moving when another position arrives.
+    The unnamed legacy aggregate retains its existing relative-depth contract.
+    """
     flat = [tile.copies[0].shape[0] == 1 for tile in tiles]
+    if mode in ("top", "slice"):
+        spacing = (
+            1.0
+            if mode == "top"
+            else min(
+                c.z_sampling[1] if c.z_sampling else c.voxel_um[0]
+                for t in tiles
+                for c in t.copies[:1]
+            )
+        )
+        if not math.isfinite(spacing) or spacing <= 0:
+            raise ValueError("Named views require positive finite Z spacing")
+        placed = []
+        for tile in tiles:
+            copies = []
+            for copy in tile.copies:
+                origin, step, count = copy.z_sampling or (
+                    copy.corner_um[0],
+                    copy.voxel_um[0],
+                    copy.shape[0],
+                )
+                if not math.isfinite(origin) or not math.isfinite(step) or step <= 0:
+                    raise ValueError("Named views require finite Z origins and positive spacing")
+                first = 0 if mode == "top" else math.floor(origin / spacing + 0.5)
+                last = (
+                    count - 1
+                    if mode == "top"
+                    else math.floor((origin + (count - 1) * step) / spacing + 0.5)
+                )
+                copies.append(
+                    replace(
+                        copy,
+                        corner_um=(first * spacing, *copy.corner_um[1:]),
+                        voxel_um=(spacing, *copy.voxel_um[1:]),
+                        shape=(last - first + 1, *copy.shape[1:]),
+                        z_sampling=(origin, step, count) if mode == "slice" else None,
+                    )
+                )
+            placed.append(replace(tile, copies=copies))
+        tiles = placed
     if any(flat) and not all(flat) and not combine:
         raise ValueError("Separate flat and stack aggregates are required for mixed sources")
-    if combine and not all(flat):
+    if combine and not all(flat) and mode is None:
         if spacing is None:
             spacing = next(t.copies[0].voxel_um[0] for t in tiles if t.copies[0].shape[0] > 1)
         tiles = [
@@ -70,7 +145,7 @@ def _place_depth(tiles, *, spacing=None, combine=False):
             else t
             for t, is_flat in zip(tiles, flat)
         ]
-    if all(flat):
+    if all(flat) and mode is None:
         placed = [
             replace(
                 tile,
@@ -594,6 +669,7 @@ class PublishedTransfer(ComposedPicture):
                 "view",
                 "originals",
                 "original_revisions",
+                "depth_placement",
             }
         ):
             raise ValueError("composition must contain explicit regions and order")
@@ -606,6 +682,10 @@ class PublishedTransfer(ComposedPicture):
             or not isinstance(view.get("acquisition"), str)
         ):
             raise ValueError("Named views require an acquisition and top, slice or projection type")
+        if view:
+            # A changed placement recipe must retire old relative-Z bakes even
+            # when the original position revisions have not changed.
+            composition["depth_placement"] = "plane-top-specimen-slice-v1"
         self._shown.mkdir(parents=True, exist_ok=True)
         with self._lock, _holding_the_bake_lock(self._shown):
             pending = self._shown / "pending.json"
@@ -660,6 +740,10 @@ class PublishedTransfer(ComposedPicture):
             references = (composition or {}).get("z_references", {})
             old_references = (old_composition or {}).get("z_references", {})
             changed.update(n for n in versions if references.get(n) != old_references.get(n))
+            if (composition or {}).get("depth_placement") != (old_composition or {}).get(
+                "depth_placement"
+            ):
+                changed.update(versions)
             if recovering:
                 changed = versions.keys() | old_versions.keys()
             affected = set(changed)
@@ -718,14 +802,21 @@ class PublishedTransfer(ComposedPicture):
                         start, step = base.corner_um[axis], base.voxel_um[axis]
                         low = canvas[key][0]
                         shift.append(low + math.floor((start - low) / step + 0.5) * step - start)
-                    tile = replace(tile, copies=[
-                        replace(copy, corner_um=tuple(
-                            a + b for a, b in zip(copy.corner_um, shift, strict=True)
-                        )) for copy in tile.copies
-                    ])
+                    tile = replace(
+                        tile,
+                        copies=[
+                            replace(
+                                copy,
+                                corner_um=tuple(
+                                    a + b for a, b in zip(copy.corner_um, shift, strict=True)
+                                ),
+                            )
+                            for copy in tile.copies
+                        ],
+                    )
                 if _read_attrs_at(tile.store)["multiscales"][0].get("type") != "mean":
                     raise ValueError("Coarse baking requires mean-reduced position pyramids")
-                if name in references:
+                if name in references and not view:
                     reference = references[name]
                     if not isinstance(reference, (float, int)) or not math.isfinite(reference):
                         raise ValueError(
@@ -753,6 +844,7 @@ class PublishedTransfer(ComposedPicture):
                     tiles,
                     spacing=previous.mosaic.voxel_um(0)[0] if previous and not view else None,
                     combine=bool(view),
+                    mode=view["type"] if view else None,
                 )
                 if previous and not view:
                     held = previous.mosaic
@@ -822,12 +914,25 @@ class PublishedTransfer(ComposedPicture):
                     moments, channels = mosaic.frame_room
                     regions = {
                         tile.name: [
-                            AcquiredRegion(t, c, (0, 0, 0), tile.copies[0].shape).as_written()
+                            AcquiredRegion(
+                                t,
+                                c,
+                                (0, 0, 0),
+                                (
+                                    (tile.copies[0].z_sampling[2], *tile.copies[0].shape[1:])
+                                    if tile.copies[0].z_sampling
+                                    else tile.copies[0].shape
+                                ),
+                            ).as_written()
                             for t in range(moments)
                             for c in range(channels)
                         ]
                         for tile in tiles
                     }
+                regions = {
+                    tile.name: _sampled_regions(tile.copies[0], regions[tile.name])
+                    for tile in tiles
+                }
                 mosaic = mosaic.with_acquired_regions(
                     regions,
                     order=composition["order"],
