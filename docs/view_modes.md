@@ -144,6 +144,11 @@ using the original folder's path, new revision map and composition. Do not proxy
 image chunks through the producer: the renderer reads the viewer HTTP service.
 Multiple acquisitions may publish into the same `run/view` folder. Each owns its
 named outputs and options; announcing one original folder does not update another.
+Named acquisitions have separate panel/close identities even at different
+objectives or Z spacings. Geometry never determines their identity; legacy
+datasets retain their existing geometry-based grouping. Within one destination,
+an open original folder has one acquisition owner, so a misspelled second name
+is refused. Independent destination folders remain allowed.
 
 Publication performs work synchronously at this API boundary. Call it from the
 producer's existing asynchronous/coalesced publication worker, not an acquisition
@@ -158,6 +163,12 @@ Preflight/overflow failure preserves the old publication. An I/O failure during
 later commits may leave earlier views advanced; the server announces those
 successes, refuses reads of pending views and allows retry. Saved chunk geometry
 and pending recovery state are authoritative when reopening.
+Original revision history is read from committed publications under an
+acquisition-scoped lock, including commits from another handle or an interrupted
+update. Old previews without that history can still be opened for reading, but
+further live publication requires a new view folder; no missing history is guessed.
+Automatic external-folder publication runs in the existing folder watcher, not
+in `/api/config`. A failing automatic publisher is logged without blocking others.
 
 ## Build and open
 
@@ -170,8 +181,10 @@ python -m pip wheel . --no-deps --wheel-dir dist
 ```
 
 The successful frontend build records input/output hashes. Wheel creation rejects
-missing, changed or incomplete build output and replaces only its owned frontend
-staging directory, so retired hashed bundles cannot survive a subsequent build.
+missing, changed or incomplete build output, including changed public assets.
+Each wheel uses fresh temporary staging for the whole package, so neither retired
+Python modules nor hashed bundles can survive a subsequent build. Existing build
+directories are not deleted.
 
 The wheel includes the page and Neuroglancer workers. To serve saved views from an
 installed package:
