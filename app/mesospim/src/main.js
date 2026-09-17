@@ -91,7 +91,7 @@ function buildViewer(ui) {
     viewer.display.scheduleRedraw();
   }
   if (ui.chrome === "simple") {
-    mountPanel(viewer, { fit: () => fitEverything(viewer) });
+    viewer.panel = mountPanel(viewer, { fit: () => fitEverything(viewer) });
   }
   window.viewer = viewer;
   return viewer;
@@ -296,6 +296,7 @@ async function follow(viewer, first) {
   for (;;) {
     if (answer && answer.version !== version) {
       version = answer.version;
+      viewer.panel?.setChoices(answer.choices);
       const state = answer.state ?? {};
       if (state.layout && viewer.layout.toJSON() !== state.layout) viewer.layout.restoreState(state.layout);
       const hadLayers = viewer.layerManager.managedLayers.length > 0;

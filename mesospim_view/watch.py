@@ -17,6 +17,7 @@ window in ``window.py`` only drives them from a timer.
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -135,6 +136,10 @@ class Follower:
         self.listed: list[Acquisition] = []
         self.watcher: Watcher | None = None
         self.following = True
+        self._offered: tuple[tuple[str, ...], int] | None = None
+        # poll() runs on a timer, choose() on the page's request: one at a time.
+        self._lock = threading.RLock()
+        self.viewer.on_choice(self.choose)
 
     @property
     def root(self) -> Path:
@@ -155,30 +160,42 @@ class Follower:
 
     def poll(self) -> bool:
         """One look at the disk; True when the list of acquisitions changed."""
-        listed = self.acquisitions.list()
-        relisted = [a.path for a in listed] != [a.path for a in self.listed]
-        self.listed = listed
-        if self.following and listed and self.shown != listed[0].path:
-            self.show(listed[0])
-        if self.watcher is not None:
-            self.watcher.poll()
-        return relisted
+        with self._lock:
+            listed = self.acquisitions.list()
+            relisted = [a.path for a in listed] != [a.path for a in self.listed]
+            self.listed = listed
+            if self.following and listed and self.shown != listed[0].path:
+                self.show(listed[0])
+            if self.watcher is not None:
+                self.watcher.poll()
+            self._offer()
+            return relisted
 
     def show(self, acquisition: Acquisition) -> None:
-        if self.watcher is not None:
-            if self.watcher.acquisition == acquisition.path:
-                return
-            self.watcher.forget()
-        self.watcher = Watcher(self.viewer, acquisition.path)
-        self.watcher.poll()
-        self.viewer.fit()
+        with self._lock:
+            if self.watcher is not None:
+                if self.watcher.acquisition == acquisition.path:
+                    return
+                self.watcher.forget()
+            self.watcher = Watcher(self.viewer, acquisition.path)
+            self.watcher.poll()
+            self.viewer.fit()
+            self._offer()
 
     def choose(self, index: int) -> None:
         """The operator picked an entry of the list: the first one means follow again."""
-        if 0 <= index < len(self.listed):
-            self.following = index == 0
-            self.show(self.listed[index])
+        with self._lock:
+            if 0 <= index < len(self.listed):
+                self.following = index == 0
+                self.show(self.listed[index])
 
     def follow_latest(self) -> None:
         self.following = True
         self.poll()
+
+    def _offer(self) -> None:
+        """The dropdown in the panel: the session's acquisitions, and the one shown."""
+        offer = (tuple(self.names), self.shown_index)
+        if offer != self._offered:
+            self._offered = offer
+            self.viewer.offer_acquisitions(list(offer[0]), offer[1])

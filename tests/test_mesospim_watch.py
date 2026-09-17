@@ -110,6 +110,12 @@ def test_the_follower_stays_on_the_newest_acquisition_until_an_older_one_is_chos
         assert len(view.stores("run_b")) == 2, "and the tile that landed meanwhile is there"
         follower.choose(0)
         assert follower.following is True
+
+        # The panel's dropdown is fed by the follower and drives it back.
+        assert view._server.scene.choices == {"names": ["run_b", "run_a"], "current": 0}
+        view._server.choice_reported({"index": 1})
+        assert follower.shown == older and follower.following is False
+        assert view._server.scene.choices == {"names": ["run_b", "run_a"], "current": 1}
     finally:
         view.stop()
 

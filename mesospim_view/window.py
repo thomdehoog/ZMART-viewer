@@ -2,13 +2,13 @@
 
     python -m mesospim_view.window /path/to/data
 
-A dropdown of the acquisitions in a data folder, newest first, and the viewer
-below it. The newest acquisition is followed automatically -- a new one
-appearing while the window is open is switched to, and every tile or time
-point that lands in it is shown within a second -- unless an older one was
-picked from the dropdown, which stays until *Latest* is pressed. The
-following itself is :class:`~mesospim_view.watch.Follower`; this file only
-binds it to Qt.
+The viewer over a data folder. The newest acquisition is followed
+automatically -- a new one appearing while the window is open is switched to,
+and every tile or time point that lands in it is shown within a second --
+unless an older one was picked from the dropdown at the top of the viewer's
+own panel, which stays until the current one is picked again. The following
+itself is :class:`~mesospim_view.watch.Follower`; this file only gives it a
+window and a timer.
 
 Written against the Qt binding mesoSPIM-control uses (PyQt5), through the same
 small helper the plain widget uses, so PyQt6 and PySide work as well.
@@ -31,30 +31,16 @@ def make_window_class():
     QtCore, QtWidgets = qt.QtCore, qt.QtWidgets
 
     class DataViewerWindow(QtWidgets.QWidget):
-        """A dropdown of acquisitions over the viewer, following the newest."""
+        """The viewer, following the newest acquisition of a folder."""
 
         def __init__(self, root: str | Path, parent=None, *, viewer: Viewer | None = None) -> None:
             super().__init__(parent)
             self.setWindowTitle("Data viewer")
             self.follower = Follower(viewer or Viewer(ui="simple"), root)
+            self.setToolTip(f"Watching {self.follower.root}")
 
-            self.chooser = QtWidgets.QComboBox()
-            self.chooser.setMinimumWidth(240)
-            self.chooser.activated.connect(self._chosen)
-            self.latest = QtWidgets.QPushButton("Latest")
-            self.latest.setToolTip("Follow the newest acquisition again")
-            self.latest.clicked.connect(self.follow_latest)
-            self.folder = QtWidgets.QLabel(str(self.follower.root))
-            self.folder.setToolTip("The folder being watched")
-
-            bar = QtWidgets.QHBoxLayout()
-            bar.addWidget(QtWidgets.QLabel("Acquisition"))
-            bar.addWidget(self.chooser, 1)
-            bar.addWidget(self.latest)
-            bar.addWidget(self.folder, 2)
             layout = QtWidgets.QVBoxLayout(self)
-            layout.setContentsMargins(6, 6, 6, 6)
-            layout.addLayout(bar)
+            layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(self.viewer.qt_widget(self), 1)
 
             self.timer = QtCore.QTimer(self)
@@ -67,28 +53,7 @@ def make_window_class():
             return self.follower.viewer
 
         def poll(self) -> None:
-            if self.follower.poll():
-                self._relist()
-            self._point_at_shown()
-
-        def follow_latest(self) -> None:
-            self.follower.follow_latest()
-            self._point_at_shown()
-
-        def _chosen(self, index: int) -> None:
-            self.follower.choose(index)
-
-        def _relist(self) -> None:
-            self.chooser.blockSignals(True)
-            self.chooser.clear()
-            for name in self.follower.names:
-                self.chooser.addItem(name)
-            self.chooser.blockSignals(False)
-
-        def _point_at_shown(self) -> None:
-            at = self.follower.shown_index
-            if at >= 0 and self.chooser.currentIndex() != at:
-                self.chooser.setCurrentIndex(at)
+            self.follower.poll()
 
         def closeEvent(self, event) -> None:  # noqa: N802 -- Qt's name
             self.timer.stop()
