@@ -1,0 +1,498 @@
+"""The mesoSPIM view: a few stores in, a neuroglancer state out, a picture on screen.
+
+Three groups. The first two need only Python and numpy and always run; the
+last drives the built page in a headless Chromium and skips, saying so, when
+the page is not built or no browser is available.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from mesospim_view import (  # noqa: E402
+    PAGE_DIR,
+    Channel,
+    NotAStore,
+    Viewer,
+    mixing_shader,
+    read_store,
+)
+from mesospim_view.demo import write_tile, write_tiles  # noqa: E402
+
+pytest.importorskip("numpy")
+
+
+@pytest.fixture(scope="module")
+def tiles(tmp_path_factory) -> list[Path]:
+    return write_tiles(tmp_path_factory.mktemp("tiles"))
+
+
+# -- reading a store -------------------------------------------------------------
+
+
+def test_a_tile_is_read_as_tczyx_with_its_place_and_channels(tiles):
+    store = read_store(tiles[1])
+    assert [axis.name for axis in store.axes] == ["t", "c", "z", "y", "x"]
+    assert store.format == "zarr2"
+    assert store.shape == (1, 2, 24, 160, 160)
+    assert store.scale == (1.0, 1.0, 5.0, 1.0, 1.0)
+    assert store.translation[4] == pytest.approx(144.0)  # second column, 16 um overlap
+    assert [channel.label for channel in store.channels] == ["488", "561"]
+    assert store.channels[0].color == "#00ff66"
+    assert store.channels[0].window == (380.0, 12400.0)
+    assert store.channel_count == 2
+
+
+def test_the_reader_refuses_what_is_not_in_the_contract(tmp_path):
+    with pytest.raises(NotAStore):
+        read_store(tmp_path)  # nothing there
+
+    czyx = tmp_path / "czyx.ome.zarr"
+    write_tile(czyx, origin_um=(0, 0, 0), seed=1)
+    attrs = json.loads((czyx / ".zattrs").read_text())
+    attrs["multiscales"][0]["axes"].pop(0)
+    (czyx / ".zattrs").write_text(json.dumps(attrs))
+    with pytest.raises(NotAStore, match="axes"):
+        read_store(czyx)
+
+    old = tmp_path / "old.ome.zarr"
+    write_tile(old, origin_um=(0, 0, 0), seed=1)
+    attrs = json.loads((old / ".zattrs").read_text())
+    attrs["multiscales"][0]["version"] = "0.3"
+    (old / ".zattrs").write_text(json.dumps(attrs))
+    with pytest.raises(NotAStore, match="0.4"):
+        read_store(old)
+
+    split = tmp_path / "split.ome.zarr"
+    write_tile(split, origin_um=(0, 0, 0), seed=1)
+    array = json.loads((split / "0" / ".zarray").read_text())
+    array["chunks"][1] = 1
+    (split / "0" / ".zarray").write_text(json.dumps(array))
+    with pytest.raises(NotAStore, match="whole c axis"):
+        read_store(split)
+
+
+def test_a_zarr3_store_is_read_from_zarr_json(tmp_path):
+    store = tmp_path / "v3.ome.zarr"
+    (store / "0").mkdir(parents=True)
+    (store / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                    "ome": {
+                        "version": "0.5",
+                        "multiscales": [
+                            {
+                                "axes": [
+                                    {"name": "t", "type": "time", "unit": "second"},
+                                    {"name": "c", "type": "channel"},
+                                    {"name": "z", "type": "space", "unit": "micrometer"},
+                                    {"name": "y", "type": "space", "unit": "micrometer"},
+                                    {"name": "x", "type": "space", "unit": "micrometer"},
+                                ],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1, 1, 4, 0.5, 0.5]},
+                                            {
+                                                "type": "translation",
+                                                "translation": [0, 0, 0, 10, 20],
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                },
+            }
+        )
+    )
+    (store / "0" / "zarr.json").write_text(
+        json.dumps(
+            {
+                "zarr_format": 3,
+                "node_type": "array",
+                "shape": [1, 3, 10, 100, 100],
+                "data_type": "uint16",
+                "chunk_grid": {
+                    "name": "regular",
+                    "configuration": {"chunk_shape": [1, 3, 10, 100, 100]},
+                },
+                "codecs": [
+                    {
+                        "name": "sharding_indexed",
+                        "configuration": {
+                            "chunk_shape": [1, 3, 1, 50, 50],
+                            "codecs": [{"name": "bytes"}],
+                        },
+                    }
+                ],
+            }
+        )
+    )
+    read = read_store(store)
+    assert read.format == "zarr3"
+    assert read.shape == (1, 3, 10, 100, 100)
+    assert read.scale == (1, 1, 4, 0.5, 0.5)
+    assert read.translation == (0, 0, 0, 10, 20)
+    assert [channel.label for channel in read.channels] == []
+    assert read.channel_count == 3
+
+
+# -- building the state ----------------------------------------------------------
+
+
+def test_stores_of_one_layer_become_sources_with_channel_dimension_and_shift(tiles):
+    view = Viewer()
+    view.add(tiles[0], layer="overview")
+    view.add(tiles[1], layer="overview", offset={"x": 10.0})
+    view.add(tiles[2], layer="overview", origin={"x": 1000.0, "y": 0.0})
+    try:
+        state = view.state
+    finally:
+        view.stop()
+    assert state["layout"] == "xy"
+    assert state["displayDimensions"] == ["x", "y", "z"]
+    (layer,) = state["layers"]
+    assert layer["type"] == "image"
+    assert layer["name"] == "overview"
+    sources = layer["source"]
+    assert len(sources) == 3
+    assert all(source["url"].endswith("/|zarr2:") for source in sources)
+    dims = sources[0]["transform"]["outputDimensions"]
+    assert list(dims) == ["t", "c^", "z", "y", "x"]
+    assert dims["x"] == [1e-6, "m"]
+    assert dims["c^"] == [1, ""]
+    # A shift is the translation column, in voxels of that axis.
+    assert [row[-1] for row in sources[0]["transform"]["matrix"]] == [0, 0, 0, 0, 0]
+    assert [row[-1] for row in sources[1]["transform"]["matrix"]] == [0, 0, 0, 0, 10.0]
+    # An origin replaces the store's own translation: tile 2 sits at y=144 um.
+    assert [row[-1] for row in sources[2]["transform"]["matrix"]] == [0, 0, 0, -144.0, 1000.0]
+
+
+def test_the_shader_mixes_every_channel_with_its_own_controls():
+    shader = mixing_shader(
+        [
+            Channel("a", "#00ff00", window=(100, 2000), limits=(0, 65535)),
+            Channel("b", "#ff00ff", active=False),
+        ],
+        multichannel=True,
+    )
+    assert (
+        "#uicontrol invlerp c0(channel=[0], range=[100.0, 2000.0], window=[0.0, 65535.0])" in shader
+    )
+    assert '#uicontrol vec3 col0 color(default="#00ff00")' in shader
+    assert "#uicontrol invlerp c1(channel=[1])" in shader
+    assert "#uicontrol bool show1 checkbox(default=false)" in shader
+    assert "rgb += col0 * v" in shader and "rgb += col1 * v" in shader
+    assert "emitRGB(rgb)" in shader and "emitRGBA(vec4(rgb, a))" in shader
+
+
+def test_channels_colours_and_window_can_be_overridden(tiles):
+    view = Viewer()
+    view.add(
+        tiles[0], layer="scan", channels=["GFP", "RFP"], colours=["#123456", None], window=(5, 500)
+    )
+    try:
+        shader = view.state["layers"][0]["shader"]
+    finally:
+        view.stop()
+    assert 'col0 color(default="#123456")' in shader
+    assert 'col1 color(default="#ff33ff")' in shader  # the store's own colour stays
+    assert "range=[5.0, 500.0]" in shader
+
+
+def test_layers_can_be_hidden_removed_and_relaid(tiles):
+    view = Viewer(layout="4panel")
+    view.add(tiles[0], layer="one")
+    view.add(tiles[1])  # its own layer, named after the store
+    try:
+        assert view.layers == ["one", "tile_01.ome.zarr"]
+        view.set_visible("one", False)
+        assert view.state["layers"][0]["visible"] is False
+        assert view.remove("one") and not view.remove("one")
+        view.set_layout("3d")
+        assert view.state["layout"] == "3d"
+        assert [layer["name"] for layer in view.state["layers"]] == ["tile_01.ome.zarr"]
+        with pytest.raises(ValueError):
+            view.set_layout("sideways")
+        view.clear()
+        assert view.state["layers"] == []
+    finally:
+        view.stop()
+
+
+# -- serving ---------------------------------------------------------------------
+
+
+def _get(url: str, headers: dict | None = None):
+    request = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as answer:
+            return answer.status, dict(answer.headers), answer.read()
+    except urllib.error.HTTPError as error:
+        return error.code, dict(error.headers), error.read()
+
+
+def test_the_server_serves_store_bytes_with_ranges_and_the_scene(tiles):
+    view = Viewer()
+    view.add(tiles[0], layer="overview")
+    url = view.start()
+    try:
+        status, _, body = _get(f"{url}api/state?since=-1")
+        assert status == 200
+        answer = json.loads(body)
+        assert answer["version"] >= 1
+        assert answer["state"]["layers"][0]["name"] == "overview"
+        assert answer["ui"] == {"transparent": False, "chrome": "full"}
+
+        source = answer["state"]["layers"][0]["source"][0]["url"].split("|")[0]
+        status, headers, body = _get(source + ".zattrs")
+        assert status == 200 and b"multiscales" in body
+        status, headers, whole = _get(source + "0/0.0.0.0.0")
+        assert status == 200 and headers["Accept-Ranges"] == "bytes"
+        status, headers, part = _get(source + "0/0.0.0.0.0", {"Range": "bytes=10-19"})
+        assert status == 206 and part == whole[10:20]
+        assert headers["Content-Range"] == f"bytes 10-19/{len(whole)}"
+        status, _, _ = _get(source + ".zattrs", {"If-None-Match": headers["ETag"]})
+        assert status in (200, 304)
+        assert _get(source + "../../etc/passwd")[0] == 404
+        assert _get(f"{url}data/99/.zattrs")[0] == 404
+
+        # A change is versioned, and a waiting page is woken by it.
+        version = answer["version"]
+        started = time.monotonic()
+        view.look_at(x=5.0)
+        status, _, body = _get(f"{url}api/state?since={version}&wait=5")
+        assert time.monotonic() - started < 4
+        answer = json.loads(body)
+        assert answer["version"] > version
+        assert answer["camera"] == {"position": {"x": 5.0}}
+    finally:
+        view.stop()
+
+
+def test_reports_from_the_page_come_back_in_micrometres(tiles):
+    view = Viewer()
+    view.add(tiles[0], layer="overview")
+    url = view.start()
+    heard = []
+    view.on_pick(heard.append)
+    try:
+        report = {
+            "names": ["t", "z", "y", "x"],
+            "scales": [1, 5e-6, 1e-6, 1e-6],
+            "units": ["s", "m", "m", "m"],
+            "position": [0, 4, 30, 200],
+        }
+        request = urllib.request.Request(
+            f"{url}api/pick",
+            data=json.dumps(report).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(request, timeout=5).read()
+        request = urllib.request.Request(
+            f"{url}api/view",
+            data=json.dumps(report).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(request, timeout=5).read()
+        assert heard == [
+            {
+                "t": 0.0,
+                "z": pytest.approx(20.0),
+                "y": pytest.approx(30.0),
+                "x": pytest.approx(200.0),
+            }
+        ]
+        assert view.position == heard[0]
+    finally:
+        view.stop()
+
+
+# -- the picture -----------------------------------------------------------------
+
+CHROMIUM = os.environ.get("ZMART_CHROMIUM", "/opt/pw-browsers/chromium")
+GL = ["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+
+READ_ALPHA = """() => {
+  const display = window.viewer.display; display.draw();
+  const gl = display.gl, canvas = display.canvas;
+  const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+  gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  const seen = { clear: 0, opaque: 0, lit: 0 };
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i + 3] === 0) seen.clear++; else if (pixels[i + 3] === 255) seen.opaque++;
+    if (pixels[i + 3] === 255 && pixels[i] + pixels[i + 1] + pixels[i + 2] > 60) seen.lit++;
+  }
+  return seen;
+}"""
+
+DESCRIBE = """() => {
+  const v = window.viewer; if (!v?.layerManager) return null;
+  let needed = 0, available = 0;
+  const layers = v.layerManager.managedLayers.map((m) => {
+    for (const rl of m.layer?.renderLayers ?? []) {
+      const p = rl.layerChunkProgressInfo;
+      if (p) { needed += p.numVisibleChunksNeeded; available += p.numVisibleChunksAvailable; }
+    }
+    return {
+      name: m.name,
+      loaded: (m.layer?.dataSources ?? []).every((s) => s.loadState !== undefined),
+      errors: (m.layer?.dataSources ?? []).map((s) => s.loadState?.error?.message).filter(Boolean),
+      channelRank: m.layer?.channelCoordinateSpace?.value?.rank ?? null,
+      sources: (m.layer?.dataSources ?? []).length,
+    };
+  });
+  const space = v.navigationState.position.coordinateSpace.value;
+  return { layers, needed, available, names: Array.from(space?.names ?? []),
+           shown: Array.from(v.navigationState.pose.displayDimensionRenderInfo.value.displayDimensionIndices) };
+}"""
+
+
+@pytest.fixture
+def browser():
+    if not (PAGE_DIR / "index.html").is_file():
+        pytest.skip("the mesoSPIM page is not built: npm ci && npm run build in app/mesospim")
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as pw:
+        try:
+            launched = pw.chromium.launch(args=GL)
+        except Exception:
+            if not Path(CHROMIUM).exists():
+                pytest.skip("no Chromium to drive the page with")
+            launched = pw.chromium.launch(executable_path=CHROMIUM, args=GL)
+        try:
+            yield launched
+        finally:
+            launched.close()
+
+
+def _open(browser, url, *, width=900, height=700):
+    page = browser.new_page(viewport={"width": width, "height": height})
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(url)
+    return page, errors
+
+
+def _wait_until_drawn(page, *, layers: int, timeout_s: float = 40.0) -> dict:
+    deadline = time.time() + timeout_s
+    seen = None
+    while time.time() < deadline:
+        seen = page.evaluate(DESCRIBE)
+        if (
+            seen
+            and len(seen["layers"]) == layers
+            and all(layer["loaded"] for layer in seen["layers"])
+            and seen["needed"] > 0
+            and seen["available"] == seen["needed"]
+        ):
+            return seen
+        time.sleep(0.25)
+    raise AssertionError(f"the picture never settled: {seen}")
+
+
+def test_four_tiles_draw_as_one_two_channel_layer(browser, tiles):
+    view = Viewer()
+    for tile in tiles:
+        view.add(tile, layer="overview")
+    url = view.start()
+    picks = []
+    view.on_pick(picks.append)
+    try:
+        page, errors = _open(browser, url)
+        seen = _wait_until_drawn(page, layers=1)
+        (layer,) = seen["layers"]
+        assert layer["sources"] == 4 and layer["errors"] == []
+        assert layer["channelRank"] == 1, "the c axis is a channel dimension, read by one shader"
+        assert seen["names"] == ["t", "z", "y", "x"]
+        assert [seen["names"][i] for i in seen["shown"]] == ["x", "y", "z"]
+        time.sleep(1.0)
+        alpha = page.evaluate(READ_ALPHA)
+        assert alpha["clear"] == 0 and alpha["lit"] > 5000, alpha
+
+        # The camera goes where Python says, in micrometres...
+        view.look_at(x=100.0, y=50.0)
+        deadline = time.time() + 5
+        while time.time() < deadline and (view.position or {}).get("x") != pytest.approx(100.0):
+            time.sleep(0.1)
+        assert view.position["x"] == pytest.approx(100.0) and view.position["y"] == pytest.approx(
+            50.0
+        )
+
+        # ...and a double-click names the point under the mouse, in micrometres.
+        box = page.locator("canvas").first.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.dblclick(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        deadline = time.time() + 5
+        while time.time() < deadline and not picks:
+            time.sleep(0.1)
+        assert picks and picks[0]["x"] == pytest.approx(100.0, abs=1.0)
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_adding_a_tile_keeps_the_operators_adjustments(browser, tiles):
+    view = Viewer()
+    view.add(tiles[0], layer="overview")
+    url = view.start()
+    try:
+        page, errors = _open(browser, url)
+        _wait_until_drawn(page, layers=1)
+        page.evaluate(
+            """() => { const l = window.viewer.layerManager.managedLayers[0].layer;
+                      l.opacity.value = 0.3; l.shaderControlState.state.get('col0').trackable.restoreState('#0000ff'); }"""
+        )
+        view.add(tiles[1], layer="overview")
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            seen = page.evaluate(DESCRIBE)
+            if seen and seen["layers"] and seen["layers"][0]["sources"] == 2:
+                break
+            time.sleep(0.2)
+        held = page.evaluate(
+            """() => { const l = window.viewer.layerManager.managedLayers[0].layer;
+                      return { opacity: l.opacity.value, colour: l.shaderControlState.state.get('col0').trackable.toJSON() }; }"""
+        )
+        assert held == {"opacity": 0.3, "colour": "#0000ff"}
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_a_transparent_ground_is_clear_outside_the_tiles_and_opaque_inside(browser, tiles):
+    view = Viewer(transparent=True, ui="bare")
+    view.add(tiles[0], layer="overview")
+    url = view.start()
+    try:
+        page, errors = _open(browser, url)
+        _wait_until_drawn(page, layers=1)
+        time.sleep(1.0)
+        alpha = page.evaluate(READ_ALPHA)
+        assert alpha["clear"] > 100_000, alpha
+        assert alpha["opaque"] > 100_000, alpha
+        assert alpha["lit"] > 5000, alpha
+        assert page.evaluate("() => document.documentElement.dataset.chrome") == "bare"
+        assert page.evaluate("() => document.querySelector('.neuroglancer-layer-panel')") is None
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()

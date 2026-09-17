@@ -1,0 +1,315 @@
+"""The one object a control application holds: a viewer it can put stores in.
+
+    from mesospim_view import Viewer
+
+    view = Viewer()
+    view.start()                                   # a local address
+    view.add("run/tile_0.ome.zarr", layer="overview", offset={"x": 0})
+    view.add("run/tile_1.ome.zarr", layer="overview", offset={"x": 1800})
+    widget = view.qt_widget()                      # or view.open_in_browser()
+
+Every call that changes what is shown publishes a fresh neuroglancer state to
+the page. The page keeps whatever the operator has adjusted on layers that did
+not change, so adding a tile does not reset the contrast of the others.
+"""
+
+from __future__ import annotations
+
+import threading
+import webbrowser
+from pathlib import Path
+from typing import Callable
+
+from .omezarr import Channel, Store, read_store
+from .server import ViewServer
+from .state import LAYOUTS, Layer, Placement, state_json
+
+PAGE_DIR = Path(__file__).resolve().parent.parent / "app" / "mesospim" / "dist"
+
+
+def _si_factor(unit: str) -> float:
+    """From the SI base unit to the unit the API speaks: micrometres and seconds."""
+    return 1e6 if unit == "m" else 1.0
+
+
+class Viewer:
+    """A neuroglancer page served locally, driven from Python."""
+
+    def __init__(
+        self,
+        *,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        page_dir: str | Path | None = None,
+        transparent: bool = False,
+        ui: str = "full",
+        layout: str = "xy",
+    ) -> None:
+        if ui not in ("full", "bare"):
+            raise ValueError("ui must be 'full' or 'bare'")
+        if layout not in LAYOUTS:
+            raise ValueError(f"layout must be one of {LAYOUTS}")
+        self._host = host
+        self._port = port
+        self._page_dir = Path(page_dir) if page_dir else PAGE_DIR
+        self._layers: dict[str, Layer] = {}
+        self._layout = layout
+        self._ui = {"transparent": transparent, "chrome": ui}
+        self._lock = threading.RLock()
+        self._server: ViewServer | None = None
+        self._thread: threading.Thread | None = None
+
+    # -- lifetime --------------------------------------------------------------
+
+    def start(self) -> str:
+        """Start serving and return the page's address."""
+        with self._lock:
+            if self._server is None:
+                page = self._page_dir if (self._page_dir / "index.html").is_file() else None
+                self._server = ViewServer(self._host, self._port, page)
+                self._server.scene.ui = dict(self._ui)
+                self._thread = threading.Thread(
+                    target=self._server.serve_forever, name="mesospim-view", daemon=True
+                )
+                self._thread.start()
+                self._publish()
+            return self._server.url
+
+    def stop(self) -> None:
+        with self._lock:
+            server, self._server = self._server, None
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+
+    @property
+    def url(self) -> str:
+        return self.start()
+
+    @property
+    def page_built(self) -> bool:
+        return (self._page_dir / "index.html").is_file()
+
+    # -- what is shown ---------------------------------------------------------
+
+    def add(
+        self,
+        path: str | Path,
+        *,
+        layer: str | None = None,
+        offset: dict[str, float] | None = None,
+        origin: dict[str, float] | None = None,
+        channels: list[str] | list[Channel] | None = None,
+        colours: list[str] | None = None,
+        window: tuple[float, float] | None = None,
+        visible: bool = True,
+    ) -> str:
+        """Show an OME-Zarr store, and return the name of the layer it joined.
+
+        A store joins the layer called ``layer``; several positions of one
+        acquisition share a layer and a set of channel controls, and each is
+        placed by its own metadata plus ``offset`` (or at ``origin``), in the
+        store's own units. ``channels``, ``colours`` and ``window`` override what
+        the store declares about its channels; the first store in a layer
+        decides these for the layer.
+        """
+        store = read_store(path)
+        name = layer or store.name
+        url = self._url_for(store)
+        placement = Placement(store=store, url=url, offset=dict(offset or {}), origin=origin)
+        declared = self._channels(store, channels, colours, window)
+        with self._lock:
+            held = self._layers.get(name)
+            if held is None:
+                held = Layer(name=name, channels=declared, visible=visible)
+                self._layers[name] = held
+            elif declared is not None and held.channels is None:
+                held.channels = declared
+            held.placements = [p for p in held.placements if p.store.path != store.path]
+            held.placements.append(placement)
+            self._publish()
+        return name
+
+    def remove(self, layer: str) -> bool:
+        with self._lock:
+            gone = self._layers.pop(layer, None) is not None
+            if gone:
+                self._publish()
+            return gone
+
+    def clear(self) -> None:
+        with self._lock:
+            self._layers.clear()
+            self._publish()
+
+    def set_visible(self, layer: str, visible: bool) -> None:
+        with self._lock:
+            self._layers[layer].visible = visible
+            self._publish()
+
+    def set_layout(self, layout: str) -> None:
+        if layout not in LAYOUTS:
+            raise ValueError(f"layout must be one of {LAYOUTS}")
+        with self._lock:
+            self._layout = layout
+            self._publish()
+
+    @property
+    def layers(self) -> list[str]:
+        with self._lock:
+            return list(self._layers)
+
+    def stores(self, layer: str) -> list[Store]:
+        with self._lock:
+            return [p.store for p in self._layers[layer].placements]
+
+    @property
+    def state(self) -> dict:
+        """The neuroglancer state the page is being asked to show."""
+        with self._lock:
+            return state_json(list(self._layers.values()), layout=self._layout)
+
+    # -- the camera ------------------------------------------------------------
+
+    def look_at(self, **axes: float) -> None:
+        """Centre the view on a point, given by axis name in micrometres (seconds for time)."""
+        self._camera({"position": axes})
+
+    def fit(self) -> None:
+        """Zoom so that everything shown fits the window."""
+        self._camera({"fit": True})
+
+    @property
+    def position(self) -> dict[str, float] | None:
+        """Where the page's camera is, by axis name, in micrometres and seconds."""
+        server = self._server
+        if server is None or not server.last_view:
+            return None
+        return self._to_units(server.last_view)
+
+    def on_view(self, listener: Callable[[dict[str, float]], None]) -> None:
+        """Hear every camera move, as the same axis-named dictionary ``position`` gives."""
+        self.start()
+        assert self._server is not None
+        self._server.view_listeners.append(lambda raw: listener(self._to_units(raw)))
+
+    def on_pick(self, listener: Callable[[dict[str, float]], None]) -> None:
+        """Hear a double-click on the picture, as an axis-named point in micrometres."""
+        self.start()
+        assert self._server is not None
+        self._server.pick_listeners.append(lambda raw: listener(self._to_units(raw)))
+
+    # -- windows ---------------------------------------------------------------
+
+    def open_in_browser(self) -> str:
+        url = self.start()
+        webbrowser.open(url)
+        return url
+
+    def qt_widget(self, parent=None):
+        """A ``QWebEngineView`` showing the viewer, for a PyQt/PySide window.
+
+        Qt is imported lazily, so the package has no Qt dependency of its own:
+        whichever of PyQt5, PyQt6, PySide6 or PySide2 the host already uses is
+        picked up. With ``transparent=True`` the page's ground is clear, so the
+        host's own widgets show through wherever nothing was imaged.
+        """
+        url = self.start()
+        qt = _qt()
+        widget = qt.QWebEngineView(parent)
+        if self._ui["transparent"]:
+            widget.page().setBackgroundColor(qt.QColor(0, 0, 0, 0))
+            widget.setAttribute(qt.WA_TranslucentBackground, True)
+            widget.setStyleSheet("background: transparent")
+        widget.setUrl(qt.QUrl(url))
+        return widget
+
+    # -- inside ----------------------------------------------------------------
+
+    def _url_for(self, store: Store) -> str:
+        self.start()
+        assert self._server is not None
+        key = self._server.stores.register(store.path)
+        return f"{self._server.url}data/{key}/|{store.format}:"
+
+    @staticmethod
+    def _channels(store, channels, colours, window) -> list[Channel] | None:
+        if channels is None and colours is None and window is None:
+            return None
+        count = store.channel_count
+        base = list(store.channels)[:count]
+        while len(base) < count:
+            base.append(Channel(label=f"channel {len(base)}"))
+        result = []
+        for index, held in enumerate(base):
+            label = held.label
+            color = held.color
+            if channels is not None and index < len(channels):
+                given = channels[index]
+                if isinstance(given, Channel):
+                    held = given
+                    label, color = given.label, given.color
+                else:
+                    label = str(given)
+            if colours is not None and index < len(colours):
+                color = colours[index]
+            result.append(
+                Channel(
+                    label=label,
+                    color=color,
+                    window=window or held.window,
+                    limits=held.limits,
+                    active=held.active,
+                )
+            )
+        return result
+
+    def _publish(self) -> None:
+        if self._server is not None:
+            self._server.scene.publish(state_json(list(self._layers.values()), layout=self._layout))
+
+    def _camera(self, camera: dict) -> None:
+        self.start()
+        assert self._server is not None
+        self._server.scene.move_camera(camera)
+
+    @staticmethod
+    def _to_units(raw: dict) -> dict[str, float]:
+        """Voxel coordinates in the page's global space, turned into micrometres."""
+        names = raw.get("names") or []
+        scales = raw.get("scales") or []
+        units = raw.get("units") or []
+        position = raw.get("position") or []
+        out = {}
+        for i, name in enumerate(names):
+            if i >= len(position) or i >= len(scales):
+                continue
+            unit = units[i] if i < len(units) else ""
+            out[name] = float(position[i]) * float(scales[i]) * _si_factor(unit)
+        return out
+
+
+class _Qt:
+    """The few Qt names the widget needs, from whichever binding is installed."""
+
+    BINDINGS = ("PyQt5", "PyQt6", "PySide6", "PySide2")
+
+    def __init__(self, binding: str) -> None:
+        core = __import__(f"{binding}.QtCore", fromlist=["Qt", "QUrl"])
+        gui = __import__(f"{binding}.QtGui", fromlist=["QColor"])
+        web = __import__(f"{binding}.QtWebEngineWidgets", fromlist=["QWebEngineView"])
+        self.QUrl = core.QUrl
+        self.QColor = gui.QColor
+        self.QWebEngineView = web.QWebEngineView
+        attributes = getattr(core.Qt, "WidgetAttribute", core.Qt)
+        self.WA_TranslucentBackground = attributes.WA_TranslucentBackground
+
+
+def _qt() -> _Qt:
+    errors = []
+    for binding in _Qt.BINDINGS:
+        try:
+            return _Qt(binding)
+        except ImportError as error:  # pragma: no cover - depends on the host
+            errors.append(f"{binding}: {error}")
+    raise ImportError("no Qt WebEngine binding found (" + "; ".join(errors) + ")")
