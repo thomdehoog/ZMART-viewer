@@ -16,6 +16,7 @@ small helper the plain widget uses, so PyQt6 and PySide work as well.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -64,13 +65,12 @@ def make_window_class():
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    if not argv:
-        print("usage: python -m mesospim_view.window <data folder>")
-        return 2
+    parser = argparse.ArgumentParser(description="The Data viewer window over a data folder.")
+    parser.add_argument("folder", help="the folder the microscope writes acquisitions into")
+    args = parser.parse_args(argv)
     qt = _qt()
     app = qt.QtWidgets.QApplication.instance() or qt.QtWidgets.QApplication(sys.argv)
-    window = make_window_class()(argv[0])
+    window = make_window_class()(args.folder)
     window.resize(1200, 800)
     window.show()
     return app.exec() if hasattr(app, "exec") else app.exec_()

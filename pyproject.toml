@@ -65,6 +65,8 @@ select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
+# The packages are imported from the checkout.
+pythonpath = ["."]
 # A test that sits still is failed with a stack trace, never waited on.
 # The slowest honest tests (storms, replays) finish well inside this.
 timeout = 600

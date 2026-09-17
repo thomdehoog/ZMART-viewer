@@ -1,4 +1,3 @@
-# ruff: noqa: F811
 """The simple interface: our panel over a bare engine, driven in a headless Chromium.
 
 Every control writes engine layer state and nothing else, so each test asks the
@@ -7,30 +6,11 @@ engine what changed rather than the panel.
 
 from __future__ import annotations
 
-import sys
 import time
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from test_mesospim_view import _open, _wait_until_drawn, browser  # noqa: E402,F401
-
-from mesospim_view import Viewer  # noqa: E402
-from mesospim_view.demo import write_tile  # noqa: E402
-
-pytest.importorskip("numpy")
-
-
-@pytest.fixture(scope="module")
-def stacks(tmp_path_factory) -> list[Path]:
-    folder = tmp_path_factory.mktemp("stacks")
-    return [
-        write_tile(folder / f"tile_{i}.ome.zarr", origin_um=(0, 0, i * 144), seed=i, timepoints=3)
-        for i in range(2)
-    ]
+from mesospim_view import Viewer
 
 
 def _shown(view: Viewer):
@@ -38,14 +18,14 @@ def _shown(view: Viewer):
     return view.start()
 
 
-def test_the_panel_lists_channels_by_acquisition_with_the_engines_own_controls(browser, stacks):
+def test_the_panel_lists_channels_by_acquisition_with_the_engines_own_controls(pages, stacks):
     view = Viewer(ui="simple")
     for stack in stacks:
         view.add(stack, layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         seen = page.evaluate(
             """() => ({
               chrome: document.documentElement.dataset.chrome,
@@ -69,13 +49,13 @@ def test_the_panel_lists_channels_by_acquisition_with_the_engines_own_controls(b
         view.stop()
 
 
-def test_the_eye_hides_a_channel_and_the_group_eye_hides_them_all(browser, stacks):
+def test_the_eye_hides_a_channel_and_the_group_eye_hides_them_all(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         visible = "() => window.viewer.layerManager.managedLayers.map(m => m.visible)"
         assert page.evaluate(visible) == [True, True]
         page.click('.channel[data-layer="overview · 561"] button.eye')
@@ -93,13 +73,13 @@ def test_the_eye_hides_a_channel_and_the_group_eye_hides_them_all(browser, stack
         view.stop()
 
 
-def test_2d_and_3d_swap_the_layout_and_the_volume_rendering(browser, stacks):
+def test_2d_and_3d_swap_the_layout_and_the_volume_rendering(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         state = "() => ({layout: window.viewer.layout.toJSON(), modes: window.viewer.layerManager.managedLayers.map(m => m.layer.volumeRenderingMode.toJSON() ?? 'off'), on: [...document.querySelectorAll('.view button.on')].map(b => b.dataset.layout)})"
         assert page.evaluate(state) == {"layout": "xy", "modes": ["off", "off"], "on": ["xy"]}
         page.click('.view button[data-layout="3d"]')
@@ -112,13 +92,13 @@ def test_2d_and_3d_swap_the_layout_and_the_volume_rendering(browser, stacks):
         view.stop()
 
 
-def test_the_sliders_step_through_depth_and_time(browser, stacks):
+def test_the_sliders_step_through_depth_and_time(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         sliders = "() => Object.fromEntries([...document.querySelectorAll('.axis-slider')].map(s => [s.id, {hidden: s.hidden, min: s.querySelector('input').min, max: s.querySelector('input').max, reading: s.querySelector('.reading').textContent}]))"
         seen = page.evaluate(sliders)
         assert (
@@ -159,13 +139,13 @@ def test_the_sliders_step_through_depth_and_time(browser, stacks):
         view.stop()
 
 
-def test_adjustments_in_the_panel_survive_a_tile_landing(browser, stacks):
+def test_adjustments_in_the_panel_survive_a_tile_landing(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         page.click('.channel[data-layer="overview · 561"] button.eye')
         page.click('.view button[data-layout="3d"]')
         # the detail slider to its top step, the gain up a little
@@ -205,13 +185,13 @@ def test_adjustments_in_the_panel_survive_a_tile_landing(browser, stacks):
         view.stop()
 
 
-def test_the_panel_folds_away_and_comes_back(browser, stacks):
+def test_the_panel_folds_away_and_comes_back(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         width = (
             "() => document.querySelector('.mesospim-panel')?.getBoundingClientRect().width ?? 0"
         )
@@ -233,13 +213,13 @@ def test_the_panel_folds_away_and_comes_back(browser, stacks):
         view.stop()
 
 
-def test_the_histogram_is_drawn_inside_the_row(browser, stacks):
+def test_the_histogram_is_drawn_inside_the_row(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         time.sleep(1.5)
         drawn = page.evaluate(
             """() => [...document.querySelectorAll('.channel .neuroglancer-invlerp-cdfpanel canvas')].map(c => {
@@ -258,15 +238,15 @@ def test_the_histogram_is_drawn_inside_the_row(browser, stacks):
         view.stop()
 
 
-def test_the_dropdown_offers_the_sessions_acquisitions_and_reports_a_choice(browser, stacks):
+def test_the_dropdown_offers_the_sessions_acquisitions_and_reports_a_choice(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     chosen = []
     view.on_choice(chosen.append)
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         assert page.evaluate("() => document.querySelector('.card.acquisition').hidden") is True
 
         view.offer_acquisitions(["run_03", "run_02", "run_01"], 0)
@@ -304,13 +284,13 @@ def test_the_dropdown_offers_the_sessions_acquisitions_and_reports_a_choice(brow
         view.stop()
 
 
-def test_the_3d_card_drives_projection_detail_gain_planes_and_the_look(browser, stacks):
+def test_the_3d_card_drives_projection_detail_gain_planes_and_the_look(pages, stacks):
     view = Viewer(ui="simple")
     view.add(stacks[0], layer="overview")
     url = _shown(view)
     try:
-        page, errors = _open(browser, url, width=1100, height=700)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url, width=1100, height=700)
+        pages.drawn(page, layers=2)
         assert page.evaluate("() => document.querySelector('.card.volume').hidden") is True
         page.click('.view button[data-layout="3d"]')
         assert page.evaluate("() => document.querySelector('.card.volume').hidden") is False
