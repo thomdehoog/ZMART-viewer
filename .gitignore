@@ -37,7 +37,7 @@ test_stores/
 
 # The mesoSPIM view page: packages and the built page are generated.
 app/mesospim/node_modules
-app/mesospim/dist
+mesospim_view/page/
 
 # The tiles python -m mesospim_view.demo writes.
 testdata/mesospim_demo/
