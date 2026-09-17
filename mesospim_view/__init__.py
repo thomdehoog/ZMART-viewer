@@ -6,7 +6,7 @@ layer, and reports the camera back. See README.md beside this file.
 """
 
 from .omezarr import Axis, Channel, NotAStore, Store, read_store
-from .state import LAYOUTS, Layer, Placement, mixing_shader, source_json, state_json
+from .state import LAYOUTS, Layer, Placement, channel_shader, source_json, state_json
 from .viewer import PAGE_DIR, Viewer
 
 __all__ = [
@@ -19,7 +19,7 @@ __all__ = [
     "Placement",
     "Store",
     "Viewer",
-    "mixing_shader",
+    "channel_shader",
     "read_store",
     "source_json",
     "state_json",

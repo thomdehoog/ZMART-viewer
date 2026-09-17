@@ -1,10 +1,14 @@
 """Turning a few placed stores into a neuroglancer state.
 
 Everything here is a pure function from plain data to the JSON neuroglancer
-already understands: a layer is a neuroglancer layer, a source is a neuroglancer
-source with a ``transform``, and the channels of a store mix inside one shader
-through neuroglancer's own channel dimension (``c^``) and ``invlerp(channel=...)``
-controls. Nothing is invented that the engine does not have a word for.
+already understands. An acquisition is a :class:`Layer` here and becomes one
+engine layer *per channel*, all sharing the same sources and added together on
+the graphics card -- which is exactly how neuroglancer's own multichannel setup
+arranges an OME-Zarr, and the only arrangement that reads a store whose chunks
+hold one channel each (the engine reads every channel of a voxel from one
+chunk, so a channel dimension across chunks draws nothing). Each source is a
+neuroglancer source with a ``transform`` carrying its shift. Nothing is
+invented that the engine does not have a word for.
 """
 
 from __future__ import annotations
@@ -44,22 +48,22 @@ class Placement:
 
 
 def source_json(placement: Placement) -> dict:
-    """A neuroglancer data source: the address, and a transform when one is needed.
+    """A neuroglancer data source: the address, and a transform when shifted.
 
-    The transform does two native things at once. It renames the store's channel
-    axis to a *channel dimension* (``c^``), which is what lets one shader read
-    every channel, and it carries any shift as the translation column of the
-    matrix, in voxels of the output space. The output space repeats the store's
-    own scales in SI, so nothing is stretched.
+    The transform is the identity with the shift in its translation column, in
+    voxels of the output space, whose dimensions repeat the store's own axes
+    and scales in SI so nothing is stretched. The channel axis keeps the
+    engine's local-dimension name (``c'``): each channel layer pins it.
     """
     store = placement.store
-    channel = store.channel_axis
     shifts = [placement.shift_voxels(i) for i in range(len(store.axes))]
+    if not any(shifts):
+        return {"url": placement.url}
     rank = len(store.axes)
     output: dict[str, list] = {}
     for i, axis in enumerate(store.axes):
-        if i == channel:
-            output[f"{axis.name}^"] = [1, ""]
+        if axis.is_channel:
+            output[f"{axis.name}'"] = [1, ""]
             continue
         unit, factor = axis.si
         output[axis.name] = [store.scale[i] * factor if unit else 1, unit]
@@ -97,66 +101,76 @@ def _glsl_number(value: float) -> str:
     return text if "e" not in text and "." in text else f"{value:.6g}"
 
 
-def mixing_shader(channels: list[Channel], *, multichannel: bool) -> str:
-    """One shader that adds the store's channels together like light.
+def channel_shader(channel: Channel) -> str:
+    """One channel's program: the engine's own multichannel shader, with the
+    store's window and colour as the controls' starting values.
 
-    Each channel gets the engine's own controls -- a brightness window, a colour
-    and a switch -- so the native layer panel edits them, and the sum clips the
-    way every microscopy viewer clips. In three dimensions the brightest channel
-    drives the opacity, as neuroglancer's own multichannel program does.
+    The window and the colour are ``#uicontrol`` values, so the native panel
+    edits them and changing one hands a number to a program already compiled.
+    In three dimensions the brightness drives the opacity, as the engine does.
     """
-    lines = []
-    for index, channel in enumerate(channels):
-        parameters = [f"channel=[{index}]"] if multichannel else []
-        if channel.window:
-            lo, hi = channel.window
-            parameters.append(f"range=[{_glsl_number(lo)}, {_glsl_number(hi)}]")
-        if channel.limits:
-            lo, hi = channel.limits
-            parameters.append(f"window=[{_glsl_number(lo)}, {_glsl_number(hi)}]")
-        lines.append(f"#uicontrol invlerp c{index}({', '.join(parameters)})")
-        lines.append(f'#uicontrol vec3 col{index} color(default="{channel.color}")')
-        lines.append(
-            f"#uicontrol bool show{index} checkbox(default={'true' if channel.active else 'false'})"
-        )
-    lines.append("void main() {")
-    lines.append("  vec3 rgb = vec3(0.0);")
-    lines.append("  float a = 0.0;")
-    lines.append("  float v;")
-    for index in range(len(channels)):
-        lines.append(f"  v = show{index} ? c{index}() : 0.0; rgb += col{index} * v; a = max(a, v);")
-    lines.append("  if (VOLUME_RENDERING) { emitRGBA(vec4(rgb, a)); } else { emitRGB(rgb); }")
-    lines.append("}")
-    return "\n".join(lines) + "\n"
+    parameters = []
+    if channel.window:
+        lo, hi = channel.window
+        parameters.append(f"range=[{_glsl_number(lo)}, {_glsl_number(hi)}]")
+    if channel.limits:
+        lo, hi = channel.limits
+        parameters.append(f"window=[{_glsl_number(lo)}, {_glsl_number(hi)}]")
+    return "\n".join(
+        [
+            f"#uicontrol invlerp contrast({', '.join(parameters)})",
+            f'#uicontrol vec3 color color(default="{channel.color}")',
+            "void main() {",
+            "  float value = contrast();",
+            "  if (VOLUME_RENDERING) { emitRGBA(vec4(color * value, value)); }",
+            "  else { emitRGB(color * value); }",
+            "}",
+            "",
+        ]
+    )
+
+
+def channel_layer_name(layer: str, channel: Channel) -> str:
+    return f"{layer} · {channel.label}"
 
 
 @dataclass
 class Layer:
-    """One neuroglancer image layer: a name, its placed stores and its channels."""
+    """One acquisition: a name, its placed stores and its channels.
+
+    It becomes one engine layer per channel. ``revision`` is bumped when a store
+    on disk has grown, so the page re-reads it; the page strips it before the
+    engine sees the layer.
+    """
 
     name: str
     placements: list[Placement] = field(default_factory=list)
     channels: list[Channel] | None = None
     visible: bool = True
-    opacity: float = 1.0
-    blend: str = "default"
-    volume_rendering: str = "off"
+    revision: int = 0
 
-    def to_json(self) -> dict:
+    def to_json(self) -> list[dict]:
         if not self.placements:
             raise ValueError(f"layer {self.name!r} has no stores")
         first = self.placements[0].store
-        channels = channels_for(first, self.channels)
-        return {
-            "type": "image",
-            "name": self.name,
-            "source": [source_json(placement) for placement in self.placements],
-            "shader": mixing_shader(channels, multichannel=first.channel_axis is not None),
-            "visible": self.visible,
-            "opacity": self.opacity,
-            "blend": self.blend,
-            "volumeRendering": self.volume_rendering,
-        }
+        sources = [source_json(placement) for placement in self.placements]
+        return [
+            {
+                "type": "image",
+                "name": channel_layer_name(self.name, channel),
+                "source": sources,
+                # Which channel of the store this layer reads: the engine keeps
+                # the c axis as a per-layer dimension, pinned here.
+                "localPosition": [index],
+                "shader": channel_shader(channel),
+                # Channels add like light, between layers, on the graphics card.
+                "blend": "additive",
+                "opacity": 1.0,
+                "visible": self.visible and channel.active,
+                "_revision": self.revision,
+            }
+            for index, channel in enumerate(channels_for(first, self.channels))
+        ]
 
 
 def state_json(layers: list[Layer], *, layout: str = "xy") -> dict:
@@ -164,7 +178,7 @@ def state_json(layers: list[Layer], *, layout: str = "xy") -> dict:
     if layout not in LAYOUTS:
         raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
     return {
-        "layers": [layer.to_json() for layer in layers],
+        "layers": [engine_layer for layer in layers for engine_layer in layer.to_json()],
         "layout": layout,
         # Left to itself the engine draws the first three axes it meets, which
         # with ``t`` in front is time against depth. The picture is x, y, z.
