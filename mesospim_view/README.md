@@ -234,7 +234,7 @@ the two apart: if the browser draws and Qt does not, it is Qt's GPU path.
 ```
 cd app/mesospim && npm ci && npm run build     # once; the page lands in mesospim_view/page/
 python -m mesospim_view.demo                    # four tiles in a browser
-python -m pytest tests/test_mesospim_view.py tests/test_mesospim_watch.py tests/test_mesospim_panel.py
+python -m pytest tests/mesospim
 ```
 
 The page is built into the package, so `pip install .` (or `pip install
@@ -250,35 +250,3 @@ skip, saying so, when the page is not built or no browser is found
 (`ZMART_CHROMIUM` names one). The Qt window itself is only driven with
 `MESOSPIM_VIEW_QT_TESTS=1` on a machine with OpenGL: QtWebEngine aborts the
 process, rather than raising, where it cannot create a context.
-
-## What comes next
-
-`PLAN_simplified_interface.md` beside this file records how the simple
-interface was planned and what of it is still to come.
-
-## The three most recent branches, read for this design
-
-`codex/view-modes-data`, `codex/operator-embedding` and
-`codex/operator-publication-responsiveness` are one stack (about 13,000 lines,
-8,000 of them tests) on top of `main`. What they add:
-
-- **Named views** (`views.py`, `projections.py`): Slice, Top and min/max/sum
-  aggregates written beside an acquisition, identified in store metadata.
-- **Publication** (`published.py`, a larger `compose.py`): the server composes
-  per-position stores into one virtual `.zmartview.zarr` with baked coarse
-  levels, driven by revisions and coverage.
-- **Operator embedding** (`embedding.js`): a JavaScript module for a host that
-  already owns a neuroglancer viewer -- no process, URL or Qt contract.
-- **Publication responsiveness** (`readable.py`): immutable on-disk generations
-  with hard links, copy workers and reader leases.
-
-Worth taking: view identity in store attributes rather than filenames; the
-frontend packaged into the wheel; `embedding.js` as a tiny versioned module.
-Not taken, and why: the publication and readable machinery exists for live
-growth and for thousands of positions, which this view does not have; the
-embedding module patches `sliceView.updateRendering` and mirrors global Z into
-a hidden local transform, which fights the engine's coordinate model; the
-aggregate path collapses a store to a single logical channel, the opposite of
-what a multichannel acquisition needs. This package keeps positions as sources
-of one layer with a native transform, and channels as native per-channel
-layers added together.

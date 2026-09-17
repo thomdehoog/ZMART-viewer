@@ -8,34 +8,13 @@ the page is not built or no browser is available.
 from __future__ import annotations
 
 import json
-import os
-import sys
 import time
 import urllib.request
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from mesospim_view import (  # noqa: E402
-    PAGE_DIR,
-    Channel,
-    NotAStore,
-    Viewer,
-    channel_shader,
-    read_store,
-)
-from mesospim_view.demo import write_tile, write_tiles  # noqa: E402
-
-pytest.importorskip("numpy")
-
-
-@pytest.fixture(scope="module")
-def tiles(tmp_path_factory) -> list[Path]:
-    return write_tiles(tmp_path_factory.mktemp("tiles"))
-
+from mesospim_view import Channel, NotAStore, Viewer, channel_shader, read_store
+from mesospim_view.demo import write_tile
 
 # -- reading a store -------------------------------------------------------------
 
@@ -337,9 +316,6 @@ def test_reports_from_the_page_come_back_in_micrometres(tiles):
 
 # -- the picture -----------------------------------------------------------------
 
-CHROMIUM = os.environ.get("ZMART_CHROMIUM", "/opt/pw-browsers/chromium")
-GL = ["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
-
 READ_ALPHA = """() => {
   const display = window.viewer.display; display.draw();
   const gl = display.gl, canvas = display.canvas;
@@ -353,72 +329,8 @@ READ_ALPHA = """() => {
   return seen;
 }"""
 
-DESCRIBE = """() => {
-  const v = window.viewer; if (!v?.layerManager) return null;
-  let needed = 0, available = 0;
-  const layers = v.layerManager.managedLayers.map((m) => {
-    for (const rl of m.layer?.renderLayers ?? []) {
-      const p = rl.layerChunkProgressInfo;
-      if (p) { needed += p.numVisibleChunksNeeded; available += p.numVisibleChunksAvailable; }
-    }
-    return {
-      name: m.name,
-      loaded: (m.layer?.dataSources ?? []).every((s) => s.loadState !== undefined),
-      errors: (m.layer?.dataSources ?? []).map((s) => s.loadState?.error?.message).filter(Boolean),
-      channelRank: m.layer?.channelCoordinateSpace?.value?.rank ?? null,
-      sources: (m.layer?.dataSources ?? []).length,
-    };
-  });
-  const space = v.navigationState.position.coordinateSpace.value;
-  return { layers, needed, available, names: Array.from(space?.names ?? []),
-           shown: Array.from(v.navigationState.pose.displayDimensionRenderInfo.value.displayDimensionIndices) };
-}"""
 
-
-@pytest.fixture
-def browser():
-    if not (PAGE_DIR / "index.html").is_file():
-        pytest.skip("the mesoSPIM page is not built: npm ci && npm run build in app/mesospim")
-    playwright = pytest.importorskip("playwright.sync_api")
-    with playwright.sync_playwright() as pw:
-        try:
-            launched = pw.chromium.launch(args=GL)
-        except Exception:
-            if not Path(CHROMIUM).exists():
-                pytest.skip("no Chromium to drive the page with")
-            launched = pw.chromium.launch(executable_path=CHROMIUM, args=GL)
-        try:
-            yield launched
-        finally:
-            launched.close()
-
-
-def _open(browser, url, *, width=900, height=700):
-    page = browser.new_page(viewport={"width": width, "height": height})
-    errors = []
-    page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(url)
-    return page, errors
-
-
-def _wait_until_drawn(page, *, layers: int, timeout_s: float = 40.0) -> dict:
-    deadline = time.time() + timeout_s
-    seen = None
-    while time.time() < deadline:
-        seen = page.evaluate(DESCRIBE)
-        if (
-            seen
-            and len(seen["layers"]) == layers
-            and all(layer["loaded"] for layer in seen["layers"])
-            and seen["needed"] > 0
-            and seen["available"] == seen["needed"]
-        ):
-            return seen
-        time.sleep(0.25)
-    raise AssertionError(f"the picture never settled: {seen}")
-
-
-def test_four_tiles_draw_as_two_channel_layers_over_the_same_sources(browser, tiles):
+def test_four_tiles_draw_as_two_channel_layers_over_the_same_sources(pages, tiles):
     view = Viewer()
     for tile in tiles:
         view.add(tile, layer="overview")
@@ -426,8 +338,8 @@ def test_four_tiles_draw_as_two_channel_layers_over_the_same_sources(browser, ti
     picks = []
     view.on_pick(picks.append)
     try:
-        page, errors = _open(browser, url)
-        seen = _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url)
+        seen = pages.drawn(page, layers=2)
         assert [layer["name"] for layer in seen["layers"]] == ["overview · 488", "overview · 561"]
         for layer in seen["layers"]:
             assert layer["sources"] == 4 and layer["errors"] == []
@@ -461,13 +373,13 @@ def test_four_tiles_draw_as_two_channel_layers_over_the_same_sources(browser, ti
         view.stop()
 
 
-def test_adding_a_tile_keeps_the_operators_adjustments(browser, tiles):
+def test_adding_a_tile_keeps_the_operators_adjustments(pages, tiles):
     view = Viewer()
     view.add(tiles[0], layer="overview")
     url = view.start()
     try:
-        page, errors = _open(browser, url)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url)
+        pages.drawn(page, layers=2)
         page.evaluate(
             """() => { const l = window.viewer.layerManager.managedLayers[0].layer;
                       l.opacity.value = 0.3; l.shaderControlState.state.get('color').trackable.restoreState('#0000ff'); }"""
@@ -475,7 +387,7 @@ def test_adding_a_tile_keeps_the_operators_adjustments(browser, tiles):
         view.add(tiles[1], layer="overview")
         deadline = time.time() + 20
         while time.time() < deadline:
-            seen = page.evaluate(DESCRIBE)
+            seen = pages.describe(page)
             if seen and seen["layers"] and seen["layers"][0]["sources"] == 2:
                 break
             time.sleep(0.2)
@@ -490,14 +402,14 @@ def test_adding_a_tile_keeps_the_operators_adjustments(browser, tiles):
         view.stop()
 
 
-def test_a_store_that_gains_a_time_point_is_read_again(browser, tmp_path):
+def test_a_store_that_gains_a_time_point_is_read_again(pages, tmp_path):
     store = write_tile(tmp_path / "growing.ome.zarr", origin_um=(0, 0, 0), seed=3, timepoints=1)
     view = Viewer()
     view.add(store, layer="growing")
     url = view.start()
     try:
-        page, errors = _open(browser, url)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url)
+        pages.drawn(page, layers=2)
         extent = "() => { const b = window.viewer.navigationState.position.coordinateSpace.value.bounds; return b.upperBounds[0] - b.lowerBounds[0]; }"
         assert page.evaluate(extent) == 1
         page.evaluate(
@@ -510,7 +422,7 @@ def test_a_store_that_gains_a_time_point_is_read_again(browser, tmp_path):
         while time.time() < deadline and page.evaluate(extent) != 3:
             time.sleep(0.25)
         assert page.evaluate(extent) == 3
-        _wait_until_drawn(page, layers=2)
+        pages.drawn(page, layers=2)
         colour = "() => window.viewer.layerManager.managedLayers[1].layer.shaderControlState.state.get('color').trackable.toJSON()"
         assert page.evaluate(colour) == "#ff0000"
         assert not errors, errors
@@ -519,13 +431,13 @@ def test_a_store_that_gains_a_time_point_is_read_again(browser, tmp_path):
         view.stop()
 
 
-def test_a_transparent_ground_is_clear_outside_the_tiles_and_opaque_inside(browser, tiles):
+def test_a_transparent_ground_is_clear_outside_the_tiles_and_opaque_inside(pages, tiles):
     view = Viewer(transparent=True, ui="bare")
     view.add(tiles[0], layer="overview")
     url = view.start()
     try:
-        page, errors = _open(browser, url)
-        _wait_until_drawn(page, layers=2)
+        page, errors = pages.open(url)
+        pages.drawn(page, layers=2)
         time.sleep(1.0)
         alpha = page.evaluate(READ_ALPHA)
         assert alpha["clear"] > 100_000, alpha

@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import os
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from mesospim_view import PAGE_DIR, Acquisitions, Viewer, Watcher  # noqa: E402
-from mesospim_view.demo import write_tile  # noqa: E402
-
-pytest.importorskip("numpy")
+from mesospim_view import PAGE_DIR, Acquisitions, Viewer, Watcher
+from mesospim_view.demo import write_tile
 
 
 def an_acquisition(root: Path, name: str) -> Path:
