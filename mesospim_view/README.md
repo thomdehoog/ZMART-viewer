@@ -201,6 +201,31 @@ draws its own controls; the mouse and keyboard still work.
 The engine needs WebGL 2. Qt WebEngine has it; on a machine that blocks the
 GPU, set `QTWEBENGINE_CHROMIUM_FLAGS="--ignore-gpu-blocklist"` before Qt starts.
 
+## Installing on the microscope PC
+
+The built page is committed, so no Node is needed there. In the mesoSPIM
+environment:
+
+```
+pip install "git+https://github.com/thomdehoog/ZMART-viewer@mesospim-view"
+pip install PyQtWebEngine     # the web view for PyQt5; not part of PyQt5 itself
+```
+
+Then, in mesoSPIM-control, `View > Open Data Viewer`. Before the first real
+run, three quick checks from a Python prompt in that environment:
+
+```python
+import mesospim_view, PyQt5.QtWebEngineWidgets      # both import
+mesospim_view.Viewer().page_built                   # True: the page came along
+```
+
+and `python -m mesospim_view.demo --live --window` shows a pretend run in the
+Data viewer window without the microscope. If that window stays black, WebGL
+is the first suspect: set `QTWEBENGINE_CHROMIUM_FLAGS=--ignore-gpu-blocklist`
+before starting, and try `--disable-gpu-driver-bug-workarounds` after that.
+The same window in a browser (`python -m mesospim_view.demo --live`) tells
+the two apart: if the browser draws and Qt does not, it is Qt's GPU path.
+
 ## Building and testing
 
 ```
