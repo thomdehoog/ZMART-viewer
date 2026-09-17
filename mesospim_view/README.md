@@ -207,6 +207,12 @@ skip, saying so, when the page is not built or no browser is found
 `MESOSPIM_VIEW_QT_TESTS=1` on a machine with OpenGL: QtWebEngine aborts the
 process, rather than raising, where it cannot create a context.
 
+## What comes next
+
+`PLAN_simplified_interface.md` beside this file: the engine's chrome off and
+our own control panel on the right with a 2D/3D button, built once the tczyx
+writer and the Data viewer are in use.
+
 ## The three most recent branches, read for this design
 
 `codex/view-modes-data`, `codex/operator-embedding` and
