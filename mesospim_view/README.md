@@ -16,6 +16,20 @@ widget = view.qt_widget()                           # a QWebEngineView, or:
 view.open_in_browser()
 ```
 
+And for a folder the microscope is writing into, the **Data viewer window**:
+
+```
+python -m mesospim_view.window /path/to/data        # or, from mesoSPIM-control: View > Open Data Viewer
+python -m mesospim_view.demo --live                 # a pretend run, followed as it lands
+```
+
+A dropdown of the acquisitions in the folder, newest first, and the viewer
+below. The newest acquisition is followed on its own: a tile or a time point
+that lands is on screen within a second, and a new acquisition starting is
+switched to, unless an older one was picked from the dropdown. That logic is
+`Follower` in `watch.py` and is tested without Qt; `window.py` binds it to a
+combo box and a timer.
+
 Everything the operator sees is neuroglancer's own interface -- its layer
 panel, its brightness histogram and colour dials, its keyboard and mouse. What
 Python adds is only what neuroglancer cannot know: which stores belong
@@ -111,6 +125,9 @@ Viewer.on_pick                    <---    POST /api/pick   (a double-click)
 ```
 
 - `omezarr.py` reads the metadata above.
+- `watch.py` follows a folder: `Acquisitions` lists the `*.ome.zarr` groups
+  in it newest first, `Watcher` polls one of them and adds a new tile or
+  re-reads a grown one, `Follower` keeps a viewer on the newest.
 - `state.py` turns placed stores into neuroglancer state: one engine layer per
   channel, over the same sources. A shifted source carries a `transform` whose
   translation column holds the shift, in voxels. Each layer's shader is the
@@ -137,16 +154,21 @@ plugin writes one OME-Zarr store per tile and channel. That fits the API
 directly:
 
 ```python
-# in the window that should show the acquisition
+# the Data viewer window, as mesoSPIM_MainWindow.open_data_viewer_window opens it
+from mesospim_view.window import make_window_class
+self.data_viewer_window = make_window_class()(acq_list[0]["folder"])
+self.data_viewer_window.show()
+
+# or the plain widget inside a window of your own
 self.view = Viewer(transparent=False)
 layout.addWidget(self.view.qt_widget(self))
-
-# when the writer finalises a tile
 self.view.add(store_path, layer=acq["filename"], window=(100, 4000))
-
-# an operator double-clicks a point of interest
 self.view.on_pick(lambda point: self.core.sig_move_absolute.emit(point))
 ```
+
+The stores it expects are the ones `MP_OME_Zarr_TCZYX_Writer` writes: one
+`<Sample>.ome.zarr` group per acquisition holding one `(t, c, z, y, x)` store
+per tile, channels along `c`, time points appended along `t`.
 
 A separate store per channel shows as one engine layer each; a store with
 several channels in one array shows as one engine layer per channel under one
@@ -166,10 +188,14 @@ GPU, set `QTWEBENGINE_CHROMIUM_FLAGS="--ignore-gpu-blocklist"` before Qt starts.
 ## Building and testing
 
 ```
-cd app/mesospim && npm ci && npm run build     # once; the page lands in dist/
+cd app/mesospim && npm ci && npm run build     # once; the page lands in mesospim_view/page/
 python -m mesospim_view.demo                    # four tiles in a browser
-python -m pytest tests/test_mesospim_view.py    # reader, state, server, and the picture
+python -m pytest tests/test_mesospim_view.py tests/test_mesospim_watch.py
 ```
+
+The page is built into the package, so `pip install .` (or `pip install
+git+https://github.com/thomdehoog/ZMART-viewer`) ships it, and mesoSPIM-control
+only needs the package installed to open the Data viewer.
 
 The picture tests drive a headless Chromium and assert what is drawn: four
 tiles as two channel layers over the same sources, the axes on screen, a camera
@@ -177,7 +203,9 @@ move from Python and a pick from the page, an operator's adjustments surviving a
 new tile, a store that gains time points while shown, and a transparent ground
 that is clear outside the tile and opaque inside it. They
 skip, saying so, when the page is not built or no browser is found
-(`ZMART_CHROMIUM` names one).
+(`ZMART_CHROMIUM` names one). The Qt window itself is only driven with
+`MESOSPIM_VIEW_QT_TESTS=1` on a machine with OpenGL: QtWebEngine aborts the
+process, rather than raising, where it cannot create a context.
 
 ## The three most recent branches, read for this design
 

@@ -35,7 +35,9 @@ def read_again(placement: Placement) -> Placement:
     )
 
 
-PAGE_DIR = Path(__file__).resolve().parent.parent / "app" / "mesospim" / "dist"
+# The built page lives inside the package (app/mesospim builds into it), so an
+# installed copy of the package carries its page.
+PAGE_DIR = Path(__file__).resolve().parent / "page"
 
 
 def _si_factor(unit: str) -> float:
@@ -136,13 +138,17 @@ class Viewer:
                 self._layers[name] = held
             elif declared is not None and held.channels is None:
                 held.channels = declared
-            shown_before = [p for p in held.placements if p.store.path == store.path]
-            if shown_before:
+            at = next(
+                (i for i, p in enumerate(held.placements) if p.store.path == store.path), None
+            )
+            if at is None:
+                held.placements.append(placement)
+            else:
                 # The same store again means it has changed on disk -- a time
-                # point appended -- so the page must read it afresh.
+                # point appended -- so the page must read it afresh. It keeps
+                # its place among the layer's sources.
+                held.placements[at] = placement
                 held.revision += 1
-            held.placements = [p for p in held.placements if p.store.path != store.path]
-            held.placements.append(placement)
             self._publish()
         return name
 
@@ -321,18 +327,24 @@ class Viewer:
 
 
 class _Qt:
-    """The few Qt names the widget needs, from whichever binding is installed."""
+    """The Qt names the viewer's widgets need, from whichever binding is installed.
+
+    PyQt5 first, because that is what mesoSPIM-control uses; the others for a host
+    that has moved on. The window in ``window.py`` uses the same helper.
+    """
 
     BINDINGS = ("PyQt5", "PyQt6", "PySide6", "PySide2")
 
     def __init__(self, binding: str) -> None:
-        core = __import__(f"{binding}.QtCore", fromlist=["Qt", "QUrl"])
-        gui = __import__(f"{binding}.QtGui", fromlist=["QColor"])
+        self.binding = binding
+        self.QtCore = __import__(f"{binding}.QtCore", fromlist=["Qt", "QUrl", "QTimer"])
+        self.QtGui = __import__(f"{binding}.QtGui", fromlist=["QColor"])
+        self.QtWidgets = __import__(f"{binding}.QtWidgets", fromlist=["QWidget"])
         web = __import__(f"{binding}.QtWebEngineWidgets", fromlist=["QWebEngineView"])
-        self.QUrl = core.QUrl
-        self.QColor = gui.QColor
+        self.QUrl = self.QtCore.QUrl
+        self.QColor = self.QtGui.QColor
         self.QWebEngineView = web.QWebEngineView
-        attributes = getattr(core.Qt, "WidgetAttribute", core.Qt)
+        attributes = getattr(self.QtCore.Qt, "WidgetAttribute", self.QtCore.Qt)
         self.WA_TranslucentBackground = attributes.WA_TranslucentBackground
 
 

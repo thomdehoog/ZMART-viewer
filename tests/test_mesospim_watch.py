@@ -1,0 +1,170 @@
+"""Following a folder the microscope writes into: the watcher, and the window over it."""
+
+from __future__ import annotations
+
+import os
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from mesospim_view import PAGE_DIR, Acquisitions, Viewer, Watcher  # noqa: E402
+from mesospim_view.demo import write_tile  # noqa: E402
+
+pytest.importorskip("numpy")
+
+
+def an_acquisition(root: Path, name: str) -> Path:
+    """An acquisition group the way the tczyx writer lays it out: a zarr group of tile stores."""
+    group = root / f"{name}.ome.zarr"
+    group.mkdir(parents=True)
+    (group / ".zgroup").write_text('{"zarr_format": 2}')
+    return group
+
+
+def test_acquisitions_are_listed_newest_first_and_tiles_are_not_mistaken_for_them(tmp_path):
+    older = an_acquisition(tmp_path, "run_a")
+    write_tile(older / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=1)
+    time.sleep(0.05)
+    newer = an_acquisition(tmp_path, "run_b")
+    # a bare tile store beside them is not an acquisition
+    write_tile(tmp_path / "loose_tile.ome.zarr", origin_um=(0, 0, 0), seed=2)
+    (tmp_path / "notes.txt").write_text("x")
+    listed = Acquisitions(tmp_path).list()
+    assert [a.path for a in listed] == [newer, older]
+    assert [a.name for a in listed] == ["run_b", "run_a"]
+    assert Acquisitions(tmp_path).newest().path == newer
+    assert Acquisitions(tmp_path / "missing").list() == []
+
+
+def test_the_watcher_adds_tiles_as_they_land_and_rereads_a_grown_one(tmp_path):
+    acquisition = an_acquisition(tmp_path, "run")
+    view = Viewer()
+    watcher = Watcher(view, acquisition)
+    try:
+        assert watcher.poll() == []
+        assert view.layers == []
+
+        first = write_tile(
+            acquisition / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=1
+        )
+        assert watcher.poll() == [first]
+        assert view.layers == ["run"]
+        assert [s.path for s in view.stores("run")] == [first]
+        assert watcher.poll() == [], "nothing changed, nothing done"
+
+        second = write_tile(
+            acquisition / "Mag1_Tile1_Sh0_Rot0.ome.zarr", origin_um=(0, 144, 0), seed=2
+        )
+        # a folder still being created is looked at again later, not shown half-made
+        (acquisition / "Mag1_Tile2_Sh0_Rot0.ome.zarr").mkdir()
+        assert watcher.poll() == [second]
+        assert [s.path for s in view.stores("run")] == [first, second]
+        revision_before = view.state["layers"][0]["_revision"]
+
+        # a time point appended to the first tile: shown again, others untouched
+        write_tile(first, origin_um=(0, 0, 0), seed=1, timepoints=2)
+        assert watcher.poll() == [first]
+        assert view.state["layers"][0]["_revision"] == revision_before + 1
+        assert [s.shape[0] for s in view.stores("run")] == [2, 1]
+
+        watcher.forget()
+        assert view.layers == []
+    finally:
+        view.stop()
+
+
+def test_the_follower_stays_on_the_newest_acquisition_until_an_older_one_is_chosen(tmp_path):
+    from mesospim_view import Follower
+
+    older = an_acquisition(tmp_path, "run_a")
+    write_tile(older / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=1)
+    view = Viewer()
+    follower = Follower(view, tmp_path)
+    try:
+        assert follower.poll() is True and follower.names == ["run_a"]
+        assert follower.shown == older and follower.shown_index == 0
+        assert view.layers == ["run_a"]
+        assert follower.poll() is False
+
+        time.sleep(0.05)
+        newer = an_acquisition(tmp_path, "run_b")
+        write_tile(newer / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=2)
+        assert follower.poll() is True
+        assert follower.shown == newer, "a new acquisition is followed on its own"
+        assert follower.names == ["run_b", "run_a"] and follower.shown_index == 0
+        assert view.layers == ["run_b"]
+
+        follower.choose(1)
+        assert follower.shown == older and follower.following is False
+        write_tile(newer / "Mag1_Tile1_Sh0_Rot0.ome.zarr", origin_um=(0, 144, 0), seed=3)
+        follower.poll()
+        assert follower.shown == older, "a chosen acquisition stays while the newest grows"
+
+        follower.follow_latest()
+        assert follower.shown == newer and follower.following is True
+        assert len(view.stores("run_b")) == 2, "and the tile that landed meanwhile is there"
+        follower.choose(0)
+        assert follower.following is True
+    finally:
+        view.stop()
+
+
+# -- the Qt window ---------------------------------------------------------------
+#
+# QtWebEngine aborts the whole process when it cannot create an OpenGL context
+# (a container without Mesa, say), which no skip can catch. So the window is only
+# exercised when asked for: MESOSPIM_VIEW_QT_TESTS=1 on a machine with a display
+# stack. What it does is tested above through Follower; this only checks the
+# binding to Qt.
+
+
+@pytest.fixture
+def qt_app():
+    if not os.environ.get("MESOSPIM_VIEW_QT_TESTS"):
+        pytest.skip("set MESOSPIM_VIEW_QT_TESTS=1 to drive the Qt window (needs OpenGL)")
+    if not (PAGE_DIR / "index.html").is_file():
+        pytest.skip("the mesoSPIM page is not built")
+    os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox")
+    try:
+        from mesospim_view.viewer import _qt
+
+        qt = _qt()
+    except ImportError as error:
+        pytest.skip(f"no Qt WebEngine binding: {error}")
+    app = qt.QtWidgets.QApplication.instance() or qt.QtWidgets.QApplication([])
+    yield app, qt
+
+
+def _spin(qt, seconds: float) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        qt.QtWidgets.QApplication.processEvents()
+        time.sleep(0.02)
+
+
+def test_the_window_binds_the_dropdown_and_the_timer_to_the_follower(tmp_path, qt_app):
+    app, qt = qt_app
+    from mesospim_view.window import make_window_class
+
+    older = an_acquisition(tmp_path, "run_a")
+    write_tile(older / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=1)
+    window = make_window_class()(tmp_path)
+    try:
+        assert window.follower.shown == older
+        assert [window.chooser.itemText(i) for i in range(window.chooser.count())] == ["run_a"]
+        time.sleep(0.05)
+        newer = an_acquisition(tmp_path, "run_b")
+        write_tile(newer / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=2)
+        _spin(qt, 1.5)
+        assert window.follower.shown == newer and window.chooser.currentText() == "run_b"
+        window.chooser.activated.emit(1)
+        assert window.follower.shown == older
+        window.latest.click()
+        assert window.follower.shown == newer and window.chooser.currentIndex() == 0
+    finally:
+        window.close()

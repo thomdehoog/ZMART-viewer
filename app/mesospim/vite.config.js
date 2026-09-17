@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
+    // Into the Python package, so that `pip install` ships the page with it.
+    outDir: "../../mesospim_view/page",
+    emptyOutDir: true,
     // The engine's background worker must be a real file, never a data: URL:
     // a data:-URL worker has no origin, so the absolute-path fetches it makes
     // for image chunks cannot resolve.

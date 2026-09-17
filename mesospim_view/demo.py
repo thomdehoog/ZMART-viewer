@@ -2,6 +2,8 @@
 
     python -m mesospim_view.demo            # writes tiles, opens a browser
     python -m mesospim_view.demo --no-open  # just serve, print the address
+    python -m mesospim_view.demo --live     # a run being written, followed as it lands
+    python -m mesospim_view.demo --live --window   # the same in the Data viewer window (Qt)
 
 Four two-channel tiles are laid out two by two with a small overlap, each an
 ordinary OME-Zarr 0.4 store (zarr v2, uncompressed chunks) carrying its stage
@@ -16,6 +18,8 @@ import json
 import shutil
 import time
 from pathlib import Path
+
+from .viewer import Viewer
 
 VOXEL_UM = (5.0, 1.0, 1.0)  # z, y, x
 TILE = (24, 160, 160)  # z, y, x voxels
@@ -194,9 +198,69 @@ def write_tiles(folder: Path, *, across: int = 2, down: int = 2) -> list[Path]:
     return tiles
 
 
-def main(argv: list[str] | None = None) -> int:
-    from .viewer import Viewer
+def write_a_run(
+    root: Path, name: str, *, tiles: int = 4, timepoints: int = 2, pause_s: float = 2.0
+) -> None:
+    """Write an acquisition the way the microscope does: tile by tile, then time point by
+    time point appended to every tile, with a pause between stacks."""
+    group = root / f"{name}.ome.zarr"
+    group.mkdir(parents=True, exist_ok=True)
+    (group / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+    step_y = TILE[1] * VOXEL_UM[1] - OVERLAP_UM
+    step_x = TILE[2] * VOXEL_UM[2] - OVERLAP_UM
+    for t in range(1, timepoints + 1):
+        for tile in range(tiles):
+            row, column = divmod(tile, 2)
+            write_tile(
+                group / f"Mag1_Tile{tile}_Sh0_Rot0.ome.zarr",
+                origin_um=(0.0, row * step_y, column * step_x),
+                seed=tile,
+                timepoints=t,
+            )
+            print(f"  wrote {name} tile {tile} time point {t - 1}")
+            time.sleep(pause_s)
 
+
+def live(args) -> int:
+    """A folder being written into, shown as it grows."""
+    import threading
+
+    root = Path(args.folder)
+    root.mkdir(parents=True, exist_ok=True)
+    existing = len([p for p in root.iterdir() if p.name.endswith(".ome.zarr")])
+    name = f"run_{existing:02d}"
+    writer = threading.Thread(target=write_a_run, args=(root, name), daemon=True)
+    if args.window:
+        from .viewer import _qt
+        from .window import make_window_class
+
+        qt = _qt()
+        app = qt.QtWidgets.QApplication.instance() or qt.QtWidgets.QApplication([])
+        window = make_window_class()(root)
+        window.resize(1200, 800)
+        window.show()
+        writer.start()
+        return app.exec() if hasattr(app, "exec") else app.exec_()
+
+    from .watch import Follower
+
+    view = Viewer(port=args.port)
+    follower = Follower(view, root)
+    url = view.start()
+    print(f"following {root} at {url}")
+    if not args.no_open:
+        view.open_in_browser()
+    writer.start()
+    try:
+        while True:
+            follower.poll()
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        view.stop()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
         "--folder", default="testdata/mesospim_demo", help="where the tiles are written"
@@ -205,7 +269,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
     parser.add_argument("--transparent", action="store_true", help="transparent 2D ground")
     parser.add_argument("--ui", choices=("full", "bare"), default="full")
+    parser.add_argument(
+        "--live", action="store_true", help="write a run tile by tile and follow it"
+    )
+    parser.add_argument(
+        "--window", action="store_true", help="with --live: the Qt Data viewer window"
+    )
     args = parser.parse_args(argv)
+    if args.live:
+        return live(args)
 
     folder = Path(args.folder)
     tiles = write_tiles(folder)

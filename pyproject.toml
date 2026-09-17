@@ -36,6 +36,10 @@ dev = [
 [tool.setuptools]
 packages = ["zmart_viewer", "zmart_viewer.record", "mesospim_view"]
 
+[tool.setuptools.package-data]
+# The built neuroglancer page of the mesoSPIM view (app/mesospim builds into it).
+mesospim_view = ["page/*", "page/assets/*"]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
@@ -48,7 +52,7 @@ extend-exclude = [
     # Generated, not written.
     "app/page/dist",
     "app/page/node_modules",
-    "app/mesospim/dist",
+    "mesospim_view/page",
     "app/mesospim/node_modules",
     # Roads explored and not taken. Kept for the reasoning, not held to the
     # standards of code anybody runs.
