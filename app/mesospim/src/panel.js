@@ -218,8 +218,11 @@ function volumeCard(viewer, fit) {
     gainRow.classList.toggle("disabled", mode !== "on");
     slices.checked = viewer.showPerspectiveSliceViews.value;
   };
+  const watched = new WeakSet();
   const watch = () => {
     for (const layer of imageLayers(viewer)) {
+      if (watched.has(layer)) continue;
+      watched.add(layer);
       layer.volumeRenderingMode.changed.add(reflect);
       layer.volumeRenderingDepthSamplesTarget.changed.add(reflect);
       layer.volumeRenderingGain.changed.add(reflect);
@@ -347,8 +350,14 @@ function channelsCard(viewer) {
   };
   viewer.layerManager.layersChanged.add(later);
   // A layer's sources arrive after the layer: the tile count follows them.
+  const followed = new WeakSet();
   viewer.layerManager.layersChanged.add(() => {
-    for (const managed of viewer.layerManager.managedLayers) managed.layer?.dataSourcesChanged?.add(later);
+    for (const managed of viewer.layerManager.managedLayers) {
+      const layer = managed.layer;
+      if (!layer?.dataSourcesChanged || followed.has(layer)) continue;
+      followed.add(layer);
+      layer.dataSourcesChanged.add(later);
+    }
   });
   rebuild();
   return card;

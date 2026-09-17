@@ -23,12 +23,13 @@ python -m mesospim_view.window /path/to/data        # or, from mesoSPIM-control:
 python -m mesospim_view.demo --live                 # a pretend run, followed as it lands
 ```
 
-A dropdown of the acquisitions in the folder, newest first, and the viewer
-below. The newest acquisition is followed on its own: a tile or a time point
-that lands is on screen within a second, and a new acquisition starting is
-switched to, unless an older one was picked from the dropdown. That logic is
-`Follower` in `watch.py` and is tested without Qt; `window.py` binds it to a
-combo box and a timer.
+The viewer, with a dropdown of the acquisitions in the folder, newest first,
+at the top of its panel. The newest acquisition is followed on its own: a tile
+that starts is on screen within a second and is read again as its chunks land
+and once more when they stop, a time point appended to it likewise, and a new
+acquisition starting is switched to, unless an older one was picked from the
+dropdown. That logic is `Follower` in `watch.py` and is tested without Qt;
+`window.py` gives it a window and a timer.
 
 Three dresses, chosen with `Viewer(ui=...)`: `"simple"` (the default of the
 Data viewer window) is our own panel down the right-hand edge over a bare
@@ -136,8 +137,10 @@ Viewer.on_pick                    <---    POST /api/pick   (a double-click)
 
 - `omezarr.py` reads the metadata above.
 - `watch.py` follows a folder: `Acquisitions` lists the `*.ome.zarr` groups
-  in it newest first, `Watcher` polls one of them and adds a new tile or
-  re-reads a grown one, `Follower` keeps a viewer on the newest.
+  in it newest first, `Watcher` polls one of them and adds a new tile, re-reads
+  one that is still being written every ten seconds and once it has gone
+  quiet, and one whose shape grew at once; `Follower` keeps a viewer on the
+  newest.
 - `state.py` turns placed stores into neuroglancer state: one engine layer per
   channel, over the same sources. A shifted source carries a `transform` whose
   translation column holds the shift, in voxels. Each layer's shader is the

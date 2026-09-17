@@ -8,7 +8,8 @@ that into calls on a :class:`Viewer`:
 
 - :class:`Acquisitions` lists the acquisitions of a folder, newest first;
 - :class:`Watcher` polls one acquisition and shows what has landed since the
-  last look: a new tile becomes a new source, a grown tile is read again.
+  last look: a new tile becomes a new source, a tile being written is read
+  again every few seconds and once more when the writer has gone quiet.
 
 Both work on plain paths and a viewer, so they are tested without Qt; the
 window in ``window.py`` only drives them from a timer.
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,21 +75,62 @@ class Acquisitions:
         return listed[0] if listed else None
 
 
+def _fingerprint(root: Path) -> tuple[int, int]:
+    """How many entries a folder tree holds and when a folder in it last gained one.
+
+    Cheap enough to take every second on a store of thousands of chunk files:
+    only the folders are stat'ed. Chunks and shards are only ever added, never
+    changed in place, so a new one always moves this.
+    """
+    entries = 0
+    newest = 0
+    pending = [root]
+    while pending:
+        folder = pending.pop()
+        try:
+            newest = max(newest, folder.stat().st_mtime_ns)
+            with os.scandir(folder) as listing:
+                for entry in listing:
+                    entries += 1
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(Path(entry.path))
+        except OSError:
+            continue
+    return entries, newest
+
+
+@dataclass
+class _Writing:
+    """A store the microscope is still writing into, as far as the watcher can tell."""
+
+    fingerprint: tuple[int, int]
+    changed_at: float  # when it was last seen gaining a file
+    read_at: float  # when the viewer last read it
+    dirty: bool = False  # gained files since the viewer last read it
+
+
 @dataclass
 class Watcher:
     """Keeps one acquisition on a viewer up to date with the disk.
 
     Every :meth:`poll` looks at the acquisition's tile stores. A store seen for
-    the first time is added to the acquisition's layer; a store whose shape has
-    changed (a time point appended) is added again, which makes the viewer read
-    it afresh. Stores that cannot be read yet -- being created at that very
-    moment -- are simply looked at again next time.
+    the first time, or whose shape has changed (a time point appended), is
+    added to the acquisition's layer at once. The writer creates a store's
+    arrays when a stack starts and lands the chunks over the minutes that
+    follow, so a store is then watched for new files: while they keep coming
+    it is read again every ``refresh_s`` seconds, and once more when none has
+    come for ``settle_s`` seconds, so the picture ends complete. Stores that
+    cannot be read yet -- being created at that very moment -- are simply
+    looked at again next time.
     """
 
     viewer: Viewer
     acquisition: Path
     layer: str | None = None
+    settle_s: float = 3.0
+    refresh_s: float = 10.0
     shapes: dict[Path, tuple[int, ...]] = field(default_factory=dict)
+    writing: dict[Path, _Writing] = field(default_factory=dict)
 
     @property
     def layer_name(self) -> str:
@@ -96,16 +139,31 @@ class Watcher:
     def poll(self) -> list[Path]:
         """Bring the viewer up to date; return the stores added or re-read."""
         changed = []
+        now = time.monotonic()
         for path in self.stores():
             try:
                 store = read_store(path)
             except NotAStore:
                 continue
-            if self.shapes.get(path) == store.shape:
+            if self.shapes.get(path) != store.shape:
+                self.viewer.add(path, layer=self.layer_name)
+                self.shapes[path] = store.shape
+                self.writing[path] = _Writing(_fingerprint(path), now, now)
+                changed.append(path)
                 continue
-            self.viewer.add(path, layer=self.layer_name)
-            self.shapes[path] = store.shape
-            changed.append(path)
+            held = self.writing.get(path)
+            if held is None:
+                continue
+            seen = _fingerprint(path)
+            if seen != held.fingerprint:
+                held.fingerprint, held.changed_at, held.dirty = seen, now, True
+            quiet = now - held.changed_at >= self.settle_s
+            if held.dirty and (quiet or now - held.read_at >= self.refresh_s):
+                self.viewer.add(path, layer=self.layer_name)
+                held.read_at, held.dirty = now, False
+                changed.append(path)
+            if quiet and not held.dirty:
+                del self.writing[path]
         return changed
 
     def stores(self) -> list[Path]:
@@ -119,6 +177,7 @@ class Watcher:
         """Take this acquisition off the viewer."""
         self.viewer.remove(self.layer_name)
         self.shapes.clear()
+        self.writing.clear()
 
 
 class Follower:
@@ -165,8 +224,8 @@ class Follower:
             relisted = [a.path for a in listed] != [a.path for a in self.listed]
             self.listed = listed
             if self.following and listed and self.shown != listed[0].path:
-                self.show(listed[0])
-            if self.watcher is not None:
+                self.show(listed[0])  # which looks at its tiles
+            elif self.watcher is not None:
                 self.watcher.poll()
             self._offer()
             return relisted

@@ -3,12 +3,13 @@
 Everything here is a pure function from plain data to the JSON neuroglancer
 already understands. An acquisition is a :class:`Layer` here and becomes one
 engine layer *per channel*, all sharing the same sources and composited on
-the graphics card by their brightness -- one layer per channel is how
+the graphics card by their brightness. One layer per channel is how
 neuroglancer's own multichannel setup arranges an OME-Zarr, and the only
-arrangement that reads a store whose chunks hold one channel each (the engine reads every channel of a voxel from one
-chunk, so a channel dimension across chunks draws nothing). Each source is a
-neuroglancer source with a ``transform`` carrying its shift. Nothing is
-invented that the engine does not have a word for.
+arrangement that reads a store whose chunks hold one channel each: the engine
+reads every channel of a voxel from one chunk, so a channel dimension across
+chunks draws nothing. Each source is a neuroglancer source with a
+``transform`` carrying its shift. Nothing is invented that the engine does not
+have a word for.
 """
 
 from __future__ import annotations
