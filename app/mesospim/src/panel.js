@@ -47,6 +47,42 @@ function splitName(name) {
   return at === -1 ? [name, name] : [name.slice(0, at), name.slice(at + SEPARATOR.length)];
 }
 
+// -- the acquisition: the session's runs, newest first --------------------------
+
+function acquisitionCard() {
+  const card = element("section", "card acquisition");
+  card.hidden = true;
+  card.appendChild(element("h2", null, "Acquisition"));
+  const select = document.createElement("select");
+  select.className = "chooser";
+  select.title = "The acquisition shown: the current one, or an earlier one of this session";
+  select.addEventListener("change", () => {
+    fetch("/api/choose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index: Number(select.value) }),
+    }).catch(() => undefined);
+  });
+  card.appendChild(select);
+  let offered = "";
+  card.setChoices = (choices) => {
+    const names = choices?.names ?? [];
+    const key = JSON.stringify(choices);
+    card.hidden = names.length === 0;
+    if (key === offered) return;
+    offered = key;
+    select.replaceChildren();
+    names.forEach((name, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = index === 0 ? `${name}  (current)` : name;
+      select.appendChild(option);
+    });
+    select.value = String(choices.current ?? 0);
+  };
+  return card;
+}
+
 // -- the view: 2D or 3D ---------------------------------------------------------
 
 function viewCard(viewer, fit) {
@@ -79,6 +115,137 @@ function viewCard(viewer, fit) {
   viewer.layout.changed.add(reflect);
   reflect();
   return card;
+}
+
+// -- the volume view: how the specimen is projected, how finely, from where ------
+
+const LOOK_FROM = [
+  ["Top", [0, 0, 0, 1]],
+  ["Front", [-Math.SQRT1_2, 0, 0, Math.SQRT1_2]],
+  ["Side", [0, Math.SQRT1_2, 0, Math.SQRT1_2]],
+];
+const DETAIL_STEPS = [32, 64, 128, 256, 512, 1024];
+
+function imageLayers(viewer) {
+  return viewer.layerManager.managedLayers
+    .map((managed) => managed.layer)
+    .filter((layer) => layer && layer.type === "image");
+}
+
+function volumeCard(viewer, fit) {
+  const card = element("section", "card volume");
+  card.appendChild(element("h2", null, "3D"));
+
+  // Projection: the brightest voxel along each ray (a microscopist's projection),
+  // every voxel accumulated with a gain, or the darkest voxel.
+  const projection = element("div", "segmented");
+  const projections = new Map();
+  for (const [mode, label] of [["max", "Max"], ["on", "Accumulate"], ["min", "Min"]]) {
+    const button = element("button", null, label);
+    button.type = "button";
+    button.dataset.mode = mode;
+    button.addEventListener("click", () => {
+      for (const layer of imageLayers(viewer)) layer.volumeRenderingMode.restoreState(mode);
+    });
+    projections.set(mode, button);
+    projection.appendChild(button);
+  }
+  card.appendChild(labelled("Projection", projection));
+
+  // Detail: how many steps a ray takes, which is what decides how fine a copy of
+  // the image the engine may draw from. More is sharper and slower.
+  const detail = document.createElement("input");
+  detail.type = "range";
+  detail.min = "0";
+  detail.max = String(DETAIL_STEPS.length - 1);
+  detail.step = "1";
+  detail.className = "detail";
+  const detailReading = element("span", "reading", "");
+  detail.addEventListener("input", () => {
+    const samples = DETAIL_STEPS[Number(detail.value)];
+    for (const layer of imageLayers(viewer)) layer.volumeRenderingDepthSamplesTarget.value = samples;
+  });
+  card.appendChild(labelled("Detail", detail, detailReading));
+
+  // Gain, for the accumulated projection only: how strongly each voxel adds up.
+  const gain = document.createElement("input");
+  gain.type = "range";
+  gain.min = "-10";
+  gain.max = "10";
+  gain.step = "0.1";
+  gain.className = "gain";
+  const gainReading = element("span", "reading", "");
+  gain.addEventListener("input", () => {
+    for (const layer of imageLayers(viewer)) layer.volumeRenderingGain.value = Number(gain.value);
+  });
+  const gainRow = labelled("Gain", gain, gainReading);
+  card.appendChild(gainRow);
+
+  // Where the specimen is looked at from; the mouse turns it from there.
+  const looks = element("div", "segmented");
+  for (const [label, orientation] of LOOK_FROM) {
+    const button = element("button", null, label);
+    button.type = "button";
+    button.dataset.look = label.toLowerCase();
+    button.addEventListener("click", () => {
+      viewer.projectionOrientation.restoreState(orientation);
+      fit?.();
+    });
+    looks.appendChild(button);
+  }
+  card.appendChild(labelled("Look from", looks));
+
+  // The cross-section planes inside the volume: off for a pure volume.
+  const slices = document.createElement("input");
+  slices.type = "checkbox";
+  slices.className = "slices";
+  slices.addEventListener("change", () => {
+    viewer.showPerspectiveSliceViews.value = slices.checked;
+  });
+  card.appendChild(labelled("Slice planes", slices));
+
+  const reflect = () => {
+    const layers = imageLayers(viewer);
+    const mode = layers[0]?.volumeRenderingMode.toJSON() ?? "off";
+    for (const [name, button] of projections) button.classList.toggle("on", mode === name);
+    const samples = layers[0]?.volumeRenderingDepthSamplesTarget.value ?? 64;
+    let nearest = 0;
+    DETAIL_STEPS.forEach((step, i) => {
+      if (Math.abs(step - samples) < Math.abs(DETAIL_STEPS[nearest] - samples)) nearest = i;
+    });
+    if (document.activeElement !== detail) detail.value = String(nearest);
+    detailReading.textContent = `${Math.round(samples)} steps`;
+    const g = layers[0]?.volumeRenderingGain.value ?? 0;
+    if (document.activeElement !== gain) gain.value = String(g);
+    gainReading.textContent = g.toFixed(1);
+    gainRow.classList.toggle("disabled", mode !== "on");
+    slices.checked = viewer.showPerspectiveSliceViews.value;
+  };
+  const watch = () => {
+    for (const layer of imageLayers(viewer)) {
+      layer.volumeRenderingMode.changed.add(reflect);
+      layer.volumeRenderingDepthSamplesTarget.changed.add(reflect);
+      layer.volumeRenderingGain.changed.add(reflect);
+    }
+    reflect();
+  };
+  viewer.layerManager.layersChanged.add(watch);
+  viewer.showPerspectiveSliceViews.changed.add(reflect);
+  watch();
+  const show = () => {
+    card.hidden = viewer.layout.toJSON() !== "3d";
+  };
+  viewer.layout.changed.add(show);
+  show();
+  return card;
+}
+
+function labelled(text, control, reading) {
+  const row = element("div", "row labelled");
+  row.appendChild(element("span", "label", text));
+  row.appendChild(control);
+  if (reading) row.appendChild(reading);
+  return row;
 }
 
 // -- the channels: one row per engine layer, gathered by acquisition ------------
@@ -253,7 +420,8 @@ class ControlPanel extends SidePanel {
     fold.classList.add("fold");
     fold.addEventListener("click", () => this.close());
     head.append(title, fold);
-    body.append(head, viewCard(viewer, fit), channelsCard(viewer));
+    this.acquisitions = acquisitionCard();
+    body.append(head, this.acquisitions, viewCard(viewer, fit), volumeCard(viewer, fit), channelsCard(viewer));
     this.addBody(body);
   }
 }
@@ -263,10 +431,18 @@ export function mountPanel(viewer, { fit }) {
   const location = new TrackableSidePanelLocation(
     { side: "right", col: 0, row: 0, flex: 1, size: 330, minSize: 260, visible: true },
   );
+  let panel = null;
+  let choices = null;
   manager.registerPanel({
     location,
-    makePanel: () => new ControlPanel(manager, location, viewer, fit),
+    makePanel: () => {
+      panel = new ControlPanel(manager, location, viewer, fit);
+      panel.acquisitions.setChoices(choices);
+      return panel;
+    },
   });
+  // A pure volume: no cross-section planes drawn inside it unless asked for.
+  viewer.showPerspectiveSliceViews.value = false;
 
   // The picture's column carries the sliders and, while the panel is folded
   // away, the button that brings it back. The manager rewrites that column's
@@ -274,6 +450,12 @@ export function mountPanel(viewer, { fit }) {
   // every frame that dropped them.
   const stage = manager.centerColumn;
   stage.style.position = "relative";
+  // The volume view would grow the panel row past the window and clip its
+  // bottom strip, sliders and scale bar included: the row is a flex child
+  // that will not shrink below its content unless told, so it is told.
+  manager.element.style.minHeight = "0";
+  stage.style.minHeight = "0";
+  stage.style.overflow = "hidden";
   const overlay = element("div", "stage-overlay");
   const unfold = iconButton("fold", "Show the controls");
   unfold.id = "fold";
@@ -300,5 +482,11 @@ export function mountPanel(viewer, { fit }) {
   viewer.showScaleBar.value = true;
   viewer.showAxisLines.value = false;
   viewer.showDefaultAnnotations.value = false;
-  return location;
+  return {
+    location,
+    setChoices(offered) {
+      choices = offered;
+      panel?.acquisitions.setChoices(offered);
+    },
+  };
 }

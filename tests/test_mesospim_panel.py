@@ -242,3 +242,113 @@ def test_the_histogram_is_drawn_inside_the_row(browser, stacks):
         page.close()
     finally:
         view.stop()
+
+
+def test_the_dropdown_offers_the_sessions_acquisitions_and_reports_a_choice(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    chosen = []
+    view.on_choice(chosen.append)
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        assert page.evaluate("() => document.querySelector('.card.acquisition').hidden") is True
+
+        view.offer_acquisitions(["run_03", "run_02", "run_01"], 0)
+        deadline = time.time() + 5
+        options = "() => [...document.querySelectorAll('.card.acquisition option')].map(o => o.textContent)"
+        while time.time() < deadline and len(page.evaluate(options)) != 3:
+            time.sleep(0.1)
+        assert page.evaluate(options) == ["run_03  (current)", "run_02", "run_01"]
+        assert page.evaluate("() => document.querySelector('.card.acquisition').hidden") is False
+        # the dropdown sits above the view switch
+        assert page.evaluate(
+            "() => [...document.querySelectorAll('.panel-body > .card')].map(c => c.className)"
+        )[:2] == ["card acquisition", "card view"]
+
+        page.select_option("select.chooser", "2")
+        deadline = time.time() + 5
+        while time.time() < deadline and not chosen:
+            time.sleep(0.1)
+        assert chosen == [2]
+
+        view.offer_acquisitions(["run_03", "run_02", "run_01"], 2)
+        deadline = time.time() + 5
+        while (
+            time.time() < deadline
+            and page.evaluate("() => document.querySelector('select.chooser').value") != "2"
+        ):
+            time.sleep(0.1)
+        assert page.evaluate("() => document.querySelector('select.chooser').value") == "2"
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_the_3d_card_drives_projection_detail_gain_planes_and_the_look(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        assert page.evaluate("() => document.querySelector('.card.volume').hidden") is True
+        page.click('.view button[data-layout="3d"]')
+        assert page.evaluate("() => document.querySelector('.card.volume').hidden") is False
+        assert page.evaluate("() => window.viewer.showPerspectiveSliceViews.value") is False, (
+            "a pure volume"
+        )
+
+        def layers(expression: str):
+            return page.evaluate(
+                f"() => window.viewer.layerManager.managedLayers.map(m => m.layer).map(l => {expression})"
+            )
+
+        assert page.evaluate("() => document.getElementById('slider-t').hidden") is False
+        page.click('.card.volume button[data-mode="on"]')
+        assert layers("l.volumeRenderingMode.toJSON()") == ["on", "on"]
+        assert (
+            page.evaluate("() => document.querySelector('.card.volume button.on').dataset.mode")
+            == "on"
+        )
+        page.click('.card.volume button[data-mode="max"]')
+        assert layers("l.volumeRenderingMode.toJSON()") == [
+            "max",
+            "max",
+        ]
+
+        page.evaluate(
+            "() => { const i = document.querySelector('.card.volume input.detail'); i.value = '3'; i.dispatchEvent(new Event('input')); }"
+        )
+        assert layers("l.volumeRenderingDepthSamplesTarget.value") == [
+            256,
+            256,
+        ]
+        assert (
+            page.evaluate(
+                "() => document.querySelector('.card.volume input.detail + .reading').textContent"
+            )
+            == "256 steps"
+        )
+
+        page.evaluate(
+            "() => { const i = document.querySelector('.card.volume input.gain'); i.value = '2.5'; i.dispatchEvent(new Event('input')); }"
+        )
+        assert layers("l.volumeRenderingGain.value") == [2.5, 2.5]
+
+        page.click(".card.volume input.slices")
+        assert page.evaluate("() => window.viewer.showPerspectiveSliceViews.value") is True
+
+        orientation = "() => window.viewer.projectionOrientation.toJSON() ?? [0, 0, 0, 1]"
+        page.click('.card.volume button[data-look="front"]')
+        assert page.evaluate(orientation) == pytest.approx([-0.7071, 0, 0, 0.7071], abs=1e-3)
+        page.click('.card.volume button[data-look="top"]')
+        assert page.evaluate(orientation) == [0, 0, 0, 1]
+        page.click('.view button[data-layout="xy"]')
+        assert page.evaluate("() => document.querySelector('.card.volume').hidden") is True
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()

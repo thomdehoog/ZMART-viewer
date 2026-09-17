@@ -80,6 +80,24 @@ button.icon.off { color: var(--text-muted); }
 .segmented button + button { border-left: 1px solid var(--control-border); }
 .segmented button.on { background: var(--accent); color: #fff; }
 
+/* -- the acquisition dropdown ------------------------------------------------- */
+select.chooser {
+  width: 100%; padding: 6px 8px; box-sizing: border-box;
+  background: var(--control-bg); color: var(--text-bright);
+  border: 1px solid var(--control-border); border-radius: 6px; font: inherit; font-weight: 600;
+}
+
+/* -- the 3D card: labelled rows of controls --------------------------------- */
+.row.labelled { gap: 10px; margin-top: 6px; }
+.row.labelled > .label { flex: 0 0 72px; color: var(--text-muted); font-size: 12px; }
+.row.labelled > .segmented { flex: 1; }
+.row.labelled > .segmented button { padding: 4px 0; font-weight: 500; font-size: 12px; }
+.row.labelled > input[type="range"] { flex: 1; accent-color: var(--accent); margin: 0; }
+.row.labelled > .reading { flex: 0 0 56px; text-align: right; font-size: 12px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.row.labelled > input[type="checkbox"] { accent-color: var(--accent); }
+.row.labelled.disabled { opacity: 0.4; pointer-events: none; }
+.card.volume h2 { margin-bottom: 2px; }
+
 /* -- the channels: one card per acquisition, one block per channel ----------- */
 .group { display: flex; flex-direction: column; }
 .group > .row.head { padding-bottom: 6px; }

@@ -5,8 +5,9 @@ Three kinds of request, kept deliberately plain:
 - ``/`` and the page's own files, from the built ``dist`` folder;
 - ``/data/<key>/...`` -- the files of a registered store, with byte ranges
   (sharded zarr v3 needs them) and revalidation by ETag;
-- ``/api/...`` -- the scene as JSON, long-polled by the page, and two short
-  reports the page posts back: where the camera is, and what was clicked.
+- ``/api/...`` -- the scene as JSON, long-polled by the page, and three short
+  reports the page posts back: where the camera is, what was clicked, and
+  which acquisition was chosen from the panel's dropdown.
 """
 
 from __future__ import annotations
@@ -36,11 +37,20 @@ class Scene:
         self.state: dict = {"layers": [], "layout": "xy"}
         self.camera: dict = {}
         self.ui: dict = {}
+        # The acquisitions the panel offers in its dropdown, and which is shown.
+        self.choices: dict = {"names": [], "current": -1}
 
     def publish(self, state: dict) -> int:
         with self._changed:
             self.version += 1
             self.state = state
+            self._changed.notify_all()
+            return self.version
+
+    def offer(self, names: list[str], current: int) -> int:
+        with self._changed:
+            self.version += 1
+            self.choices = {"names": list(names), "current": current}
             self._changed.notify_all()
             return self.version
 
@@ -61,6 +71,7 @@ class Scene:
                 "state": self.state,
                 "camera": self.camera,
                 "ui": self.ui,
+                "choices": self.choices,
             }
 
 
@@ -123,6 +134,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
         elif route == "/api/pick":
             self.server.pick_reported(payload)
+            self._send_json({"ok": True})
+        elif route == "/api/choose":
+            self.server.choice_reported(payload)
             self._send_json({"ok": True})
         else:
             self._send_empty(HTTPStatus.NOT_FOUND)
@@ -263,6 +277,7 @@ class ViewServer(ThreadingHTTPServer):
         self.stores = Stores()
         self.view_listeners: list[Callable[[dict], None]] = []
         self.pick_listeners: list[Callable[[dict], None]] = []
+        self.choice_listeners: list[Callable[[int], None]] = []
         self.last_view: dict | None = None
         self.last_view_at: float = 0.0
 
@@ -285,6 +300,12 @@ class ViewServer(ThreadingHTTPServer):
         self.last_view_at = time.monotonic()
         for listener in list(self.view_listeners):
             listener(payload)
+
+    def choice_reported(self, payload: object) -> None:
+        if not isinstance(payload, dict) or not isinstance(payload.get("index"), int):
+            return
+        for listener in list(self.choice_listeners):
+            listener(payload["index"])
 
     def pick_reported(self, payload: object) -> None:
         if not isinstance(payload, dict):

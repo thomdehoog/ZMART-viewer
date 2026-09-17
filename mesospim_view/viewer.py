@@ -241,6 +241,21 @@ class Viewer:
         assert self._server is not None
         self._server.pick_listeners.append(lambda raw: listener(self._to_units(raw)))
 
+    # -- the acquisition dropdown ------------------------------------------------
+
+    def offer_acquisitions(self, names: list[str], current: int = 0) -> None:
+        """Fill the panel's dropdown: the acquisitions of the session, newest first,
+        and which of them is shown. An empty list hides the dropdown."""
+        self.start()
+        assert self._server is not None
+        self._server.scene.offer(names, current)
+
+    def on_choice(self, listener: Callable[[int], None]) -> None:
+        """Hear the operator pick an entry of that dropdown, by index."""
+        self.start()
+        assert self._server is not None
+        self._server.choice_listeners.append(listener)
+
     # -- windows ---------------------------------------------------------------
 
     def open_in_browser(self) -> str:

@@ -32,9 +32,12 @@ combo box and a timer.
 
 Three dresses, chosen with `Viewer(ui=...)`: `"simple"` (the default of the
 Data viewer window) is our own panel down the right-hand edge over a bare
-engine, with a 2D/3D switch, one row per channel carrying the engine's own
-window-with-histogram and colour controls, and depth and time sliders on the
-picture; `"full"` is neuroglancer's own interface, panels and all; `"bare"`
+engine: a dropdown of the session's acquisitions (fed by `offer_acquisitions`,
+answered through `on_choice`; the Data viewer window's follower does both), a
+2D/3D switch, in 3D a card with the projection (max, accumulate, min), the
+detail (ray steps), the gain, where to look from and whether to draw the slice
+planes, one row per channel carrying the engine's own window-with-histogram
+and colour controls, and depth and time sliders on the picture; `"full"` is neuroglancer's own interface, panels and all; `"bare"`
 is nothing but the picture, for a host that draws its own controls. In every
 dress the mouse and keyboard are the engine's, and what Python adds is only
 what neuroglancer cannot know: which stores belong together, where each one
