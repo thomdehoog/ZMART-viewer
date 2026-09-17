@@ -34,3 +34,10 @@ parked/measurements/acquisitions/
 
 # generated on demand by testdata/make_awkward_stores.py and friends
 test_stores/
+
+# The mesoSPIM view page: packages and the built page are generated.
+app/mesospim/node_modules
+app/mesospim/dist
+
+# The tiles python -m mesospim_view.demo writes.
+testdata/mesospim_demo/

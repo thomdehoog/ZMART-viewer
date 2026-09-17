@@ -34,7 +34,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["zmart_viewer", "zmart_viewer.record"]
+packages = ["zmart_viewer", "zmart_viewer.record", "mesospim_view"]
 
 [tool.ruff]
 target-version = "py310"
@@ -48,6 +48,8 @@ extend-exclude = [
     # Generated, not written.
     "app/page/dist",
     "app/page/node_modules",
+    "app/mesospim/dist",
+    "app/mesospim/node_modules",
     # Roads explored and not taken. Kept for the reasoning, not held to the
     # standards of code anybody runs.
     "parked",

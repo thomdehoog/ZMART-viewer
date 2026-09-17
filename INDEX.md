@@ -14,6 +14,16 @@ React app that embeds the neuroglancer engine to view large, 3-D, multi-channel
 images (OME-Zarr), intended to grow into the single image viewer for the whole
 workflow. Both run with no microscope (demo mode).
 
+## The mesoSPIM view
+
+`mesospim_view/` is a separate, deliberately small package: a native
+neuroglancer page driven from Python, for building a view into the mesoSPIM
+control software. It loads a few dozen OME-Zarr stores at most, places them by
+transform, mixes each store's channels in one layer, and does no live refresh
+or baking. Its `README.md` says what it keeps from the viewer above, what it
+leaves out, and how to embed it in a Qt window. Read it before touching either
+`mesospim_view/` or `app/mesospim/`.
+
 ## Read these, in this order
 
 There are four, and they answer different questions. The list is deliberately
