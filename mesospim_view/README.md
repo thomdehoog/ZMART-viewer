@@ -32,9 +32,10 @@ combo box and a timer.
 
 Three dresses, chosen with `Viewer(ui=...)`: `"simple"` (the default of the
 Data viewer window) is our own panel down the right-hand edge over a bare
-engine: a dropdown of the session's acquisitions (fed by `offer_acquisitions`,
-answered through `on_choice`; the Data viewer window's follower does both), a
-2D/3D switch, in 3D a card with the projection (max, accumulate, min), the
+engine, with the 2D/3D switch at the top left of the picture: a dropdown of
+the session's acquisitions (fed by `offer_acquisitions`, answered through
+`on_choice`; the Data viewer window's follower does both), in 3D a card with
+the projection (max, accumulate, min), the
 detail (ray steps), the gain, where to look from and whether to draw the slice
 planes, one row per channel carrying the engine's own window-with-histogram
 and colour controls, and depth and time sliders on the picture; `"full"` is neuroglancer's own interface, panels and all; `"bare"`

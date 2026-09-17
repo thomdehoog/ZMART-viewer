@@ -85,10 +85,8 @@ function acquisitionCard() {
 
 // -- the view: 2D or 3D ---------------------------------------------------------
 
-function viewCard(viewer, fit) {
-  const card = element("section", "card view");
-  card.appendChild(element("h2", null, "View"));
-  const row = element("div", "segmented");
+function viewSwitch(viewer, fit) {
+  const row = element("div", "segmented view");
   const buttons = new Map();
   for (const [layout, label] of [["xy", "2D"], ["3d", "3D"]]) {
     const button = element("button", null, label);
@@ -107,14 +105,13 @@ function viewCard(viewer, fit) {
     buttons.set(layout, button);
     row.appendChild(button);
   }
-  card.appendChild(row);
   const reflect = () => {
     const current = viewer.layout.toJSON();
     for (const [layout, button] of buttons) button.classList.toggle("on", current === layout);
   };
   viewer.layout.changed.add(reflect);
   reflect();
-  return card;
+  return row;
 }
 
 // -- the volume view: how the specimen is projected, how finely, from where ------
@@ -421,7 +418,7 @@ class ControlPanel extends SidePanel {
     fold.addEventListener("click", () => this.close());
     head.append(title, fold);
     this.acquisitions = acquisitionCard();
-    body.append(head, this.acquisitions, viewCard(viewer, fit), volumeCard(viewer, fit), channelsCard(viewer));
+    body.append(head, this.acquisitions, volumeCard(viewer, fit), channelsCard(viewer));
     this.addBody(body);
   }
 }
@@ -463,6 +460,8 @@ export function mountPanel(viewer, { fit }) {
     location.visible = true;
   });
   overlay.appendChild(unfold);
+  // The 2D/3D switch sits on the picture, top left, where the eye goes first.
+  overlay.appendChild(viewSwitch(viewer, fit));
   const reflect = () => {
     unfold.style.display = location.visible ? "none" : "flex";
   };
