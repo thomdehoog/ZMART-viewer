@@ -30,10 +30,15 @@ switched to, unless an older one was picked from the dropdown. That logic is
 `Follower` in `watch.py` and is tested without Qt; `window.py` binds it to a
 combo box and a timer.
 
-Everything the operator sees is neuroglancer's own interface -- its layer
-panel, its brightness histogram and colour dials, its keyboard and mouse. What
-Python adds is only what neuroglancer cannot know: which stores belong
-together, where each one sits, and how its channels should first look.
+Three dresses, chosen with `Viewer(ui=...)`: `"simple"` (the default of the
+Data viewer window) is our own panel down the right-hand edge over a bare
+engine, with a 2D/3D switch, one row per channel carrying the engine's own
+window-with-histogram and colour controls, and depth and time sliders on the
+picture; `"full"` is neuroglancer's own interface, panels and all; `"bare"`
+is nothing but the picture, for a host that draws its own controls. In every
+dress the mouse and keyboard are the engine's, and what Python adds is only
+what neuroglancer cannot know: which stores belong together, where each one
+sits, and how its channels should first look.
 
 ## What it keeps from the ZMART viewer, and what it leaves out
 
@@ -47,11 +52,13 @@ across:
 
 - **A layer is one acquisition, its positions are its sources.** The engine
   places each source by a transform and composites them; nothing is stitched.
-- **A channel is an engine layer, added like light.** Each channel of an
-  acquisition is its own image layer over the same sources, blended
-  additively, with the window and colour as `#uicontrol` values rather than
-  shader text -- the arrangement neuroglancer's own multichannel setup uses
-  and the one the viewer's channel-mixing work settled on.
+- **A channel is an engine layer, composited by its brightness.** Each
+  channel of an acquisition is its own image layer over the same sources,
+  drawn over the ones beneath with its brightness as alpha, with the window
+  and colour as `#uicontrol` values rather than shader text. One layer per
+  channel is neuroglancer's own multichannel arrangement; compositing rather
+  than adding is what keeps overlapping tiles from summing to a bright seam
+  and dense channels from clipping to white.
 - **The transparent 2D ground**, as four small opt-in edits to the pinned
   engine (`app/mesospim/scripts/patch_neuroglancer.mjs`, the same edits the
   ZMART viewer 0.2.1 carries). Nothing else is patched.
@@ -101,11 +108,10 @@ layers together on the graphics card. The panel lists them as
 
 ## Known limits
 
-- **Overlapping positions add along their overlap.** Additive blending is a
-  property of a layer, so two tiles of one acquisition that overlap sum where
-  they meet, and the strip reads brighter. Butting tiles (`origin=` places a
-  tile exactly) or a stitched store avoid it; cropping a source is not
-  something the engine offers.
+- **Where tiles overlap, the tile drawn last covers the other** by its own
+  brightness: a bright cell in the top tile hides a dim one beneath it. The
+  engine offers no cropping of a source; a stitched store is the way to a
+  seamless overlap.
 - **The engine needs WebGL 2** and a canvas with a size: the page fills its
   window, so give the widget one.
 
@@ -138,10 +144,16 @@ Viewer.on_pick                    <---    POST /api/pick   (a double-click)
 - `viewer.py` is the API. Every change publishes a new version; the page waits
   on `/api/state` for it, so a change is on screen within a frame, with no
   polling while nothing happens.
-- `app/mesospim/src/main.js` is the whole page. It builds a stock viewer
+- `app/mesospim/src/main.js` is the page. It builds a stock viewer
   (`makeDefaultViewer` plus the default bindings), applies states, reports
   back. A layer whose revision moved has its stores forgotten from the
   engine's memo before it is rebuilt, so a grown store is read afresh.
+- `app/mesospim/src/panel.js` is the simple interface: registered as one of
+  the engine's own side panels (only a panel inside the engine's canvas gets
+  a histogram drawn), with the view switch, the channel rows and the sliders.
+  Every control reads and writes engine layer state, the same state the
+  native panel edits, so the operator's adjustments survive Python's updates
+  by the same rule.
 
 Positions and picks are spoken in **micrometres** (seconds for `t`) by axis
 name, whatever unit a store was written in.
@@ -190,7 +202,7 @@ GPU, set `QTWEBENGINE_CHROMIUM_FLAGS="--ignore-gpu-blocklist"` before Qt starts.
 ```
 cd app/mesospim && npm ci && npm run build     # once; the page lands in mesospim_view/page/
 python -m mesospim_view.demo                    # four tiles in a browser
-python -m pytest tests/test_mesospim_view.py tests/test_mesospim_watch.py
+python -m pytest tests/test_mesospim_view.py tests/test_mesospim_watch.py tests/test_mesospim_panel.py
 ```
 
 The page is built into the package, so `pip install .` (or `pip install
@@ -209,9 +221,8 @@ process, rather than raising, where it cannot create a context.
 
 ## What comes next
 
-`PLAN_simplified_interface.md` beside this file: the engine's chrome off and
-our own control panel on the right with a 2D/3D button, built once the tczyx
-writer and the Data viewer are in use.
+`PLAN_simplified_interface.md` beside this file records how the simple
+interface was planned and what of it is still to come.
 
 ## The three most recent branches, read for this design
 

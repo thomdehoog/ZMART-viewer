@@ -1,0 +1,244 @@
+# ruff: noqa: F811
+"""The simple interface: our panel over a bare engine, driven in a headless Chromium.
+
+Every control writes engine layer state and nothing else, so each test asks the
+engine what changed rather than the panel.
+"""
+
+from __future__ import annotations
+
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from test_mesospim_view import _open, _wait_until_drawn, browser  # noqa: E402,F401
+
+from mesospim_view import Viewer  # noqa: E402
+from mesospim_view.demo import write_tile  # noqa: E402
+
+pytest.importorskip("numpy")
+
+
+@pytest.fixture(scope="module")
+def stacks(tmp_path_factory) -> list[Path]:
+    folder = tmp_path_factory.mktemp("stacks")
+    return [
+        write_tile(folder / f"tile_{i}.ome.zarr", origin_um=(0, 0, i * 144), seed=i, timepoints=3)
+        for i in range(2)
+    ]
+
+
+def _shown(view: Viewer):
+    view.fit()
+    return view.start()
+
+
+def test_the_panel_lists_channels_by_acquisition_with_the_engines_own_controls(browser, stacks):
+    view = Viewer(ui="simple")
+    for stack in stacks:
+        view.add(stack, layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        seen = page.evaluate(
+            """() => ({
+              chrome: document.documentElement.dataset.chrome,
+              nativePanel: document.querySelector('.neuroglancer-layer-panel') !== null,
+              groups: [...document.querySelectorAll('.group')].map(g => g.dataset.group),
+              rows: [...document.querySelectorAll('.channel')].map(r => r.dataset.layer),
+              windows: [...document.querySelectorAll('.channel .controls .neuroglancer-invlerp-widget, .channel .controls [class*="invlerp"]')].length,
+              swatches: [...document.querySelectorAll('.channel .swatch')].map(s => s.style.background),
+              scaleBar: window.viewer.showScaleBar.value, axes: window.viewer.showAxisLines.value,
+            })"""
+        )
+        assert seen["chrome"] == "simple" and seen["nativePanel"] is False
+        assert seen["groups"] == ["overview"]
+        assert seen["rows"] == ["overview · 488", "overview · 561"]
+        assert seen["windows"] >= 2, "each row carries the engine's window control"
+        assert seen["swatches"] == ["rgb(0, 255, 102)", "rgb(255, 51, 255)"]
+        assert seen["scaleBar"] is True and seen["axes"] is False
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_the_eye_hides_a_channel_and_the_group_eye_hides_them_all(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        visible = "() => window.viewer.layerManager.managedLayers.map(m => m.visible)"
+        assert page.evaluate(visible) == [True, True]
+        page.click('.channel[data-layer="overview · 561"] button.eye')
+        assert page.evaluate(visible) == [True, False]
+        assert page.evaluate(
+            "() => document.querySelector('.channel[data-layer=\"overview · 561\"]').classList.contains('hidden')"
+        )
+        page.click('.group[data-group="overview"] > .row > button.eye')
+        assert page.evaluate(visible) == [False, False]
+        page.click('.group[data-group="overview"] > .row > button.eye')
+        assert page.evaluate(visible) == [True, True]
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_2d_and_3d_swap_the_layout_and_the_volume_rendering(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        state = "() => ({layout: window.viewer.layout.toJSON(), modes: window.viewer.layerManager.managedLayers.map(m => m.layer.volumeRenderingMode.toJSON() ?? 'off'), on: [...document.querySelectorAll('.view button.on')].map(b => b.dataset.layout)})"
+        assert page.evaluate(state) == {"layout": "xy", "modes": ["off", "off"], "on": ["xy"]}
+        page.click('.view button[data-layout="3d"]')
+        assert page.evaluate(state) == {"layout": "3d", "modes": ["max", "max"], "on": ["3d"]}
+        page.click('.view button[data-layout="xy"]')
+        assert page.evaluate(state) == {"layout": "xy", "modes": ["off", "off"], "on": ["xy"]}
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_the_sliders_step_through_depth_and_time(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        sliders = "() => Object.fromEntries([...document.querySelectorAll('.axis-slider')].map(s => [s.id, {hidden: s.hidden, min: s.querySelector('input').min, max: s.querySelector('input').max, reading: s.querySelector('.reading').textContent}]))"
+        seen = page.evaluate(sliders)
+        assert (
+            seen["slider-z"]["min"] == "0"
+            and seen["slider-z"]["max"] == "23"
+            and not seen["slider-z"]["hidden"]
+        )
+        assert (
+            seen["slider-t"]["min"] == "0"
+            and seen["slider-t"]["max"] == "2"
+            and not seen["slider-t"]["hidden"]
+        )
+        assert seen["slider-z"]["reading"].endswith("/ 24") and seen["slider-t"][
+            "reading"
+        ].endswith("/ 3")
+
+        page.evaluate(
+            "() => { const i = document.querySelector('#slider-t input'); i.value = '2'; i.dispatchEvent(new Event('input')); }"
+        )
+        page.evaluate(
+            "() => { const i = document.querySelector('#slider-z input'); i.value = '5'; i.dispatchEvent(new Event('input')); }"
+        )
+        position = page.evaluate(
+            "() => { const v = window.viewer; const s = v.navigationState.position.coordinateSpace.value; const p = v.navigationState.position.value; return Object.fromEntries(s.names.map((n, i) => [n, p[i]])); }"
+        )
+        assert position["t"] == pytest.approx(2.5) and position["z"] == pytest.approx(5.5)
+        assert page.evaluate(sliders)["slider-z"]["reading"] == "6 / 24"
+
+        # Python moving the camera moves the slider too
+        view.look_at(z=12 * 5.0)  # micrometres: 5 um planes
+        deadline = time.time() + 5
+        while time.time() < deadline and page.evaluate(sliders)["slider-z"]["reading"] != "13 / 24":
+            time.sleep(0.1)
+        assert page.evaluate(sliders)["slider-z"]["reading"] == "13 / 24"
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_adjustments_in_the_panel_survive_a_tile_landing(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        page.click('.channel[data-layer="overview · 561"] button.eye')
+        page.click('.view button[data-layout="3d"]')
+        view.add(stacks[1], layer="overview")
+        deadline = time.time() + 20
+        sources = (
+            "() => window.viewer.layerManager.managedLayers.map(m => m.layer.dataSources.length)"
+        )
+        while time.time() < deadline and page.evaluate(sources) != [2, 2]:
+            time.sleep(0.2)
+        assert page.evaluate(sources) == [2, 2]
+        assert page.evaluate(
+            "() => window.viewer.layerManager.managedLayers.map(m => m.visible)"
+        ) == [True, False]
+        assert page.evaluate(
+            "() => window.viewer.layerManager.managedLayers.map(m => m.layer.volumeRenderingMode.toJSON())"
+        ) == ["max", "max"]
+        assert page.evaluate(
+            "() => [...document.querySelectorAll('.channel')].map(r => r.classList.contains('hidden'))"
+        ) == [False, True]
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_the_panel_folds_away_and_comes_back(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        width = (
+            "() => document.querySelector('.mesospim-panel')?.getBoundingClientRect().width ?? 0"
+        )
+        picture = (
+            "() => window.viewer.display.panels.values().next().value.renderViewport.logicalWidth"
+        )
+        assert page.evaluate(width) > 250
+        narrow = page.evaluate(picture)
+        page.click(".panel-head button.fold")
+        time.sleep(0.5)
+        assert page.evaluate(width) == 0
+        assert page.evaluate(picture) > narrow, "the picture takes the room the panel gave up"
+        page.click("#fold")
+        time.sleep(0.5)
+        assert page.evaluate(width) > 250
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_the_histogram_is_drawn_inside_the_row(browser, stacks):
+    view = Viewer(ui="simple")
+    view.add(stacks[0], layer="overview")
+    url = _shown(view)
+    try:
+        page, errors = _open(browser, url, width=1100, height=700)
+        _wait_until_drawn(page, layers=2)
+        time.sleep(1.5)
+        drawn = page.evaluate(
+            """() => [...document.querySelectorAll('.channel .neuroglancer-invlerp-cdfpanel canvas')].map(c => {
+              const r = c.getBoundingClientRect();
+              const ctx = c.getContext('2d'); const px = ctx.getImageData(0, 0, c.width, c.height).data;
+              let lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 60) lit++;
+              return { width: r.width, height: r.height, lit }; })"""
+        )
+        assert len(drawn) == 2
+        for canvas in drawn:
+            assert canvas["width"] > 200 and 30 <= canvas["height"] <= 50, canvas
+            assert canvas["lit"] > 50, "the engine drew the histogram into the row"
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
