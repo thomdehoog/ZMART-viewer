@@ -78,6 +78,54 @@ def test_the_watcher_adds_tiles_as_they_land_and_rereads_a_grown_one(tmp_path):
         view.stop()
 
 
+def test_a_tile_being_written_is_read_again_while_it_grows_and_once_it_has_settled(tmp_path):
+    """The writer creates a tile's arrays when the stack starts and lands the chunks
+    over the minutes after: the watcher shows the tile at once, reads it again
+    while chunks keep coming, and once more after the last one."""
+    acquisition = an_acquisition(tmp_path, "run")
+    view = Viewer()
+    watcher = Watcher(view, acquisition, settle_s=0.3, refresh_s=0.15)
+    try:
+        tile = write_tile(acquisition / "Mag1_Tile0_Sh0_Rot0.ome.zarr", origin_um=(0, 0, 0), seed=1)
+        assert watcher.poll() == [tile], "shown the moment it can be read"
+        revision = view.state["layers"][0]["_revision"]
+
+        # nothing lands: not read again, and after a quiet spell no longer watched
+        time.sleep(0.35)
+        assert watcher.poll() == []
+        assert watcher.writing == {}
+        assert view.state["layers"][0]["_revision"] == revision
+
+        # a time point starting: the arrays grow first, the chunks land after
+        write_tile(tile, origin_um=(0, 0, 0), seed=1, timepoints=2)
+        landing = [tile / "0" / "1.1.0.0.0", tile / "0" / "1.1.1.0.0"]
+        held_back = {chunk: chunk.read_bytes() for chunk in landing}
+        for chunk in landing:
+            chunk.unlink()
+        assert watcher.poll() == [tile], "a grown shape is shown at once"
+        revision = view.state["layers"][0]["_revision"]
+
+        # chunks landing: read again every refresh_s while they keep coming...
+        landing[0].write_bytes(held_back[landing[0]])
+        assert watcher.poll() == [], "too soon after the last read"
+        time.sleep(0.2)
+        assert watcher.poll() == [tile], "chunks came, and the last read is refresh_s ago"
+        assert view.state["layers"][0]["_revision"] == revision + 1
+        landing[1].write_bytes(held_back[landing[1]])
+        time.sleep(0.05)
+        assert watcher.poll() == []
+
+        # ... and once more when none has come for settle_s
+        time.sleep(0.35)
+        assert watcher.poll() == [tile]
+        assert view.state["layers"][0]["_revision"] == revision + 2
+        assert watcher.writing == {}, "settled: not walked any more"
+        time.sleep(0.35)
+        assert watcher.poll() == []
+    finally:
+        view.stop()
+
+
 def test_the_follower_stays_on_the_newest_acquisition_until_an_older_one_is_chosen(tmp_path):
     from mesospim_view import Follower
 

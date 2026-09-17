@@ -168,6 +168,17 @@ def test_adjustments_in_the_panel_survive_a_tile_landing(browser, stacks):
         _wait_until_drawn(page, layers=2)
         page.click('.channel[data-layer="overview · 561"] button.eye')
         page.click('.view button[data-layout="3d"]')
+        # the detail slider to its top step, the gain up a little
+        page.evaluate(
+            """() => {
+              const detail = document.querySelector('.card.volume input.detail');
+              detail.value = detail.max;
+              detail.dispatchEvent(new Event('input'));
+              const gain = document.querySelector('.card.volume input.gain');
+              gain.value = '2';
+              gain.dispatchEvent(new Event('input'));
+            }"""
+        )
         view.add(stacks[1], layer="overview")
         deadline = time.time() + 20
         sources = (
@@ -182,6 +193,9 @@ def test_adjustments_in_the_panel_survive_a_tile_landing(browser, stacks):
         assert page.evaluate(
             "() => window.viewer.layerManager.managedLayers.map(m => m.layer.volumeRenderingMode.toJSON())"
         ) == ["max", "max"]
+        assert page.evaluate(
+            "() => window.viewer.layerManager.managedLayers.map(m => [m.layer.volumeRenderingDepthSamplesTarget.value, m.layer.volumeRenderingGain.value])"
+        ) == [[1024, 2], [1024, 2]]
         assert page.evaluate(
             "() => [...document.querySelectorAll('.channel')].map(r => r.classList.contains('hidden'))"
         ) == [False, True]

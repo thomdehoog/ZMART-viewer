@@ -222,7 +222,15 @@ const lastAsked = new Map();
 
 // Fields the operator may have changed in the engine's panel, carried across a
 // rebuild wherever Python did not change them itself.
-const OPERATOR_FIELDS = ["shaderControls", "opacity", "blend", "visible", "volumeRendering"];
+const OPERATOR_FIELDS = [
+  "shaderControls",
+  "opacity",
+  "blend",
+  "visible",
+  "volumeRendering",
+  "volumeRenderingGain",
+  "volumeRenderingDepthSamples",
+];
 
 function carryAdjustments(spec, before, held) {
   const merged = { ...spec };
