@@ -265,7 +265,10 @@ def test_the_dropdown_offers_the_sessions_acquisitions_and_reports_a_choice(brow
         # the dropdown sits above the view switch
         assert page.evaluate(
             "() => [...document.querySelectorAll('.panel-body > .card')].map(c => c.className)"
-        )[:2] == ["card acquisition", "card view"]
+        )[:1] == ["card acquisition"]
+        assert page.evaluate(
+            "() => document.querySelector('.stage-overlay > .segmented.view') !== null"
+        )
 
         page.select_option("select.chooser", "2")
         deadline = time.time() + 5

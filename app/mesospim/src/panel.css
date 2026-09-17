@@ -70,8 +70,14 @@ button.icon:hover { background: var(--control-bg); border-color: var(--control-b
 button.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 button.icon.off { color: var(--text-muted); }
 
-/* -- the view: one segmented control ---------------------------------------- */
+/* -- segmented controls; the 2D/3D switch is one, floating top left on the picture */
 .segmented { display: flex; width: 100%; border: 1px solid var(--control-border); border-radius: 6px; overflow: hidden; }
+.stage-overlay > .segmented.view {
+  position: absolute; top: 12px; left: 12px; z-index: 5; width: auto;
+  background: var(--overlay-bg); backdrop-filter: blur(4px);
+}
+.stage-overlay > .segmented.view button { padding: 5px 16px; background: transparent; }
+.stage-overlay > .segmented.view button.on { background: var(--accent); }
 .segmented button {
   flex: 1; padding: 6px 0;
   background: var(--control-bg); border: 0; color: var(--text-primary);
