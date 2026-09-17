@@ -50,7 +50,8 @@ class NotAStore(ValueError):
     Accepted: OME-NGFF 0.4 on zarr v2 or 0.5 on zarr v3, with exactly the five
     axes ``t, c, z, y, x`` in that order. That is the shape the acquisition
     software writes, and holding every store to it keeps the rest of the code
-    free of special cases.
+    free of special cases. How the arrays are chunked or sharded is not looked
+    at: a chunk per time point and channel is the layout the viewer reads best.
     """
 
 
@@ -190,31 +191,13 @@ def _transforms(rank: int, transforms: object) -> tuple[list[float], list[float]
     return scale, translation
 
 
-def _array_layout(level: Path) -> tuple[list[int] | None, list[int] | None]:
-    """The shape of an array and the chunk it is read in, for zarr v3 or v2.
-
-    For a sharded v3 array the chunk that matters is the inner one, which is
-    what a reader fetches from a shard.
-    """
-    described = _read_json(level / "zarr.json")
-    if isinstance(described, dict) and isinstance(described.get("shape"), list):
-        shape = [int(n) for n in described["shape"]]
-        chunks = None
-        grid = described.get("chunk_grid")
-        if isinstance(grid, dict) and isinstance(grid.get("configuration"), dict):
-            chunks = grid["configuration"].get("chunk_shape")
-        for codec in described.get("codecs") or []:
-            if isinstance(codec, dict) and codec.get("name") == "sharding_indexed":
-                chunks = (codec.get("configuration") or {}).get("chunk_shape", chunks)
-        return shape, [int(n) for n in chunks] if isinstance(chunks, list) else None
-    described = _read_json(level / ".zarray")
-    if isinstance(described, dict) and isinstance(described.get("shape"), list):
-        chunks = described.get("chunks")
-        return (
-            [int(n) for n in described["shape"]],
-            [int(n) for n in chunks] if isinstance(chunks, list) else None,
-        )
-    return None, None
+def _array_shape(level: Path) -> list[int] | None:
+    """The shape of an array, from zarr v3's ``zarr.json`` or v2's ``.zarray``."""
+    for description in (level / "zarr.json", level / ".zarray"):
+        described = _read_json(description)
+        if isinstance(described, dict) and isinstance(described.get("shape"), list):
+            return [int(n) for n in described["shape"]]
+    return None
 
 
 def read_store(path: str | Path) -> Store:
@@ -274,16 +257,9 @@ def read_store(path: str | Path) -> Store:
     ]
 
     level_path = root / str(level0.get("path", "0"))
-    shape, chunks = _array_layout(level_path)
+    shape = _array_shape(level_path)
     if shape is None or len(shape) != rank:
         raise NotAStore(f"{root}: level {level0.get('path', '0')!s} has no readable array shape")
-    if chunks is not None and len(chunks) == rank and chunks[1] < shape[1]:
-        # Neuroglancer reads every channel of a voxel from one chunk: a channel
-        # dimension must lie within a single chunk, or the source draws nothing.
-        raise NotAStore(
-            f"{root}: chunks cover {chunks[1]} of {shape[1]} channels; "
-            "a chunk must span the whole c axis"
-        )
 
     omero = ome.get("omero", attrs.get("omero"))
     channels = _omero_channels(omero)

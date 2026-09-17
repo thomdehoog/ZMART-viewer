@@ -231,6 +231,19 @@ function carryAdjustments(spec, before, held) {
   return merged;
 }
 
+// The engine remembers what it read about a store for as long as the page
+// lives, so a store that has grown on disk would be rebuilt from the old
+// description. Forgetting its entries makes the next layer read it again;
+// holders of decoded image (the entries naming a constructor) are left alone.
+function forgetStore(viewer, url) {
+  const remembered = viewer.chunkManager?.memoize?.map;
+  const folder = url.split("|")[0];
+  if (!remembered || !folder) return;
+  for (const key of [...remembered.keys()]) {
+    if (key.includes(folder) && !key.includes('"constructorId"')) remembered.delete(key);
+  }
+}
+
 function applyLayers(viewer, specs) {
   const manager = viewer.layerManager;
   const wanted = new Set(specs.map((spec) => spec.name));
@@ -243,14 +256,20 @@ function applyLayers(viewer, specs) {
     const before = lastAsked.get(spec.name);
     let managed = manager.getLayerByName(spec.name);
     if (managed && before && same(before, spec)) return;
-    let description = spec;
+    // `_revision` is Python's, not the engine's: it changes when a store has
+    // grown, so that an otherwise identical layer is read again.
+    const { _revision, ...forEngine } = spec;
+    let description = forEngine;
     if (managed) {
       // The engine's JSON leaves out a value that equals its own default, so the
       // opacity is read live: an operator's 0.5 is a choice even if it is the default.
       const held = { ...(managed.toJSON() ?? {}), visible: managed.visible };
       if (managed.layer?.opacity) held.opacity = managed.layer.opacity.value;
-      description = carryAdjustments(spec, before, held);
+      description = carryAdjustments(forEngine, before, held);
       deleteLayer(managed);
+      if (before && before._revision !== _revision) {
+        for (const source of spec.source ?? []) forgetStore(viewer, source.url ?? source);
+      }
     }
     managed = makeLayer(viewer.layerSpecification, spec.name, description);
     viewer.layerSpecification.add(managed, index);

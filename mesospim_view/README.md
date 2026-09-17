@@ -33,9 +33,11 @@ across:
 
 - **A layer is one acquisition, its positions are its sources.** The engine
   places each source by a transform and composites them; nothing is stitched.
-- **Channels are controls, not shader text.** Every channel's window, colour
-  and switch is a `#uicontrol`, so adjusting one hands a number to a program
-  already compiled.
+- **A channel is an engine layer, added like light.** Each channel of an
+  acquisition is its own image layer over the same sources, blended
+  additively, with the window and colour as `#uicontrol` values rather than
+  shader text -- the arrangement neuroglancer's own multichannel setup uses
+  and the one the viewer's channel-mixing work settled on.
 - **The transparent 2D ground**, as four small opt-in edits to the pinned
   engine (`app/mesospim/scripts/patch_neuroglancer.mjs`, the same edits the
   ZMART viewer 0.2.1 carries). Nothing else is patched.
@@ -48,13 +50,21 @@ and every server route but three.
 ## The data contract
 
 A store is accepted when it is OME-NGFF **0.4 on zarr v2** or **0.5 on zarr
-v3**, with exactly the axes **`t, c, z, y, x`** in that order, `c` of type
-`channel`, and **chunks that span the whole `c` axis** at every level.
+v3**, with exactly the axes **`t, c, z, y, x`** in that order and `c` of type
+`channel`. A store holding one channel is fine; so is one holding several.
 
-The last rule is the engine's: a channel dimension must lie inside one chunk,
-or the source draws nothing at all (`sliceview/frontend.js`, "Channel dimension
-... has extent N but corresponding chunk dimension has extent 1"). A writer that
-chunks per channel produces stores this viewer refuses with that reason.
+How the arrays are chunked and sharded is the writer's choice, and the viewer
+does not look. **One chunk (and one shard) per time point and channel** is the
+layout it reads best: the engine fetches whole chunks for the plane it shows,
+and a chunk spanning other time points or channels is bytes downloaded for
+nothing. Shards are read through byte-range requests, which the server
+answers; a shard must be written in one go by the writer for reasons of its
+own, and that changes nothing here.
+
+A store may grow along `t` while it is shown: a time-lapse appends time points
+to the stores already on disk. Show the store again (`add()` with the same
+path) or call `refresh()`, and the page reads its new extent without touching
+the other stores or the operator's adjustments.
 
 Placement reads the store's own `scale` and `translation` (per-dataset and
 multiscale-level transformations composed the way the format says). The
@@ -62,6 +72,28 @@ multiscale-level transformations composed the way the format says). The
 starting window; `add()` can override all three.
 
 `read_store()` raises `NotAStore` with a plain reason for anything else.
+
+## Why one engine layer per channel
+
+The engine reads every channel of a voxel from a single chunk, so a *channel
+dimension* -- the arrangement that lets one shader read all channels -- works
+only when every chunk spans the whole `c` axis (measured: split it across
+chunks and the source draws nothing, with "Channel dimension ... has extent N
+but corresponding chunk dimension has extent 1"). Chunks per channel are the
+right layout for writing and reading, so `c` stays a per-layer dimension and
+each channel is a layer that pins it (`localPosition`). The engine adds the
+layers together on the graphics card. The panel lists them as
+`overview · 488`, `overview · 561`; the Python API still speaks of one layer.
+
+## Known limits
+
+- **Overlapping positions add along their overlap.** Additive blending is a
+  property of a layer, so two tiles of one acquisition that overlap sum where
+  they meet, and the strip reads brighter. Butting tiles (`origin=` places a
+  tile exactly) or a stitched store avoid it; cropping a source is not
+  something the engine offers.
+- **The engine needs WebGL 2** and a canvas with a size: the page fills its
+  window, so give the widget one.
 
 ## How it works
 
@@ -79,18 +111,20 @@ Viewer.on_pick                    <---    POST /api/pick   (a double-click)
 ```
 
 - `omezarr.py` reads the metadata above.
-- `state.py` turns placed stores into neuroglancer state. A source's
-  `transform` renames `c` to the channel dimension `c^` and carries any shift
-  as the translation column of the matrix, in voxels. A layer's shader adds its
-  channels together like light and, in 3D, lets the brightest one drive the
-  opacity -- the same arithmetic as neuroglancer's own multichannel setup.
+- `state.py` turns placed stores into neuroglancer state: one engine layer per
+  channel, over the same sources. A shifted source carries a `transform` whose
+  translation column holds the shift, in voxels. Each layer's shader is the
+  engine's own multichannel program with the store's window and colour as the
+  controls' starting values; in 3D the brightness drives the opacity.
 - `server.py` is a `ThreadingHTTPServer`: the built page, store bytes with
   byte ranges and ETags (sharded zarr v3 needs ranges), and the scene.
 - `viewer.py` is the API. Every change publishes a new version; the page waits
   on `/api/state` for it, so a change is on screen within a frame, with no
   polling while nothing happens.
 - `app/mesospim/src/main.js` is the whole page. It builds a stock viewer
-  (`makeDefaultViewer` plus the default bindings), applies states, reports back.
+  (`makeDefaultViewer` plus the default bindings), applies states, reports
+  back. A layer whose revision moved has its stores forgotten from the
+  engine's memo before it is rebuilt, so a grown store is read afresh.
 
 Positions and picks are spoken in **micrometres** (seconds for `t`) by axis
 name, whatever unit a store was written in.
@@ -114,9 +148,10 @@ self.view.add(store_path, layer=acq["filename"], window=(100, 4000))
 self.view.on_pick(lambda point: self.core.sig_move_absolute.emit(point))
 ```
 
-A separate store per channel shows as a separate layer per store; stores
-written with several channels in one array share one layer and one set of
-controls, which is what this package is built for.
+A separate store per channel shows as one engine layer each; a store with
+several channels in one array shows as one engine layer per channel under one
+name. Either way every position of an acquisition feeds the same layers, and
+appended time points reach the screen through `add()` or `refresh()`.
 
 `transparent=True` clears the ground outside the acquired pixels, so a host
 widget under the view shows through (`QWebEngineView` is given a clear page
@@ -137,9 +172,10 @@ python -m pytest tests/test_mesospim_view.py    # reader, state, server, and the
 ```
 
 The picture tests drive a headless Chromium and assert what is drawn: four
-tiles as one two-channel layer, the axes on screen, a camera move from Python
-and a pick from the page, an operator's adjustments surviving a new tile, and a
-transparent ground that is clear outside the tile and opaque inside it. They
+tiles as two channel layers over the same sources, the axes on screen, a camera
+move from Python and a pick from the page, an operator's adjustments surviving a
+new tile, a store that gains time points while shown, and a transparent ground
+that is clear outside the tile and opaque inside it. They
 skip, saying so, when the page is not built or no browser is found
 (`ZMART_CHROMIUM` names one).
 
@@ -166,5 +202,6 @@ growth and for thousands of positions, which this view does not have; the
 embedding module patches `sliceView.updateRendering` and mirrors global Z into
 a hidden local transform, which fights the engine's coordinate model; the
 aggregate path collapses a store to a single logical channel, the opposite of
-what a multichannel layer needs. This package keeps positions as sources of one
-layer with a native transform, and channels as a native channel dimension.
+what a multichannel acquisition needs. This package keeps positions as sources
+of one layer with a native transform, and channels as native per-channel
+layers added together.

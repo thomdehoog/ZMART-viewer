@@ -24,6 +24,17 @@ from .omezarr import Channel, Store, read_store
 from .server import ViewServer
 from .state import LAYOUTS, Layer, Placement, state_json
 
+
+def read_again(placement: Placement) -> Placement:
+    """The same placement over the store as it is on disk now."""
+    return Placement(
+        store=read_store(placement.store.path),
+        url=placement.url,
+        offset=placement.offset,
+        origin=placement.origin,
+    )
+
+
 PAGE_DIR = Path(__file__).resolve().parent.parent / "app" / "mesospim" / "dist"
 
 
@@ -125,10 +136,30 @@ class Viewer:
                 self._layers[name] = held
             elif declared is not None and held.channels is None:
                 held.channels = declared
+            shown_before = [p for p in held.placements if p.store.path == store.path]
+            if shown_before:
+                # The same store again means it has changed on disk -- a time
+                # point appended -- so the page must read it afresh.
+                held.revision += 1
             held.placements = [p for p in held.placements if p.store.path != store.path]
             held.placements.append(placement)
             self._publish()
         return name
+
+    def refresh(self, layer: str | None = None) -> None:
+        """Re-read the stores of one layer, or of all, from disk.
+
+        For a store that has grown while shown: a time-lapse appends time
+        points to the stores already there, and the engine believes the extent
+        it read first until told otherwise. Adjustments the operator made are
+        kept.
+        """
+        with self._lock:
+            for name, held in self._layers.items():
+                if layer is None or name == layer:
+                    held.placements = [read_again(p) for p in held.placements]
+                    held.revision += 1
+            self._publish()
 
     def remove(self, layer: str) -> bool:
         with self._lock:

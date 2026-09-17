@@ -68,8 +68,14 @@ def _write_array(folder: Path, data, chunk_shape) -> None:
         )
 
 
-def write_tile(path: Path, *, origin_um: tuple[float, float, float], seed: int) -> Path:
-    """One two-channel tile at ``origin_um`` (z, y, x), as OME-Zarr 0.4 with axes t, c, z, y, x."""
+def write_tile(
+    path: Path, *, origin_um: tuple[float, float, float], seed: int, timepoints: int = 1
+) -> Path:
+    """One two-channel tile at ``origin_um`` (z, y, x), as OME-Zarr 0.4 with axes t, c, z, y, x.
+
+    With ``timepoints`` above one the cells drift a little from frame to frame,
+    which is what a time slider needs to show anything.
+    """
     import numpy as np
 
     rng = np.random.default_rng(seed)
@@ -90,11 +96,15 @@ def write_tile(path: Path, *, origin_um: tuple[float, float, float], seed: int) 
             volume[1] += blob * rng.uniform(0.5, 1.0)
     # A bright frame around each tile, so its edges and overlaps are visible.
     volume[0, :, :3, :] = volume[0, :, -3:, :] = volume[0, :, :, :3] = volume[0, :, :, -3:] = 0.6
-    out = np.empty_like(volume, dtype=np.uint16)
-    for c in range(2):
-        peak = float(volume[c].max()) or 1.0
-        out[c] = np.clip(400 + volume[c] / peak * 12000, 0, 65535).astype(np.uint16)
-    out = out[np.newaxis]  # t, c, z, y, x
+    frames = []
+    for frame in range(timepoints):
+        shifted = np.roll(volume, 3 * frame, axis=-1)
+        out = np.empty_like(shifted, dtype=np.uint16)
+        for c in range(2):
+            peak = float(shifted[c].max()) or 1.0
+            out[c] = np.clip(400 + shifted[c] / peak * 12000, 0, 65535).astype(np.uint16)
+        frames.append(out)
+    out = np.stack(frames)  # t, c, z, y, x
 
     if path.exists():
         shutil.rmtree(path)
@@ -102,10 +112,9 @@ def write_tile(path: Path, *, origin_um: tuple[float, float, float], seed: int) 
     datasets = []
     for level, data in enumerate(levels):
         factor = 2**level
+        # One chunk per time point, channel and plane: the layout the writer uses.
         _write_array(
-            path / str(level),
-            data,
-            (1, data.shape[1], 1, min(64, data.shape[-2]), min(64, data.shape[-1])),
+            path / str(level), data, (1, 1, 1, min(64, data.shape[-2]), min(64, data.shape[-1]))
         )
         datasets.append(
             {

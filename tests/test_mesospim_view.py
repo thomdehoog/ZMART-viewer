@@ -24,7 +24,7 @@ from mesospim_view import (  # noqa: E402
     Channel,
     NotAStore,
     Viewer,
-    mixing_shader,
+    channel_shader,
     read_store,
 )
 from mesospim_view.demo import write_tile, write_tiles  # noqa: E402
@@ -73,13 +73,12 @@ def test_the_reader_refuses_what_is_not_in_the_contract(tmp_path):
     with pytest.raises(NotAStore, match="0.4"):
         read_store(old)
 
-    split = tmp_path / "split.ome.zarr"
-    write_tile(split, origin_um=(0, 0, 0), seed=1)
-    array = json.loads((split / "0" / ".zarray").read_text())
-    array["chunks"][1] = 1
-    (split / "0" / ".zarray").write_text(json.dumps(array))
-    with pytest.raises(NotAStore, match="whole c axis"):
-        read_store(split)
+    # How the arrays are chunked is the writer's business, not the reader's.
+    per_channel = tmp_path / "per_channel.ome.zarr"
+    write_tile(per_channel, origin_um=(0, 0, 0), seed=1)
+    array = json.loads((per_channel / "0" / ".zarray").read_text())
+    assert array["chunks"][:3] == [1, 1, 1]
+    assert read_store(per_channel).channel_count == 2
 
 
 def test_a_zarr3_store_is_read_from_zarr_json(tmp_path):
@@ -156,7 +155,7 @@ def test_a_zarr3_store_is_read_from_zarr_json(tmp_path):
 # -- building the state ----------------------------------------------------------
 
 
-def test_stores_of_one_layer_become_sources_with_channel_dimension_and_shift(tiles):
+def test_an_acquisition_becomes_one_engine_layer_per_channel_sharing_its_sources(tiles):
     view = Viewer()
     view.add(tiles[0], layer="overview")
     view.add(tiles[1], layer="overview", offset={"x": 10.0})
@@ -167,39 +166,33 @@ def test_stores_of_one_layer_become_sources_with_channel_dimension_and_shift(til
         view.stop()
     assert state["layout"] == "xy"
     assert state["displayDimensions"] == ["x", "y", "z"]
-    (layer,) = state["layers"]
-    assert layer["type"] == "image"
-    assert layer["name"] == "overview"
-    sources = layer["source"]
+    assert [layer["name"] for layer in state["layers"]] == ["overview · 488", "overview · 561"]
+    first, second = state["layers"]
+    assert first["source"] == second["source"]
+    assert (first["localPosition"], second["localPosition"]) == ([0], [1])
+    assert first["blend"] == "additive" and first["opacity"] == 1.0
+    assert first["type"] == "image" and first["visible"] is True
+
+    sources = first["source"]
     assert len(sources) == 3
     assert all(source["url"].endswith("/|zarr2:") for source in sources)
-    dims = sources[0]["transform"]["outputDimensions"]
-    assert list(dims) == ["t", "c^", "z", "y", "x"]
-    assert dims["x"] == [1e-6, "m"]
-    assert dims["c^"] == [1, ""]
-    # A shift is the translation column, in voxels of that axis.
-    assert [row[-1] for row in sources[0]["transform"]["matrix"]] == [0, 0, 0, 0, 0]
+    # A store in its own place carries no transform at all.
+    assert "transform" not in sources[0]
+    # A shift is the translation column, in voxels of that axis; c stays local (c').
+    dims = sources[1]["transform"]["outputDimensions"]
+    assert list(dims) == ["t", "c'", "z", "y", "x"]
+    assert dims["x"] == [1e-6, "m"] and dims["c'"] == [1, ""]
     assert [row[-1] for row in sources[1]["transform"]["matrix"]] == [0, 0, 0, 0, 10.0]
     # An origin replaces the store's own translation: tile 2 sits at y=144 um.
     assert [row[-1] for row in sources[2]["transform"]["matrix"]] == [0, 0, 0, -144.0, 1000.0]
 
 
-def test_the_shader_mixes_every_channel_with_its_own_controls():
-    shader = mixing_shader(
-        [
-            Channel("a", "#00ff00", window=(100, 2000), limits=(0, 65535)),
-            Channel("b", "#ff00ff", active=False),
-        ],
-        multichannel=True,
-    )
-    assert (
-        "#uicontrol invlerp c0(channel=[0], range=[100.0, 2000.0], window=[0.0, 65535.0])" in shader
-    )
-    assert '#uicontrol vec3 col0 color(default="#00ff00")' in shader
-    assert "#uicontrol invlerp c1(channel=[1])" in shader
-    assert "#uicontrol bool show1 checkbox(default=false)" in shader
-    assert "rgb += col0 * v" in shader and "rgb += col1 * v" in shader
-    assert "emitRGB(rgb)" in shader and "emitRGBA(vec4(rgb, a))" in shader
+def test_the_shader_is_the_engines_own_with_the_stores_window_and_colour():
+    shader = channel_shader(Channel("a", "#00ff00", window=(100, 2000), limits=(0, 65535)))
+    assert "#uicontrol invlerp contrast(range=[100.0, 2000.0], window=[0.0, 65535.0])" in shader
+    assert '#uicontrol vec3 color color(default="#00ff00")' in shader
+    assert "emitRGB(color * value)" in shader and "emitRGBA(vec4(color * value, value))" in shader
+    assert channel_shader(Channel("b", "#ff00ff")).startswith("#uicontrol invlerp contrast()")
 
 
 def test_channels_colours_and_window_can_be_overridden(tiles):
@@ -208,12 +201,13 @@ def test_channels_colours_and_window_can_be_overridden(tiles):
         tiles[0], layer="scan", channels=["GFP", "RFP"], colours=["#123456", None], window=(5, 500)
     )
     try:
-        shader = view.state["layers"][0]["shader"]
+        layers = view.state["layers"]
     finally:
         view.stop()
-    assert 'col0 color(default="#123456")' in shader
-    assert 'col1 color(default="#ff33ff")' in shader  # the store's own colour stays
-    assert "range=[5.0, 500.0]" in shader
+    assert [layer["name"] for layer in layers] == ["scan · GFP", "scan · RFP"]
+    assert 'color(default="#123456")' in layers[0]["shader"]
+    assert 'color(default="#ff33ff")' in layers[1]["shader"]  # the store's own colour stays
+    assert all("range=[5.0, 500.0]" in layer["shader"] for layer in layers)
 
 
 def test_layers_can_be_hidden_removed_and_relaid(tiles):
@@ -223,15 +217,32 @@ def test_layers_can_be_hidden_removed_and_relaid(tiles):
     try:
         assert view.layers == ["one", "tile_01.ome.zarr"]
         view.set_visible("one", False)
-        assert view.state["layers"][0]["visible"] is False
+        assert [layer["visible"] for layer in view.state["layers"]] == [False, False, True, True]
         assert view.remove("one") and not view.remove("one")
         view.set_layout("3d")
         assert view.state["layout"] == "3d"
-        assert [layer["name"] for layer in view.state["layers"]] == ["tile_01.ome.zarr"]
+        assert [layer["name"] for layer in view.state["layers"]] == [
+            "tile_01.ome.zarr · 488",
+            "tile_01.ome.zarr · 561",
+        ]
         with pytest.raises(ValueError):
             view.set_layout("sideways")
         view.clear()
         assert view.state["layers"] == []
+    finally:
+        view.stop()
+
+
+def test_showing_a_store_again_or_refreshing_bumps_its_revision(tiles):
+    view = Viewer()
+    view.add(tiles[0], layer="overview")
+    try:
+        assert view.state["layers"][0]["_revision"] == 0
+        view.add(tiles[0], layer="overview")
+        assert view.state["layers"][0]["_revision"] == 1
+        assert len(view.state["layers"][0]["source"]) == 1
+        view.refresh()
+        assert view.state["layers"][0]["_revision"] == 2
     finally:
         view.stop()
 
@@ -257,7 +268,7 @@ def test_the_server_serves_store_bytes_with_ranges_and_the_scene(tiles):
         assert status == 200
         answer = json.loads(body)
         assert answer["version"] >= 1
-        assert answer["state"]["layers"][0]["name"] == "overview"
+        assert answer["state"]["layers"][0]["name"] == "overview · 488"
         assert answer["ui"] == {"transparent": False, "chrome": "full"}
 
         source = answer["state"]["layers"][0]["source"][0]["url"].split("|")[0]
@@ -407,7 +418,7 @@ def _wait_until_drawn(page, *, layers: int, timeout_s: float = 40.0) -> dict:
     raise AssertionError(f"the picture never settled: {seen}")
 
 
-def test_four_tiles_draw_as_one_two_channel_layer(browser, tiles):
+def test_four_tiles_draw_as_two_channel_layers_over_the_same_sources(browser, tiles):
     view = Viewer()
     for tile in tiles:
         view.add(tile, layer="overview")
@@ -416,10 +427,11 @@ def test_four_tiles_draw_as_one_two_channel_layer(browser, tiles):
     view.on_pick(picks.append)
     try:
         page, errors = _open(browser, url)
-        seen = _wait_until_drawn(page, layers=1)
-        (layer,) = seen["layers"]
-        assert layer["sources"] == 4 and layer["errors"] == []
-        assert layer["channelRank"] == 1, "the c axis is a channel dimension, read by one shader"
+        seen = _wait_until_drawn(page, layers=2)
+        assert [layer["name"] for layer in seen["layers"]] == ["overview · 488", "overview · 561"]
+        for layer in seen["layers"]:
+            assert layer["sources"] == 4 and layer["errors"] == []
+            assert layer["channelRank"] == 0, "c is a local dimension, pinned per layer"
         assert seen["names"] == ["t", "z", "y", "x"]
         assert [seen["names"][i] for i in seen["shown"]] == ["x", "y", "z"]
         time.sleep(1.0)
@@ -455,10 +467,10 @@ def test_adding_a_tile_keeps_the_operators_adjustments(browser, tiles):
     url = view.start()
     try:
         page, errors = _open(browser, url)
-        _wait_until_drawn(page, layers=1)
+        _wait_until_drawn(page, layers=2)
         page.evaluate(
             """() => { const l = window.viewer.layerManager.managedLayers[0].layer;
-                      l.opacity.value = 0.3; l.shaderControlState.state.get('col0').trackable.restoreState('#0000ff'); }"""
+                      l.opacity.value = 0.3; l.shaderControlState.state.get('color').trackable.restoreState('#0000ff'); }"""
         )
         view.add(tiles[1], layer="overview")
         deadline = time.time() + 20
@@ -469,9 +481,38 @@ def test_adding_a_tile_keeps_the_operators_adjustments(browser, tiles):
             time.sleep(0.2)
         held = page.evaluate(
             """() => { const l = window.viewer.layerManager.managedLayers[0].layer;
-                      return { opacity: l.opacity.value, colour: l.shaderControlState.state.get('col0').trackable.toJSON() }; }"""
+                      return { opacity: l.opacity.value, colour: l.shaderControlState.state.get('color').trackable.toJSON() }; }"""
         )
         assert held == {"opacity": 0.3, "colour": "#0000ff"}
+        assert not errors, errors
+        page.close()
+    finally:
+        view.stop()
+
+
+def test_a_store_that_gains_a_time_point_is_read_again(browser, tmp_path):
+    store = write_tile(tmp_path / "growing.ome.zarr", origin_um=(0, 0, 0), seed=3, timepoints=1)
+    view = Viewer()
+    view.add(store, layer="growing")
+    url = view.start()
+    try:
+        page, errors = _open(browser, url)
+        _wait_until_drawn(page, layers=2)
+        extent = "() => { const b = window.viewer.navigationState.position.coordinateSpace.value.bounds; return b.upperBounds[0] - b.lowerBounds[0]; }"
+        assert page.evaluate(extent) == 1
+        page.evaluate(
+            "() => { window.viewer.layerManager.managedLayers[1].layer.shaderControlState.state.get('color').trackable.restoreState('#ff0000'); }"
+        )
+        # The writer appends a time point in place, then says so.
+        write_tile(store, origin_um=(0, 0, 0), seed=3, timepoints=3)
+        view.add(store, layer="growing")
+        deadline = time.time() + 20
+        while time.time() < deadline and page.evaluate(extent) != 3:
+            time.sleep(0.25)
+        assert page.evaluate(extent) == 3
+        _wait_until_drawn(page, layers=2)
+        colour = "() => window.viewer.layerManager.managedLayers[1].layer.shaderControlState.state.get('color').trackable.toJSON()"
+        assert page.evaluate(colour) == "#ff0000"
         assert not errors, errors
         page.close()
     finally:
@@ -484,7 +525,7 @@ def test_a_transparent_ground_is_clear_outside_the_tiles_and_opaque_inside(brows
     url = view.start()
     try:
         page, errors = _open(browser, url)
-        _wait_until_drawn(page, layers=1)
+        _wait_until_drawn(page, layers=2)
         time.sleep(1.0)
         alpha = page.evaluate(READ_ALPHA)
         assert alpha["clear"] > 100_000, alpha
