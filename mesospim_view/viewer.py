@@ -39,6 +39,11 @@ def read_again(placement: Placement) -> Placement:
 # installed copy of the package carries its page.
 PAGE_DIR = Path(__file__).resolve().parent / "page"
 
+# How the page dresses the engine: with neuroglancer's own panels ("full"),
+# with our panel on the right and the sliders on the picture ("simple"), or as
+# nothing but the picture for a host that draws its own controls ("bare").
+UI = ("full", "simple", "bare")
+
 
 def _si_factor(unit: str) -> float:
     """From the SI base unit to the unit the API speaks: micrometres and seconds."""
@@ -58,8 +63,8 @@ class Viewer:
         ui: str = "full",
         layout: str = "xy",
     ) -> None:
-        if ui not in ("full", "bare"):
-            raise ValueError("ui must be 'full' or 'bare'")
+        if ui not in UI:
+            raise ValueError(f"ui must be one of {UI}")
         if layout not in LAYOUTS:
             raise ValueError(f"layout must be one of {LAYOUTS}")
         self._host = host

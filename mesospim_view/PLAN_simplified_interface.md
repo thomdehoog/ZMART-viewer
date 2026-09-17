@@ -1,7 +1,12 @@
 # Plan: the simplified interface
 
 > Written after the tczyx writer (mesoSPIM-control #2) and the Data viewer
-> window (#3) were opened. To build once both are in use. Status: PLAN.
+> window (#3) were opened. Status: steps 1 and 2 BUILT (`ui="simple"`,
+> `app/mesospim/src/panel.js`, `tests/test_mesospim_panel.py`); 3 and 4 open.
+> Two things came out differently from the plan below: the panel is one of
+> the engine's own side panels, because the engine draws a histogram only
+> inside its canvas; and channels are composited by brightness rather than
+> added, which removed the overlap seam.
 
 The aim: switch the engine's own interface off and put ours on, the way the
 smart viewer does it -- a control panel down the right-hand edge, the picture

@@ -3,8 +3,9 @@
  *
  * The page does three things and nothing else:
  *
- * 1. builds a stock neuroglancer viewer (its own panels, bindings and layer
- *    controls, or a bare canvas when the host draws its own controls);
+ * 1. builds a stock neuroglancer viewer: with its own panels ("full"), with
+ *    our own panel beside a bare engine ("simple", panel.js), or as a bare
+ *    canvas for a host that draws its own controls ("bare");
  * 2. long-polls `/api/state` and brings the layers into line with it, keeping
  *    the operator's own adjustments on layers that did not change;
  * 3. reports the camera to `/api/view` and a double-click to `/api/pick`.
@@ -26,6 +27,7 @@ import {
 } from "neuroglancer/unstable/ui/default_clipboard_handling.js";
 import { makeLayer, deleteLayer } from "neuroglancer/unstable/layer/index.js";
 import { registerActionListener } from "neuroglancer/unstable/util/event_action_map.js";
+import { mountPanel } from "./panel.js";
 import "./page.css";
 
 const POLL_WAIT_S = 25;
@@ -64,15 +66,15 @@ function readUi(first) {
 }
 
 function buildViewer(ui) {
-  const bare = ui.chrome === "bare";
+  const native = ui.chrome === "full";
   document.documentElement.dataset.chrome = ui.chrome;
   const viewer = makeDefaultViewer({
     target: document.getElementById("engine"),
-    showUIControls: !bare,
-    showTopBar: !bare,
-    showLayerPanel: !bare,
-    showLocation: !bare,
-    showPanelBorders: !bare,
+    showUIControls: native,
+    showTopBar: native,
+    showLayerPanel: native,
+    showLocation: native,
+    showPanelBorders: native,
     showLayerDialog: false,
     resetStateWhenEmpty: false,
   });
@@ -87,6 +89,9 @@ function buildViewer(ui) {
     // ground does without it. Annotations and the scale bar are unaffected.
     viewer.showAxisLines.value = false;
     viewer.display.scheduleRedraw();
+  }
+  if (ui.chrome === "simple") {
+    mountPanel(viewer, { fit: () => fitEverything(viewer) });
   }
   window.viewer = viewer;
   return viewer;

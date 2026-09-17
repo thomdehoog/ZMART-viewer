@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import sys
 import threading
 import time
 from http import HTTPStatus
@@ -269,6 +270,13 @@ class ViewServer(ThreadingHTTPServer):
     def url(self) -> str:
         host, port = self.server_address[:2]
         return f"http://{host}:{port}/"
+
+    def handle_error(self, request, client_address) -> None:
+        """A page that went away mid-request is not an error worth a traceback."""
+        error = sys.exc_info()[1]
+        if isinstance(error, (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)
 
     def scene_reported(self, payload: object) -> None:
         if not isinstance(payload, dict):

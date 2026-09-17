@@ -2,10 +2,10 @@
 
 Everything here is a pure function from plain data to the JSON neuroglancer
 already understands. An acquisition is a :class:`Layer` here and becomes one
-engine layer *per channel*, all sharing the same sources and added together on
-the graphics card -- which is exactly how neuroglancer's own multichannel setup
-arranges an OME-Zarr, and the only arrangement that reads a store whose chunks
-hold one channel each (the engine reads every channel of a voxel from one
+engine layer *per channel*, all sharing the same sources and composited on
+the graphics card by their brightness -- one layer per channel is how
+neuroglancer's own multichannel setup arranges an OME-Zarr, and the only
+arrangement that reads a store whose chunks hold one channel each (the engine reads every channel of a voxel from one
 chunk, so a channel dimension across chunks draws nothing). Each source is a
 neuroglancer source with a ``transform`` carrying its shift. Nothing is
 invented that the engine does not have a word for.
@@ -102,12 +102,16 @@ def _glsl_number(value: float) -> str:
 
 
 def channel_shader(channel: Channel) -> str:
-    """One channel's program: the engine's own multichannel shader, with the
-    store's window and colour as the controls' starting values.
+    """One channel's program, with the store's window and colour as the controls'
+    starting values.
 
-    The window and the colour are ``#uicontrol`` values, so the native panel
-    edits them and changing one hands a number to a program already compiled.
-    In three dimensions the brightness drives the opacity, as the engine does.
+    Brightness rides in the alpha as well as the colour, and the layers are
+    composited over one another rather than added: a dim pixel lets the channel
+    beneath show through, a bright one covers it, so channels mix without the
+    sum ever clipping to white, and two tiles of one acquisition that overlap
+    do not add up to a bright seam along the join. The alpha never quite
+    reaches zero inside a tile, so a transparent ground still shows acquired
+    black as black.
     """
     parameters = []
     if channel.window:
@@ -122,8 +126,7 @@ def channel_shader(channel: Channel) -> str:
             f'#uicontrol vec3 color color(default="{channel.color}")',
             "void main() {",
             "  float value = contrast();",
-            "  if (VOLUME_RENDERING) { emitRGBA(vec4(color * value, value)); }",
-            "  else { emitRGB(color * value); }",
+            "  emitRGBA(vec4(color * value, max(value, 1.0 / 255.0)));",
             "}",
             "",
         ]
@@ -163,8 +166,8 @@ class Layer:
                 # the c axis as a per-layer dimension, pinned here.
                 "localPosition": [index],
                 "shader": channel_shader(channel),
-                # Channels add like light, between layers, on the graphics card.
-                "blend": "additive",
+                # Composited over one another by their brightness (see channel_shader).
+                "blend": "default",
                 "opacity": 1.0,
                 "visible": self.visible and channel.active,
                 "_revision": self.revision,

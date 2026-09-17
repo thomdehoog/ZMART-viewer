@@ -36,7 +36,7 @@ def make_window_class():
         def __init__(self, root: str | Path, parent=None, *, viewer: Viewer | None = None) -> None:
             super().__init__(parent)
             self.setWindowTitle("Data viewer")
-            self.follower = Follower(viewer or Viewer(), root)
+            self.follower = Follower(viewer or Viewer(ui="simple"), root)
 
             self.chooser = QtWidgets.QComboBox()
             self.chooser.setMinimumWidth(240)

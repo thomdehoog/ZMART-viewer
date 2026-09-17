@@ -86,20 +86,19 @@ def write_tile(
     z, y, x = TILE
     zz, yy, xx = np.ogrid[0:z, 0:y, 0:x]
     volume = np.zeros((2, z, y, x), dtype=np.float32)
-    for centre in rng.uniform([2, 10, 10], [z - 2, y - 10, x - 10], size=(40, 3)):
+    for centre in rng.uniform([2, 10, 10], [z - 2, y - 10, x - 10], size=(28, 3)):
         blob = np.exp(
             -0.5
             * (
                 ((zz - centre[0]) / 2.0) ** 2
-                + ((yy - centre[1]) / 7.0) ** 2
-                + ((xx - centre[2]) / 7.0) ** 2
+                + ((yy - centre[1]) / 5.0) ** 2
+                + ((xx - centre[2]) / 5.0) ** 2
             )
         )
+        blob[blob < 0.05] = 0.0  # no tails: the ground between cells stays at the background
         volume[0] += blob
         if rng.random() < 0.5:
             volume[1] += blob * rng.uniform(0.5, 1.0)
-    # A bright frame around each tile, so its edges and overlaps are visible.
-    volume[0, :, :3, :] = volume[0, :, -3:, :] = volume[0, :, :, :3] = volume[0, :, :, -3:] = 0.6
     frames = []
     for frame in range(timepoints):
         shifted = np.roll(volume, 3 * frame, axis=-1)
@@ -268,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
     parser.add_argument("--transparent", action="store_true", help="transparent 2D ground")
-    parser.add_argument("--ui", choices=("full", "bare"), default="full")
+    parser.add_argument("--ui", choices=("full", "simple", "bare"), default="simple")
     parser.add_argument(
         "--live", action="store_true", help="write a run tile by tile and follow it"
     )

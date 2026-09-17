@@ -170,7 +170,7 @@ def test_an_acquisition_becomes_one_engine_layer_per_channel_sharing_its_sources
     first, second = state["layers"]
     assert first["source"] == second["source"]
     assert (first["localPosition"], second["localPosition"]) == ([0], [1])
-    assert first["blend"] == "additive" and first["opacity"] == 1.0
+    assert first["blend"] == "default" and first["opacity"] == 1.0
     assert first["type"] == "image" and first["visible"] is True
 
     sources = first["source"]
@@ -191,7 +191,7 @@ def test_the_shader_is_the_engines_own_with_the_stores_window_and_colour():
     shader = channel_shader(Channel("a", "#00ff00", window=(100, 2000), limits=(0, 65535)))
     assert "#uicontrol invlerp contrast(range=[100.0, 2000.0], window=[0.0, 65535.0])" in shader
     assert '#uicontrol vec3 color color(default="#00ff00")' in shader
-    assert "emitRGB(color * value)" in shader and "emitRGBA(vec4(color * value, value))" in shader
+    assert "emitRGBA(vec4(color * value, max(value, 1.0 / 255.0)))" in shader
     assert channel_shader(Channel("b", "#ff00ff")).startswith("#uicontrol invlerp contrast()")
 
 
