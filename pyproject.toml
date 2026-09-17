@@ -7,22 +7,23 @@ name = "zmart-viewer"
 version = "0.2.1"
 description = "A viewer for large, growing, multi-channel microscopy images: point it at a folder and it draws what is there, and follows it while a microscope writes."
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 
-# What the viewer needs to run, and nothing else. The record machinery --
-# how an acquisition writes itself and what that means -- lives inside this
-# package (``zmart_viewer.record``), so a viewer install is self-contained:
-# it opens anything, follows live runs, and its tests exercise the same
-# writer a microscope controller drives.
+# What every part of this repository needs. The ZMART viewer itself
+# (``zmart_viewer``) also needs zarr and pywebview, which are the ``viewer``
+# extra below: ``pip install .[viewer]``, or the conda environment, which
+# carries both. The mesoSPIM view (``mesospim_view``) needs only this.
 dependencies = [
-    "zarr>=3,<4",
     "numpy>=1.24",
-    "pywebview>=5",
 ]
 
 [project.optional-dependencies]
+viewer = [
+    "zarr>=3,<4",
+    "pywebview>=5",
+]
 dev = [
     "pytest>=8",
     "pytest-timeout>=2",
@@ -34,7 +35,11 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["zmart_viewer", "zmart_viewer.record"]
+packages = ["zmart_viewer", "zmart_viewer.record", "mesospim_view"]
+
+[tool.setuptools.package-data]
+# The built neuroglancer page of the mesoSPIM view (app/mesospim builds into it).
+mesospim_view = ["page/*", "page/assets/*"]
 
 [tool.ruff]
 target-version = "py310"
@@ -48,6 +53,8 @@ extend-exclude = [
     # Generated, not written.
     "app/page/dist",
     "app/page/node_modules",
+    "mesospim_view/page",
+    "app/mesospim/node_modules",
     # Roads explored and not taken. Kept for the reasoning, not held to the
     # standards of code anybody runs.
     "parked",
