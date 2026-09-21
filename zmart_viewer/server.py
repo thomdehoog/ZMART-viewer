@@ -329,6 +329,10 @@ class _Handler(SimpleHTTPRequestHandler):
                 return
             try:
                 body = coverage.answer(store, inside)
+            except pieces.TemporarilyUnanswerable:
+                # A piece a publication is rewriting just now: try again shortly.
+                self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
+                return
             except Exception:
                 logging.getLogger(__name__).exception("coverage unavailable for %s", store)
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
