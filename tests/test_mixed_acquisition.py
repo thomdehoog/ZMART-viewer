@@ -47,8 +47,12 @@ def test_interrupted_bake_can_reopen_and_recover(tmp_path, monkeypatch):
     view.close()
     view = PublishedAcquisition(tmp_path, piece=64)
     try:
-        with pytest.raises(RuntimeError, match="needs recovery"):
-            view.outputs[STORE].composer()
+        # Reopened on a leftover pending note: the last committed generation
+        # is still whole except for the pieces the interrupted bake had
+        # named, and those alone are withheld until recovery.
+        reopened = view.outputs[STORE]
+        assert reopened.composer() is not None
+        assert any(reopened.being_rewritten(0, row, column) for row in range(2) for column in range(8))
         view.publish(tmp_path, {name: 2}, CANVAS, composition=composition([name]), bake=True)
         made = view.outputs[STORE].composer()
         assert made.values_for(0, 0, 0, 4)[0, 2] == 2000

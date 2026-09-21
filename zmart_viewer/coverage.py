@@ -16,6 +16,7 @@ import numpy as np
 from . import pieces
 from .building import ComposedPicture
 from .library import _read_array_description, _read_attrs_at
+from .published import PublishedTransfer
 from .record.gateway import live_run_holding
 
 MARKER = "__zmart_coverage__"
@@ -112,6 +113,8 @@ def answer(store: Path, inside: str) -> bytes | None:
             return None
         coordinates = dict(zip(axes, indices, strict=True))
         y, x = indices[-2:]
+        if isinstance(held, PublishedTransfer) and held.being_rewritten(level, y, x):
+            raise pieces.TemporarilyUnanswerable(f"{store} is rewriting that piece just now")
         if composer:
             mask = composer.coverage_for(
                 level,

@@ -217,7 +217,8 @@ def test_interrupted_publication_is_refused_until_retry_recovers(tmp_path, monke
     canvas = {"x_um": [0, 1024], "y_um": [0, 512]}
     try:
         view.publish(tmp_path, {"a.ome.zarr": 1}, canvas)
-        assert reader.composer().values_for(0, 0, 0, 0).max() == 1200
+        before = reader.composer()
+        assert before.values_for(0, 0, 0, 0).max() == 1200
         write_position(tmp_path, "a.ome.zarr", 0, 2700)
         patch_piece = view._replace_one_piece
 
@@ -229,8 +230,13 @@ def test_interrupted_publication_is_refused_until_retry_recovers(tmp_path, monke
         with pytest.raises(OSError, match="interrupted bake"):
             view.publish(tmp_path, {"a.ome.zarr": 2}, canvas)
         assert view.revision == 1
+        # A reader holding the previous generation keeps it, and is refused
+        # only the pieces the interrupted publication had started to rewrite;
+        # a reader with nothing in hand has nothing safe to serve.
+        assert reader.composer() is before
+        assert reader.being_rewritten(0, 0, 0)
         with pytest.raises(RuntimeError, match="needs recovery"):
-            reader.composer()
+            PublishedTransfer(tmp_path / STORE, piece=64).composer()
         monkeypatch.setattr(view, "_replace_one_piece", patch_piece)
         assert view.publish(tmp_path, {"a.ome.zarr": 2}, canvas) == 2
         assert reader.composer().values_for(0, 0, 0, 0).max() == 2700
@@ -439,3 +445,52 @@ def test_initial_external_folder_bake_requires_canvas(tmp_path):
     write_position(tmp_path, "a.ome.zarr", 0, 1200)
     with pytest.raises(ValueError, match="canvas bounds"):
         make_server(port=0, data_dir=tmp_path, loads=[{"path": tmp_path}], bake=True)
+
+
+def test_a_publication_under_way_keeps_serving_all_but_the_pieces_it_rewrites(tmp_path):
+    """The browser keeps its picture while the next generation is composed.
+
+    A publication names the pieces it will rewrite in ``pending.json`` before
+    it writes any of them. Every other piece of the previous generation is
+    still exactly what it was, so a reader goes on answering from it; the
+    named pieces alone say "try again shortly", and only until the commit.
+    """
+    from test_server import request
+
+    from zmart_viewer.server import make_server
+
+    write_position(tmp_path, "a.ome.zarr", 0, 1200)
+    write_position(tmp_path, "b.ome.zarr", 512, 900)
+    server = make_server(port=0, data_dir=tmp_path, live=True, allow_open=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    try:
+        opening = {
+            "path": str(tmp_path), "bake": False,
+            "source_revisions": {"a.ome.zarr": 1, "b.ome.zarr": 1},
+            "composition": {"regions": "complete", "order": ["a.ome.zarr", "b.ome.zarr"], "xy_origin": "corner"},
+            "canvas": {"x_um": [0, 1024], "y_um": [0, 512]},
+            "views": {"path": str(tmp_path / "view"), "acquisition": "mixed", "modes": [],
+                      "projections": ["max"], "projection_path": str(tmp_path / "projections")},
+        }
+        status, body = request(port, "/api/stores/open", "POST", json.dumps(opening).encode())[::2]
+        assert status == 200, body
+        source = json.loads(request(port, "/api/config")[2])["layers"][0]["sources"][0].split("|")[0]
+
+        def piece(column):
+            return f"{source}0/c/0/0/{column}"
+
+        pending = tmp_path / "view" / "mixed_max.zmartview.zarr" / "pending.json"
+        assert request(port, piece(0))[0] == 200
+        assert request(port, piece(1))[0] == 200
+        # A publication in flight, rewriting the second piece of level 0.
+        pending.write_text(json.dumps({"dirty": {"0": [[0, 1]]}}), encoding="utf-8")
+        assert request(port, piece(0))[0] == 200
+        assert request(port, piece(1))[0] == 503
+        pending.unlink()
+        assert request(port, piece(1))[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)

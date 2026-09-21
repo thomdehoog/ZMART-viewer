@@ -867,6 +867,8 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
 
     if composer is None:
         composer = held
+    if isinstance(held, PublishedTransfer) and held.being_rewritten(level, row, column):
+        raise TemporarilyUnanswerable(f"{store} is rewriting that piece just now")
     try:
         may_read_bake = not isinstance(held, PublishedTransfer) or held.bake
         baked = where.joinpath(*inside.strip("/").split("/"))
