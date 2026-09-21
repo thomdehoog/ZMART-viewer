@@ -316,12 +316,6 @@ class _Handler(SimpleHTTPRequestHandler):
         """Serve one file from an open OME-Zarr store under ``/data``."""
         rel = self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0]
         number, _, rest = rel.partition("/")
-        image = rest.partition("/")[0]
-        if image.endswith(".zmartview.zarr"):
-            store = self._library.resolve(f"{number}/{image}")
-            if store is not None and (store / "pending.json").exists():
-                self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
-                return
         marker = f"/{coverage.MARKER}/"
         if marker in rel:
             store_rel, inside = rel.split(marker, 1)

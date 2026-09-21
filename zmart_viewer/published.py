@@ -583,14 +583,60 @@ class PublishedTransfer(ComposedPicture):
         self._held = None
         self._state = None
         self._state_mark = None
+        self._rewriting = {}
+        self._rewriting_mark = None
 
     def composer(self) -> Composer:
-        with self._lock:
+        """The generation to answer from.
+
+        A publication under way holds the lock while it composes and bakes the
+        next generation, and leaves ``pending.json`` standing until it has
+        committed. A reader that already holds the previous generation keeps
+        answering from it meanwhile, never waiting on the publication; only
+        the pieces the publication rewrites are withheld, see
+        :meth:`being_rewritten`. Without a previous generation -- a process
+        that started on a leftover ``pending.json`` -- nothing is served until
+        the publication is recovered.
+        """
+        held = self._held
+        if held is None:
+            self._lock.acquire()
+        elif not self._lock.acquire(blocking=False):
+            return held
+        try:
             if (self._shown / "pending.json").exists():
+                if held is not None:
+                    return held
                 with _holding_the_bake_lock(self._shown):
                     if (self._shown / "pending.json").exists():
                         raise RuntimeError("The coarse overview publication needs recovery")
             return self._read_snapshot()
+        finally:
+            self._lock.release()
+
+    def being_rewritten(self, level: int, row: int, column: int) -> bool:
+        """Whether a publication under way is rewriting this piece.
+
+        The publication names the pieces it touches in ``pending.json`` before
+        it writes any of them; every other piece of the previous generation
+        stays as it was and may be served. A note that cannot be read is a
+        note being written, and the piece is withheld until it can.
+        """
+        pending = self._shown / "pending.json"
+        try:
+            mark = pending.stat().st_mtime_ns
+        except FileNotFoundError:
+            return False
+        if mark != self._rewriting_mark:
+            try:
+                written = json.loads(pending.read_text(encoding="utf-8")).get("dirty", {})
+            except (OSError, ValueError):
+                return True
+            self._rewriting = {
+                int(at): {tuple(chunk) for chunk in chunks} for at, chunks in written.items()
+            }
+            self._rewriting_mark = mark
+        return (row, column) in self._rewriting.get(level, ())
 
     def _read_snapshot(self) -> Composer:
         with self._lock:
