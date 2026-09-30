@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 import zarr
 from test_published_transfer import write_position
-from zmart_viewer.picture.acquired import AcquiredRegion
-from zmart_viewer.picture.compose import _read_one_tile
-from zmart_viewer.views.published import STORE, PublishedTransfer, _place_depth
+from zmart_viewer.picture.acquired_regions import AcquiredRegion
+from zmart_viewer.picture.arrangement import _read_one_tile
+from zmart_viewer.views.publishing import STORE, PublishedTransfer, _place_depth
 
 CANVAS = {"x_um": [0, 2048], "y_um": [0, 128]}
 HEIGHTS = [62.99, 62.79, 64.26, 64.01, 61.10, 60.40, 62.20, 61.40]

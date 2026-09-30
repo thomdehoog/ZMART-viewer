@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from zmart_viewer.opening.contrast import display_window
-from zmart_viewer.opening.library import (
+from zmart_viewer.opening.open_folders import (
     channel_color,
     channel_of,
     discover,

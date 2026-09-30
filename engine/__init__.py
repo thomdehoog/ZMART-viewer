@@ -14,8 +14,9 @@ Inside it:
 - ``views``: the named views, Slice, Top and Min/Max/Sum.
 - ``live``: following a run while it is written, and the record of how a
   run writes itself.
-- ``drawing``: the JavaScript that drives neuroglancer, and ``embedding.js``
-  for interfaces that draw for themselves.
+- ``drawing``: the JavaScript that creates and drives neuroglancer, with its
+  own controls switched off, and ``embedding.js`` for the named views. Any
+  interface, this package's own window included, draws through it.
 - ``command``: the ``zmart-viewer`` command.
 
 The names below are what other software may rely on. They stay stable
@@ -25,7 +26,7 @@ between versions; everything deeper inside may move.
 from zmart_viewer.command import main, open_window
 from zmart_viewer.serving.server import make_server
 from zmart_viewer.views.projections import write_projection
-from zmart_viewer.views.published import STORE, PublishedAcquisition
+from zmart_viewer.views.publishing import STORE, PublishedAcquisition
 
 __all__ = [
     "PublishedAcquisition",

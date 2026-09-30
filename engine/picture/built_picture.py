@@ -24,10 +24,10 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_viewer.live.record.gateway import _LiveRun
-from zmart_viewer.live.record.model import rounded_up
-from zmart_viewer.live.record.shardlink import how_the_array_is_stored
-from zmart_viewer.picture.compose import (
+from zmart_viewer.live.record.live_serving import _LiveRun
+from zmart_viewer.live.record.shard_lookup import how_the_array_is_stored
+from zmart_viewer.live.record.vocabulary import rounded_up
+from zmart_viewer.picture.arrangement import (
     OURS,
     PIECE,
     Composer,

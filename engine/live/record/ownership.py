@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from itertools import product
 
-from zmart_viewer.live.record.model import (
+from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     Box,
     GridCell,

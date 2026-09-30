@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
-from zmart_viewer.opening.library import Library
+from zmart_viewer.opening.open_folders import Library
 from zmart_viewer.serving.server import group_labels, make_server
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
@@ -450,11 +450,11 @@ class TestStartingTheViewerOnSuchAFolder:
         at the bottom, which is not something anyone should have to read at a
         microscope.
         """
-        if not (_VIZ_ROOT / "app" / "page" / "dist" / "index.html").exists():
+        if not (_VIZ_ROOT / "interface" / "dist" / "index.html").exists():
             pytest.skip(
-                "app/page/dist is not built, so the zmart-viewer command stops "
+                "interface/dist is not built, so the zmart-viewer command stops "
                 "before it gets as far as the folder — build it with "
-                "`npm --prefix app/page install && npm --prefix app/page run build`"
+                "`npm install && npm run build`"
             )
         from zmart_viewer import command as launcher
 

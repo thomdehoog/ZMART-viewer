@@ -48,7 +48,19 @@ from zmart_viewer.live.record.identity import (
     the_records_folder,
 )
 from zmart_viewer.live.record.manifest import RunManifest, _write_and_replace, now_in_words
-from zmart_viewer.live.record.model import (
+from zmart_viewer.live.record.omezarr import describe_the_position
+from zmart_viewer.live.record.ownership import (
+    check_the_grid_holds_together,
+    place_the_positions,
+    places_on_a_grid,
+)
+from zmart_viewer.live.record.shard_lookup import where_one_chunk_lives
+from zmart_viewer.live.record.view_routes import (
+    Placed,
+    refuse_a_view_stored_differently,
+    route_the_view,
+)
+from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     CommitEvent,
     GridCell,
@@ -56,18 +68,6 @@ from zmart_viewer.live.record.model import (
     SceneLayoutRevision,
     ZmartLiveError,
     rounded_up,
-)
-from zmart_viewer.live.record.omezarr import describe_the_position
-from zmart_viewer.live.record.ownership import (
-    check_the_grid_holds_together,
-    place_the_positions,
-    places_on_a_grid,
-)
-from zmart_viewer.live.record.shardlink import where_one_chunk_lives
-from zmart_viewer.live.record.viewroute import (
-    Placed,
-    refuse_a_view_stored_differently,
-    route_the_view,
 )
 
 __all__ = [
@@ -982,7 +982,7 @@ class LivePublisher:
         belongs.
 
         Building the map is also the moment the arrangement gets checked.
-        :func:`zmart_viewer.live.record.viewroute.route_the_view` refuses a set of positions
+        :func:`zmart_viewer.live.record.view_routes.route_the_view` refuses a set of positions
         that were not all written the same way, one that does not land on whole
         pieces, or one asked for ground it does not hold.
         """
@@ -1722,7 +1722,7 @@ class LivePublisher:
         to be a deliberate act rather than an ordinary one.
 
         Returns the commit that made the replacement visible. Raises
-        :class:`~zmart_viewer.live.record.model.ZmartLiveError` when this moment has never been
+        :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` when this moment has never been
         published, since there is then nothing to supersede and
         :meth:`write_a_position` is the ordinary way in.
         """
@@ -1900,7 +1900,7 @@ def _the_same_picture(lifted: bytes, array, corner: tuple[int, ...]) -> bool:
     import tempfile
 
     from zarr.codecs import ZstdCodec
-    from zmart_viewer.live.record.model import rmtree_despite_brief_holds
+    from zmart_viewer.live.record.vocabulary import rmtree_despite_brief_holds
 
     # A piece at the edge of a level is stored full-sized and padded, while the
     # image itself stops where the specimen does. So the comparison is made over

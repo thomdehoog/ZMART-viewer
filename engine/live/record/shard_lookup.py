@@ -128,7 +128,7 @@ from pathlib import Path
 from struct import unpack_from
 from threading import Lock
 
-from zmart_viewer.live.record.model import ZmartLiveError
+from zmart_viewer.live.record.vocabulary import ZmartLiveError
 
 __all__ = [
     "BUNDLES_REMEMBERED_AT_MOST",
@@ -244,7 +244,7 @@ class ShardIndex:
         shard's own corner: ``(0, 0)`` is the first chunk in the shard whatever
         part of the image that shard covers.
 
-        Raises :class:`~zmart_viewer.live.record.model.ZmartLiveError` when the position names
+        Raises :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` when the position names
         a different number of axes than the shard has, or falls outside it.
         """
         if len(within_shard) != len(self.chunks_per_shard):
@@ -674,7 +674,7 @@ def read_the_index(
         and why a wrong answer here would be so hard to notice.
 
     What can go wrong
-        A :class:`~zmart_viewer.live.record.model.ZmartLiveError` is raised when the bundle
+        A :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` is raised when the bundle
         shape is not a whole number of chunks, when the file is too short to
         contain the table it should have, or when the table describes a chunk
         that would run off the end of the file. That last one is the check that
@@ -1003,7 +1003,7 @@ def describe_the_bundling(array_path: str | Path) -> Bundling:
         not a failure.
 
     What can go wrong
-        A :class:`~zmart_viewer.live.record.model.ZmartLiveError` is raised when the path does
+        A :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` is raised when the path does
         not hold an array description, when that description is in an older
         format that cannot bundle chunks, or when the bundle it declares is not a
         whole number of chunks across.
@@ -1283,7 +1283,7 @@ def where_one_chunk_lives(array_path: str | Path, chunk_coordinate: Sequence[int
         own file: offset zero, and a length equal to the file's size.
 
     What can go wrong
-        A :class:`~zmart_viewer.live.record.model.ZmartLiveError` is raised when the coordinate
+        A :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` is raised when the coordinate
         names the wrong number of axes or points outside the image, and when the
         shard holding it turns out to be damaged or cut short. A chunk that is
         merely absent never raises; it comes back as ``None``.

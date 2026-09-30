@@ -16,7 +16,7 @@ What is missing without it
 OME-Zarr is the agreed way of saying those things. This module writes version
 0.5 of it, which is the generation built on zarr version 3 and the one the rest
 of this project writes by default. Four pieces are needed, and a position
-written by :mod:`zmart_viewer.live.record.coordinator` has none of them until this module
+written by :mod:`zmart_viewer.live.record.publisher` has none of them until this module
 runs:
 
 *The image group.* The position folder itself has to be marked as a group — a
@@ -99,7 +99,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_viewer.live.record.model import (
+from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     Channel,
     LevelGeometry,
@@ -162,7 +162,7 @@ A_SECOND = 1.0
 #: useful rather than a formality: it tells a reader whether a zoomed-out picture
 #: is a smoothed version of the specimen or a sample of it.
 #:
-#: ``mean`` is what :mod:`zmart_viewer.live.record.coordinator` does today — it averages each
+#: ``mean`` is what :mod:`zmart_viewer.live.record.publisher` does today — it averages each
 #: two-by-two block of voxels in y and x — and it is the default here for that
 #: reason. ``nearest`` is what the retired elder writer did, keeping every
 #: second voxel and discarding the rest, and it is offered so that a position
@@ -354,7 +354,7 @@ def the_channels_described(channels: Sequence[str | Channel], dtype: str) -> lis
     """Name and colour each channel, in the form a reader expects.
 
     The colours and the brightness window are built by
-    :class:`~zmart_viewer.live.record.model.Channel`, which is the one place in this project
+    :class:`~zmart_viewer.live.record.vocabulary.Channel`, which is the one place in this project
     that decides what a channel's description should look like. Writing a second
     version of that here would be how the two quietly drift apart, and a
     description with an incomplete brightness window is refused outright by
@@ -410,7 +410,7 @@ def the_image_description(
             complete canonical pyramid; a virtual view may pass its advertised
             subset without changing the sealed profile.
         channels: the colours of light the run records, either as plain names or
-            as prepared :class:`~zmart_viewer.live.record.model.Channel` values. A run that
+            as prepared :class:`~zmart_viewer.live.record.vocabulary.Channel` values. A run that
             knows roughly how bright its images are should pass prepared channels
             with a brightness window, or the position opens looking almost black.
         origin_pixels: where this position's first voxel sits, counted in
@@ -590,7 +590,7 @@ def describe_the_position(
         levels: the pyramid levels present below ``store``. By default every
             canonical level in the profile is required and described.
         channels: the colours of light the run records, as names or as prepared
-            :class:`~zmart_viewer.live.record.model.Channel` values.
+            :class:`~zmart_viewer.live.record.vocabulary.Channel` values.
         origin_pixels: where this position's first voxel sits, counted in
             full-resolution pixels from the corner of the run. For a live run
             this is ``layout.placement(position_id).origin``. Left out, the image

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import zarr
 from test_acquired_composition import region, source
-from zmart_viewer.picture.compose import (
+from zmart_viewer.picture.arrangement import (
     MEAN_CROP_REDUCTION,
     Composer,
     Mosaic,
@@ -18,7 +18,7 @@ from zmart_viewer.picture.compose import (
     read_the_mosaic_as_written,
     the_mosaic_written_down,
 )
-from zmart_viewer.views.published import STORE, PublishedTransfer
+from zmart_viewer.views.publishing import STORE, PublishedTransfer
 
 
 @pytest.mark.parametrize(

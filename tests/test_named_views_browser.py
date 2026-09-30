@@ -7,9 +7,9 @@ from pixels import image_middle
 from test_manifest_refresh_browser import _wait_for_picture
 from test_transparent_2d_browser import READ_ALPHA
 from test_view_sampling import write_tile
-from zmart_viewer.picture.compose import MEAN_REDUCTION
+from zmart_viewer.picture.arrangement import MEAN_REDUCTION
 from zmart_viewer.serving.server import make_server
-from zmart_viewer.views.named import ViewSet
+from zmart_viewer.views.slice_top_projection import ViewSet
 
 
 @pytest.mark.parametrize("bake", [False, True])

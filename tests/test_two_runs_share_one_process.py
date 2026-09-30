@@ -21,10 +21,10 @@ VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.live.record.coordinator import LivePublisher  # noqa: E402
-from zmart_viewer.live.record.model import GridCell  # noqa: E402
-from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
-from zmart_viewer.picture.building import GovernedRun  # noqa: E402
+from zmart_viewer.live.record.publisher import LivePublisher  # noqa: E402
+from zmart_viewer.live.record.storage_plans import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.vocabulary import GridCell  # noqa: E402
+from zmart_viewer.picture.built_picture import GovernedRun  # noqa: E402
 
 FRAME = 384
 

@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import tomllib
 from test_view_sampling import write_tile
-from zmart_viewer.views.named import ViewSet
+from zmart_viewer.views.slice_top_projection import ViewSet
 
 
 def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
@@ -23,7 +23,7 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
         target = checkout / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(repo / name, target)
-    shutil.copytree(built_dist, checkout / "app/page/dist")
+    shutil.copytree(built_dist, checkout / "interface/dist")
     positions = tmp_path / "positions"
     positions.mkdir()
     write_tile(positions, "p.ome.zarr", np.full((1, 1, 3, 8, 8), 40000, dtype="uint16"))
@@ -86,8 +86,11 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
                 for p in (repo / "engine").rglob("*.py")
             }
         )
-        expected_files.update({f"drawing/{name}": (repo / "engine" / "drawing" / name).read_bytes()
-                               for name in ("embedding.js", "neuroglancer-growth.mjs")})
+        # The whole of the engine's drawing code ships in the wheel, so that an
+        # interface built elsewhere can import it from the installed package.
+        expected_files.update({f"drawing/{p.name}": p.read_bytes()
+                               for p in (repo / "engine" / "drawing").iterdir()
+                               if p.suffix in (".js", ".mjs", ".css")})
         assert packaged == expected_files, (
             "Wheel must contain exactly this build, with no retired assets"
         )
@@ -122,7 +125,7 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
 import importlib.metadata, pathlib, re, tempfile, threading, urllib.request, os, json
 import zmart_viewer
 from zmart_viewer.serving.server import make_server, _FRONTEND_DIST
-from zmart_viewer.views.named import ViewSet
+from zmart_viewer.views.slice_top_projection import ViewSet
 assert 'installed' in pathlib.Path(zmart_viewer.__file__).parts
 assert importlib.metadata.version('zmart-viewer') == os.environ['ZMART_TEST_VERSION']
 assert _FRONTEND_DIST.name == '_frontend'

@@ -49,7 +49,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyGrowthPatches } from "../../../engine/drawing/neuroglancer-growth.mjs";
+import { applyGrowthPatches } from "../engine/drawing/neuroglancer-growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "..", "node_modules", "neuroglancer", "lib");
@@ -189,7 +189,7 @@ for (const patch of PATCHES) {
       console.error(
         `${file} still carries the superseded patch generation. Reinstall the `
         + "package so this one applies to stock sources:\\n\\n"
-        + "    rm -rf app/page/node_modules/neuroglancer && npm --prefix app/page install\\n",
+        + "    rm -rf node_modules/neuroglancer && npm install\\n",
       );
       failed = true;
       continue;

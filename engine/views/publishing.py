@@ -18,14 +18,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import NamedTuple
 
-from zmart_viewer.opening.library import _description_file, _read_attrs_at, discover
-from zmart_viewer.picture.acquired import AcquiredRegion, canonical_regions
-from zmart_viewer.picture.building import (
-    ComposedPicture,
-    _after_a_windows_reader,
-    _holding_the_bake_lock,
-)
-from zmart_viewer.picture.compose import (
+from zmart_viewer.opening.open_folders import _description_file, _read_attrs_at, discover
+from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
+from zmart_viewer.picture.arrangement import (
     Composer,
     Mosaic,
     _read_one_tile,
@@ -34,6 +29,11 @@ from zmart_viewer.picture.compose import (
     the_frame_room_of,
     the_mosaic_written_down,
     uses_legacy_mean,
+)
+from zmart_viewer.picture.built_picture import (
+    ComposedPicture,
+    _after_a_windows_reader,
+    _holding_the_bake_lock,
 )
 
 STORE = ".zmart-viewer/overview.ome.zarr"
@@ -264,7 +264,7 @@ class PublishedFolders:
         if composition is not None and versions is None:
             raise ValueError("Acquired composition needs explicit completed source revisions")
         if views is not None:
-            from zmart_viewer.views.named import ViewSet
+            from zmart_viewer.views.slice_top_projection import ViewSet
 
             if composition is None or versions is None:
                 raise ValueError("Named views require explicit coverage and completed revisions")

@@ -17,7 +17,7 @@ import urllib.request
 
 import numpy as np
 from pointed_by_hand import a_small_scene, a_tile, decoded, the_tiles_bytes
-from zmart_viewer.serving import pieces
+from zmart_viewer.serving import picture_pieces as pieces
 from zmart_viewer.serving.server import make_server
 
 

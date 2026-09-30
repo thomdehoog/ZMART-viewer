@@ -12,7 +12,7 @@ stored a second time. When the viewer asks for a piece of it, something has to
 say which file already holds those exact bytes, where in that file they start,
 and how many of them there are.
 
-:mod:`zmart_viewer.live.record.shardlink` can answer that question for a single chunk of a
+:mod:`zmart_viewer.live.record.shard_lookup` can answer that question for a single chunk of a
 single position, and it has been proven against real files. What was missing was
 the step in front of it: turning *"the viewer wants piece (0, 0, 3, 8, 8) of the
 view"* into *"that is chunk (0, 0, 3, 8, 0) of the position in this folder"*, and
@@ -21,7 +21,7 @@ then into a byte range. This module is that step.
 The one number everything turns on
 ----------------------------------
 
-A position written by :func:`zmart_viewer.live.record.profiles.plan_the_writing` keeps its
+A position written by :func:`zmart_viewer.live.record.storage_plans.plan_the_writing` keeps its
 pixels in two nested sizes, and telling them apart is the whole of this module.
 
 * The **chunk** is the small piece the picture is really cut into — 128 pixels
@@ -105,8 +105,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from zmart_viewer.live.record.model import ZmartLiveError
-from zmart_viewer.live.record.shardlink import Bundling, Held, StoredArray, how_the_array_is_stored
+from zmart_viewer.live.record.shard_lookup import (
+    Bundling,
+    Held,
+    StoredArray,
+    how_the_array_is_stored,
+)
+from zmart_viewer.live.record.vocabulary import ZmartLiveError
 
 __all__ = [
     "Claim",
@@ -305,7 +310,7 @@ def _the_description_of(array: Path) -> dict:
 def _how_a_position_is_stored(array: Path) -> _HowAPositionIsStored:
     """Read one level of one position: its chunk grid, its bundling, its encoding.
 
-    The geometry comes from :func:`zmart_viewer.live.record.shardlink.how_the_array_is_stored`,
+    The geometry comes from :func:`zmart_viewer.live.record.shard_lookup.how_the_array_is_stored`,
     which is the part that has been proven against real files. What is added here
     is the encoding: the kind of number a pixel is, and what is done to a chunk on
     its way to disk. Those are what the view has to declare about itself.
@@ -540,7 +545,7 @@ class ViewRoute:
     again for every piece would be pure waste.
 
     A position's table of contents is looked after in
-    :mod:`zmart_viewer.live.record.shardlink` rather than here, and it is worth knowing how,
+    :mod:`zmart_viewer.live.record.shard_lookup` rather than here, and it is worth knowing how,
     because an earlier version of this class deliberately refused to keep one. The
     worry then was a live run: chunks are still landing in a bundle while the
     viewer is watching, and a table kept from an hour ago would go on saying
@@ -629,7 +634,7 @@ class ViewRoute:
         An empty answer means no position covers that ground, and it is
         ordinary rather than a fault — as is asking beyond the edge of the
         picture, which a viewer rounding a screenful up to whole chunks does
-        constantly. A :class:`~zmart_viewer.live.record.model.ZmartLiveError` is raised when
+        constantly. A :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` is raised when
         the coordinate names the wrong number of axes or is negative.
         """
         wanted = _whole_numbers(chunk_coordinate, "chunk coordinate")
@@ -681,7 +686,7 @@ class ViewRoute:
             holds no specimen.
 
         What can go wrong
-            A :class:`~zmart_viewer.live.record.model.ZmartLiveError` is raised when the
+            A :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` is raised when the
             coordinate names the wrong number of axes or is negative, and when a
             bundle turns out to be damaged or cut short. A piece that is merely
             absent never raises.
@@ -756,7 +761,7 @@ def route_the_view(
         older recording of shared ground is deliberately wanted.
 
     What can go wrong
-        A :class:`~zmart_viewer.live.record.model.ZmartLiveError` is raised when no positions
+        A :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` is raised when no positions
         are given, when they were not all written the same way, when one of them
         does not land on whole chunks, or when the view is asked for part of a
         position that is not there.
@@ -842,7 +847,7 @@ def the_bytes_of(serving: Serving) -> bytes:
     acquisition wrote them, and the viewer's own engine turns them back into
     pixels exactly as it would for an ordinary image.
 
-    Raises :class:`~zmart_viewer.live.record.model.ZmartLiveError` when fewer bytes are there
+    Raises :class:`~zmart_viewer.live.record.vocabulary.ZmartLiveError` when fewer bytes are there
     than the piece claims. That means the file has been truncated or is still
     being written, and handing over what was found would give the viewer a partly
     decoded chunk rather than an error.

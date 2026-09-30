@@ -9,7 +9,7 @@ import pytest
 import zarr
 from test_view_sampling import write_tile
 from zmart_viewer.serving.server import make_server
-from zmart_viewer.views.named import ViewSet
+from zmart_viewer.views.slice_top_projection import ViewSet
 
 
 @pytest.mark.parametrize("spacing", [1, 2.5, 4])

@@ -20,10 +20,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { rename } from "node:fs/promises";
 import { statSync } from "node:fs";
-import { workerEntry } from "../../engine/drawing/neuroglancer-growth.mjs";
+import { workerEntry } from "../engine/drawing/neuroglancer-growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const lib = join(here, "node_modules", "neuroglancer", "lib");
+const lib = join(here, "..", "node_modules", "neuroglancer", "lib");
 
 // The two worker entry points neuroglancer launches at runtime.
 const workers = ["chunk_worker.bundle.js", "async_computation.bundle.js"];

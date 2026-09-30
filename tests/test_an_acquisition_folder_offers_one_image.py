@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 from pointed_by_hand import a_pointed_view, a_tile, decoded
-from zmart_viewer.opening.library import Library
-from zmart_viewer.serving.pieces import pointed_bytes_behind
+from zmart_viewer.opening.open_folders import Library
+from zmart_viewer.serving.picture_pieces import pointed_bytes_behind
 
 
 def _an_acquisition_folder(folder):

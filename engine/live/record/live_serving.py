@@ -9,7 +9,7 @@ the run manifest says that exact unit is published.
 
 For the linked view it also completes the zero-copy route.  A view chunk is
 answered by an encoded inner chunk inside a canonical position's shard, using
-:mod:`zmart_viewer.live.record.viewroute`; no pixel is decoded or copied.  Where positions
+:mod:`zmart_viewer.live.record.view_routes`; no pixel is decoded or copied.  Where positions
 overlap, the route's claims are walked newest first and the newest **published**
 claim answers — so a position that is written and routed but not yet committed
 neither appears early nor blanks the published ground it is about to take over.
@@ -25,18 +25,18 @@ from pathlib import Path
 
 from zmart_viewer.live.record.identity import load_a_layout_revision, load_the_profile
 from zmart_viewer.live.record.manifest import RunManifest
-from zmart_viewer.live.record.model import (
-    AcquisitionProfile,
-    SceneLayoutRevision,
-    ZmartLiveError,
-    rounded_up,
-)
-from zmart_viewer.live.record.viewroute import (
+from zmart_viewer.live.record.view_routes import (
     Placed,
     Serving,
     ViewRoute,
     refuse_a_view_stored_differently,
     route_the_view,
+)
+from zmart_viewer.live.record.vocabulary import (
+    AcquisitionProfile,
+    SceneLayoutRevision,
+    ZmartLiveError,
+    rounded_up,
 )
 
 __all__ = [

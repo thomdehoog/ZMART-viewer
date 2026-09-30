@@ -71,11 +71,11 @@ sys.path.insert(0, str(_VIZ.parent))
 
 import numpy as np  # noqa: E402
 import watching  # noqa: E402
-from zmart_viewer.live.record.coordinator import LivePublisher  # noqa: E402
-from zmart_viewer.live.record.model import CommitEvent, GridCell  # noqa: E402
-from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
-from zmart_viewer.picture.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.serving import pieces as served  # noqa: E402
+from zmart_viewer.live.record.publisher import LivePublisher  # noqa: E402
+from zmart_viewer.live.record.storage_plans import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.vocabulary import CommitEvent, GridCell  # noqa: E402
+from zmart_viewer.picture.built_picture import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.serving import picture_pieces as served  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
 
@@ -316,7 +316,7 @@ def main() -> int:
     server = make_server(
         port=0,
         data_dir=shown,
-        site_dir=_VIZ / "app" / "page" / "dist",
+        site_dir=_VIZ / "interface" / "dist",
         store=[store.name],
         window=(0, BRIGHT[0]),
     )

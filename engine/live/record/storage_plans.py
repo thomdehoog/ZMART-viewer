@@ -30,7 +30,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 from zmart_viewer.live.record.identity import name_for_a_profile
-from zmart_viewer.live.record.model import (
+from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     FrozenMap,
     LevelGeometry,

@@ -18,16 +18,16 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
-from zmart_viewer.live.record.gateway import live_run_holding
-from zmart_viewer.picture.building import OURS, ComposedPicture, GovernedRun
-from zmart_viewer.picture.compose import (
+from zmart_viewer.live.record.live_serving import live_run_holding
+from zmart_viewer.picture.arrangement import (
     Composer,
     Mosaic,
     read_the_mosaic_as_written,
     read_the_transfer,
     the_piece_address,
 )
-from zmart_viewer.views.published import PublishedTransfer
+from zmart_viewer.picture.built_picture import OURS, ComposedPicture, GovernedRun
+from zmart_viewer.views.publishing import PublishedTransfer
 
 # The folder a view's list lived in for a while, beside the images rather than
 # inside one. Still read, so a run written that way keeps working.
@@ -471,7 +471,7 @@ def link_a_finished_run(run_root: str | Path, *, name: str = "linked") -> Path:
     a later commit makes the pointers stand aside (the governed picture
     serves), and calling this again refreshes them.
     """
-    from zmart_viewer.picture.building import GovernedRun, declare_a_governed_picture
+    from zmart_viewer.picture.built_picture import GovernedRun, declare_a_governed_picture
 
     run_root = Path(run_root).resolve()
     # The revision is read BEFORE the record: a commit landing while this map

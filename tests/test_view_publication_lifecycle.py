@@ -6,16 +6,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 from test_view_sampling import write_tile
-from zmart_viewer.opening.library import Library
-from zmart_viewer.views import named as views
-from zmart_viewer.views.published import PublishedFolders
+from zmart_viewer.opening.open_folders import Library
+from zmart_viewer.views import slice_top_projection as views
+from zmart_viewer.views.publishing import PublishedFolders
 
 CANVAS = {"x_um": [0, 8], "y_um": [0, 8]}
 COMPOSITION = {"regions": "complete", "order": ["p.ome.zarr"]}
 
 
 def test_named_identity_never_adopts_unknown_legacy_geometry():
-    from zmart_viewer.opening.library import _same_acquisition
+    from zmart_viewer.opening.open_folders import _same_acquisition
 
     assert not _same_acquisition(None, "a")
     assert not _same_acquisition("a", None)
@@ -249,7 +249,7 @@ def test_source_owner_survives_registry_restart(tmp_path):
 
 def test_split_legacy_dataset_never_inherits_another_datasets_publication(tmp_path):
     import zarr
-    from zmart_viewer.views.published import STACK_STORE
+    from zmart_viewer.views.publishing import STACK_STORE
 
     write_tile(tmp_path, "a.ome.zarr", np.ones((1, 1, 2, 8, 8), dtype="uint16"))
     tile = write_tile(tmp_path, "b.ome.zarr", np.full((1, 1, 2, 8, 8), 9, dtype="uint16"))

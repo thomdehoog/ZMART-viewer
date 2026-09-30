@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import zarr
 from record_fixtures import a_live_run, prepare_without_publishing, some_specimen
-from zmart_viewer.picture.building import GovernedRun
-from zmart_viewer.picture.compose import Composer, Copy, Mosaic, Tile
+from zmart_viewer.picture.arrangement import Composer, Copy, Mosaic, Tile
+from zmart_viewer.picture.built_picture import GovernedRun
 from zmart_viewer.serving import coverage
 from zmart_viewer.serving.server import make_server
 

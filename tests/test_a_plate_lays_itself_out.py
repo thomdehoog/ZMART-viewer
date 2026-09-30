@@ -30,12 +30,12 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer.picture.building import (  # noqa: E402
+from zmart_viewer.picture.arrangement import read_the_transfer  # noqa: E402
+from zmart_viewer.picture.built_picture import (  # noqa: E402
     declare_a_built_picture,
     the_scene_folder_name,
 )
-from zmart_viewer.picture.compose import read_the_transfer  # noqa: E402
-from zmart_viewer.serving import pieces as served  # noqa: E402
+from zmart_viewer.serving import picture_pieces as served  # noqa: E402
 
 FIELD = (2, 32, 32)  # planes, height, width of one field
 VOXEL_UM = (1.0, 0.5, 0.5)

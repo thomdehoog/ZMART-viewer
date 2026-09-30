@@ -21,12 +21,12 @@ from typing import Any
 
 from zmart_viewer.live.record.identity import load_a_layout_revision, load_the_profile
 from zmart_viewer.live.record.manifest import CommittedState, RunManifest
-from zmart_viewer.live.record.model import CommitEvent, ZmartLiveError
 from zmart_viewer.live.record.scene import (
     NeuroglancerScene,
     build_the_scene,
     compile_for_neuroglancer,
 )
+from zmart_viewer.live.record.vocabulary import CommitEvent, ZmartLiveError
 
 __all__ = [
     "FRONTEND_STATE_SCHEMA",

@@ -17,7 +17,7 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from zmart_viewer.opening.library import Library
+from zmart_viewer.opening.open_folders import Library
 from zmart_viewer.serving.server import make_server
 
 

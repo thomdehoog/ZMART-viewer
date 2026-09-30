@@ -5,9 +5,10 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from zmart_viewer.opening.library import Library
-from zmart_viewer.serving import coverage, pieces
-from zmart_viewer.views.published import STORE, PublishedFolders, PublishedTransfer
+from zmart_viewer.opening.open_folders import Library
+from zmart_viewer.serving import coverage
+from zmart_viewer.serving import picture_pieces as pieces
+from zmart_viewer.views.publishing import STORE, PublishedFolders, PublishedTransfer
 
 
 def write_position(folder, name, x, value, *, frames=1, channels=1, depth=1):

@@ -12,11 +12,12 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pytest
 from test_view_sampling import write_tile
-from zmart_viewer.serving import coverage, pieces
+from zmart_viewer.serving import coverage
+from zmart_viewer.serving import picture_pieces as pieces
 from zmart_viewer.serving.server import make_server
-from zmart_viewer.views.named import ViewSet
 from zmart_viewer.views.projections import write_projection
-from zmart_viewer.views.published import PublishedTransfer
+from zmart_viewer.views.publishing import PublishedTransfer
+from zmart_viewer.views.slice_top_projection import ViewSet
 
 
 def test_legacy_baked_levels_beyond_original_pyramid_remain_readable(tmp_path):
@@ -36,7 +37,7 @@ def test_legacy_baked_levels_beyond_original_pyramid_remain_readable(tmp_path):
 
 
 def test_all_view_subsets_and_independent_runs():
-    module = Path(__file__).resolve().parents[1] / "app/page/src/named-views.js"
+    module = Path(__file__).resolve().parents[1] / "engine/drawing/embedding.js"
     run = subprocess.run(
         [
             "node",

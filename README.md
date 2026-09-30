@@ -24,18 +24,20 @@ drives the microscope.
 
 The ZMART Viewer is two things in one repository:
 
-1. **A viewing engine** (`engine/`, installed as the Python package `zmart_viewer`). It reads OME-Zarr images, places each
-   position where it belongs, follows a folder while a microscope writes into it,
-   and serves only the pieces of the picture that are on screen, so even enormous
-   data feels light. It also offers named views of an acquisition: **Slice** (one
-   plane at a time), **Top** (the surface seen from above) and **Min/Max/Sum**
-   projections.
+1. **A viewing engine** (`engine/`, installed as the Python package `zmart_viewer`).
+   It reads OME-Zarr images, places each position where it belongs, follows a
+   folder while a microscope writes into it, and serves only the pieces of the
+   picture that are on screen, so even enormous data feels light. It draws through
+   [neuroglancer](https://github.com/google/neuroglancer) with neuroglancer's own
+   controls switched off, and it offers named views of an acquisition: **Slice**
+   (one plane at a time), **Top** (the surface seen from above) and
+   **Min/Max/Sum** projections.
 
-2. **A window** (`interface/`, built on [neuroglancer](https://github.com/google/neuroglancer)).
-   Sliders through depth (Z) and time (T), a panel to set each channel's colour
-   and contrast, a load window to choose data, and a 3-D view. It opens as its own
-   desktop window and never talks to a microscope, so it can be used on anybody's
-   data, on any machine, with no possibility of disturbing an experiment.
+2. **A window** (`interface/`). Sliders through depth (Z) and time (T), a panel
+   to set each channel's colour and contrast, a load window to choose data, and a
+   3-D view. It opens as its own desktop window and never talks to a microscope,
+   so it can be used on anybody's data, on any machine, with no possibility of
+   disturbing an experiment.
 
 Smart-microscopy interfaces use the engine and bring their own window. The ZMART
 operator window in [ZMART Microscopy](https://github.com/thomdehoog/ZMART-microscopy)

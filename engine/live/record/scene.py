@@ -105,7 +105,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from zmart_viewer.live.record.manifest import CommittedState
-from zmart_viewer.live.record.model import (
+from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     FrozenMap,
     GridCell,

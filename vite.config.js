@@ -2,15 +2,21 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  // The interface is the page; the engine's drawing code sits beside it and is
+  // imported by relative path, so the build must be allowed to read outside
+  // the page's own folder.
+  root: "interface",
   plugins: [react()],
 
   // --- production build ---
   build: {
+    outDir: "dist",
+    emptyOutDir: true,
     // Emit the engine's background worker as a real file, never inlined as a
     // data: URL. A data:-URL worker has no origin, so absolute-path fetches from
     // inside it (how the worker loads image chunks) cannot resolve — metadata
     // would load but pixels never would. (The workers themselves are compiled
-    // ahead of time by precompile-workers.mjs; see that file and docs/measured/SPIKE_RESULTS.md.)
+    // ahead of time by scripts/precompile-workers.mjs; see that file.)
     assetsInlineLimit: 0,
   },
 
@@ -22,6 +28,7 @@ export default defineConfig({
     exclude: ["neuroglancer"],
   },
   server: {
+    fs: { allow: [".."] },
     // Under `vite dev` the frontend runs on Vite's own port; anything it asks
     // for under /data (the image volume) or /api (Python) is forwarded to the
     // Python server on 8848, so the browser sees a single origin. The shipped

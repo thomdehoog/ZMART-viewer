@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from zmart_viewer.opening.library import (
+from zmart_viewer.opening.open_folders import (
     DESCRIPTION_FILES,
     _moments_folder,
     _read_attrs_at,
@@ -215,14 +215,14 @@ def _samples(store: Path, *, channel: int | None = None):
 
 def _a_built_pictures_values(store: str | Path, level: int, box, channel: int | None):
     """A built picture's pixels inside the share of it on screen, or None."""
-    from zmart_viewer.serving.pieces import the_values_inside
+    from zmart_viewer.serving.picture_pieces import the_values_inside
 
     return the_values_inside(Path(store), level, box, channel=channel or 0)
 
 
 def _a_built_pictures_sample(store: str | Path, channel: int | None):
     """The composer's own sample of a built picture, or None outside one."""
-    from zmart_viewer.serving.pieces import a_sample_behind
+    from zmart_viewer.serving.picture_pieces import a_sample_behind
 
     return a_sample_behind(Path(store), channel=channel or 0)
 

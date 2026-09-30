@@ -27,7 +27,7 @@ from grid_scans import (  # noqa: E402
     _post,
 )
 from test_open_and_close import _store  # noqa: E402
-from zmart_viewer.picture.building import the_scene_folder_name  # noqa: E402
+from zmart_viewer.picture.built_picture import the_scene_folder_name  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
 

@@ -20,7 +20,7 @@ from pixels import fraction_lit
 # Importing the server put the building folder on ``sys.path``; the naming
 # rule below is the one every built view follows, so no test spells the
 # ``.zmartview.zarr`` suffix by hand.
-from zmart_viewer.picture.building import the_scene_folder_name  # noqa: E402
+from zmart_viewer.picture.built_picture import the_scene_folder_name  # noqa: E402
 from zmart_viewer.serving.server import make_server
 
 
@@ -805,7 +805,7 @@ class TestRelinking:
         run = tmp_path / "surveyrun"
         run.mkdir()
         _store(run / "surveyrun_pos001.ome.zarr", channels=1)
-        from zmart_viewer.picture.building import declare_a_built_picture
+        from zmart_viewer.picture.built_picture import declare_a_built_picture
 
         store = declare_a_built_picture(run / "views", run, name="surveyrun")
         shutil.move(str(run / "surveyrun_pos001.ome.zarr"), str(tmp_path / "elsewhere.ome.zarr"))

@@ -8,15 +8,15 @@ from test_acquired_composition import source
 from test_published_acquired import CANVAS
 from test_server import request
 from zmart_viewer.serving.server import make_server
-from zmart_viewer.views.published import STACK_STORE, PublishedTransfer
+from zmart_viewer.views.publishing import STACK_STORE, PublishedTransfer
 
 
 @pytest.mark.parametrize("preloaded", [False, True])
 def test_concurrent_folder_and_store_opens_share_owner(tmp_path, preloaded):
     from concurrent.futures import ThreadPoolExecutor
 
-    from zmart_viewer.opening.library import Library
-    from zmart_viewer.views.published import PublishedFolders
+    from zmart_viewer.opening.open_folders import Library
+    from zmart_viewer.views.publishing import PublishedFolders
 
     source(tmp_path, "a.ome.zarr", 120)
     library = Library()

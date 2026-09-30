@@ -97,7 +97,7 @@ up the microscope.
 ## 3. Put the picture on your page
 
 Your interface brings its own controls: sliders, channel settings, and
-whatever else your experiment needs. The viewer's own window (`app/page`) is
+whatever else your experiment needs. The viewer's own window (`interface/`) is
 not part of this; it is the interface for people who use the viewer on its
 own. The picture itself is drawn by [neuroglancer](https://github.com/google/neuroglancer),
 the one drawing engine the viewer supports.

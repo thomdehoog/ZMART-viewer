@@ -41,8 +41,8 @@ sys.path.insert(0, str(VIZ))
 
 from PIL import Image  # noqa: E402
 from test_a_transfer_is_built_into_one_picture import PIECE, STEP_UM, _write_a_tile  # noqa: E402
-from zmart_viewer.picture.building import declare_a_built_picture  # noqa: E402
-from zmart_viewer.serving import pieces as served  # noqa: E402
+from zmart_viewer.picture.built_picture import declare_a_built_picture  # noqa: E402
+from zmart_viewer.serving import picture_pieces as served  # noqa: E402
 
 sys.path.insert(0, str(VIZ))
 from zmart_viewer.serving.server import make_server  # noqa: E402

@@ -31,7 +31,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import a_governed_run as harness  # noqa: E402
-from zmart_viewer.picture.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.picture.built_picture import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
 
@@ -81,7 +81,7 @@ def _serving(tmp_path: Path):
     server = make_server(
         port=0,
         data_dir=shown,
-        site_dir=_VIZ / "app" / "page" / "dist",
+        site_dir=_VIZ / "interface" / "dist",
         store=[store.name],
         window=harness.BRIGHT,
         live=True,

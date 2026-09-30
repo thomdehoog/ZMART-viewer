@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zmart_viewer.live.following import LIVE_PICTURE, the_live_picture_declared
-from zmart_viewer.live.record.gateway import live_run_holding
-from zmart_viewer.opening.library import DESCRIPTION_FILES, is_store
+from zmart_viewer.live.record.live_serving import live_run_holding
+from zmart_viewer.opening.open_folders import DESCRIPTION_FILES, is_store
 
 
 class CannotOpen(Exception):
@@ -71,7 +71,9 @@ def scene_behind_a_plate(target: Path) -> Path | None:
     if not target.is_dir():
         return None
 
-    from zmart_viewer.picture.compose import _the_description_of  # deferred: pulls numpy and zarr
+    from zmart_viewer.picture.arrangement import (
+        _the_description_of,  # deferred: pulls numpy and zarr
+    )
 
     try:
         described, _ = _the_description_of(target)
@@ -81,7 +83,7 @@ def scene_behind_a_plate(target: Path) -> Path | None:
     if not isinstance(described.get("plate"), dict):
         return None
 
-    from zmart_viewer.picture.building import (  # deferred
+    from zmart_viewer.picture.built_picture import (  # deferred
         declare_a_built_picture,
         the_scene_folder_name,
     )
@@ -116,7 +118,7 @@ def scene_behind_a_run(target: Path, scenes: Path | None) -> Path | None:
     if all(one.name.endswith(".zmartview.zarr") for one in inside):
         return None  # Saved alternatives are opened, never composed or generated here.
 
-    from zmart_viewer.picture.building import (  # deferred
+    from zmart_viewer.picture.built_picture import (  # deferred
         declare_a_built_picture,
         the_scene_folder_name,
     )

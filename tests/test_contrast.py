@@ -191,9 +191,9 @@ def test_measuring_an_unreadable_store_still_gives_a_usable_window(tmp_path):
 
 
 def a_linked_run(folder, *, channels=("channel 0",), value=1200):
-    from zmart_viewer.live.record.coordinator import LivePublisher
-    from zmart_viewer.live.record.model import GridCell
-    from zmart_viewer.live.record.profiles import plan_the_writing
+    from zmart_viewer.live.record.publisher import LivePublisher
+    from zmart_viewer.live.record.storage_plans import plan_the_writing
+    from zmart_viewer.live.record.vocabulary import GridCell
 
     frame = 384
     profile, _ = plan_the_writing("overview", frame=frame, z_planes=1, channels=channels)

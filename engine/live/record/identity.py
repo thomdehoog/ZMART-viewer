@@ -102,7 +102,7 @@ from pathlib import Path
 # which is why this reaches for a name the manifest keeps to itself.
 from zmart_viewer.live.record.manifest import _write_and_replace as _put_in_place_in_one_step
 from zmart_viewer.live.record.manifest import now_in_words
-from zmart_viewer.live.record.model import (
+from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     SceneLayoutRevision,
     ZmartLiveError,

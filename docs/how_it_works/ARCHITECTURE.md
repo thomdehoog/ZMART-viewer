@@ -20,7 +20,7 @@ start if you are new here.
 
 ## 1. The shape
 
-Neuroglancer is the engine and its own interface is switched off: `NeuroglancerView.jsx`
+Neuroglancer is the engine and its own interface is switched off: `engine/drawing/viewer.js`
 builds it with `makeMinimalViewer` and `showUIControls: false`, and `engine-chrome.css`
 suppresses what remains. Everything an operator sees is ours — the layer panel, the
 sliders, the targets list, the scale bar.
@@ -65,7 +65,7 @@ Two places where the deferral is done well and should be copied rather than dist
 - **A channel is one layer with many sources.** The engine composites the tiles; we never
   stitch. Measured live on a real mesoSPIM transfer: seven stores become one group with
   `Ch488` holding five sources and `Ch647` two.
-- **Contrast travels as control *values*, not as shader text.** `shaderFor` in `scene.js`
+- **Contrast travels as control *values*, not as shader text.** `shaderFor` in `engine/drawing/layers.js`
   declares the `invlerp` control with no particular value and `shaderControlsFor` sends the
   numbers separately, so dragging a contrast handle does not recompile a program on the
   graphics card.
@@ -160,7 +160,7 @@ datasets. Both `split_name` and `group_by_type` are gone.
 
 What decides whether two stores belong together is now read from *inside* them: the size of
 one voxel, and — where a store names its channels internally — the channel names. See
-`_acquisition_of` and `_same_acquisition` in `library.py`. The voxel size is the
+`_acquisition_of` and `_same_acquisition` in `engine/opening/open_folders.py`. The voxel size is the
 magnification the microscope actually used and cannot be anything else, whereas a folder
 can be renamed by anybody. So a run may invent a kind of scan nobody has heard of and call
 it anything at all, and it is still shown correctly.
@@ -171,7 +171,7 @@ each, so the answer is to open one of them rather than to wonder what happened. 
 one place the viewer declines to show something it was pointed at, and it is deliberate: a
 folder holding two acquisitions is usually a folder chosen one level too high.
 
-**A dataset is a first-class object.** `Dataset` in `library.py` is created by the load and
+**A dataset is a first-class object.** `Dataset` in `engine/opening/open_folders.py` is created by the load and
 carries its own number, folder, name, list of stores, channel list, whether it is live, and
 what kind of acquisition it is. The panel is given datasets and their channels rather than
 deriving both.
@@ -183,7 +183,7 @@ being written to — is opened as a dataset of its own rather than merged into t
 it. Refusing there would be no use: the request that would have carried the refusal finished
 long ago, and the target scan is usually the very thing the run was done for. So the two
 moments agree on what matters, that two acquisitions are never drawn as one row, and differ
-only in whether there is anybody left to tell. `_look_again` and `_place` in `library.py`
+only in whether there is anybody left to tell. `_look_again` and `_place` in `engine/opening/open_folders.py`
 set this out in full.
 
 Together these moved the viewer from *inferring* what the operator loaded to *being told*,
@@ -200,7 +200,7 @@ machinery to make a large folder feel faster than the engine can draw it.
 
 Mode is a property of a **dataset**, not of the server: an operator may watch a run in
 progress while last week's finished run is open beside it for comparison. The per-folder
-watch flag in `library.py` already works this way, so the code is closer to this than the
+watch flag in `engine/opening/open_folders.py` already works this way, so the code is closer to this than the
 server-level `live=` argument suggests; what is missing is that the mode is not carried by
 anything the operator can see or by anything the panel knows about.
 
@@ -210,7 +210,7 @@ The server: Python's own `http.server`, no framework, installable from conda wit
 exotic. The traversal guard, which resolves each request target and refuses anything that
 does not land inside an open folder. The separation from the microscope — no `/api/goto`,
 targets written to a file for the control application to read, and a test asserting no
-stage-moving endpoint exists. The pacing in `engine.js`. And the demonstrated
+stage-moving endpoint exists. The pacing in `engine/drawing/neuroglancer.js`. And the demonstrated
 render-and-navigate tests, which are the only things that catch a viewer that draws
 perfectly and ignores the mouse.
 
@@ -379,43 +379,47 @@ wants to know which one to open.
                               └────────────────┬────────────────────┘
                                                │ starts
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE FRONT — what you see            app/page/src/
+   THE INTERFACE — what you see          interface/   (only the viewer's own window)
  ══════════════════════════════════════════════════════════════════════════════
 
-     App.jsx ─────────────── holds the whole panel's state
-       ├── NeuroglancerView.jsx ── builds the engine (makeMinimalViewer);
-       │                            Neuroglancer's own interface is OFF
+     App.jsx ─────────────── holds the whole window's state, and the load window
+       ├── NeuroglancerView.jsx ── gives the engine an element to draw into
        ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
        ├── AxisSlider.jsx ─────── depth up the side, time along the bottom
        ├── ScaleBar.jsx ───────── how large the specimen really is
        └── TargetsPanel.jsx ───── places you mark, saved to a file
 
-     scene.js ── panel state  →  plain layer descriptions
-                 (no React and no browser in it — the easy part to check)
-     engine.js ─ applies those to the engine WITHOUT rebuilding the scene
+     A smart-microscopy interface replaces this whole folder with its own
+     page, and uses the engine below exactly as this one does.
 
  ══════════════════════════════════════════════▲══════════════════════════════
                                   HTTP         │  pieces, descriptions, events
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE MIDDLE — what answers            engine/   (imported as zmart_viewer)
+   THE ENGINE — what answers and draws   engine/   (imported as zmart_viewer)
  ══════════════════════════════════════════════════════════════════════════════
 
-     serving/   server.py ──── answers every request; guards the opened folder
-                pieces.py ──── "no file here?" → pointed or built bytes
-                coverage.py ── which ground was acquired, for transparency
-     opening/   loading.py ─── the one door: classify a path, open it right
-                library.py ─── what is open, and how stores are read
-                contrast.py ── without this, real acquisitions draw black
-     picture/   compose.py ─── the arrangement, and building pieces of it
-                building.py ── a picture written down; a governed one patched
-                acquired.py ── the regions that were really imaged
-     views/     named.py ───── Slice, Top, Min/Max/Sum
-                published.py ─ publishing an acquisition's pictures
-                projections.py writing a projection beside an image
-     live/      following.py ─ announce changes; adapt live runs
-                record/ ────── how a live run writes and publishes itself
-     drawing/   embedding.js ─ named views, for interfaces that draw for themselves
-     command.py ───────────── the zmart-viewer command: a window, or an address
+     drawing/   viewer.js ──────── creates neuroglancer with its own interface OFF
+                layers.js ──────── settings  →  plain layer descriptions
+                neuroglancer.js ── applies those to the viewer WITHOUT rebuilding
+                live-refresh.js ── what changed since the page last looked
+                embedding.js ───── the named views, for pages that draw for themselves
+                neuroglancer-growth.mjs  the patch that lets an image grow while shown
+
+     serving/   server.py ──────── answers every request; guards the opened folder
+                picture_pieces.py  "no file here?" → pointed or built bytes
+                coverage.py ────── which ground was acquired, for transparency
+     opening/   open_a_path.py ─── the one door: classify a path, open it right
+                open_folders.py ── what is open, and how stores are read
+                contrast.py ────── without this, real acquisitions draw black
+     picture/   arrangement.py ─── where each position goes, and building pieces of it
+                built_picture.py ─ a picture written down; a governed one patched
+                acquired_regions.py  the regions that were really imaged
+     views/     slice_top_projection.py  the named views
+                publishing.py ──── publishing an acquisition's pictures
+                projections.py ─── writing a projection beside an image
+     live/      following.py ───── announce changes; adapt live runs
+                record/ ────────── how a live run writes and publishes itself
+     command.py ─────────────────── the zmart-viewer command: a window, or an address
 
      tests/browsercheck.py ─ the safety net: serves the page, opens it,
                              reads the pixels that came out
@@ -424,11 +428,11 @@ wants to know which one to open.
    THE BACK — what is written            engine/live/record/
  ══════════════════════════════════════════════════════════════════════════════
 
-     coordinator.py ─ the publisher: pixels, pyramids, one commit each ┐
+     publisher.py ─── the publisher: pixels, pyramids, one commit each ┐
      ownership.py ─── who owns which piece of shared ground            ├ the record
      manifest.py ──── signed commits; what is published, in order      │
-     profiles.py ──── how one kind of acquisition is written           ┘
-     gateway.py ───── which bytes may answer for a published piece
+     storage_plans.py  how one kind of acquisition is written          ┘
+     live_serving.py ─ which bytes may answer for a published piece
      (the elder writers are retired; the formats they wrote are pinned
       by hand-written fixtures in tests/pointed_by_hand.py, against the
       viewer's own reading contracts)
@@ -457,7 +461,7 @@ are saved to a file beside the data, and the control application reads them from
 there. A test asserts that no stage-moving endpoint exists, so this cannot drift
 back in by accident.
 
-**`scene.js` and `engine.js` are separate on purpose.** One is pure translation —
+**`layers.js` and `neuroglancer.js` in `engine/drawing/` are separate on purpose.** One is pure translation —
 give it the panel's state and it hands back descriptions of layers, with no React
 and no browser involved — and the other holds the fiddly business of applying those
 to a live engine without rebuilding the scene. Splitting them is what made the
