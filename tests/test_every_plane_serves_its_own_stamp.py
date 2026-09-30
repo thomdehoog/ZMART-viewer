@@ -368,21 +368,10 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
 
 def test_every_door_parses_the_one_address():
     """The one-definition rule for the piece address, checked by identity."""
-    import importlib.util
-
     from zmart_viewer import pieces as served
     from zmart_viewer.compose import the_piece_address
 
-    # The transfer demo carries its own serving door; it must use the one
-    # parser too. Loaded by path, because demos are scripts, not a package.
-    spec = importlib.util.spec_from_file_location(
-        "the_transfer_door", _VIZ / "demos" / "serve_a_transfer.py"
-    )
-    transfer_door = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(transfer_door)
-
     assert served.the_piece_address is the_piece_address
-    assert transfer_door.the_piece_address is the_piece_address
     # And the parser itself: a flat address is frame (0, 0); a grown one
     # carries all six numbers; anything else is not a piece.
     assert the_piece_address("3/c/1/2/4") == (3, 0, 0, 1, 2, 4)

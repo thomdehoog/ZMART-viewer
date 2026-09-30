@@ -1735,7 +1735,7 @@ def make_server(
             "That usually means something else on this machine is already using "
             f"it — most often another copy of this viewer. Either close that one, "
             "or start this one on a different port:\n\n"
-            "    python run_demo.py --port 8849\n\n"
+            "    zmart-viewer --port 8849\n\n"
             "Any number between 1024 and 65535 that nothing else is using will do, "
             "and --port 0 lets the machine choose a free one for you and prints "
             "which it picked."
@@ -1748,7 +1748,7 @@ def make_server(
 def serve(port: int = 8848) -> None:
     """Run the server until interrupted. The viewer page will be at ``/``."""
     server = make_server(port)
-    print(f"ZMART Viz Studio serving on http://127.0.0.1:{server.server_address[1]}")
+    print(f"ZMART Viewer serving on http://127.0.0.1:{server.server_address[1]}")
 
     try:
         server.serve_forever()
@@ -1761,7 +1761,7 @@ def serve(port: int = 8848) -> None:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Serve the visualization studio.")
+    parser = argparse.ArgumentParser(description="Serve the ZMART Viewer engine without opening a window.")
     parser.add_argument("--port", type=int, default=8848)
     args = parser.parse_args()
     serve(args.port)

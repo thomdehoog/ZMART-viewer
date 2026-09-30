@@ -29,7 +29,7 @@ all. `originUm` read the outer place only, so every foreign image reported itsel
 as beginning at the stage's zero and a transfer of many tiles drew all of them on
 top of one another. Both are now composed the way the format says.
 
-That second one is the 898 micrometre fault of `parked/contract.md` §1a
+That second one is the 898 micrometre fault of an earlier prototype's notes §1a
 returning in the one form its fix did not cover: the readers had been taught this
 project's convention rather than the format's.
 
@@ -110,7 +110,7 @@ copies nest perfectly, the format is genuinely ambiguous, and a file that shifts
 itself to suit one reader is wrong for every other.
 
 The argument is principled and the cost is already written down in our own code.
-`parked/neuroglancer-under/viewer.js:1060-1078` records that neuroglancer applies
+an earlier prototype records that neuroglancer applies
 its half-voxel assumption per level, that we can only correct the finest level
 from JavaScript, and that a zoomed-out view is therefore up to half a screen pixel
 out. That comment already prescribes the cure — "the writer should say which
@@ -124,7 +124,7 @@ Worth reopening. The ecosystem has picked a side.
 
 ## 2. Culling by declared geometry rather than by the coverage record
 
-`parked/RESULTS.md` measures that on a sparse canvas three requests in four are
+an earlier prototype's notes measures that on a sparse canvas three requests in four are
 for ground nobody has imaged — 250 requests to draw one view, 190 of them for
 empty room. We answer that with `onlyWhereTheRunHasImaged`, which refuses a tile
 whose rectangle misses every region in the `coverage` record.
@@ -148,7 +148,7 @@ from:
 
 That middle row is why this matters here: a foreign transfer keeps no coverage
 record, so today it gets no bound at all. The bottom row is
-`parked/contract.md` §1a's own admitted gap — "coverage is **one** record for
+an earlier prototype's notes §1a's own admitted gap — "coverage is **one** record for
 the whole viewer … so it cannot describe two runs whose voxels are different
 sizes", which is why measurement 8 is taken unbounded "for that reason rather
 than by choice".
@@ -183,7 +183,7 @@ through the same transform as the image, it is nearly free and is automatically
 right for rotated tiles and fractional offsets.
 
 **Where we are right and should not change.** For a wide survey and a detail scan
-of part of it — the arrangement `parked/contract.md` §1a is built around — later-wins is
+of part of it — the arrangement an earlier prototype's notes §1a is built around — later-wins is
 the correct semantics, not a compromise. Blending a 10× survey into a 63× detail
 scan would be actively wrong.
 
@@ -205,7 +205,7 @@ for the nested case, which is what it is for.
 
 ## 4. A coupling of our own, found while comparing
 
-`parked/viv-inside/viewer.js:548` sets `own.umPerVoxel = own.opened[0].umPerVoxel`
+an earlier prototype sets `own.umPerVoxel = own.opened[0].umPerVoxel`
 and `stretchOntoTheSameWorld` places every acquisition in **voxels of whichever
 store the page listed first**. multiview-stitcher's world is abstract physical
 space that no view's grid owns.
@@ -217,7 +217,7 @@ anyway:
 * Viv chooses its pyramid level from the width of the model matrix, and rounds. So
   listing the survey first and listing the detail scan first can pick **different
   levels for the same store**. A latent surprise rather than a bug, and worth a
-  sentence in `parked/contract.md` §1a.
+  sentence in an earlier prototype's notes §1a.
 * A store carrying a rotation or a shear — which NGFF 0.4 cannot express but 0.5
   and neuroglancer both can — would be drawn axis-aligned, in the right *place*,
   silently. A guard that refuses or warns on a transform we cannot represent is

@@ -1,4 +1,4 @@
-"""Shared fixtures for the viz-studio tests.
+"""Shared fixtures for the viewer tests.
 
 The backend is the ``zmart_viewer`` package at the repository root, so tests
 put that root on ``sys.path``; the checkout's parent is included as well

@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import http.client
 import json
-import sys
 import threading
 from pathlib import Path
 
@@ -37,11 +36,6 @@ from zmart_viewer.library import Library
 from zmart_viewer.server import group_labels, make_server
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
-if str(_VIZ_ROOT) not in sys.path:
-    # run_demo.py is the command an operator types, and one of the tests below is
-    # about what it prints. It sits beside the viewer rather than inside the
-    # backend, so it needs its own entry on the import path.
-    sys.path.insert(0, str(_VIZ_ROOT))
 
 # How coarse an overview is, and how fine a target scan of something found in it
 # is, in micrometres. These are the figures from a real run, and the only thing
@@ -459,17 +453,17 @@ class TestStartingTheViewerOnSuchAFolder:
         """
         if not (_VIZ_ROOT / "app" / "page" / "dist" / "index.html").exists():
             pytest.skip(
-                "app/page/dist is not built, so run_demo.py stops before it gets "
-                "as far as the folder — build it with "
+                "app/page/dist is not built, so the zmart-viewer command stops "
+                "before it gets as far as the folder — build it with "
                 "`npm --prefix app/page install && npm --prefix app/page run build`"
             )
-        import run_demo
+        from zmart_viewer import launcher
 
         folder = tmp_path / "mixed"
         _store(folder / "overview_pos001.ome.zarr")
         _store(folder / "targetscan_cell001.ome.zarr", voxel=TARGET_SCAN_VOXEL)
 
-        answer = run_demo.main(["--data", str(folder)])
+        answer = launcher.main([str(folder)])
         printed = capsys.readouterr().out
 
         assert answer == 1, "a refusal should leave the command reporting failure"
