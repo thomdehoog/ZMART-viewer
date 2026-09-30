@@ -19,8 +19,8 @@ depth axis, visible through stack navigation. Stacks subtract their specimen-fra
 `requested_stage_focus_z_um` provenance value. An explicit `z_references` map can
 override it; without either reference, the lowest stored plane is used. The
 reference need not coincide with a plane. Canonical positive-spacing plane order
-is preserved; Leica acquisition order is normalized by the writer, not reversed
-again here. No absolute-Z viewing mode is introduced.
+is preserved; a microscope's own acquisition order is normalized by the
+writer, not reversed again here. No absolute-Z viewing mode is introduced.
 
 XY is sampled onto the fixed specimen canvas's finest grid by nearest neighbour.
 For a fractional-pixel origin, the footprint moves by at most half a finest voxel

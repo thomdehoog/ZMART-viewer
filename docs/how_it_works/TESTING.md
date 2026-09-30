@@ -2,22 +2,26 @@
 
 ## The short version
 
-From the repository folder, with the test tools installed
-(`pip install -e .[dev]`) and the page built once
-(`npm install && npm run build`):
+From the repository folder, install the viewer with its test tools, and the
+browser the picture tests drive:
 
 ```
+pip install -e .[dev]
+python -m playwright install chromium
 python -m pytest tests
 ```
 
-That runs every test. The browser tests drive a real headless browser; on a
-machine without one, or without a graphics card, they skip and the rest still
-run. The first run takes a few minutes; after that it is quick.
+The built page is already in the repository (`gui/built/`), so the tests need
+no Node or npm. You need them only after changing the GUI's JavaScript; then
+run `npm install && npm run build` first.
 
-To test against a **real acquisition** as well, point it at an OME-Zarr store:
+The browser tests open the real viewer in a headless browser and read the
+pixels it drew. Where no browser can be started they skip, and the end of the
+run says plainly that no picture was looked at. **Before approving a release,
+run with a browser and make that a failure instead:**
 
 ```
-ZMART_TEST_STORE=/path/to/acquisition.ome.zarr python -m pytest tests
+ZMART_REQUIRE_BROWSER=1 python -m pytest tests
 ```
 
 Anything you add after the command goes straight to pytest, so you can run just
@@ -26,7 +30,6 @@ part of the suite while you work:
 ```
 python -m pytest tests -k omezarr     # only the OME-Zarr tests
 python -m pytest tests -v              # one line per test
-python -m pytest tests -s -k gpu       # print which GPU the renderer found
 ```
 
 ## Manifest-driven production refresh
@@ -57,18 +60,6 @@ A skip is not visual verification. The positive assertion that committed A
 remains measurably bright while uncommitted B stays invisible is load-bearing:
 it prevents a black screen from satisfying the publication gate.
 
-The deterministic mutation campaign deliberately sabotages premature serving,
-gapped time availability, damaged-state handling, source revision comparison,
-stable URLs and selective cache invalidation:
-
-```bash
-# ran from the microscopy checkout while the record machinery lived there;
-# its guard now belongs beside the record's own tests
-```
-
-It first proves each unmodified target is green, accepts only pytest's ordinary
-assertion-failure status as evidence, and restores every subject byte-for-byte.
-
 ## What runs, and what skips
 
 The suite is written so a plain machine stays green and a capable machine tests
@@ -83,21 +74,9 @@ reason. Three things decide what runs:
   The page must be built first (see above); without it they skip. They also
   need a Chromium, and the suite goes to some trouble to find one — see
   "Finding a browser this machine already has" below.
-- **When a GPU / real data is present.** Two tests only make sense on a real
-  machine, and live in `tests/test_gpu_realdata.py`:
-  - `test_webgl_is_hardware_accelerated` — confirms a graphics card, not
-    software, is drawing WebGL. It **skips** on a machine without one (you will
-    see "software WebGL renderer … no GPU on this machine"), so it is quiet in
-    CI and meaningful on the microscope PC. Run it with `-s` to print the exact
-    GPU it found.
-  - `test_real_store_channels_become_layers` and `test_real_store_renders` —
-    open the store named by `ZMART_TEST_STORE`, and check that every channel in
-    it becomes a layer and that the volume actually streams and renders. They
-    **skip** unless that variable is set.
-
-There is also a set of tests that run against a specific real mesoSPIM transfer
-on the lab's network share (`tests/test_real_mesospim_data.py`). They skip
-wherever that drive is not mounted, and run on the acquisition PC where it is.
+- **When there is a graphics card.** Without one, the browser draws in
+  software. The tests still pass, but they then measure this machine's
+  arithmetic rather than a real screen, and the end of the run says so.
 
 ## Finding the limit on how many positions a browser will carry
 
@@ -223,23 +202,15 @@ the whole machine is slow, both halves are slow and the ratio does not move.
 There are two tests in it and they say different things. One holds the line where
 the viewer is today, so that a further slide is noticed. The other states the rate
 that is actually wanted and is **expected to fail**, because the viewer pays a cost
-per position on every frame and that is not fixed — an earlier note kept in the repository's history records the
-cause and why the fix is an architectural change. The day somebody does fix it, that
+per position on every frame and that is not fixed; the test itself
+says why, and why the fix is an architectural change. The day somebody does fix it, that
 test will start passing, the run will say so, and the marker should come off.
 
-## Confirming the GPU is really being used
+## Confirming the graphics card is really being used
 
-The clearest single check:
-
-```
-python -m pytest tests -s -k hardware_accelerated
-```
-
-On a machine with a graphics card this prints the renderer, for example
-`WebGL renderer: NVIDIA GeForce …`, and passes. On a machine without one it
-skips and tells you it saw a software renderer. (For a second opinion outside
-the tests, open `chrome://gpu` in the same browser and look for "Hardware
-accelerated" next to WebGL2.)
+At the end of every run that opened a browser, the suite says which renderer
+drew the pictures. For a second opinion outside the tests, open `chrome://gpu`
+in the same browser and look for "Hardware accelerated" next to WebGL2.
 
 ## A note on speed
 
@@ -250,43 +221,21 @@ graphics card the same tests, and the viewer itself, run far faster. The test
 *results* (correct channels, safe serving, pixels reaching the renderer) hold on
 any machine; only the *timings* change.
 
-## Windows lab-PC setup (validated 2026-07-24)
+## On a managed Windows lab PC
 
-On a managed Windows PC, AppLocker may block native tools downloaded beneath a
-user profile or a temporary directory. Keep the Conda environment, Node build
-tools, Playwright browser, and test checkout beneath an approved installation
-directory. The setup validated on the ZMART workstation used:
+A managed Windows PC may block programs that were downloaded into a user
+profile or a temporary folder (AppLocker). Both the page build (Node, Vite,
+esbuild) and the browser tests (Playwright's Chromium) start such programs, so
+keep the Python environment, Node, the Playwright browser and the checkout
+beneath a folder the PC allows. A checkout under `C:\tmp`, a mapped network
+drive, or a browser download under `%LOCALAPPDATA%` may install without
+complaint and then fail with `spawn UNKNOWN`. Point Playwright at an allowed
+folder before installing its browser:
 
 ```bat
-conda activate ZMART-viewer
-conda install -c conda-forge nodejs esbuild
-npm install --global vite@7.0.0 esbuild@0.25.12
-set PLAYWRIGHT_BROWSERS_PATH=C:\ProgramData\MinicondaZMB\envs\ZMART-viewer\ms-playwright
-playwright install chromium
+set PLAYWRIGHT_BROWSERS_PATH=C:\an\allowed\folder\ms-playwright
+python -m playwright install chromium
 ```
-
-The checkout used for browser tests was placed below the same environment:
-
-```text
-C:\ProgramData\MinicondaZMB\envs\ZMART-viewer\src\ZMART-microscopy
-```
-
-This matters because both Vite/esbuild and Playwright launch native
-executables. A checkout under `C:\tmp`, a mapped network drive, or a browser
-download under `%LOCALAPPDATA%` may install successfully but then fail with
-`spawn UNKNOWN`.
-
-Validation recorded on **2026-07-24 at 11:29 Europe/Zurich** against commit
-`4ce2711`:
-
-```text
-140 passed, 2 skipped in 568.93s
-```
-
-The hardware-accelerated WebGL, interaction, layer-panel, render-acceptance,
-synthetic OME-Zarr, network-share mesoSPIM, server, and path-safety tests all
-passed. The only skipped tests required an explicit real acquisition through
-`ZMART_TEST_STORE`.
 
 ## Seeing it for real
 

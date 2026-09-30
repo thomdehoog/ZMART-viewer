@@ -72,7 +72,10 @@ def verify_products(view, inputs):
         output.close()  # No comparison against the compositor that populated the bake.
         made = output.composer()
         assert made.mosaic.frame_room == (2, 2)
-        assert made.mosaic.corner_um[0] == 0
+        # Slice keeps the specimen's own depth (this fixture sits at Z = 100 um);
+        # Top and the projections count planes from zero. See
+        # test_view_depth_coordinates.py for that contract.
+        assert made.mosaic.corner_um[0] == (100 if key == "slice" else 0)
         for level in range(3):
             shape = [2, 2, 4 if key in ("slice", "top") else 1, 8 >> level, 32 >> level]
             assert (

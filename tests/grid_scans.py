@@ -25,11 +25,18 @@ PLANES = 2
 STEP_UM = 320.0
 
 def _write_a_grid_tile(
-    store: Path, number: int, at_um: tuple[float, float], *, across: int | None = None
+    store: Path,
+    number: int,
+    at_um: tuple[float, float],
+    *,
+    across: int | None = None,
+    reduction: str = "nearest",
 ) -> None:
     """One position of a raw grid scan, bright enough to tell apart.
 
-    ``across`` makes the frame a rectangle rather than a square.
+    ``across`` makes the frame a rectangle rather than a square. ``reduction``
+    is how the smaller copies are said to be made: ``"nearest"`` picks pixels,
+    ``"mean"`` averages them, which is what the engine's baked overview needs.
     """
     store.mkdir(parents=True)
     picture = np.full((PLANES, FRAME, across or FRAME), 1500 + number * 800, "uint16")
@@ -65,7 +72,7 @@ def _write_a_grid_tile(
                         "multiscales": [
                             {
                                 "name": store.name,
-                                "type": "nearest",
+                                "type": reduction,
                                 "axes": [
                                     {"name": one, "type": "space", "unit": "micrometer"}
                                     for one in ("z", "y", "x")
@@ -83,14 +90,17 @@ def _write_a_grid_tile(
     )
 
 
-def _a_grid_scan(folder: Path, *, across: int = 2) -> Path:
+def _a_grid_scan(folder: Path, *, across: int = 2, reduction: str = "nearest") -> Path:
     """A raw dataset of ``across``-squared positions on a regular grid."""
     folder.mkdir(parents=True)
     number = 0
     for row in range(across):
         for column in range(across):
             _write_a_grid_tile(
-                folder / f"pos{number:02d}.ome.zarr", number, (row * STEP_UM, column * STEP_UM)
+                folder / f"pos{number:02d}.ome.zarr",
+                number,
+                (row * STEP_UM, column * STEP_UM),
+                reduction=reduction,
             )
             number += 1
     return folder

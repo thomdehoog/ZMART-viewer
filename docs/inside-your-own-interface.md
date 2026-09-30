@@ -61,14 +61,26 @@ opens quickly the next time.
 
 ## 2. Tell it what to show, and when something changed
 
-Open a folder of positions:
+Open a folder of positions as a *published* acquisition, one the engine keeps
+up to date as you tell it about new writes:
 
 ```json
 POST /api/stores/open
 {"path": "/path/to/run/positions",
+ "bake": true,
  "canvas": {"x_um": [0, 10000], "y_um": [0, 5000]},
  "source_revisions": {"P000.ome.zarr": 1}}
 ```
+
+`"bake": true` is what makes it a published acquisition. The engine then keeps a
+coarse overview of the whole canvas as files beside your data, in a folder
+called `.zmart-viewer/`, so that a survey of thousands of positions opens and
+zooms out quickly. Your own image files are never changed. The overview is made
+by averaging, so each position's own smaller copies must be averages too: its
+OME-Zarr description must say `"type": "mean"`. Positions whose copies were made
+any other way are refused, with the reason in the answer. Without `bake`, the
+folder opens as an ordinary folder of images, and the announcement below is
+refused with "No published folder is open".
 
 After every completed write, send the full current mapping of position to
 revision:

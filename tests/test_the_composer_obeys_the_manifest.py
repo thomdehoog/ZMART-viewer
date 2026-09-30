@@ -13,9 +13,9 @@ a mock manifest would let the composer agree with a simplification instead of
 with the thing that rules the microscope.
 
 The review that ordered this work is
-``building/REVIEW_the_composer_meets_the_live_role.md``; findings one, two,
+an earlier note (kept in the repository's git history); findings one, two,
 three and five are the contracts below. The independent review of the *plan*
-is ``building/REVIEW_PROMPT_change_zero_build_plan.md``.
+is an earlier note (kept in the repository's git history).
 """
 
 from __future__ import annotations

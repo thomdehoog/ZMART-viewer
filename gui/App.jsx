@@ -35,7 +35,7 @@ const LIVE_STATE_CHECK_MS = 10_000;
 // The engine names its panels after *display* axes -- the first, second and third
 // of the axes it has been handed, not the axes the image calls x, y and z. So
 // this name only means anything alongside the order those axes are handed over
-// in, which is settled in engine.js by `pinTheAxesThatMeasureDistance`. It hands
+// in, which is settled in neuroglancer.js by `pinTheAxesThatMeasureDistance`. It hands
 // them over width first, then height, then depth. With that order, "xy" puts width
 // across the window running to the right, height down it, and depth into the
 // screen -- the plane the operator scrolls through, drawn the same way round as
@@ -44,7 +44,7 @@ const LIVE_STATE_CHECK_MS = 10_000;
 // **The two must be changed together.** Either one on its own gives a view that
 // is edge-on or mirrored, and a mirrored view is the dangerous one because it
 // still looks like a good picture. The viewer shipped a mirrored one for months.
-// engine.js sets this out at length, and
+// neuroglancer.js sets this out at length, and
 // `tests/test_the_picture_is_not_mirrored.py` measures it off the screen.
 const SLICE_LAYOUT = "xy";
 const VOLUME_LAYOUT = "3d";
@@ -369,7 +369,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
           pyramid -- is kept now as a hard copy on disk, or composed from
           the raw data when someone looks. The recommendation is measured,
           not guessed: on the lab workstation
-          (docs/measured/MEASURED_the_ladder_of_surveys.md, the on-the-card table) the
+          (an earlier note (kept in the repository's git history), the on-the-card table) the
           bake costs 5.7 s at 1,024 positions of 384-pixel test tiles where
           the unbaked first look costs 7.7 s -- the crossover, at roughly
           150 megapixels of survey, a few dozen full camera frames. At
@@ -1435,7 +1435,7 @@ export default function App() {
 
   // Let the engine settle on a starting magnification once the images have said
   // how big they are. Declared ahead of the effect that adds the layers so the
-  // waiting is in place before there is anything to wait for; see engine.js for
+  // waiting is in place before there is anything to wait for; see neuroglancer.js for
   // what goes wrong without it.
   //
   // Until that first fit has run, the canvas is kept veiled: the engine
@@ -1504,9 +1504,9 @@ export default function App() {
     const reread = rereadWanted.current;
     rereadWanted.current = false;
     // The descriptions the panel just handed the engine, exactly as they were
-    // handed over. This exists for one test and is worth the line: `engine.js`
+    // handed over. This exists for one test and is worth the line: `neuroglancer.js`
     // carries every field of a description onto the live layer by hand, one line
-    // each, so a field added to `scene.js` and forgotten there is dropped in
+    // each, so a field added to `layers.js` and forgotten there is dropped in
     // silence -- three controls were found dead that way in a single afternoon.
     // A test can only guard against the *next* one if it can ask what fields are
     // in a description rather than being told a list somebody has to remember to
@@ -1716,10 +1716,10 @@ export default function App() {
 
   // A channel that arrives knowing nothing about its brightness — no
   // declared window, no measured histogram — is asked about as soon as its
-  // pixels exist. A replay's live channels are exactly this: the live view
+  // pixels exist. A live run's channels are exactly this: the live view
   // carries no display window, so they drew on the camera's whole range and
-  // the landing positions looked near-black (the operator watched dark
-  // replays, 2026-08-23). Each landing refreshes the config, so a channel
+  // the arriving positions looked near-black. Each landing refreshes the
+  // config, so a channel
   // whose pixels had not arrived yet is simply asked again on the next one.
   // An answer never lands over an operator's own setting: the moment a
   // window is set by hand the channel is marked touched, synchronously,

@@ -578,7 +578,7 @@ function syncSources(
   // looks free — same address in, same description out — but the engine
   // answers it by throwing the loaded source away first and reading the
   // description again from the server afterwards, and between those two
-  // moments the layer has nothing to draw. On a sequential replay that road
+  // moments the layer has nothing to draw. On a live run that road
   // ran at every landing: the whole picture went black for 100–300 ms,
   // sixteen times in a row — the flicker of 2026-08-23, photographed frame
   // by frame in Chromium before it was understood. Since the description
@@ -1454,7 +1454,7 @@ export function whenTheSourcesHaveSettled(viewer, ready, act) {
   // unreadable store having been dealt with as much as a perfect one -- before
   // the bounds are worth fitting to. ``ready`` guards the other direction:
   // a caller waiting for layers that have not even been HANDED OVER yet (a
-  // replay whose config just arrived) says so, or a look between the answer
+  // run whose config just arrived) says so, or a look between the answer
   // and the hand-over would find everything old settled and act too early.
   const settled = () =>
     ready() &&

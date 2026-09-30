@@ -66,7 +66,7 @@ export function createViewer(target) {
     // leave the picture floating on a black field inside a light page. The
     // colour comes from themeGround() — the same variable the stylesheet
     // uses — and is told again whenever the Light/Dark button changes the
-    // page's dress. (syncView in engine.js re-asserts the same reading on
+    // page's dress. (syncView in neuroglancer.js re-asserts the same reading on
     // every view change, so the two can never fight.)
     const paintTheGround = () => {
       const ground = themeGround();

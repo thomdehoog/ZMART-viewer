@@ -216,41 +216,25 @@ class LivePublisher:
     #: operator sees on screen.
     #:
     #: Deferring is what a large survey wants. Keeping the map true after every
-    #: commit costs a pass over the WHOLE survey, and at 12,769 positions that
-    #: measured about 13 seconds of a 16-second publish, while a publish that
-    #: writes only its own position stays flat however long the run gets. The
-    #: operator asked for it (2026-08-21), on the grounds that nothing in their
-    #: lab opens a run's files while the microscope is still going.
+    #: commit costs a pass over the whole survey: at 12,769 positions that was
+    #: measured at about 13 seconds of a 16-second publish, while a publish
+    #: that writes only its own position stays flat however long the run gets.
     #:
-    #: It is still NOT the default, and 2026-08-26 says why with more
-    #: precision than 2026-08-22 could. Three things break when it is flipped;
-    #: one is now fixed and two are not.
+    #: It is still not the default, because two things an operator would see
+    #: break when it is switched on:
     #:
-    #: FIXED. ``replay_the_dataset`` skipped :meth:`finish_the_run` on the
-    #: stated grounds that a per-publish run keeps its view current and has
-    #: nothing left to finish. True of the mode it was written for, and it is
-    #: exactly the call that writes the view for the mode that defers it -- so
-    #: the replay returned the path of a view nobody had written. The door now
-    #: finishes its run, in a ``finally`` so a stopped replay leaves an
-    #: openable run too. That fix is right whatever this setting says.
+    #: 1. Auto contrast goes dead on a live run (``test_contrast``: "a live
+    #:    picture holds no voxels of its own, but the members of its data
+    #:    collection do -- the measurement must follow the link"). The
+    #:    measurement follows the linked view, which does not exist mid-run;
+    #:    it should follow the governed picture, which is what is served as the
+    #:    live source.
+    #: 2. Growth flickers (``test_the_spiral_growth_is_visible``: "the lit
+    #:    canvas shrank while the spiral was landing"). Not yet understood.
     #:
-    #: OPEN, and both are seen by an operator, measured with the flip on:
-    #:
-    #: 1. Auto goes dead on a live run. ``test_contrast`` --
-    #:    "a live picture holds no voxels of its own, but the members of its
-    #:    data collection do -- the measurement must follow the link". The
-    #:    measurement follows the LINKED view, which is not there mid-run.
-    #:    It should follow the governed picture, which is what the registry
-    #:    has served as the live source since 2026-08-12; contrast never
-    #:    caught up with that move.
-    #: 2. Growth flickers. ``test_the_spiral_growth_is_visible`` --
-    #:    "the lit canvas shrank while the spiral was landing", which is the
-    #:    fault HANDOVER_the_flicker.md exists for. Not yet understood.
-    #:
-    #: Fix those two and the flip is free: it takes about 13 seconds off a
-    #: 16-second publish at 12,769 positions and makes the writer flat with
-    #: scale. Ask for ``"at_run_end"`` meanwhile where the saving matters and
-    #: nothing outside is reading along -- the measurements already do.
+    #: Fix those two and the switch is free. Meanwhile, ask for
+    #: ``"at_run_end"`` where the saving matters and nothing outside is
+    #: reading the run's files while it is being written.
     linked_view: str = "per_publish"
     manifest: RunManifest = field(init=False)
     layout: SceneLayoutRevision = field(init=False)

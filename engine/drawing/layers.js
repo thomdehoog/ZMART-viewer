@@ -3,7 +3,7 @@
  *
  * This is the translation layer, and it is kept on its own because none of it
  * touches React or the browser: give it the panel's state and it hands back plain
- * descriptions of layers, which `engine.js` then applies to the engine. That makes
+ * descriptions of layers, which `neuroglancer.js` then applies to the engine. That makes
  * it the easiest part of the viewer to reason about and to check, and it keeps the
  * shell free of the fiddly business of writing shader programs.
  */
@@ -201,7 +201,7 @@ export function engineName(spec) {
  * window measured from the pixels (the same one the Auto button applies) is
  * used instead of the camera's whole range -- a real specimen sits in the
  * bottom few per cent of that range, so the whole range showed a picture that
- * was very nearly black until somebody pressed Auto. Watched on every replay
+ * was very nearly black until somebody pressed Auto. Watched on every live run
  * before this fallback existed. Both the canvas and the panel's sliders read
  * the window through here, so they can never disagree about where a fresh
  * layer starts.
@@ -263,10 +263,10 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       // whole point. A row's own frame count is the highest across its positions, so
       // one position advancing moves it and says nothing about which one moved --
       // which left the engine going back to every store on the row to ask. See
-      // syncSources in engine.js, and docs/open/NEXT_STEPS.md for what that cost.
+      // syncSources in neuroglancer.js, and an earlier note (kept in the repository's git history) for what that cost.
       frameCounts: spec.frameCounts ?? undefined,
       // Manifest-driven sources keep a stable address.  Their separately carried
-      // identities and committed revisions tell engine.js exactly which existing
+      // identities and committed revisions tell neuroglancer.js exactly which existing
       // source must be refreshed after a publication, without making the address
       // itself look like a new image.
       sourceIds: spec.sourceIds ?? undefined,

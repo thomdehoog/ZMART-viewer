@@ -1,469 +1,275 @@
-# What the viewer is: a wrapper around an engine
+# How the viewer is built
 
-**Status: a statement of the intended architecture, and a record of where the code
-currently departs from it.** The departures are listed with what it would take to close
-them.
+This is the map of the code: what the parts are, how they talk to each other,
+and the few rules that decide where a new piece of code belongs. Read it
+before changing anything that is not a one-line fix.
 
-When this was written, none of it had been built to this shape. **Section 3 is now the
-exception: it has been built, and that section describes the code rather than an
-intention.** Everything else still stands as intent.
+For how data is laid out on disk, read [DATA_LAYOUT.md](DATA_LAYOUT.md). For
+how the viewer is driven by mouse and keyboard, and why, read
+[CONTROLS.md](CONTROLS.md). For running the tests, read [TESTING.md](TESTING.md).
 
-Read `docs/how_it_works/DATA_LAYOUT.md` for how data is stored, `docs/history/LIVE_MODE_PLAN.md` for the live-mode
-proposal that sits on top of this, and an earlier note kept in the repository's history for the honest list of what is
-unfinished — with the caveat, below, that several of its remaining items are ruled out by
-the rule in section 2.
+## 1. Two parts: the engine and the GUI
 
-Sections 1 to 6 describe the viewer itself. **Section 7 stands back further** and
-describes the three layers the whole tool is made of — what the operator sees, what
-is on disk, and what sits between them. It is the widest frame and a good place to
-start if you are new here.
+The repository holds two things, and the line between them is the most
+important thing in this document.
 
-## 1. The shape
+- **The engine** (`engine/`, imported as `zmart_viewer`) is everything a
+  smart-microscopy interface needs in order to show images. It reads OME-Zarr,
+  places each position where it was taken on the stage, follows a folder while
+  a microscope is still writing into it, and serves the pieces of the picture
+  over HTTP. It also holds the JavaScript that drives neuroglancer, in
+  `engine/drawing/`. It has no buttons, panels or sliders of its own.
+- **The GUI** (`gui/`, imported as `zmart_viewer.gui`) is the viewer's own
+  window, for people who only want to look at their data: the panels, the
+  sliders, the load window, and `window.py`, which opens the window with
+  pywebview and is what the `zmart-viewer` command runs.
 
-Neuroglancer is the engine and its own interface is switched off: `engine/drawing/viewer.js`
-builds it with `makeMinimalViewer` and `showUIControls: false`, and `engine-chrome.css`
-suppresses what remains. Everything an operator sees is ours — the layer panel, the
-sliders, the targets list, the scale bar.
+A smart-microscopy interface lives in its own repository. It uses the engine
+exactly as the GUI does and replaces the GUI with its own window. So the test
+for where code belongs is simple: **if a separate interface would need it, it
+belongs in the engine; if only this window needs it, it belongs in the GUI.**
 
-(Pointers in this document name functions rather than line numbers. Two of them used to
-give a line and both had drifted a few lines out of date, which is enough to send a
-reader to the wrong place and no way to notice.)
+The engine's public names are listed in `engine/__init__.py`. Everything else
+inside it may move between versions.
 
-One trap comes with that and is worth repeating wherever this is described, because it
-costs a day to rediscover: `makeMinimalViewer` builds the engine but installs **no input
-bindings**. Without `setDefaultInputEventBindings` the volume renders perfectly and
-nothing responds to the mouse. Rendering and navigation are independent, so render tests
-cannot catch it; `tests/test_interaction.py` is what holds it.
+## 2. Neuroglancer draws; we do the rest
 
-## 2. The rule: defer everything the engine can do
+Neuroglancer is the drawing engine, and its own interface is switched off:
+`engine/drawing/viewer.js` creates it with `makeMinimalViewer` and
+`showUIControls: false`, and `neuroglancer-chrome.css` hides the little that
+remains. Everything a person sees around the picture is ours.
 
-**The wrapper does only what neuroglancer cannot do, and does not work around what
-neuroglancer does badly.**
+One trap comes with that, and it costs a day to rediscover: `makeMinimalViewer`
+builds the engine but installs **no mouse or keyboard bindings**. Without them
+the picture renders perfectly and nothing responds to the mouse. `viewer.js`
+installs exactly the gestures this viewer documents; `CONTROLS.md` records
+each decision, and `tests/test_interaction.py` holds them in place. Render
+tests alone cannot catch this, because drawing and navigating are independent.
 
-The second half matters as much as the first. Neuroglancer already handles data of this
-size well, and it is the one component we chose not to rewrite; a wrapper that starts
-compensating for it acquires the maintenance of both. The rule has a single exception,
-and it is not a loophole: **inefficiency of our own making is ours to fix.** Handing the
-engine forty thousand sources at once until the browser refuses them is our doing, not
-its shortcoming.
+**The rule: leave to neuroglancer everything it can do, and do not work around
+what it does badly.** Neuroglancer already handles data of this size well, and
+it is the one component we chose not to rewrite; a wrapper that starts
+compensating for it inherits the maintenance of both. The one exception is not
+a loophole: inefficiency of our own making is ours to fix.
 
-Who owns what, as it stands:
-
-| | owner |
+| | who does it |
 |---|---|
-| pyramid level selection, chunk fetch and decode | engine |
-| the decoded-chunk cache | engine |
-| placing tiles beside one another by their `translation` | engine |
-| slice and volume rendering, navigation, input bindings | engine |
-| which stores exist and which are open | wrapper |
-| serving the bytes | wrapper |
-| the panel, sliders, colours, annotations | wrapper |
-| pacing how fast sources are offered | wrapper (our own inefficiency) |
+| choosing the zoom level, fetching and decoding pieces | neuroglancer |
+| the cache of decoded pieces | neuroglancer |
+| slice and 3-D rendering, navigation | neuroglancer |
+| which images exist and which are open | the engine |
+| placing positions on the stage, and building pieces of the picture | the engine |
+| serving the bytes, and deciding what a live run may show | the engine |
+| the panel, sliders, colours, marks | the GUI (or your own interface) |
 
-Two places where the deferral is done well and should be copied rather than disturbed:
+Two places where this is done well, to be copied rather than disturbed:
 
-- **A channel is one layer with many sources.** The engine composites the tiles; we never
-  stitch. Measured live on a real mesoSPIM transfer: seven stores become one group with
-  `Ch488` holding five sources and `Ch647` two.
-- **Contrast travels as control *values*, not as shader text.** `shaderFor` in `engine/drawing/layers.js`
-  declares the `invlerp` control with no particular value and `shaderControlsFor` sends the
-  numbers separately, so dragging a contrast handle does not recompile a program on the
-  graphics card.
+- **A channel is one layer with many sources.** Neuroglancer composites the
+  positions; we never stitch pixels in the browser.
+- **Contrast travels as control values, not as shader text.** `shaderFor` in
+  `engine/drawing/layers.js` declares the contrast control once, and
+  `shaderControlsFor` sends the numbers separately, so dragging a contrast
+  handle does not recompile a program on the graphics card.
+
+`layers.js` and `neuroglancer.js` are separate on purpose. `layers.js` is pure
+translation: give it the window's settings and it hands back descriptions of
+layers, with no browser involved, which makes it easy to test.
+`neuroglancer.js` does the fiddly work of applying those descriptions to a
+running viewer without rebuilding the scene.
 
 ### Where the rule is broken today: contrast is measured in Python
 
-`contrast.py` reads pixels off the disk to compute a display window and a histogram.
-Neuroglancer computes data histograms on the GPU already — it ships
-`lib/webgl/empirical_cdf.js`, and `histogramSpecifications` / `dataHistogram` appear in
-`sliceview/frontend.js`, `sliceview/volume/image_renderlayer.js` and
-`volume_rendering/volume_render_layer.js`, existing precisely to drive the `invlerp`
-controls we are already using. Switching off the engine's interface cost us the widget,
-not the computation.
+`engine/opening/contrast.py` reads pixels from disk to work out a starting
+display window and a histogram. Neuroglancer can compute histograms on the
+graphics card, and its own auto-range narrows the window until it settles,
+which handles the dim 16-bit specimens that matter here. But the histogram is
+only computed when neuroglancer's own contrast widget asks for it, and that
+widget does not exist while its interface is switched off.
 
-Nearly every contrast problem in this repository descends from that one deviation: the
-cold open that took ninety minutes and then 126 seconds before being cut to 1.3; a row's
-window coming from whichever of its positions sorts first by name; sampling that scales
-with the *declared* extent of a store rather than what has been written; and the
-degenerate `(0, 1)` window that is cached for the session when a store is met before its
-pixels exist.
+So moving contrast to neuroglancer means asking for the histogram ourselves
+and reading it back at the right moment in a frame. It is worth doing: it
+would delete `contrast.py` and its cache, and measure what is actually on
+screen rather than what is on disk. It wants its own piece of work, with a
+test that photographs a 16-bit specimen before and after.
 
-Deferring it deletes `contrast.py`, its server-side measurement cache and the invalidation
-around it, and — because a GPU histogram measures what is actually loaded — it removes the
-empty-canvas failure rather than working around it.
+## 3. One load, one acquisition
 
-**Verified 2026-08-21, and the verification changed the estimate.** Two things came
-back, one better than expected and one worse.
+**Opening a folder produces exactly one acquisition, however many images it
+spans.** An acquisition is one kind of scan, for example an overview or a set
+of target scans: its images carry the same channels, because they were taken
+the same way. It appears in the panel as one heading with one row per channel.
 
-*Better.* The engine's own auto-range is already written and shipped:
-`widget/invlerp_range_finder.js` computes percentiles from the GPU histogram and — this
-is the part that answers the 16-bit worry — **iterates**, narrowing the window and
-recomputing until the range settles. A narrow band well above zero is exactly the case
-that needs that, and the engine already does it. So the concern this paragraph used to
-raise is met by code that exists.
+Which images belong together is read from **inside** them, never from their
+names: the size of one voxel (which is the magnification the microscope really
+used) and, where an image names its channels, those names. See
+`_acquisition_of` and `_same_acquisition` in `engine/opening/open_folders.py`.
+A folder can be renamed by anybody; a voxel size cannot.
 
-*Worse.* The sentence above, that switching off the interface "cost us the widget, not
-the computation", is **not right**, and the correction matters. The histogram is
-demand-driven: `HistogramSpecifications.visibleHistograms` returns nought unless
-something has registered visibility, the render layers gate the whole computation on it
-(`sliceview/renderlayer.js`, `volume_rendering/volume_render_layer.js`), and the only
-thing that registers is the engine's own invlerp widget
-(`widget/invlerp.js` — `histogramSpecifications.visibility.add(this.visibility)`).
+If a folder holds more than one acquisition, `_one_acquisition_only` refuses to
+open it and lists the images in each, so the answer is to open one of them.
+That is the one place the viewer declines to show what it was pointed at, and it
+is deliberate: such a folder was usually chosen one level too high.
 
-We create the viewer with `showUIControls: false`, so that widget never exists. **No
-histogram is being computed today.** Switching the interface off cost us both.
+A different acquisition that appears in a watched folder **during** a run, such
+as a target scan landing beside the overview it came from, is not refused:
+there is nobody left to tell. It is opened under a heading of its own instead.
+`_look_again` and `_place` in `open_folders.py` set this out.
 
-That does not sink the plan, but it resizes it. Deferring contrast means: register
-visibility on the layer's `histogramSpecifications` so the engine computes it; read it
-back with `copyHistogramToCPU` at the right point in the frame, which must happen with
-the histogram framebuffer bound; and either reuse `computePercentilesFromEmpiricalHistogram`
-or stand up an `AutoRangeFinder` against an object shaped like the widget it expects
-(`trackable`, `dataType`, `display`, `histogramSpecifications`, `histogramIndex`).
+`engine/opening/open_a_path.py` is the one door every way in goes through: the
+load window, the `zmart-viewer` command and an interface's `/api/stores/open`.
+It works out what a path is (one image, a folder of images, an HCS plate, raw
+positions from a microscope, or a run that is still being written) and opens it
+the right way.
 
-So it is a piece of display-path work against engine internals, not the reading of a
-number already sitting there. Worth doing — it still deletes `contrast.py`, its cache and
-its invalidation, and still removes the empty-canvas failure rather than working around
-it — but it wants its own afternoon, and a gate that photographs a 16-bit specimen
-before and after.
-
-### What the rule strikes from the roadmap
-
-Applying section 2 honestly removes several items an earlier note kept in the repository's history still carries:
-
-- **HTTP/2.** It treats a symptom of the engine's fan-out and costs a dependency.
-- **The coordinate-space quadratic.** Already correctly declined — halving an 800-position
-  open was measured as achievable and rejected because it needs replacing a method on an
-  internal neuroglancer object at run time. It stays declined.
-- **A parallel brightness pass.** Moot if contrast moves to the engine.
-- **The remaining scale audits and the memory-per-folder measurement.** These characterise
-  how the engine behaves with many stores. Under this rule that behaviour is the engine's,
-  and we neither fix it nor chase it.
-
-What survives is only the pacing, which is ours.
-
-## 3. A dataset is what one load produces
-
-**Loading through the wrapper produces exactly one dataset, however many stores it spans.**
-A dataset is one acquisition type or one multitiled run: the stores in it must carry the
-**same channels**, because they are the same acquisition. It appears in the panel as a
-single named thing — `overview`, say — with one sub-layer per channel.
-
-### This is how the code works now
-
-This section used to record three departures, and all three have since been closed. They
-are worth stating, because what replaced them is the more interesting half.
-
-**The dataset boundary was inferred from filenames, and no longer is.** The viewer used to
-take the text before a store's first underscore as its acquisition type and gather stores
-by it, so what appeared on screen came from a driver's naming convention: point the viewer
-at a folder whose stores did not share a prefix and one load silently became several
-datasets. Both `split_name` and `group_by_type` are gone.
-
-What decides whether two stores belong together is now read from *inside* them: the size of
-one voxel, and — where a store names its channels internally — the channel names. See
-`_acquisition_of` and `_same_acquisition` in `engine/opening/open_folders.py`. The voxel size is the
-magnification the microscope actually used and cannot be anything else, whereas a folder
-can be renamed by anybody. So a run may invent a kind of scan nobody has heard of and call
-it anything at all, and it is still shown correctly.
-
-**The same-channels requirement is checked, at the door.** `_one_acquisition_only` refuses
-a load spanning more than one acquisition and names what it found, listing the stores in
-each, so the answer is to open one of them rather than to wonder what happened. That is the
-one place the viewer declines to show something it was pointed at, and it is deliberate: a
-folder holding two acquisitions is usually a folder chosen one level too high.
-
-**A dataset is a first-class object.** `Dataset` in `engine/opening/open_folders.py` is created by the load and
-carries its own number, folder, name, list of stores, channel list, whether it is live, and
-what kind of acquisition it is. The panel is given datasets and their channels rather than
-deriving both.
-
-One consequence is worth knowing, because it is not obvious from the above. A store that
-appears in a watched folder *during* a run is placed by the same comparison, and one that
-turns out to be a different acquisition — a target scan landing in the folder an overview is
-being written to — is opened as a dataset of its own rather than merged into the row beside
-it. Refusing there would be no use: the request that would have carried the refusal finished
-long ago, and the target scan is usually the very thing the run was done for. So the two
-moments agree on what matters, that two acquisitions are never drawn as one row, and differ
-only in whether there is anybody left to tell. `_look_again` and `_place` in `engine/opening/open_folders.py`
-set this out in full.
-
-Together these moved the viewer from *inferring* what the operator loaded to *being told*,
-which is what this section asked for.
-
-## 4. Two modes, and they belong to the dataset
-
-**Realtime.** The data is being written. The control application says when something is
-ready, the viewer is told over a connection it holds open, and only what changed is added.
-
-**Offline.** The data is finished. Any number of stores; open them, show them, stop asking.
-Be efficient, but per section 2 — do not chase the engine's limits, and do not add viewer
-machinery to make a large folder feel faster than the engine can draw it.
-
-Mode is a property of a **dataset**, not of the server: an operator may watch a run in
-progress while last week's finished run is open beside it for comparison. The per-folder
-watch flag in `engine/opening/open_folders.py` already works this way, so the code is closer to this than the
-server-level `live=` argument suggests; what is missing is that the mode is not carried by
-anything the operator can see or by anything the panel knows about.
-
-## 5. What stays exactly as it is
-
-The server: Python's own `http.server`, no framework, installable from conda with nothing
-exotic. The traversal guard, which resolves each request target and refuses anything that
-does not land inside an open folder. The separation from the microscope — no `/api/goto`,
-targets written to a file for the control application to read, and a test asserting no
-stage-moving endpoint exists. The pacing in `engine/drawing/neuroglancer.js`. And the demonstrated
-render-and-navigate tests, which are the only things that catch a viewer that draws
-perfectly and ignores the mouse.
-
-## 6. Consequences for the live-mode plan
-
-`docs/history/LIVE_MODE_PLAN.md` should be rebased on this document rather than read beside it. Two of
-its items change character:
-
-- Its first blocking item — auto-contrast poisoning a session on an unwritten canvas — is
-  not a live-mode problem. It is a symptom of section 2's violation, and moving contrast to
-  the engine removes it wherever it would have appeared.
-- Its "one store per acquisition type" becomes a statement about **datasets**, which is
-  what section 3 defines. One dataset may be one store or many; what the live case needs is
-  that the number is fixed by the experiment, not that it is one.
-
-## 7. The three layers: the operator, the disk, and what sits between
-
-Sections 1 to 6 are about the viewer. This section is about the whole tool, and it
-is the frame the rest of it hangs on.
-
-There are three layers, and it is worth being able to name them:
+## 4. Three layers: what draws, what answers, what is on disk
 
 ```
-        FRONT                     MIDDLE                      BACK
-   Neuroglancer and          engine/serving/server.py           OME-Zarr on disk
-   our interface
+        DRAWING                    SERVING                     ON DISK
+   neuroglancer, driven       engine/serving/            OME-Zarr images, however
+   by engine/drawing/         server.py                  the microscope wrote them
 
   +------------------+      +-------------------+      +-------------------+
-  |  draws 2D and 3D |      | answers questions |      | tiles, however the|
-  |  chooses the     |      | about a picture   |      | microscope wrote  |
-  |  zoom level      |      | that need not     |      | them: one image,  |
-  |  softens the     |      | exist on disk in  |      | four images, one  |
-  |  seams           |      | that shape        |      | per well, nested  |
+  |  draws 2-D and   |      | answers questions |      | one image, many   |
+  |  3-D, chooses    |      | about a picture   |      | positions, one per|
+  |  the zoom level  |      | that need not     |      | well, or a run    |
+  |                  |      | exist on disk in  |      | still being       |
+  |                  |      | that shape        |      | written           |
   +------------------+      +-------------------+      +-------------------+
-           |                          |                          |
-           |   "the piece at          |   "the part of tile 42   |
-           |    z=3, y=7, x=2"        |    that falls in it"     |
+           |   "the piece at          |   "the parts of the      |
+           |    z=3, y=7, x=2"        |    positions under it"   |
            |------------------------->|------------------------->|
-           |                          |                          |
            |<-------------------------|<-------------------------|
            |   one piece of picture   |   the bytes on disk      |
-           |                          |                          |
-
-   speaks: one ordinary       speaks: both, and           speaks: whatever
-   OME-Zarr, one source,      translates between          suits the run
-   with a pyramid             them
 ```
 
-Reading one request end to end: the operator drags the view, so the engine works
-out which pieces of picture it is missing and asks for them by position. The
-server takes each of those positions, works out which tiles cover that piece of
-the specimen and where those tiles are kept, reads them, and hands back one piece.
-The engine never learns that tiles were involved.
+One request, end to end: the person drags the view, so neuroglancer works out
+which pieces of the picture it is missing and asks for them by position. The
+server works out which positions cover each piece, reads them at the zoom level
+being drawn, lays them into one piece, and sends it back. Neuroglancer never
+learns that positions were involved.
 
-The whole of this section follows from one thing: the question the front asks and
-the question the back answers are allowed to be different questions, because the
-middle translates between them.
+This is why **where a position sits on disk and where it belongs on the stage
+are separate questions.** The layout on disk can suit the microscope and the
+analysis; the picture on screen is still one image. `engine/picture/` does the
+placing: `arrangement.py` works out where each position goes and builds pieces
+of the picture from them, and `built_picture.py` writes down a built picture's
+description (an OME-Zarr that holds no pixels of its own).
+`engine/serving/picture_pieces.py` answers for a piece that is not an ordinary
+file: either a byte range pointed at inside a position's own file, or bytes
+built when asked for.
 
-**The front is the engine and our interface around it.** It draws, it navigates,
-and it does the whole of the three-dimensional work. What matters here is that it
-is only ever handed **one ordinary OME-Zarr** — one source, with a pyramid.
-Everything the viewer's speed depends on follows from that, and section 2's rule
-says why we do not try to do its job for it.
+**The engine does not write your images.** Opening a folder never changes the
+images in it. What the engine may write is its own, and kept apart: a built
+picture's description, and, when an interface asks for a baked overview, the
+coarse zoomed-out copies under `.zmart-viewer/` beside the data
+(`engine/views/publishing.py`).
 
-**The back is whatever suits the microscope and the experiment.** One large image,
-one image per well, one per position, or images nested inside a parent — the choice
-belongs to how the run is acquired and how the data will be analysed afterwards,
-not to what the viewer would prefer.
+### The named views
 
-**The middle is the server, and its job is to let those two disagree.** It answers
-the front's questions about a picture that need not exist on disk in that shape. It
-is not a new component: `engine/serving/server.py` is already this layer. Today it passes
-files straight through, which is the simplest thing it can do and the right thing
-when the store on disk is already the picture the operator wants to see.
+An acquisition can be looked at in more than one way. `engine/views/` provides
+them: **Slice** (one plane at a time, at the specimen's own depth), **Top** (the
+surface seen from above) and the **Min/Max/Sum** projections, written beside an
+image by `projections.py`. `slice_top_projection.py` defines them;
+`embedding.js` in `engine/drawing/` lets a window choose between them. See
+[view_modes.md](../view_modes.md).
 
-### What this buys, and it is the reason to think in these terms
+## 5. Following a run while it is written
 
-**Where a tile sits on disk and where it belongs on the stage become separate
-questions.** That is the whole benefit, and everything else is a consequence:
+Two parts of the engine handle a run that is still going, and they must not be
+confused.
 
-- The back can change without the front noticing, so a storage layout chosen for
-  the microscope does not have to be a layout chosen for drawing.
-- A tile's position can be corrected *after* acquisition — once a stitcher has
-  worked out where the stage really went — without a byte being rewritten.
-- The number of images on disk stops setting the viewer's frame rate, which is
-  what an earlier note kept in the repository's history spends its scale audits establishing.
+- **`engine/live/following.py` is the reader's side.** It pushes one kind of
+  message to open windows, *something changed*, and each window re-reads the
+  state in the ordinary way, so the disk stays the one source of truth. An
+  interface that wrote the data can say so itself, with `/api/announce`, which
+  is better than waiting for the folder to be noticed.
+- **`engine/live/record/` is the writer's side.** It is how a smart-microscopy
+  run writes itself: each position whole, its pyramid, and a manifest of
+  signed commits that records what is **finished**. A microscope controller
+  drives real hardware through this package.
 
-There is one arrangement this makes possible that is otherwise a straight
-contradiction: **keeping the overlap between tiles while still showing one
-picture**. An image holds a single value per point, so tiles written into one
-image overwrite each other where they meet — `docs/how_it_works/DATA_LAYOUT.md` Decision 1b measures
-that at a fifth of everything the camera recorded. With a middle layer the tiles
-can be kept apart on disk, whole and unspoiled, and put together only on the way
-out. `docs/how_it_works/TILES_IN_ONE_STORE.md` measures what that costs.
+The rule the record enforces is short: **data becomes visible only after the
+complete position, or the complete moment, has been committed.** Files that
+exist on disk mean nothing until then; a picture assembled from a half-written
+position is not a slow picture, it is a wrong one that looks right.
+`record/live_serving.py` applies that rule to every request for a live run's
+pixels. `record/manifest.py` explains the record in full.
 
-### Two rules about what belongs where
+## 6. What stays exactly as it is
 
-**The middle places tiles; the front blends them.** Putting a tile in its proper
-place is moving whole voxels about, and it is cheap — measured at about six
-milliseconds for one piece of picture, and it stays there whether the run holds
-sixteen tiles or ten thousand. *Smoothing* the join between two tiles is a
-different kind of work: `measure_live_fusion_cost.py` measures a stitching library
-doing it live at six hundred to three thousand milliseconds a piece, a hundred times
-dearer. So the seam is softened in the shader, where the picture is already being
-drawn — `docs/how_it_works/INTEROP.md` §3 sets out the fifteen lines it takes — and never in the
-middle.
+- **The server is Python's own `http.server`**, with no web framework, so it
+  installs anywhere pip does.
+- **The traversal guard.** Every request is resolved and refused unless it
+  lands inside an open folder.
+- **No line to the microscope.** There is no endpoint that moves a stage.
+  Places a person marks are saved to a file beside the data, and whatever runs
+  the experiment reads them from there. A test asserts that no stage-moving
+  endpoint exists, so this cannot drift back in.
 
-**The middle only earns its place when the back and the front disagree.** If the
-store on disk is already the picture the operator wants — one image, tiles butted
-up against each other, no overlap to preserve — the front reads it directly and
-the middle has nothing to do. Building a placing layer for a run that does not need
-one is work with no reader.
+## 7. Where each file sits
 
-### What this costs, stated plainly
-
-A store whose tiles are laid out for the microscope rather than for looking at is
-**only a picture while our software is running**. Handed to a colleague, opened in
-napari, or restored from a backup, it is a grid of tiles with no indication that it
-was ever anything else.
-
-That is a real price and it should be paid deliberately. `docs/how_it_works/DATA_LAYOUT.md` records a
-way of keeping the overlap that does *not* pay it — dealing tiles across four
-ordinary images so that neighbours never share one, measured at nothing lost and
-sixty draws a second — where the only cost is that a reader opens four images
-instead of one. Which of those is right depends on how much the data has to travel,
-and it is a decision for the experiment rather than for the viewer.
-
-### Watching a run that is still going
-
-The three layers hold up while data is arriving, which is what a smart-microscopy
-run needs. Tiles kept apart on disk never share a piece of a file, so two of them
-written at the same moment cannot destroy each other — the hazard `docs/how_it_works/DATA_LAYOUT.md`
-measures at up to three quarters of a tile lost. The front already knows how to
-notice new data: an announcement carrying `wrote_image_in_place` makes the engine
-let go of what it has decoded, and it refetches only what is on screen.
-
-The one job that is genuinely new is keeping the **zoomed-out copies** current as
-tiles land. Those copies have to be made once from all the tiles together — made
-separately from separate images, every tile edge would be averaged against the
-empty ground beside it and the specimen would wear a faint grid. That is design
-work rather than a detail, and it is not done.
-
-### Status
-
-The three layers are real; the placing behaviour in the middle is not. The server
-passes files through today, and everything above about tiles being kept apart and
-assembled on the way out is measured but unbuilt. `docs/how_it_works/TILES_IN_ONE_STORE.md` has the
-measurements, and `docs/history/PLAN_keeping_the_overlap.md` weighs it against the simpler
-arrangement this repository had already measured -- dealing tiles across four
-ordinary images -- and recommends that instead, for reasons that are about what the
-data is worth to somebody else rather than about speed.
-
----
-
-## 8. Where each file sits, and what it is for
-
-Section 1 gives the shape and section 7 gives the three layers. This is the same
-picture at the level of files, for somebody who has just cloned the repository and
-wants to know which one to open.
+For somebody who has just cloned the repository and wants to know which file
+to open.
 
 ```
-                              ┌─────────────────────────────────────┐
-   WHAT YOU RUN               │  zmart-viewer (the command)           │
-                              │  gui/window.py — a window, or │
-                              │                 prints an address   │
-                              └────────────────┬────────────────────┘
-                                               │ starts
- ══════════════════════════════════════════════▼══════════════════════════════
-   THE INTERFACE — what you see          gui/   (only the viewer's own window)
- ══════════════════════════════════════════════════════════════════════════════
+   WHAT YOU RUN       zmart-viewer   →   gui/window.py   (a window, or an address)
 
-     window.py ───────────── the zmart-viewer command: opens this window (pywebview)
-     App.jsx ─────────────── holds the whole window's state, and the load window
+ ═══════════════════════════════════════════════════════════════════════════════
+   THE GUI — the viewer's own window                        gui/
+ ═══════════════════════════════════════════════════════════════════════════════
+
+     window.py ───────────── opens the window with pywebview; the zmart-viewer command
+     App.jsx ─────────────── the whole window's state, and the load window
        ├── NeuroglancerView.jsx ── gives the engine an element to draw into
        ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
        ├── AxisSlider.jsx ─────── depth up the side, time along the bottom
        ├── ScaleBar.jsx ───────── how large the specimen really is
        └── TargetsPanel.jsx ───── places you mark, saved to a file
+     built/ ─────────────── the page, already built; what an installed viewer serves
 
-     A smart-microscopy interface replaces this whole folder with its own
-     page, and uses the engine below exactly as this one does.
+     A smart-microscopy interface replaces this folder with its own window.
 
- ══════════════════════════════════════════════▲══════════════════════════════
-                                  HTTP         │  pieces, descriptions, events
- ══════════════════════════════════════════════▼══════════════════════════════
-   THE ENGINE — what answers and draws   engine/   (imported as zmart_viewer)
- ══════════════════════════════════════════════════════════════════════════════
+ ════════════════════════════════════════════▲══════════════════════════════════
+                                  HTTP       │  pieces, descriptions, events
+ ════════════════════════════════════════════▼══════════════════════════════════
+   THE ENGINE — what answers and draws                      engine/
+ ═══════════════════════════════════════════════════════════════════════════════
 
-     drawing/   viewer.js ──────── creates neuroglancer with its own interface OFF
-                layers.js ──────── settings  →  plain layer descriptions
-                neuroglancer.js ── applies those to the viewer WITHOUT rebuilding
-                live-refresh.js ── what changed since the page last looked
-                embedding.js ───── the named views, for pages that draw for themselves
-                neuroglancer-growth.mjs  the patch that lets an image grow while shown
-
-     serving/   server.py ──────── answers every request; guards the opened folder
-                picture_pieces.py  "no file here?" → pointed or built bytes
-                coverage.py ────── which ground was acquired, for transparency
-     opening/   open_a_path.py ─── the one door: classify a path, open it right
-                open_folders.py ── what is open, and how stores are read
-                contrast.py ────── without this, real acquisitions draw black
-     picture/   arrangement.py ─── where each position goes, and building pieces of it
-                built_picture.py ─ a picture written down; a governed one patched
+     drawing/   viewer.js ────────── creates neuroglancer with its own interface off
+                layers.js ────────── settings → plain layer descriptions
+                neuroglancer.js ──── applies them to the viewer without rebuilding
+                live-refresh.js ──── what changed since the window last looked
+                embedding.js ─────── the named views, for windows that draw themselves
+                neuroglancer-growth.mjs  lets an image grow while it is shown
+     serving/   server.py ────────── answers every request; guards the opened folder
+                picture_pieces.py ── pieces that are not plain files
+                coverage.py ──────── which ground was acquired, for transparency
+     opening/   open_a_path.py ───── the one door: what a path is, and how to open it
+                open_folders.py ──── what is open, and how images are read
+                contrast.py ──────── a sensible brightness to start with
+     picture/   arrangement.py ───── where each position goes; building pieces
+                built_picture.py ─── a built picture written down
                 acquired_regions.py  the regions that were really imaged
      views/     slice_top_projection.py  the named views
-                publishing.py ──── publishing an acquisition's pictures
-                projections.py ─── writing a projection beside an image
-     live/      following.py ───── announce changes; adapt live runs
-                record/ ────────── how a live run writes and publishes itself
+                publishing.py ────── publishing an acquisition, with a baked overview
+                projections.py ───── writing a projection beside an image
+     live/      following.py ─────── telling open windows that something changed
+                record/ ──────────── how a live run writes and publishes itself
+                  publisher.py ───── writes positions and pyramids, one commit each
+                  manifest.py ────── the record of what is finished
+                  live_serving.py ── which bytes may answer for a published piece
+                  storage_plans.py ─ how one kind of acquisition is written
+                  vocabulary.py ──── the words the rest of record/ speaks in
 
-     tests/browsercheck.py ─ the safety net: serves the page, opens it,
-                             reads the pixels that came out
+ ═══════════════════════════════════════════════════════════════════════════════
+   THE BUILD — only for changing the GUI's JavaScript
+ ═══════════════════════════════════════════════════════════════════════════════
 
- ══════════════════════════════════════════════▼══════════════════════════════
-   THE BACK — what is written            engine/live/record/
- ══════════════════════════════════════════════════════════════════════════════
+     package.json, vite.config.js ── `npm run build` turns gui/ and engine/drawing/
+     scripts/                         into gui/built/, and stamps what went in
+     build_support.py ─────────────── refuses to package a gui/built/ that no longer
+                                      matches its sources
 
-     publisher.py ─── the publisher: pixels, pyramids, one commit each ┐
-     ownership.py ─── who owns which piece of shared ground            ├ the record
-     manifest.py ──── signed commits; what is published, in order      │
-     storage_plans.py  how one kind of acquisition is written          ┘
-     live_serving.py ─ which bytes may answer for a published piece
-     (the elder writers are retired; the formats they wrote are pinned
-      by hand-written fixtures in tests/pointed_by_hand.py, against the
-      viewer's own reading contracts)
-
-              writes ↓                          ↑ read by linking.py
-
-     experiment/
-       overview.ome.zarr/     the view — a real OME-Zarr image holding no picture
-       positions/
-         overview_pos00000.ome.zarr    ← all of the data is here
-         overview_pos00001.ome.zarr
-       zmart-links/           ours, kept outside the images
-       zmart-coverage/        ours
+     tests/browsercheck.py ── the safety net: serves the page, opens it in a real
+                              browser, and reads the pixels that came out
 ```
-
-Three things the drawing is meant to make obvious, each of which is a decision
-rather than an accident.
-
-**At the bottom the arrow only goes one way.** `linking.py` reads the positions and
-nothing in the viewer writes them. That is what lets the viewer be opened on a run
-that is still being acquired, on the machine next to the instrument, without any
-possibility of disturbing it.
-
-**There is no line from anything here to the microscope.** Places an operator marks
-are saved to a file beside the data, and the control application reads them from
-there. A test asserts that no stage-moving endpoint exists, so this cannot drift
-back in by accident.
-
-**`layers.js` and `neuroglancer.js` in `engine/drawing/` are separate on purpose.** One is pure translation —
-give it the panel's state and it hands back descriptions of layers, with no React
-and no browser involved — and the other holds the fiddly business of applying those
-to a live engine without rebuilding the scene. Splitting them is what made the
-engine's behaviour something a test can check rather than something you have to
-watch.
