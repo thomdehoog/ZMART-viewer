@@ -42,8 +42,7 @@ from test_many_positions_arrive import HELD, write_folder
 from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 # How many positions to compare. Ten times as many is the same shape of comparison
 # as the hundred-against-a-thousand that found the fault, and these two open in

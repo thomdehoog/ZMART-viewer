@@ -6,12 +6,11 @@ import http.client
 import threading
 
 from record_fixtures import FRAME, some_specimen  # noqa: E402
-
-from zmart_viewer.record.coordinator import LivePublisher
-from zmart_viewer.record.gateway import answer_from_a_live_run
-from zmart_viewer.record.model import GridCell
-from zmart_viewer.record.profiles import plan_the_writing
-from zmart_viewer.server import make_server
+from zmart_viewer.live.record.coordinator import LivePublisher
+from zmart_viewer.live.record.gateway import answer_from_a_live_run
+from zmart_viewer.live.record.model import GridCell
+from zmart_viewer.live.record.profiles import plan_the_writing
+from zmart_viewer.serving.server import make_server
 
 
 def ask(port: int, path: str, *, headers: dict[str, str] | None = None) -> tuple[int, bytes]:

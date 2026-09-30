@@ -235,7 +235,7 @@ There are three layers, and it is worth being able to name them:
 
 ```
         FRONT                     MIDDLE                      BACK
-   Neuroglancer and          zmart_viewer/server.py           OME-Zarr on disk
+   Neuroglancer and          engine/serving/server.py           OME-Zarr on disk
    our interface
 
   +------------------+      +-------------------+      +-------------------+
@@ -282,7 +282,7 @@ not to what the viewer would prefer.
 
 **The middle is the server, and its job is to let those two disagree.** It answers
 the front's questions about a picture that need not exist on disk in that shape. It
-is not a new component: `zmart_viewer/server.py` is already this layer. Today it passes
+is not a new component: `engine/serving/server.py` is already this layer. Today it passes
 files straight through, which is the simplest thing it can do and the right thing
 when the store on disk is already the picture the operator wants to see.
 
@@ -374,7 +374,7 @@ wants to know which one to open.
 ```
                               ┌─────────────────────────────────────┐
    WHAT YOU RUN               │  zmart-viewer (the command)           │
-                              │  launcher.py  — opens a window, or  │
+                              │  command.py   — opens a window, or  │
                               │                 prints an address   │
                               └────────────────┬────────────────────┘
                                                │ starts
@@ -397,25 +397,31 @@ wants to know which one to open.
  ══════════════════════════════════════════════▲══════════════════════════════
                                   HTTP         │  pieces, descriptions, events
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE MIDDLE — what answers            zmart_viewer/
+   THE MIDDLE — what answers            engine/   (imported as zmart_viewer)
  ══════════════════════════════════════════════════════════════════════════════
 
-     server.py ────── answers every request; guards the opened folder
-       ├── loading.py ──── the one door: classify a path, open it right
-       ├── library.py ──── what is open, and how stores are read
-       ├── pieces.py ───── "no file here?" → pointed or built bytes
-       ├── compose.py ──── the arrangement, and building pieces of it
-       ├── building.py ─── a picture written down; a governed one patched
-       ├── live.py ─────── announce changes; adapt live runs
-       ├── contrast.py ─── without this, real acquisitions draw black
-       ├── launcher.py ─── the zmart-viewer command: a window, or an address
-       └── embedding.js ── named views, for interfaces that draw for themselves
+     serving/   server.py ──── answers every request; guards the opened folder
+                pieces.py ──── "no file here?" → pointed or built bytes
+                coverage.py ── which ground was acquired, for transparency
+     opening/   loading.py ─── the one door: classify a path, open it right
+                library.py ─── what is open, and how stores are read
+                contrast.py ── without this, real acquisitions draw black
+     picture/   compose.py ─── the arrangement, and building pieces of it
+                building.py ── a picture written down; a governed one patched
+                acquired.py ── the regions that were really imaged
+     views/     named.py ───── Slice, Top, Min/Max/Sum
+                published.py ─ publishing an acquisition's pictures
+                projections.py writing a projection beside an image
+     live/      following.py ─ announce changes; adapt live runs
+                record/ ────── how a live run writes and publishes itself
+     drawing/   embedding.js ─ named views, for interfaces that draw for themselves
+     command.py ───────────── the zmart-viewer command: a window, or an address
 
      tests/browsercheck.py ─ the safety net: serves the page, opens it,
                              reads the pixels that came out
 
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE BACK — what is written            zmart_viewer/record/
+   THE BACK — what is written            engine/live/record/
  ══════════════════════════════════════════════════════════════════════════════
 
      coordinator.py ─ the publisher: pixels, pyramids, one commit each ┐

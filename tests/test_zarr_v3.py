@@ -36,9 +36,8 @@ import numpy as np
 import pytest
 import zarr
 from pixels import colour_spread, fraction_lit, image_middle
-
-from zmart_viewer import library as stores
-from zmart_viewer.library import (
+from zmart_viewer.opening import library as stores
+from zmart_viewer.opening.library import (
     Library,
     axis_names,
     declared_channels,
@@ -48,7 +47,7 @@ from zmart_viewer.library import (
     written_timepoints,
     zarr_scheme,
 )
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 # How wide the full-resolution copy of these stores is, in voxels.
 #

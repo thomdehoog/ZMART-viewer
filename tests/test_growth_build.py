@@ -16,7 +16,7 @@ def test_growth_patch_checks_body_and_worker_rebuild_reads_modules(tmp_path):
       import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
       import {dirname, join} from 'node:path';
       import {build} from 'esbuild';
-      import {applyGrowthPatches, growthPatches, workerEntry} from '../../zmart_viewer/neuroglancer-growth.mjs';
+      import {applyGrowthPatches, growthPatches, workerEntry} from '../../engine/drawing/neuroglancer-growth.mjs';
       const lib = process.argv[1];
       for (const {file,anchor} of growthPatches(lib)) {
         mkdirSync(dirname(file), {recursive:true});

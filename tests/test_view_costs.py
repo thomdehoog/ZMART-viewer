@@ -6,10 +6,9 @@ import time
 import numpy as np
 import pytest
 from test_view_sampling import write_tile
-
-from zmart_viewer import pieces
-from zmart_viewer.compose import MEAN_REDUCTION, Composer
-from zmart_viewer.views import ViewSet
+from zmart_viewer.picture.compose import MEAN_REDUCTION, Composer
+from zmart_viewer.serving import pieces
+from zmart_viewer.views.named import ViewSet
 
 
 def _chunks(folder):

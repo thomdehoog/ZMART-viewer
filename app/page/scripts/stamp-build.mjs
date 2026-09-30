@@ -18,8 +18,8 @@ async function hashes(paths) {
   ])));
 }
 const inputs = await files(root, true);
-inputs.push(join(root, "../../zmart_viewer/embedding.js"),
-  join(root, "../../zmart_viewer/neuroglancer-growth.mjs"));
+inputs.push(join(root, "../../engine/drawing/embedding.js"),
+  join(root, "../../engine/drawing/neuroglancer-growth.mjs"));
 const outputs = (await files(join(root, "dist"))).filter(path => !path.endsWith("build-manifest.json"));
 await writeFile(join(root, "dist", "build-manifest.json"), JSON.stringify({
   inputs: await hashes(inputs), outputs: await hashes(outputs),

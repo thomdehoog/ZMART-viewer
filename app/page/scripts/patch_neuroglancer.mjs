@@ -49,7 +49,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyGrowthPatches } from "../../../zmart_viewer/neuroglancer-growth.mjs";
+import { applyGrowthPatches } from "../../../engine/drawing/neuroglancer-growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "..", "node_modules", "neuroglancer", "lib");

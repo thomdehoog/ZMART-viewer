@@ -11,8 +11,7 @@ from __future__ import annotations
 import threading
 
 from pointed_by_hand import a_tile
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 
 def test_each_acquisition_type_gets_a_row_of_its_own(browser, built_dist, tmp_path):

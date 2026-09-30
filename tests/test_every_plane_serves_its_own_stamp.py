@@ -40,10 +40,9 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from check_the_built_picture import decode  # noqa: E402
-
-from zmart_viewer.building import GovernedRun  # noqa: E402
-from zmart_viewer.record.model import GridCell  # noqa: E402
-from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.model import GridCell  # noqa: E402
+from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.picture.building import GovernedRun  # noqa: E402
 
 DEPTH = 13  # ragged on purpose
 STAMP = 1000  # plane k carries the value STAMP + k, everywhere, exactly
@@ -87,7 +86,7 @@ def every_plane_matches(composer, *, depth: int) -> None:
 
 def test_the_governed_door_serves_the_stamp_one_plane_per_block(tmp_path):
     """The writer's own packing: inner chunks one plane deep, z never halved."""
-    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=DEPTH)
     run = LivePublisher(
@@ -107,8 +106,8 @@ def test_the_governed_door_serves_the_stamp_one_plane_per_block(tmp_path):
 
 def test_the_built_door_serves_the_stamp_several_planes_per_block(tmp_path):
     """Thy1's packing: 8-plane blocks over 13 planes, the final block partial."""
-    from zmart_viewer import pieces as served
-    from zmart_viewer.building import declare_a_built_picture
+    from zmart_viewer.picture.building import declare_a_built_picture
+    from zmart_viewer.serving import pieces as served
 
     side = 256
     store = tmp_path / "stores" / "stamped.ome.zarr"
@@ -208,8 +207,8 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
     takes — so a shift anywhere between the address and the pixels decodes
     to another frame's stamp and fails loudly.
     """
-    from zmart_viewer import pieces as served
-    from zmart_viewer.building import declare_a_built_picture
+    from zmart_viewer.picture.building import declare_a_built_picture
+    from zmart_viewer.serving import pieces as served
 
     side = 128
     store = tmp_path / "stores" / "combined.ome.zarr"
@@ -307,8 +306,8 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
     everything), and a moment published later starts serving the moment
     it is published.
     """
-    from zmart_viewer.building import GovernedRun
-    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.coordinator import LivePublisher
+    from zmart_viewer.picture.building import GovernedRun
 
     frame = 384
     profile, _ = plan_the_writing(
@@ -368,8 +367,8 @@ def test_the_governed_door_serves_the_record_not_the_files(tmp_path):
 
 def test_every_door_parses_the_one_address():
     """The one-definition rule for the piece address, checked by identity."""
-    from zmart_viewer import pieces as served
-    from zmart_viewer.compose import the_piece_address
+    from zmart_viewer.picture.compose import the_piece_address
+    from zmart_viewer.serving import pieces as served
 
     assert served.the_piece_address is the_piece_address
     # And the parser itself: a flat address is frame (0, 0); a grown one

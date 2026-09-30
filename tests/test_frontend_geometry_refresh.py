@@ -10,7 +10,7 @@ def test_depth_transition_holds_only_a_complete_unchanged_framebuffer():
     result = subprocess.run(
         ["node", "--input-type=module", "--eval", r"""
         import assert from 'node:assert/strict';
-        import {holdCompleteSlice} from '../../zmart_viewer/embedding.js';
+        import {holdCompleteSlice} from '../../engine/drawing/embedding.js';
         let ready = true, draws = 0;
         const slice = {
           renderingStale:false, projectionParameters:{value:{width:10,height:10}},
@@ -57,7 +57,7 @@ def test_geometry_refresh_waits_for_initial_binding_and_cancels_on_disposal():
         import assert from 'node:assert/strict';
         import {RefCounted} from 'neuroglancer/unstable/util/disposable.js';
         import {NullarySignal} from 'neuroglancer/unstable/util/signal.js';
-        import {refreshGeometry, geometryRefreshPending} from '../../zmart_viewer/embedding.js';
+        import {refreshGeometry, geometryRefreshPending} from '../../engine/drawing/embedding.js';
         for (const dispose of [false, true]) {
           const source = new RefCounted();
           source.changed = new NullarySignal();
@@ -110,7 +110,7 @@ def test_top_bounds_use_transforms_when_global_depth_units_change():
           emptyInvalidCoordinateSpace} from 'neuroglancer/unstable/coordinate_transform.js';
         import {WatchableValue} from 'neuroglancer/unstable/trackable_value.js';
         import {NullarySignal} from 'neuroglancer/unstable/util/signal.js';
-        const {keepDepthLocal} = await import('../../zmart_viewer/embedding.js');
+        const {keepDepthLocal} = await import('../../engine/drawing/embedding.js');
         const keep = (layer, viewer) => keepDepthLocal(layer, viewer,
           transform => new WatchableCoordinateSpaceTransform(transform));
         const space = (scale, depth) => makeCoordinateSpace({names:['z'], units:['m'],
@@ -180,7 +180,7 @@ def test_top_bounds_use_transforms_when_global_depth_units_change():
 
 
 def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
-    script = Path(__file__).resolve().parents[1] / "zmart_viewer/neuroglancer-growth.mjs"
+    script = Path(__file__).resolve().parents[1] / "engine/drawing/neuroglancer-growth.mjs"
     result = subprocess.run(
         [
             "node",

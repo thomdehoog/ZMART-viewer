@@ -67,9 +67,8 @@ import pytest
 import zarr
 from demo_data import write_demo_zarr
 from pixels import colour_spread, image_middle
-
-from zmart_viewer.contrast import measure
-from zmart_viewer.server import make_server
+from zmart_viewer.opening.contrast import measure
+from zmart_viewer.serving.server import make_server
 
 # Two brightness windows that could not be more different, and what each should do
 # to this particular specimen.

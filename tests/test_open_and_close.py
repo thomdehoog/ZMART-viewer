@@ -20,8 +20,8 @@ from pixels import fraction_lit
 # Importing the server put the building folder on ``sys.path``; the naming
 # rule below is the one every built view follows, so no test spells the
 # ``.zmartview.zarr`` suffix by hand.
-from zmart_viewer.building import the_scene_folder_name  # noqa: E402
-from zmart_viewer.server import make_server
+from zmart_viewer.picture.building import the_scene_folder_name  # noqa: E402
+from zmart_viewer.serving.server import make_server
 
 
 def _store(path, *, value=4000, channels=2):
@@ -261,7 +261,7 @@ def test_the_load_data_box_can_be_switched_off(browser, built_dist, demo_store):
     """
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     server = make_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, allow_open=False
@@ -304,7 +304,7 @@ def test_the_selection_list_is_absent_unless_asked_for(browser, built_dist, demo
     """
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -329,7 +329,7 @@ def test_the_bar_of_controls_can_be_put_on_the_left(browser, built_dist, demo_st
     """
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     server = make_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, panel_side="left"
@@ -354,7 +354,7 @@ def test_the_controls_fold_away(browser, built_dist, demo_store):
     """The bar folds to the edge, so the whole screen can show the specimen."""
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -393,7 +393,7 @@ def test_finished_data_opens_no_listening_connection(browser, built_dist, demo_s
     """
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     server = make_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, live=False
@@ -460,7 +460,7 @@ def test_a_live_viewer_waits_to_be_told(browser, built_dist, demo_store):
     """
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -805,7 +805,7 @@ class TestRelinking:
         run = tmp_path / "surveyrun"
         run.mkdir()
         _store(run / "surveyrun_pos001.ome.zarr", channels=1)
-        from zmart_viewer.building import declare_a_built_picture
+        from zmart_viewer.picture.building import declare_a_built_picture
 
         store = declare_a_built_picture(run / "views", run, name="surveyrun")
         shutil.move(str(run / "surveyrun_pos001.ome.zarr"), str(tmp_path / "elsewhere.ome.zarr"))

@@ -27,8 +27,7 @@ sys.path.insert(0, str(VIZ))
 
 from grid_scans import _post  # noqa: E402
 from test_open_and_close import _store  # noqa: E402
-
-from zmart_viewer.server import make_server  # noqa: E402
+from zmart_viewer.serving.server import make_server  # noqa: E402
 
 
 @pytest.fixture

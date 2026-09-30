@@ -30,8 +30,7 @@ import numpy as np
 import pytest
 import zarr
 from driving import open_through_the_window, pick_colormap  # noqa: E402
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 16, 1024, 256, 3
 

@@ -18,8 +18,7 @@ import time
 import numpy as np
 import pytest
 import zarr
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 
 def _serve_tree(tmp_path, *, live: bool = True):
@@ -399,7 +398,7 @@ def test_a_piece_the_clock_cannot_vouch_for_is_not_given_a_validator(serving, tm
     File identity leans on the modification stamp, and filesystems stamp files
     from a clock that ticks more coarsely than a writer writes — the same
     still-moving rule the table caches follow (see ``STAMPS_STILL_MOVING_NS``
-    in ``zmart_viewer.record/shardlink.py``). A piece patched twice in one tick at the
+    in ``zmart_viewer.live.record/shardlink.py``). A piece patched twice in one tick at the
     same size would carry the same identity, and a 304 against it would hand
     the browser exactly the stale picture all of this exists to prevent. So a
     piece still within the clock's reach of "now" gets no validator at all and
@@ -585,7 +584,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_the_description_is_forgotten(self, two_open):
         """What a store contains, remembered while reading it, is dropped on close."""
-        from zmart_viewer import library as stores
+        from zmart_viewer.opening import library as stores
 
         port, data = two_open
         closed = str(data / "targetscan_cell001.ome.zarr")
@@ -601,7 +600,7 @@ class TestClosingGivesTheMemoryBack:
         Dropping too much would be quietly expensive rather than wrong: the
         acquisition still on screen would be read from disk all over again.
         """
-        from zmart_viewer import library as stores
+        from zmart_viewer.opening import library as stores
 
         port, data = two_open
         kept = str(data / "overview_pos001.ome.zarr")
@@ -610,7 +609,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_the_files_served_to_the_browser_are_forgotten(self, two_open):
         """The small files handed to the page are held in memory too."""
-        from zmart_viewer.server import _Handler
+        from zmart_viewer.serving.server import _Handler
 
         port, data = two_open
         closed = str(data / "targetscan_cell001.ome.zarr")
@@ -622,7 +621,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_closing_says_which_images_went(self, tmp_path):
         """The server can only forget what the library tells it was closed."""
-        from zmart_viewer.library import Library
+        from zmart_viewer.opening.library import Library
 
         _, data = self._two_acquisitions(tmp_path)
         library = Library()

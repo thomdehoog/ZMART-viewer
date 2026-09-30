@@ -39,10 +39,9 @@ from test_manifest_refresh_browser import (  # noqa: E402
     _wait_for_picture,
     _wait_for_revision,
 )
-
-from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
-from zmart_viewer.record.model import GridCell  # noqa: E402
-from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.coordinator import LivePublisher  # noqa: E402
+from zmart_viewer.live.record.model import GridCell  # noqa: E402
+from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
 
 ROOM = 4  # declared moments; only some are ever written here
 

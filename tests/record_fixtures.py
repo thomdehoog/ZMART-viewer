@@ -1,6 +1,6 @@
 """Small live runs to test against, for anything that reads what we publish.
 
-These four were written inside `zmart_viewer.record`'s own tests and grew a second set
+These four were written inside `zmart_viewer.live.record`'s own tests and grew a second set
 of users: the viewer's gates, which need a *real* live run to open, watch and
 measure. That worked while both lived in one repository and stops working the
 moment they do not -- "install their test suite to run mine" is not a
@@ -20,9 +20,8 @@ say plainly what it saw.
 from __future__ import annotations
 
 import numpy as np
-
-from zmart_viewer.record.model import GridCell
-from zmart_viewer.record.profiles import plan_the_writing
+from zmart_viewer.live.record.model import GridCell
+from zmart_viewer.live.record.profiles import plan_the_writing
 
 #: The camera frame these runs are written with. Large enough that a piece of
 #: the picture is a piece rather than a rounding, small enough to write fast.
@@ -47,7 +46,7 @@ def a_live_run(folder, *, timepoints: int = 1, linked_view: str = "per_publish")
     which is exactly the case that deferring it removes. A caller testing the
     deferral asks for ``"at_run_end"`` and gets the run a real acquisition has.
     """
-    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=timepoints)
     return LivePublisher(

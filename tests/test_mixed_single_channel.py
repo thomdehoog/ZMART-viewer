@@ -9,10 +9,9 @@ import zarr
 from test_published_depth import CANVAS, composition
 from test_published_transfer import write_position
 from test_server import request
-
-from zmart_viewer.library import axis_names
-from zmart_viewer.published import STACK_STORE, STORE, PublishedAcquisition
-from zmart_viewer.server import make_server
+from zmart_viewer.opening.library import axis_names
+from zmart_viewer.serving.server import make_server
+from zmart_viewer.views.published import STACK_STORE, STORE, PublishedAcquisition
 
 
 @pytest.mark.parametrize("bake", [False, True])

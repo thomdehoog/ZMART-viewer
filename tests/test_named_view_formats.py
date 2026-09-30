@@ -9,10 +9,10 @@ import pytest
 import zarr
 from numcodecs import Zstd
 from test_view_sampling import INPUT_FORMATS, write_tile
-
-from zmart_viewer import coverage, pieces, published
-from zmart_viewer.library import Library
-from zmart_viewer.views import ViewSet
+from zmart_viewer.opening.library import Library
+from zmart_viewer.serving import coverage, pieces
+from zmart_viewer.views import published
+from zmart_viewer.views.named import ViewSet
 
 
 def regions(mask):

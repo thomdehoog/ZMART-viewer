@@ -39,9 +39,12 @@ import zarr
 VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 
-from zmart_viewer import pieces as served  # noqa: E402
-from zmart_viewer.building import declare_a_built_picture, the_scene_folder_name  # noqa: E402
-from zmart_viewer.compose import Composer, read_the_transfer  # noqa: E402
+from zmart_viewer.picture.building import (  # noqa: E402
+    declare_a_built_picture,
+    the_scene_folder_name,
+)
+from zmart_viewer.picture.compose import Composer, read_the_transfer  # noqa: E402
+from zmart_viewer.serving import pieces as served  # noqa: E402
 
 # One tile: shallow, small, and square, so a whole transfer of them is quick to
 # write and every test can afford to compare every voxel.
@@ -1049,7 +1052,7 @@ def test_a_built_picture_is_measured_where_the_operator_is_looking(
     piece are gone.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from zmart_viewer.contrast import measure_here  # noqa: PLC0415
+    from zmart_viewer.opening.contrast import measure_here  # noqa: PLC0415
 
     # Unbaked on purpose: then NOTHING in the folder holds pixels, which is
     # what every level past the baked ones looks like on a real plate.

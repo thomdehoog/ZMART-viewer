@@ -12,8 +12,12 @@ import json
 import numpy as np
 import zarr
 from demo_data import write_demo_zarr
-
-from zmart_viewer.contrast import HISTOGRAM_BINS, display_window, intensity_histogram, measure
+from zmart_viewer.opening.contrast import (
+    HISTOGRAM_BINS,
+    display_window,
+    intensity_histogram,
+    measure,
+)
 
 
 def write_store(path, data: np.ndarray, omero: dict | None = None) -> str:
@@ -187,9 +191,9 @@ def test_measuring_an_unreadable_store_still_gives_a_usable_window(tmp_path):
 
 
 def a_linked_run(folder, *, channels=("channel 0",), value=1200):
-    from zmart_viewer.record.coordinator import LivePublisher
-    from zmart_viewer.record.model import GridCell
-    from zmart_viewer.record.profiles import plan_the_writing
+    from zmart_viewer.live.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.model import GridCell
+    from zmart_viewer.live.record.profiles import plan_the_writing
 
     frame = 384
     profile, _ = plan_the_writing("overview", frame=frame, z_planes=1, channels=channels)
@@ -214,7 +218,7 @@ def a_linked_run(folder, *, channels=("channel 0",), value=1200):
     # linked view moved to end-of-run this fixture got away with naming a
     # store nothing had declared, because the writer left one behind on every
     # publish.
-    from zmart_viewer.live import LIVE_PICTURE, the_live_picture_declared
+    from zmart_viewer.live.following import LIVE_PICTURE, the_live_picture_declared
 
     the_live_picture_declared(folder)
     return folder / LIVE_PICTURE

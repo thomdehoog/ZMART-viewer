@@ -4,11 +4,10 @@ import numpy as np
 import pytest
 import zarr
 from test_view_sampling import fixture, oracle, write_tile
-
-from zmart_viewer import pieces
-from zmart_viewer.compose import MEAN_REDUCTION
-from zmart_viewer.published import PublishedTransfer
-from zmart_viewer.views import ViewSet
+from zmart_viewer.picture.compose import MEAN_REDUCTION
+from zmart_viewer.serving import pieces
+from zmart_viewer.views.named import ViewSet
+from zmart_viewer.views.published import PublishedTransfer
 
 
 @pytest.mark.parametrize("bake", [False, True])

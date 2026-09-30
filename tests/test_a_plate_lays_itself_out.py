@@ -30,9 +30,12 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
-from zmart_viewer import pieces as served  # noqa: E402
-from zmart_viewer.building import declare_a_built_picture, the_scene_folder_name  # noqa: E402
-from zmart_viewer.compose import read_the_transfer  # noqa: E402
+from zmart_viewer.picture.building import (  # noqa: E402
+    declare_a_built_picture,
+    the_scene_folder_name,
+)
+from zmart_viewer.picture.compose import read_the_transfer  # noqa: E402
+from zmart_viewer.serving import pieces as served  # noqa: E402
 
 FIELD = (2, 32, 32)  # planes, height, width of one field
 VOXEL_UM = (1.0, 0.5, 0.5)
@@ -493,8 +496,7 @@ def door(built_dist, tmp_path):
     import threading
 
     from test_open_and_close import _store
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     first = tmp_path / "overview"
     first.mkdir()

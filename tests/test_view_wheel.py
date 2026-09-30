@@ -11,8 +11,7 @@ from pathlib import Path
 import numpy as np
 import tomllib
 from test_view_sampling import write_tile
-
-from zmart_viewer.views import ViewSet
+from zmart_viewer.views.named import ViewSet
 
 
 def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
@@ -83,11 +82,11 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
         }
         expected_files.update(
             {
-                p.relative_to(repo / "zmart_viewer").as_posix(): p.read_bytes()
-                for p in (repo / "zmart_viewer").rglob("*.py")
+                p.relative_to(repo / "engine").as_posix(): p.read_bytes()
+                for p in (repo / "engine").rglob("*.py")
             }
         )
-        expected_files.update({name: (repo / "zmart_viewer" / name).read_bytes()
+        expected_files.update({f"drawing/{name}": (repo / "engine" / "drawing" / name).read_bytes()
                                for name in ("embedding.js", "neuroglancer-growth.mjs")})
         assert packaged == expected_files, (
             "Wheel must contain exactly this build, with no retired assets"
@@ -122,8 +121,8 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
             """
 import importlib.metadata, pathlib, re, tempfile, threading, urllib.request, os, json
 import zmart_viewer
-from zmart_viewer.server import make_server, _FRONTEND_DIST
-from zmart_viewer.views import ViewSet
+from zmart_viewer.serving.server import make_server, _FRONTEND_DIST
+from zmart_viewer.views.named import ViewSet
 assert 'installed' in pathlib.Path(zmart_viewer.__file__).parts
 assert importlib.metadata.version('zmart-viewer') == os.environ['ZMART_TEST_VERSION']
 assert _FRONTEND_DIST.name == '_frontend'

@@ -7,8 +7,7 @@ import numpy as np
 import pytest
 import zarr
 from test_published_depth import CANVAS, at_depth, composition
-
-from zmart_viewer.published import STACK_STORE, STORE, PublishedAcquisition, PublishedTransfer
+from zmart_viewer.views.published import STACK_STORE, STORE, PublishedAcquisition, PublishedTransfer
 
 
 def focused(folder, name, x, height, *, reference=None, depth=3):
@@ -227,7 +226,7 @@ def test_mixed_relative_publication(tmp_path, monkeypatch, bake, flat_first):
                     )
         assert all(p.read_bytes() == value for p, value in original.items())
         monkeypatch.setattr(
-            "zmart_viewer.published._read_one_tile", lambda *_: pytest.fail("idle metadata read")
+            "zmart_viewer.views.published._read_one_tile", lambda *_: pytest.fail("idle metadata read")
         )
         before = view.revision
         view.publish(
@@ -248,8 +247,7 @@ def test_mixed_relative_publication(tmp_path, monkeypatch, bake, flat_first):
 @pytest.mark.parametrize("flat_first", [False, True])
 def test_browser_mixed_relative_depth(browser, built_dist, tmp_path, bake, flat_first):
     from test_manifest_refresh_browser import _wait_for_picture
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     focused(tmp_path, "flat.ome.zarr", 0, 76, depth=1)
     focused(tmp_path, "focus.ome.zarr", 256, 60, reference=61.3)

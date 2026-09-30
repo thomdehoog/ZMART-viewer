@@ -24,14 +24,14 @@ drives the microscope.
 
 The ZMART Viewer is two things in one repository:
 
-1. **An engine** (`zmart_viewer/`, Python). It reads OME-Zarr images, places each
+1. **A viewing engine** (`engine/`, installed as the Python package `zmart_viewer`). It reads OME-Zarr images, places each
    position where it belongs, follows a folder while a microscope writes into it,
    and serves only the pieces of the picture that are on screen, so even enormous
    data feels light. It also offers named views of an acquisition: **Slice** (one
    plane at a time), **Top** (the surface seen from above) and **Min/Max/Sum**
    projections.
 
-2. **A window** (`app/page/`, built on [neuroglancer](https://github.com/google/neuroglancer)).
+2. **A window** (`interface/`, built on [neuroglancer](https://github.com/google/neuroglancer)).
    Sliders through depth (Z) and time (T), a panel to set each channel's colour
    and contrast, a load window to choose data, and a 3-D view. It opens as its own
    desktop window and never talks to a microscope, so it can be used on anybody's
@@ -63,7 +63,7 @@ zmart-viewer /path/to/run --no-window
 From your own software, to put the picture inside your own interface:
 
 ```python
-from zmart_viewer.server import make_server
+from zmart_viewer import make_server
 
 # 1) Start the engine on a port of the machine's choosing, watching a folder
 server = make_server(port=0, data_dir="/path/to/run", live=True)

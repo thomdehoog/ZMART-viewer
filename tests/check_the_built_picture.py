@@ -33,7 +33,7 @@ from zarr.core.buffer import cpu
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from zmart_viewer.compose import (
+from zmart_viewer.picture.compose import (
     Composer,  # noqa: E402
     read_the_transfer,  # noqa: E402
 )

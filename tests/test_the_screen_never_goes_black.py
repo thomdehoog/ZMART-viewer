@@ -79,11 +79,10 @@ from pathlib import Path
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-import measure_a_governed_run_at_scale as harness  # noqa: E402
+import a_governed_run as harness  # noqa: E402
 from record_fixtures import a_live_run, some_specimen  # noqa: E402
-
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.server import make_server  # noqa: E402
+from zmart_viewer.picture.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.serving.server import make_server  # noqa: E402
 
 # --------------------------------------------------------------------------
 # The numbers this test depends on, and why each one is what it is.

@@ -25,9 +25,8 @@ import threading
 
 import numpy as np
 import zarr
-
-from zmart_viewer.library import normalise_units
-from zmart_viewer.server import make_server
+from zmart_viewer.opening.library import normalise_units
+from zmart_viewer.serving.server import make_server
 
 
 def _described(unit: str) -> bytes:

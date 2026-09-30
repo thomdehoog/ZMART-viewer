@@ -41,12 +41,23 @@ Homepage = "https://github.com/thomdehoog/ZMART-viewer"
 
 # The command that opens the viewer: `zmart-viewer`, with a folder or without.
 [project.scripts]
-zmart-viewer = "zmart_viewer.launcher:main"
+zmart-viewer = "zmart_viewer.command:main"
 
 [tool.setuptools]
-packages = ["zmart_viewer", "zmart_viewer.record", "zmart_viewer._frontend"]
+packages = [
+    "zmart_viewer",
+    "zmart_viewer.serving",
+    "zmart_viewer.opening",
+    "zmart_viewer.picture",
+    "zmart_viewer.views",
+    "zmart_viewer.live",
+    "zmart_viewer.live.record",
+    "zmart_viewer.drawing",
+    "zmart_viewer._frontend",
+]
 
 [tool.setuptools.package-dir]
+"zmart_viewer" = "engine"
 "zmart_viewer._frontend" = "app/page/dist"
 
 [tool.setuptools.cmdclass]
@@ -54,7 +65,7 @@ build_py = "build_support.BuildPy"
 bdist_wheel = "build_support.Wheel"
 
 [tool.setuptools.package-data]
-"zmart_viewer" = ["embedding.js", "neuroglancer-growth.mjs"]
+"zmart_viewer.drawing" = ["*.js", "*.mjs"]
 "zmart_viewer._frontend" = ["**/*"]
 
 [tool.ruff]

@@ -38,7 +38,7 @@ import zarr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from zmart_viewer import contrast  # noqa: E402
+from zmart_viewer.opening import contrast  # noqa: E402
 
 # The two channels are deliberately far apart, in the way a real Stellaris
 # acquisition is: a bright structural marker and a faint one that matters just as

@@ -12,12 +12,11 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pytest
 from test_view_sampling import write_tile
-
-from zmart_viewer import coverage, pieces
-from zmart_viewer.projections import write_projection
-from zmart_viewer.published import PublishedTransfer
-from zmart_viewer.server import make_server
-from zmart_viewer.views import ViewSet
+from zmart_viewer.serving import coverage, pieces
+from zmart_viewer.serving.server import make_server
+from zmart_viewer.views.named import ViewSet
+from zmart_viewer.views.projections import write_projection
+from zmart_viewer.views.published import PublishedTransfer
 
 
 def test_legacy_baked_levels_beyond_original_pyramid_remain_readable(tmp_path):

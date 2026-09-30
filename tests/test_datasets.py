@@ -22,8 +22,7 @@ import json
 import numpy as np
 import pytest
 import zarr
-
-from zmart_viewer.library import Library
+from zmart_viewer.opening.library import Library
 
 
 def _store(path, *, scale=(2.0, 0.35, 0.35), axes=("z", "y", "x"), channels=None):

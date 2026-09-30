@@ -63,7 +63,7 @@ stable URLs and selective cache invalidation:
 
 ```bash
 # ran from the microscopy checkout while the record machinery lived there;
-# its guard now belongs beside zmart_viewer/record's own tests
+# its guard now belongs beside the record's own tests
 ```
 
 It first proves each unmodified target is green, accepts only pytest's ordinary

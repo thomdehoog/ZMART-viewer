@@ -5,8 +5,7 @@ import multiprocessing
 import os
 
 import pytest
-
-from zmart_viewer.building import _holding_the_bake_lock
+from zmart_viewer.picture.building import _holding_the_bake_lock
 
 
 def _wait_for_lock(store, attempting, finished, outcome):

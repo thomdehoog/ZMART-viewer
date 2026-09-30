@@ -6,8 +6,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import zarr
-
-from zmart_viewer.compose import (
+from zmart_viewer.picture.compose import (
     MEAN_REDUCTION,
     Composer,
     Mosaic,
@@ -194,7 +193,7 @@ def test_top_warm_completes_with_run_reuse(tmp_path):
 
 @pytest.mark.parametrize("explicit", [False, True])
 def test_legacy_float_rounding_contract_survives(tmp_path, explicit):
-    from zmart_viewer.compose import LEGACY_MEAN_REDUCTION
+    from zmart_viewer.picture.compose import LEGACY_MEAN_REDUCTION
 
     data = np.full((1, 1, 1, 8, 8), 0.25, dtype="float32")
     tile = write_tile(tmp_path, "old.ome.zarr", data)

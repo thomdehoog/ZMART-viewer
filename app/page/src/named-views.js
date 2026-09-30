@@ -1,1 +1,1 @@
-export { VIEW_LABELS, viewKey, viewChoices, selectedViews, inSelectedView } from "../../../zmart_viewer/embedding.js";
+export { VIEW_LABELS, viewKey, viewChoices, selectedViews, inSelectedView } from "../../../engine/drawing/embedding.js";
