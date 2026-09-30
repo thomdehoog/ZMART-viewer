@@ -95,11 +95,14 @@ up the microscope.
 
 ## 3. Put the picture on your page
 
-The simplest page is an `<iframe>` pointing at `http://127.0.0.1:<port>/`. That
-gives you the viewer's own window inside yours, with its sliders and panel.
+Your interface brings its own controls: sliders, channel settings, and
+whatever else your experiment needs. The viewer's own window (`app/page`) is
+not part of this; it is the interface for people who use the viewer on its
+own. The picture itself is drawn by [neuroglancer](https://github.com/google/neuroglancer),
+the one drawing engine the viewer supports.
 
-To draw the picture on your own canvas, with your own controls, use the
-embedding script the engine serves at `/embedding.js`. It is a plain ES module
+To draw the picture on your own canvas, use the embedding script the engine
+serves at `/embedding.js`. It is a plain ES module
 with no dependencies of its own:
 
 ```html
