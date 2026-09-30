@@ -21,24 +21,6 @@ banner that is hard to read past, whether or not anything failed.
 from __future__ import annotations
 
 import os
-
-# The engine lives in ``engine/`` but is imported as ``zmart_viewer``. An
-# installed package (``pip install -e .``) is found the usual way; without
-# one, the tests point the name at the folder themselves.
-try:
-    import zmart_viewer  # noqa: F401
-except ImportError:
-    import importlib.util as _util
-    import sys as _sys
-    from pathlib import Path as _Path
-
-    _engine = _Path(__file__).resolve().parents[1] / "engine"
-    _spec = _util.spec_from_file_location(
-        "zmart_viewer", _engine / "__init__.py", submodule_search_locations=[str(_engine)]
-    )
-    _module = _util.module_from_spec(_spec)
-    _sys.modules["zmart_viewer"] = _module
-    _spec.loader.exec_module(_module)
 import re
 import socket
 import sys
@@ -46,6 +28,7 @@ import threading
 import time
 from pathlib import Path
 
+import engine_on_path  # noqa: F401  -- makes ``zmart_viewer`` importable from the checkout
 import pytest
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
@@ -130,7 +113,7 @@ for source_root in (_REPO_ROOT, _VIZ_ROOT, _TESTS):
 from demo_data import write_demo_zarr  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
-_DIST = _VIZ_ROOT / "app" / "page" / "dist"
+_DIST = _VIZ_ROOT / "interface" / "dist"
 
 
 @pytest.fixture(scope="session")
@@ -141,9 +124,10 @@ def viz_root() -> Path:
 def _newest_source_change() -> float:
     """When the viewer's own source was last edited."""
     newest = 0.0
-    for path in (_VIZ_ROOT / "app" / "page" / "src").rglob("*"):
-        if path.is_file():
-            newest = max(newest, path.stat().st_mtime)
+    for folder in (_VIZ_ROOT / "interface", _VIZ_ROOT / "engine" / "drawing"):
+        for path in folder.rglob("*"):
+            if path.is_file() and "dist" not in path.parts:
+                newest = max(newest, path.stat().st_mtime)
     return newest
 
 
@@ -169,8 +153,8 @@ def built_dist() -> Path:
     if not (_DIST / "index.html").exists():
         _give_up_on_the_picture(
             "the viewer page has not been built, so there was nothing to open "
-            "(app/page/dist/index.html is missing). Build it with "
-            "`npm --prefix app/page install && npm --prefix app/page run build`"
+            "(interface/dist/index.html is missing). Build it with "
+            "`npm install && npm run build`"
         )
     built = (_DIST / "index.html").stat().st_mtime
     changed = _newest_source_change()
@@ -179,7 +163,7 @@ def built_dist() -> Path:
             "the built viewer page is older than the source it was built from, so "
             "these tests would be measuring a program that is no longer the one in "
             "the repository. Rebuild it first:\n\n"
-            "    npm --prefix app/page run build\n\n"
+            "    npm run build\n\n"
             f"(built {time.strftime('%H:%M:%S', time.localtime(built))}, "
             f"source last changed "
             f"{time.strftime('%H:%M:%S', time.localtime(changed))})"

@@ -6,10 +6,10 @@ import http.client
 import threading
 
 from record_fixtures import FRAME, some_specimen  # noqa: E402
-from zmart_viewer.live.record.coordinator import LivePublisher
-from zmart_viewer.live.record.gateway import answer_from_a_live_run
-from zmart_viewer.live.record.model import GridCell
-from zmart_viewer.live.record.profiles import plan_the_writing
+from zmart_viewer.live.record.live_serving import answer_from_a_live_run
+from zmart_viewer.live.record.publisher import LivePublisher
+from zmart_viewer.live.record.storage_plans import plan_the_writing
+from zmart_viewer.live.record.vocabulary import GridCell
 from zmart_viewer.serving.server import make_server
 
 

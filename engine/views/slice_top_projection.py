@@ -11,12 +11,12 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from zmart_viewer.opening.library import _read_attrs_at
-from zmart_viewer.picture.acquired import canonical_regions
-from zmart_viewer.picture.building import _holding_the_bake_lock
-from zmart_viewer.picture.compose import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, _read_one_tile
+from zmart_viewer.opening.open_folders import _read_attrs_at
+from zmart_viewer.picture.acquired_regions import canonical_regions
+from zmart_viewer.picture.arrangement import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, _read_one_tile
+from zmart_viewer.picture.built_picture import _holding_the_bake_lock
 from zmart_viewer.views.projections import METHODS, PROJECTION_RECIPE, write_projection
-from zmart_viewer.views.published import PublishedTransfer, validate_canvas
+from zmart_viewer.views.publishing import PublishedTransfer, validate_canvas
 
 
 def view_metadata(store):

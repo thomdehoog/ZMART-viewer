@@ -9,9 +9,9 @@ import pytest
 import zarr
 from test_acquired_composition import pixels, region, source
 from test_server import request
-from zmart_viewer.serving import pieces
+from zmart_viewer.serving import picture_pieces as pieces
 from zmart_viewer.serving.server import make_server
-from zmart_viewer.views.published import STACK_STORE, STORE, PublishedTransfer
+from zmart_viewer.views.publishing import STACK_STORE, STORE, PublishedTransfer
 
 CANVAS = {"x_um": [0, 64], "y_um": [0, 8]}
 
@@ -22,7 +22,7 @@ def test_misaligned_bake_updates_ancestors_without_reopening_distant_originals(
     tmp_path, monkeypatch, frames, channels, depth, value
 ):
     from test_published_transfer import write_position
-    from zmart_viewer.picture.compose import MEAN_REDUCTION, Composer
+    from zmart_viewer.picture.arrangement import MEAN_REDUCTION, Composer
 
     canvas = {"x_um": [0, 2049], "y_um": [0, 129]}
     for name, x, initial_value in (("a.ome.zarr", 1, 120), ("far.ome.zarr", 1537, 240)):
@@ -331,7 +331,7 @@ def test_http_sparse_contract_cannot_silently_be_dropped(tmp_path, bake):
 def test_publication_http_distinguishes_invalid_input_from_io_failure(
     tmp_path, monkeypatch, route, method, payload, failure, expected
 ):
-    from zmart_viewer.views.published import PublishedFolders
+    from zmart_viewer.views.publishing import PublishedFolders
 
     def fail(*args, **kwargs):
         raise failure("publication unavailable")
@@ -353,8 +353,8 @@ def test_publication_http_distinguishes_invalid_input_from_io_failure(
 
 @pytest.mark.parametrize("bake", [False, True])
 def test_complete_stores_append_retire_and_keep_one_aggregate_at_100(tmp_path, bake):
-    from zmart_viewer.opening.library import Library
-    from zmart_viewer.views.published import PublishedFolders
+    from zmart_viewer.opening.open_folders import Library
+    from zmart_viewer.views.publishing import PublishedFolders
 
     names = [f"p{i:03}.ome.zarr" for i in range(100)]
     for i, name in enumerate(names):
@@ -420,7 +420,7 @@ def test_off_mode_retirement_is_cleared_when_baking_resumes(tmp_path):
 
 
 def test_virtual_extended_levels_work_in_a_spawned_worker(tmp_path):
-    from zmart_viewer.picture.compose import Composer
+    from zmart_viewer.picture.arrangement import Composer
 
     source(tmp_path, "a.ome.zarr", 120)
     view = PublishedTransfer(tmp_path / STORE, piece=4)
@@ -450,7 +450,7 @@ def test_browser_sparse_aggregate_refresh_pixels_and_requests(
     from test_manifest_refresh_browser import _wait_for_picture
     from test_published_transfer import write_position
     from test_transparent_2d_browser import READ_ALPHA
-    from zmart_viewer.picture.compose import MEAN_REDUCTION
+    from zmart_viewer.picture.arrangement import MEAN_REDUCTION
 
     write_position(tmp_path, "black.ome.zarr", 0, 0)
     write_position(tmp_path, "signal.ome.zarr", 512, 2400)

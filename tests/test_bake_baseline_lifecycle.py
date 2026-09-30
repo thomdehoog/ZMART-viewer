@@ -2,8 +2,8 @@ import json
 
 import numpy as np
 import zarr
-from zmart_viewer.picture.building import declare_a_built_picture
-from zmart_viewer.picture.compose import Composer, read_the_transfer
+from zmart_viewer.picture.arrangement import Composer, read_the_transfer
+from zmart_viewer.picture.built_picture import declare_a_built_picture
 
 
 def positions(root):

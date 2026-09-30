@@ -36,7 +36,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 import a_governed_run as harness  # noqa: E402
-from zmart_viewer.picture.building import GovernedRun, declare_a_governed_picture  # noqa: E402
+from zmart_viewer.picture.built_picture import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 # Wide enough that the picture has extended pyramid levels to keep true --
 # they are where the per-landing rebuilding lived -- and small enough that

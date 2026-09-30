@@ -35,6 +35,8 @@ from pathlib import Path
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 sys.path.insert(0, str(_VIZ / "tests"))
+
+import engine_on_path  # noqa: E402, F401
 from demo_data import write_demo_zarr  # noqa: E402
 from zmart_viewer.serving.server import _FRONTEND_DIST, make_server  # noqa: E402
 
@@ -132,7 +134,7 @@ def run_check() -> int:
     if not (_FRONTEND_DIST / "index.html").exists():
         print(
             "The viewer page is not built. Build it first:\n"
-            "    npm --prefix app/page install && npm --prefix app/page run build"
+            "    npm install && npm run build"
         )
         return 2
 

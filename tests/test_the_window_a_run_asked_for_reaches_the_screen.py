@@ -19,7 +19,7 @@ from __future__ import annotations
 import numpy as np
 from pixels import fraction_lit
 from pointed_by_hand import TILE, a_pointed_view, a_tile
-from zmart_viewer.opening.library import channels
+from zmart_viewer.opening.open_folders import channels
 
 # The band the specimen really occupies, and what the run asks to be shown.
 # Well inside the camera's range on purpose: that gap is the whole subject.

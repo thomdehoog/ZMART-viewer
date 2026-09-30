@@ -28,8 +28,12 @@ import pytest
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-from zmart_viewer.live.record.coordinator import LivePublisher  # noqa: E402
-from zmart_viewer.live.record.model import AcquisitionProfile, GridCell, LevelGeometry  # noqa: E402
+from zmart_viewer.live.record.publisher import LivePublisher  # noqa: E402
+from zmart_viewer.live.record.vocabulary import (  # noqa: E402
+    AcquisitionProfile,
+    GridCell,
+    LevelGeometry,
+)
 
 DEPTH = 13  # odd on purpose: the ceiling-versus-floor seam, and 13 // 2 != -(-13 // 2)
 
@@ -81,7 +85,7 @@ def a_deep_run_whose_levels_halve_z(tmp_path):
 def test_the_writer_and_the_world_frame_agree_on_the_ceiling(
     a_deep_run_whose_levels_halve_z,
 ):
-    from zmart_viewer.picture.building import TheWorldFrame
+    from zmart_viewer.picture.built_picture import TheWorldFrame
 
     run = a_deep_run_whose_levels_halve_z
     ceiling = (-(-DEPTH // 2), 64, 64)  # (7, 64, 64)
@@ -114,8 +118,10 @@ def test_the_rule_has_exactly_one_definition():
     how deep the world is. Identity (`is`), not equality: the same
     function object, not a lookalike.
     """
-    from zmart_viewer.live.record import coordinator, gateway, model
-    from zmart_viewer.picture import building as governed
+    from zmart_viewer.live.record import live_serving as gateway
+    from zmart_viewer.live.record import publisher as coordinator
+    from zmart_viewer.live.record import vocabulary as model
+    from zmart_viewer.picture import built_picture as governed
 
     assert coordinator.rounded_up is model.rounded_up
     assert gateway.rounded_up is model.rounded_up

@@ -27,13 +27,13 @@ from pathlib import Path
 
 from zmart_viewer.live import following as live
 from zmart_viewer.live.following import SourceRegistry, live_rows
-from zmart_viewer.live.record.gateway import answer_from_a_live_run, live_run_holding
-from zmart_viewer.opening import loading
+from zmart_viewer.live.record.live_serving import answer_from_a_live_run, live_run_holding
+from zmart_viewer.opening import open_a_path as loading
 from zmart_viewer.opening.contrast import (
     Measurements,
     measure_here,
 )
-from zmart_viewer.opening.library import (
+from zmart_viewer.opening.open_folders import (
     DESCRIPTION_FILES,
     Library,
     _read_array_description,
@@ -53,14 +53,15 @@ from zmart_viewer.opening.library import (
 
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
-from zmart_viewer.serving import coverage, pieces
+from zmart_viewer.serving import coverage
+from zmart_viewer.serving import picture_pieces as pieces
 
 _HERE = Path(__file__).resolve().parent
 _ENGINE = _HERE.parent
 _DRAWING = _ENGINE / "drawing"
 _FRONTEND_DIST = _ENGINE / "_frontend"
 if not _FRONTEND_DIST.is_dir():
-    _FRONTEND_DIST = (_ENGINE.parent / "app" / "page" / "dist").resolve()
+    _FRONTEND_DIST = (_ENGINE.parent / "interface" / "dist").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
@@ -1018,7 +1019,10 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
             return
 
-        from zmart_viewer.picture.building import declare_a_built_picture, the_scene_folder_name
+        from zmart_viewer.picture.built_picture import (
+            declare_a_built_picture,
+            the_scene_folder_name,
+        )
 
         bake = bool(asked.get("bake"))
         name = asked.get("name") if isinstance(asked.get("name"), str) else None
@@ -1317,7 +1321,7 @@ def make_server(
             name=spec.get("name"),
         )
 
-    from zmart_viewer.views.published import PublishedFolders
+    from zmart_viewer.views.publishing import PublishedFolders
 
     published = PublishedFolders(library, bake=bake, canvas=canvas)
     scratch: dict = {"published": published}

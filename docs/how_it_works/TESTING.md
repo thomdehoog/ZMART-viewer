@@ -4,7 +4,7 @@
 
 From the repository folder, with the test tools installed
 (`pip install -e .[dev]`) and the page built once
-(`npm --prefix app/page install && npm --prefix app/page run build`):
+(`npm install && npm run build`):
 
 ```
 python -m pytest tests

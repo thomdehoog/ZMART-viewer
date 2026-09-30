@@ -12,11 +12,11 @@ import json
 from pathlib import Path
 
 import numpy as np
-from zmart_viewer.live.record.gateway import live_run_holding
-from zmart_viewer.opening.library import _read_array_description, _read_attrs_at
-from zmart_viewer.picture.building import ComposedPicture
-from zmart_viewer.serving import pieces
-from zmart_viewer.views.published import PublishedTransfer
+from zmart_viewer.live.record.live_serving import live_run_holding
+from zmart_viewer.opening.open_folders import _read_array_description, _read_attrs_at
+from zmart_viewer.picture.built_picture import ComposedPicture
+from zmart_viewer.serving import picture_pieces as pieces
+from zmart_viewer.views.publishing import PublishedTransfer
 
 MARKER = "__zmart_coverage__"
 
@@ -129,7 +129,7 @@ def answer(store: Path, inside: str) -> bytes | None:
         mask = np.zeros((side, side), dtype=np.uint8)
         projection = attrs.get("zmart_projection")
         if projection is not None:
-            from zmart_viewer.picture.compose import AcquiredRegion
+            from zmart_viewer.picture.arrangement import AcquiredRegion
 
             factor = 2**level
             for written in projection["regions"]:

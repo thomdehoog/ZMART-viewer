@@ -3,7 +3,7 @@ import pytest
 import zarr
 from test_view_sampling import write_tile
 from zmart_viewer.opening.contrast import measure
-from zmart_viewer.opening.library import _read_attrs_at
+from zmart_viewer.opening.open_folders import _read_attrs_at
 from zmart_viewer.views.projections import projection_dtype, reduce_z, write_projection
 
 

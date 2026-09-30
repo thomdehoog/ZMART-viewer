@@ -20,8 +20,8 @@ say plainly what it saw.
 from __future__ import annotations
 
 import numpy as np
-from zmart_viewer.live.record.model import GridCell
-from zmart_viewer.live.record.profiles import plan_the_writing
+from zmart_viewer.live.record.storage_plans import plan_the_writing
+from zmart_viewer.live.record.vocabulary import GridCell
 
 #: The camera frame these runs are written with. Large enough that a piece of
 #: the picture is a piece rather than a rounding, small enough to write fast.
@@ -46,7 +46,7 @@ def a_live_run(folder, *, timepoints: int = 1, linked_view: str = "per_publish")
     which is exactly the case that deferring it removes. A caller testing the
     deferral asks for ``"at_run_end"`` and gets the run a real acquisition has.
     """
-    from zmart_viewer.live.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.publisher import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, timepoints=timepoints)
     return LivePublisher(

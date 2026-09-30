@@ -17,7 +17,7 @@ from zmart_viewer.live.following import (
     live_rows,
 )
 from zmart_viewer.live.record.live_state import LiveStateTracker
-from zmart_viewer.opening.library import Library
+from zmart_viewer.opening.open_folders import Library
 from zmart_viewer.serving.server import make_server
 
 

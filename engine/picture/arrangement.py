@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_viewer.picture.acquired import AcquiredRegion
+from zmart_viewer.picture.acquired_regions import AcquiredRegion
 
 IMAGE_SUFFIX = ".ome.zarr"
 

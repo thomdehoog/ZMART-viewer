@@ -258,8 +258,8 @@ def main(argv: list[str] | None = None) -> int:
             "The viewer page is not built, so there is nothing to show.\n"
             "An installed wheel already contains the page. From a source checkout, "
             "build it once with:\n"
-            "    npm --prefix app/page install\n"
-            "    npm --prefix app/page run build\n"
+            "    npm install\n"
+            "    npm run build\n"
             "then run this again."
         )
         return 1
@@ -287,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         open_window(live=not args.static, **common)
         return 0
 
-    from zmart_viewer.opening.library import discover, prefer_filter, select_tiles
+    from zmart_viewer.opening.open_folders import discover, prefer_filter, select_tiles
 
     try:
         parent, names = discover(args.folder)

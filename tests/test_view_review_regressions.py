@@ -5,15 +5,15 @@ import json
 import numpy as np
 import pytest
 from test_view_sampling import INPUT_FORMATS, write_tile
-from zmart_viewer.picture.compose import Composer, read_the_mosaic_as_written
-from zmart_viewer.serving import pieces
-from zmart_viewer.views.named import ViewSet
+from zmart_viewer.picture.arrangement import Composer, read_the_mosaic_as_written
+from zmart_viewer.serving import picture_pieces as pieces
+from zmart_viewer.views.slice_top_projection import ViewSet
 
 
 @pytest.mark.parametrize("direct", [False, True])
 def test_equivalent_region_order_is_no_write(tmp_path, monkeypatch, direct):
     import zarr
-    from zmart_viewer.views import published
+    from zmart_viewer.views import publishing as published
 
     positions = tmp_path / "positions"
     positions.mkdir()
@@ -67,8 +67,8 @@ def test_shared_folder_publication_owners_advance_independently(
     tmp_path, different_spacing, input_format, bake
 ):
     import zarr
-    from zmart_viewer.opening.library import Library
-    from zmart_viewer.views.published import PublishedFolders
+    from zmart_viewer.opening.open_folders import Library
+    from zmart_viewer.views.publishing import PublishedFolders
 
     library = Library()
     published = PublishedFolders(library)

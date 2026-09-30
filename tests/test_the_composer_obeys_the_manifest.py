@@ -32,9 +32,9 @@ sys.path.insert(0, str(VIZ.parent))
 
 from check_the_built_picture import decode  # noqa: E402
 from record_fixtures import FRAME, some_specimen  # noqa: E402
-from zmart_viewer.live.record.model import GridCell  # noqa: E402
-from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
-from zmart_viewer.picture.building import GovernedRun  # noqa: E402
+from zmart_viewer.live.record.storage_plans import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.vocabulary import GridCell  # noqa: E402
+from zmart_viewer.picture.built_picture import GovernedRun  # noqa: E402
 
 # Small pieces, so the picture is several pieces across and posA-only ground,
 # shared ground, and posB-only ground all fall in different pieces.
@@ -50,7 +50,7 @@ def a_governed_run(folder: Path, *, timepoints: int = 1, third: bool = False):
     chosen per test so that whose pixels ended up on screen is readable from
     the bytes.
     """
-    from zmart_viewer.live.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.publisher import LivePublisher
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1)
     cells = {GridCell(0, 0): "posA", GridCell(0, 1): "posB"}
@@ -201,7 +201,7 @@ def test_an_absent_chunk_of_committed_ground_is_refused_not_invented(tmp_path):
     any published neighbour beneath it. The gateway's rule is quoted in the
     review: "a gap in it is damage to fail closed on."
     """
-    from zmart_viewer.picture.compose import MissingCommittedGround
+    from zmart_viewer.picture.arrangement import MissingCommittedGround
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -345,7 +345,7 @@ def test_a_transfers_decimated_levels_keep_their_own_registration(tmp_path):
 
     import numpy as np
     import zarr
-    from zmart_viewer.picture.compose import Composer, read_the_transfer
+    from zmart_viewer.picture.arrangement import Composer, read_the_transfer
 
     transfer = tmp_path / "transfer"
     store = transfer / "tile.ome.zarr"
@@ -423,8 +423,8 @@ def test_a_governed_picture_is_served_with_the_gate_on(tmp_path):
     request — uncommitted ground absent, then present the moment its commit
     lands, with no forget call and no restart between the two answers.
     """
-    from zmart_viewer.picture.building import declare_a_governed_picture
-    from zmart_viewer.serving import pieces as served
+    from zmart_viewer.picture.built_picture import declare_a_governed_picture
+    from zmart_viewer.serving import picture_pieces as served
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -460,7 +460,7 @@ def test_a_picture_declared_over_a_runs_positions_is_refused(tmp_path):
     """
     import json
 
-    from zmart_viewer.serving import pieces as served
+    from zmart_viewer.serving import picture_pieces as served
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -507,8 +507,8 @@ def test_a_governed_picture_that_cannot_be_made_says_try_again(tmp_path):
     retries -- and test_a_fault_is_not_absence.py holds the wire end of the
     same promise.
     """
-    from zmart_viewer.picture.building import declare_a_governed_picture
-    from zmart_viewer.serving import pieces as served
+    from zmart_viewer.picture.built_picture import declare_a_governed_picture
+    from zmart_viewer.serving import picture_pieces as served
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -539,8 +539,8 @@ def test_a_run_of_several_channels_declares_with_its_colour_axis(tmp_path):
     """
     import json
 
-    from zmart_viewer.live.record.coordinator import LivePublisher
-    from zmart_viewer.picture.building import declare_a_governed_picture
+    from zmart_viewer.live.record.publisher import LivePublisher
+    from zmart_viewer.picture.built_picture import declare_a_governed_picture
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1, channels=("488", "561"))
     run = LivePublisher(
@@ -609,7 +609,7 @@ def test_a_stamped_tile_says_exactly_what_the_walked_tile_would(tmp_path):
     later generation. A single voxel of disagreement here is a tile drawn in
     the wrong place with nothing on screen to say so.
     """
-    from zmart_viewer.picture.building import _a_committed_tile
+    from zmart_viewer.picture.built_picture import _a_committed_tile
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))

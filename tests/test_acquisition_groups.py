@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from zmart_viewer.opening.library import axis_names, channels
+from zmart_viewer.opening.open_folders import axis_names, channels
 
 
 def _write_store(path, *, axes, shape, omero_channels=None):

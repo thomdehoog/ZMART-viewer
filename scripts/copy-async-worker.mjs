@@ -18,8 +18,8 @@ import { dirname, join } from "node:path";
 import { copyFile, stat } from "node:fs/promises";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = join(here, "node_modules", "neuroglancer", "lib", "async_computation.bundle.js");
-const dst = join(here, "dist", "async_computation.bundle.js");
+const src = join(here, "..", "node_modules", "neuroglancer", "lib", "async_computation.bundle.js");
+const dst = join(here, "..", "interface", "dist", "async_computation.bundle.js");
 
 const { size } = await stat(src);
 if (size < 50 * 1024) {

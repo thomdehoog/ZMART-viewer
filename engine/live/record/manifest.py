@@ -70,7 +70,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
-from zmart_viewer.live.record.model import CommitEvent, FrozenMap, ZmartLiveError
+from zmart_viewer.live.record.vocabulary import CommitEvent, FrozenMap, ZmartLiveError
 
 __all__ = [
     "CommittedState",
@@ -250,10 +250,10 @@ def _write_and_replace(destination: Path, text: str) -> None:
     viewer, and on Windows the reader's open handle makes the replacement fail
     as ``Access is denied`` on ground that is free a moment later — a governed
     run watched live died of exactly this. The pixel path was cured first, in
-    :func:`~zmart_viewer.live.record.model.written_despite_brief_holds`, and this is the
+    :func:`~zmart_viewer.live.record.vocabulary.written_despite_brief_holds`, and this is the
     same cure in the same place for the metadata.
     """
-    from zmart_viewer.live.record.model import written_despite_brief_holds
+    from zmart_viewer.live.record.vocabulary import written_despite_brief_holds
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     handle = tempfile.NamedTemporaryFile(

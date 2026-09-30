@@ -20,9 +20,9 @@ from record_fixtures import (  # noqa: E402
     some_specimen,
 )
 from zmart_viewer.live import following as live_config
-from zmart_viewer.live.record.coordinator import LivePublisher
-from zmart_viewer.live.record.model import GridCell
-from zmart_viewer.live.record.profiles import plan_the_writing
+from zmart_viewer.live.record.publisher import LivePublisher
+from zmart_viewer.live.record.storage_plans import plan_the_writing
+from zmart_viewer.live.record.vocabulary import GridCell
 from zmart_viewer.serving.server import make_server
 
 _SETTLED = """() => {

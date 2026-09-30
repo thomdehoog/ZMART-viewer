@@ -283,7 +283,7 @@ def the_shipped_group_size() -> int:
     quietly stop describing the viewer.
     """
     source = (
-        Path(__file__).resolve().parent.parent / "app" / "page" / "src" / "engine.js"
+        Path(__file__).resolve().parent.parent / "engine" / "drawing" / "neuroglancer.js"
     ).read_text(encoding="utf-8")
     found = re.search(r"const AT_A_TIME\s*=\s*(\d+)", source)
     assert found, (

@@ -17,8 +17,8 @@ from the source checkout, the page has to be built once first, which needs
 [Node.js](https://nodejs.org):
 
 ```bash
-npm --prefix app/page install
-npm --prefix app/page run build
+npm install
+npm run build
 pip install .
 ```
 

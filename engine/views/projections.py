@@ -11,9 +11,14 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_viewer.opening.library import _read_attrs_at
-from zmart_viewer.picture.acquired import AcquiredRegion, canonical_regions
-from zmart_viewer.picture.compose import MEAN_REDUCTION, _read_one_tile, halve_xy, the_frame_room_of
+from zmart_viewer.opening.open_folders import _read_attrs_at
+from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
+from zmart_viewer.picture.arrangement import (
+    MEAN_REDUCTION,
+    _read_one_tile,
+    halve_xy,
+    the_frame_room_of,
+)
 
 METHODS = ("min", "max", "sum")
 PROJECTION_RECIPE = 1

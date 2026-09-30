@@ -25,7 +25,7 @@ import threading
 
 import numpy as np
 import zarr
-from zmart_viewer.opening.library import normalise_units
+from zmart_viewer.opening.open_folders import normalise_units
 from zmart_viewer.serving.server import make_server
 
 

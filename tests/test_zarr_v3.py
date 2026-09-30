@@ -36,8 +36,8 @@ import numpy as np
 import pytest
 import zarr
 from pixels import colour_spread, fraction_lit, image_middle
-from zmart_viewer.opening import library as stores
-from zmart_viewer.opening.library import (
+from zmart_viewer.opening import open_folders as stores
+from zmart_viewer.opening.open_folders import (
     Library,
     axis_names,
     declared_channels,

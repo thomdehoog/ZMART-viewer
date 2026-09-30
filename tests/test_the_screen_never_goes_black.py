@@ -81,7 +81,7 @@ sys.path.insert(0, str(_VIZ))
 
 import a_governed_run as harness  # noqa: E402
 from record_fixtures import a_live_run, some_specimen  # noqa: E402
-from zmart_viewer.picture.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.picture.built_picture import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
 # --------------------------------------------------------------------------

@@ -24,8 +24,14 @@ from pathlib import Path
 
 import pytest
 import zarr
-from zmart_viewer.opening import library as stores
-from zmart_viewer.opening.library import Library, axis_names, channels, is_store, written_timepoints
+from zmart_viewer.opening import open_folders as stores
+from zmart_viewer.opening.open_folders import (
+    Library,
+    axis_names,
+    channels,
+    is_store,
+    written_timepoints,
+)
 from zmart_viewer.serving.server import make_server
 
 # Nothing here may take longer than this. The point of these tests is to catch
@@ -400,7 +406,7 @@ class TestHowFarTheDataReaches:
         through one folder after another would otherwise accumulate a count for
         every folder they had ever opened.
         """
-        from zmart_viewer.opening import library as stores_module
+        from zmart_viewer.opening import open_folders as stores_module
 
         store = write_store(
             tmp_path / "overview_pos001.ome.zarr",
@@ -433,7 +439,7 @@ class TestHowFarTheDataReaches:
         should return the memory it was using, or "close what you are not using" is
         advice the viewer does not honour.
         """
-        from zmart_viewer.opening import library as stores_module
+        from zmart_viewer.opening import open_folders as stores_module
 
         store = write_store(
             tmp_path / "overview_pos001.ome.zarr",

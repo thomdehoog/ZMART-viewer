@@ -1050,7 +1050,7 @@ asked in every available way to read the store again fetched no description file
 So the viewer drops what the engine remembers about that one store first, and only then
 asks it to resolve the store again. What is dropped is only what was *read*; the decoded
 image is remembered separately and is deliberately left alone. See
-`forgetWhatWasReadAbout` in `app/page/src/engine.js`.
+`forgetWhatWasReadAbout` in `engine/drawing/neuroglancer.js`.
 
 Two things follow that are worth keeping in mind. This memory dies with the page, so
 closing the viewer clears it and there is nothing to tidy up on the way out. And because
@@ -1121,7 +1121,7 @@ one row. Merged, they would share a single set of controls: no heading of its ow
 target scan, no eye to hide the overview and look at it, one brightness taken from
 whichever arrived first, and closing either one closing both.
 
-The code is `library.py` — `_acquisition_of`, `_same_acquisition`, `_one_acquisition_only`
+The code is `engine/opening/open_folders.py` — `_acquisition_of`, `_same_acquisition`, `_one_acquisition_only`
 and `_place` — and `zmart-viewer/ARCHITECTURE.md` section 3 states the rule this satisfies.
 
 Each channel row is one Neuroglancer layer reading the store and pinned to that
@@ -1272,7 +1272,7 @@ before the loading starts:
 
 So the speed of a large folder of separate positions is accepted rather than engineered
 around. The two mechanisms proposed to engineer around it are both rejected — a window of
-only the positions in view (see the note in `engine.js`) and fusing finished positions into
+only the positions in view (see the note in `engine/drawing/neuroglancer.js`) and fusing finished positions into
 a copy (Decision 1b) — and this is the reason: neither was worth its complexity once the
 operator could simply open less.
 

@@ -39,12 +39,12 @@ import zarr
 VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 
-from zmart_viewer.picture.building import (  # noqa: E402
+from zmart_viewer.picture.arrangement import Composer, read_the_transfer  # noqa: E402
+from zmart_viewer.picture.built_picture import (  # noqa: E402
     declare_a_built_picture,
     the_scene_folder_name,
 )
-from zmart_viewer.picture.compose import Composer, read_the_transfer  # noqa: E402
-from zmart_viewer.serving import pieces as served  # noqa: E402
+from zmart_viewer.serving import picture_pieces as served  # noqa: E402
 
 # One tile: shallow, small, and square, so a whole transfer of them is quick to
 # write and every test can afford to compare every voxel.

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import zarr
 from test_acquired_composition import pixels, region, source
-from zmart_viewer.picture.compose import MEAN_REDUCTION, Composer, Mosaic
+from zmart_viewer.picture.arrangement import MEAN_REDUCTION, Composer, Mosaic
 
 
 def write_pyramid(tile, values):
@@ -131,8 +131,8 @@ def test_mean_label_without_reducer_contract_keeps_composed_rounding(tmp_path):
 def test_declared_native_publication_rewrite_reopen_and_contract_change(
     tmp_path, monkeypatch, bake
 ):
-    from zmart_viewer.serving import pieces
-    from zmart_viewer.views.published import STORE, PublishedTransfer
+    from zmart_viewer.serving import picture_pieces as pieces
+    from zmart_viewer.views.publishing import STORE, PublishedTransfer
 
     tile = source(tmp_path, "a.ome.zarr", 120)
     canvas = {"x_um": [0, 64], "y_um": [0, 8]}

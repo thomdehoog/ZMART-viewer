@@ -58,14 +58,14 @@ packages = [
 
 [tool.setuptools.package-dir]
 "zmart_viewer" = "engine"
-"zmart_viewer._frontend" = "app/page/dist"
+"zmart_viewer._frontend" = "interface/dist"
 
 [tool.setuptools.cmdclass]
 build_py = "build_support.BuildPy"
 bdist_wheel = "build_support.Wheel"
 
 [tool.setuptools.package-data]
-"zmart_viewer.drawing" = ["*.js", "*.mjs"]
+"zmart_viewer.drawing" = ["*.js", "*.mjs", "*.css"]
 "zmart_viewer._frontend" = ["**/*"]
 
 [tool.ruff]
@@ -78,8 +78,8 @@ extend-exclude = [
     ".eggs",
     "**/__pycache__",
     # Generated, not written.
-    "app/page/dist",
-    "app/page/node_modules",
+    "interface/dist",
+    "node_modules",
     # Roads explored and not taken. Kept for the reasoning, not held to the
     # standards of code anybody runs.
     "parked",

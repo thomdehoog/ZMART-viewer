@@ -584,7 +584,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_the_description_is_forgotten(self, two_open):
         """What a store contains, remembered while reading it, is dropped on close."""
-        from zmart_viewer.opening import library as stores
+        from zmart_viewer.opening import open_folders as stores
 
         port, data = two_open
         closed = str(data / "targetscan_cell001.ome.zarr")
@@ -600,7 +600,7 @@ class TestClosingGivesTheMemoryBack:
         Dropping too much would be quietly expensive rather than wrong: the
         acquisition still on screen would be read from disk all over again.
         """
-        from zmart_viewer.opening import library as stores
+        from zmart_viewer.opening import open_folders as stores
 
         port, data = two_open
         kept = str(data / "overview_pos001.ome.zarr")
@@ -621,7 +621,7 @@ class TestClosingGivesTheMemoryBack:
 
     def test_closing_says_which_images_went(self, tmp_path):
         """The server can only forget what the library tells it was closed."""
-        from zmart_viewer.opening.library import Library
+        from zmart_viewer.opening.open_folders import Library
 
         _, data = self._two_acquisitions(tmp_path)
         library = Library()

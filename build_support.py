@@ -1,4 +1,9 @@
-"""Wheel frontend ownership: validate a completed build, then copy an exact tree."""
+"""Wheel frontend ownership: validate a completed build, then copy an exact tree.
+
+The wheel may only carry a page that was built from the sources now in the
+checkout. ``scripts/stamp-build.mjs`` writes a manifest of what went in and
+what came out; this checks it before setuptools packages ``interface/dist``.
+"""
 
 import hashlib
 import json
@@ -12,39 +17,47 @@ from setuptools.command.build_py import build_py
 from setuptools.errors import SetupError
 
 
-def validate_frontend(page):
+def _files(folder, skip=()):
+    for here, directories, names in os.walk(folder):
+        directories[:] = [d for d in directories if d not in skip]
+        for name in names:
+            yield Path(here) / name
+
+
+def validate_frontend(root):
+    """Refuse a page that was not built from exactly these sources."""
+    root = Path(root)
+    dist = root / "interface/dist"
     try:
-        manifest = json.loads((page / "dist/build-manifest.json").read_text())
-        inputs = []
-        for folder, directories, files in os.walk(page):
-            directories[:] = [d for d in directories if d not in ("node_modules", "dist")]
-            inputs.extend(Path(folder) / name for name in files)
-        inputs.extend(page / "../../engine/drawing" / name
-                      for name in ("embedding.js", "neuroglancer-growth.mjs"))
-        outputs = [
-            p for p in (page / "dist").rglob("*") if p.is_file() and p.name != "build-manifest.json"
+        manifest = json.loads((dist / "build-manifest.json").read_text())
+        inputs = [
+            *_files(root / "interface", skip=("dist", "node_modules")),
+            *_files(root / "engine/drawing"),
+            *_files(root / "scripts"),
+            root / "package.json", root / "package-lock.json", root / "vite.config.js",
         ]
+        outputs = [p for p in _files(dist) if p.name != "build-manifest.json"]
         for paths, expected in ((inputs, manifest["inputs"]), (outputs, manifest["outputs"])):
             actual = {
-                Path(os.path.relpath(p, page)).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                Path(os.path.relpath(p, root)).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in paths
             }
             if actual != expected:
                 raise ValueError("frontend inputs or outputs changed after the build")
         if (
-            not (page / "dist/index.html").is_file()
-            or not (page / "dist/async_computation.bundle.js").is_file()
+            not (dist / "index.html").is_file()
+            or not (dist / "async_computation.bundle.js").is_file()
         ):
             raise ValueError("frontend entry point or worker missing")
     except (OSError, ValueError, KeyError) as error:
         raise SetupError(
-            "Run npm --prefix app/page run build successfully before building the wheel"
+            "Run npm run build successfully before building the wheel"
         ) from error
 
 
 class BuildPy(build_py):
     def run(self):
-        validate_frontend(Path("app/page"))
+        validate_frontend(Path("."))
         staging = Path(self.build_lib).resolve()
         frontend = (staging / "zmart_viewer/_frontend").resolve()
         frontend.relative_to(staging)

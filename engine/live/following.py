@@ -21,14 +21,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from zmart_viewer.live.record.gateway import live_run_holding
+from zmart_viewer.live.record.live_serving import live_run_holding
 from zmart_viewer.live.record.live_state import LiveStateSnapshot, LiveStateTracker
-from zmart_viewer.live.record.model import ZmartLiveError
 from zmart_viewer.live.record.omezarr import the_channels_described
+from zmart_viewer.live.record.vocabulary import ZmartLiveError
 from zmart_viewer.opening.contrast import intensity_histogram
-from zmart_viewer.opening.library import described_channels, zarr_scheme
-from zmart_viewer.picture.building import declare_a_governed_picture, the_scene_folder_name
-from zmart_viewer.serving.pieces import catch_up_governed_runs
+from zmart_viewer.opening.open_folders import described_channels, zarr_scheme
+from zmart_viewer.picture.built_picture import declare_a_governed_picture, the_scene_folder_name
+from zmart_viewer.serving.picture_pieces import catch_up_governed_runs
 
 log = logging.getLogger("zmart-viewer.announcements")
 
@@ -286,7 +286,7 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
 
 def _the_run_is_grown(run_root: Path) -> bool:
     """Whether this run's picture carries the (t, c) axes."""
-    from zmart_viewer.live.record.gateway import _LiveRun
+    from zmart_viewer.live.record.live_serving import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
 
@@ -542,7 +542,7 @@ def live_state_document(
 
 def the_runs_channels(run_root: Path) -> list[dict]:
     """What this run says about its colours: their names, tints and windows."""
-    from zmart_viewer.live.record.gateway import _LiveRun
+    from zmart_viewer.live.record.live_serving import _LiveRun
 
     profile = _LiveRun(run_root)._geometry()[1]
     return described_channels(

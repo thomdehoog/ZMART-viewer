@@ -50,7 +50,7 @@ import a_governed_run as harness  # noqa: E402
 # begin. One implementation, shared, kept honest by the gate that uses it
 # hardest.
 from test_a_commit_storm_under_zooming import _announce, _dirty_for  # noqa: E402
-from zmart_viewer.picture.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.picture.built_picture import declare_a_governed_picture  # noqa: E402
 from zmart_viewer.serving import server as server_module  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 

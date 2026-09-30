@@ -1,3 +1,5 @@
-include build_support.py
-recursive-include app/page *
-prune app/page/node_modules
+include build_support.py package.json package-lock.json vite.config.js
+recursive-include interface *
+recursive-include scripts *
+prune node_modules
+prune interface/dist

@@ -1,4 +1,3 @@
-import React from "react";
 // neuroglancer is built from many optional pieces. The bare `makeMinimalViewer`
 // wires up the display but registers none of the ways to *read* data. These
 // four imports switch on the pieces we need: the layer types (image, etc.), the
@@ -11,7 +10,7 @@ import "neuroglancer/unstable/layer/enabled_frontend_modules.js";
 import "neuroglancer/unstable/datasource/enabled_frontend_modules.js";
 import "neuroglancer/unstable/kvstore/enabled_frontend_modules.js";
 import { makeMinimalViewer } from "neuroglancer/unstable/ui/minimal_viewer.js";
-import { themeGround } from "./engine.js";
+import { themeGround } from "./neuroglancer.js";
 // Mouse and keyboard navigation (pan, zoom, scroll through z, rotate the 3-D
 // view) is NOT part of building a viewer. neuroglancer's panels receive the DOM
 // events either way, but without these binding tables no *action* is attached to
@@ -29,30 +28,23 @@ import {
 import "neuroglancer/unstable/ui/default_viewer.css";
 // Loaded after the engine's own stylesheet so it wins: this hides the handful of
 // controls the engine draws inside the image itself. See the file for why.
-import "./engine-chrome.css";
+import "./neuroglancer-chrome.css";
 
 /**
- * Mounts the neuroglancer engine and hands the live `viewer` back through
- * `onViewer`. That is all it does.
+ * Create the neuroglancer viewer inside ``target`` (an empty element), with
+ * every one of neuroglancer's own buttons and panels switched off, and with
+ * exactly the gestures this engine documents. That is all it does.
  *
- * Deliberately, this component owns the engine's *lifetime* (create it when the
- * div appears, dispose it when the component goes away) but NOT what the engine
- * *shows*. Which layers, which layout, the brightness, the z-position — all of
- * that is driven by the parent talking to the `viewer` object. Keeping that
- * split means the control panel can grow without ever touching this file.
+ * It owns the viewer's *lifetime* (create it here, dispose it through the
+ * returned ``dispose``) but NOT what the viewer *shows*. Which layers, which
+ * layout, the brightness, the z-position: all of that is driven by whoever
+ * holds the ``viewer`` object, through the functions in ``neuroglancer.js``.
+ * That split is what lets any interface, the viewer's own window or a
+ * smart-microscopy page, build its controls without touching this file.
  *
- * neuroglancer is not a React component; it draws into a DOM node directly, so
- * we give it an empty div via a ref. The effect is written to survive React
- * StrictMode's deliberate mount → dispose → mount in development, so do not be
- * surprised to see the engine built twice under `vite dev`.
+ * Returns ``{ viewer, dispose }``.
  */
-export default function NeuroglancerView({ onViewer, generation = 0, veiled = false }) {
-  const containerRef = React.useRef(null);
-
-  React.useEffect(() => {
-    const target = containerRef.current;
-    if (!target) return undefined;
-
+export function createViewer(target) {
     // Create the viewer with all of neuroglancer's own buttons and panels
     // turned off — we supply our own controls, so the engine shows nothing but
     // the image. `showLayerDialog`/`resetStateWhenEmpty` are off so the engine
@@ -227,48 +219,11 @@ export default function NeuroglancerView({ onViewer, generation = 0, veiled = fa
       });
     }
 
-    onViewer?.(viewer);
-    return () => {
-      dressWatcher.disconnect();
-      viewer.dispose();
+    return {
+      viewer,
+      dispose() {
+        dressWatcher.disconnect();
+        viewer.dispose();
+      },
     };
-    // ``generation`` is how the interface asks for a *new* engine rather than
-    // a changed one. Closing an acquisition is the only thing that asks. The
-    // engine holds more than the layer it was told to delete: with the layer
-    // gone, its sources rebuilt and every piece fetched again, the next
-    // acquisition still came up with most of its tiles unpainted, and the
-    // only thing that ever put it right was a fresh drawing context
-    // (measured 2026-08-21 -- same bounds, same camera, same requests, a
-    // different picture). So a close builds one.
-  }, [onViewer, generation]);
-
-  // Size the mount with width/height rather than absolute insets: neuroglancer
-  // sets `position: relative` on this element itself, which would cancel any
-  // inset-based sizing and collapse it to zero height. Filling the (already
-  // sized) parent sidesteps that entirely.
-  //
-  // The black stays black in the light theme too, on purpose. Fluorescence
-  // is read against black -- at the microscope and in every viewer -- and a
-  // light ground here would change what a dim signal looks like. Only the
-  // chrome around the image follows the theme.
-  // While ``veiled`` the drawing is held at opacity zero over the bare
-  // ground: the engine's first frames come out at its own default
-  // magnification before the fit-to-window lands, and showing them read as
-  // the picture jumping in size on every first open. The ground underneath
-  // means the veil looks like an empty canvas, and the short fade makes the
-  // arrival read as the picture appearing rather than snapping.
-  return (
-    <div style={{ width: "100%", height: "100%", background: "var(--image-surface-bg, var(--canvas-bg, #000))" }}>
-      <div
-        ref={containerRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          background: "var(--image-surface-bg, var(--canvas-bg, #000))",
-          opacity: veiled ? 0 : 1,
-          transition: "var(--image-arrival-transition, opacity 120ms linear)",
-        }}
-      />
-    </div>
-  );
 }
