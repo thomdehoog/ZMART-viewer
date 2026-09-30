@@ -141,3 +141,36 @@ def test_without_a_window_toolkit_it_carries_on_in_a_browser(
     assert code == 0
     assert "could not be opened" in said and "http://127.0.0.1:" in said
     assert _image_layers(shown["config"]) >= 1, "the engine kept serving the image"
+
+
+@pytest.mark.parametrize(("static", "expected"), [(False, 2), (True, 1)])
+def test_static_stops_looking_for_new_images(tmp_path, monkeypatch, static, expected):
+    """--static means the data is finished, so an image added later is not shown.
+
+    Without --static the folder is watched, and an image written beside the
+    first one joins the picture. With it, nothing new is looked for, which is
+    what makes a large finished folder quick to move around.
+    """
+    folder = tmp_path / "run"
+    write_demo_zarr(folder / "a.ome.zarr")
+    sources = []
+
+    def count_sources(url):
+        with urllib.request.urlopen(f"{url}/api/config", timeout=30) as answer:
+            config = json.load(answer)
+        return sum(len(layer.get("sources", [layer])) for layer in config.get("layers", [])
+                   if layer.get("kind") != "segmentation")
+
+    def add_one_then_stop(server, url):
+        sources.append(count_sources(url))
+        write_demo_zarr(folder / "b.ome.zarr", seed=8)
+        sources.append(count_sources(url))
+        server.shutdown()
+        server.server_close()
+
+    monkeypatch.setattr(window, "_serve_until_interrupt", add_one_then_stop)
+    arguments = [str(folder), "--no-window", "--port", "0"] + (["--static"] if static else [])
+    assert window.main(arguments) == 0
+    assert sources[0] >= 1
+    grew = sources[1] > sources[0]
+    assert grew == (expected == 2), (static, sources)
