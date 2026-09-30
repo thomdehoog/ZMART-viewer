@@ -14,7 +14,7 @@ def test_frontend_build_certificate(tmp_path):
     interface = root / "gui"
     drawing = root / "engine" / "drawing"
     scripts = root / "scripts"
-    for folder in (interface / "dist", drawing, scripts):
+    for folder in (interface / "built", drawing, scripts):
         folder.mkdir(parents=True)
     sources = {
         "gui/App.jsx": "app",
@@ -26,8 +26,8 @@ def test_frontend_build_certificate(tmp_path):
         "vite.config.js": "export default {}",
     }
     outputs = {
-        "gui/dist/index.html": "<html>",
-        "gui/dist/async_computation.bundle.js": "worker",
+        "gui/built/index.html": "<html>",
+        "gui/built/async_computation.bundle.js": "worker",
     }
     for name, text in {**sources, **outputs}.items():
         (root / name).write_text(text)
@@ -37,7 +37,7 @@ def test_frontend_build_certificate(tmp_path):
         kind: {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}
         for kind, names in (("inputs", sources), ("outputs", outputs))
     }
-    (interface / "dist/build-manifest.json").write_text(json.dumps(manifest))
+    (interface / "built/build-manifest.json").write_text(json.dumps(manifest))
     validate_frontend(root)
     for name in (*sources, *outputs):
         original = (root / name).read_bytes()
@@ -45,7 +45,7 @@ def test_frontend_build_certificate(tmp_path):
         with pytest.raises(SetupError):
             validate_frontend(root)
         (root / name).write_bytes(original)
-    for name in ("gui/new.js", "engine/drawing/new.js", "gui/dist/retired-worker.js"):
+    for name in ("gui/new.js", "engine/drawing/new.js", "gui/built/retired-worker.js"):
         (root / name).write_text("new")
         with pytest.raises(SetupError):
             validate_frontend(root)

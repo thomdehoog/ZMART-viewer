@@ -81,7 +81,7 @@ def _serving(tmp_path: Path):
     server = make_server(
         port=0,
         data_dir=shown,
-        site_dir=_VIZ / "gui" / "dist",
+        site_dir=_VIZ / "gui" / "built",
         store=[store.name],
         window=harness.BRIGHT,
         live=True,

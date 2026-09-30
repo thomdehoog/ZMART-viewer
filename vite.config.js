@@ -10,7 +10,7 @@ export default defineConfig({
 
   // --- production build ---
   build: {
-    outDir: "dist",
+    outDir: "built",
     emptyOutDir: true,
     // Emit the engine's background worker as a real file, never inlined as a
     // data: URL. A data:-URL worker has no origin, so absolute-path fetches from

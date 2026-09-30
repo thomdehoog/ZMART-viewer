@@ -2,7 +2,7 @@
 
 The wheel may only carry a page that was built from the sources now in the
 checkout. ``scripts/stamp-build.mjs`` writes a manifest of what went in and
-what came out; this checks it before setuptools packages ``gui/dist``.
+what came out; this checks it before setuptools packages ``gui/built``.
 """
 
 import hashlib
@@ -27,32 +27,39 @@ def _files(folder, skip=()):
 def validate_frontend(root):
     """Refuse a page that was not built from exactly these sources."""
     root = Path(root)
-    dist = root / "gui/dist"
+    built = root / "gui/built"
     try:
-        manifest = json.loads((dist / "build-manifest.json").read_text())
+        manifest = json.loads((built / "build-manifest.json").read_text())
         inputs = [
-            *_files(root / "gui", skip=("dist", "node_modules", "__pycache__")),
+            # Python files in gui/ open the window; they are not part of the page.
+            *(
+                p
+                for p in _files(root / "gui", skip=("built", "node_modules", "__pycache__"))
+                if p.suffix != ".py"
+            ),
             *_files(root / "engine/drawing", skip=("__pycache__",)),
             *_files(root / "scripts"),
-            root / "package.json", root / "package-lock.json", root / "vite.config.js",
+            root / "package.json",
+            root / "package-lock.json",
+            root / "vite.config.js",
         ]
-        outputs = [p for p in _files(dist) if p.name != "build-manifest.json"]
+        outputs = [p for p in _files(built) if p.name != "build-manifest.json"]
         for paths, expected in ((inputs, manifest["inputs"]), (outputs, manifest["outputs"])):
             actual = {
-                Path(os.path.relpath(p, root)).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                Path(os.path.relpath(p, root)).as_posix(): hashlib.sha256(
+                    p.read_bytes()
+                ).hexdigest()
                 for p in paths
             }
             if actual != expected:
                 raise ValueError("frontend inputs or outputs changed after the build")
         if (
-            not (dist / "index.html").is_file()
-            or not (dist / "async_computation.bundle.js").is_file()
+            not (built / "index.html").is_file()
+            or not (built / "async_computation.bundle.js").is_file()
         ):
             raise ValueError("frontend entry point or worker missing")
     except (OSError, ValueError, KeyError) as error:
-        raise SetupError(
-            "Run npm run build successfully before building the wheel"
-        ) from error
+        raise SetupError("Run npm run build successfully before building the wheel") from error
 
 
 class BuildPy(build_py):

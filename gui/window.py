@@ -255,12 +255,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if not (_FRONTEND_DIST / "index.html").exists():
         print(
-            "The viewer page is not built, so there is nothing to show.\n"
-            "An installed wheel already contains the page. From a source checkout, "
-            "build it once with:\n"
-            "    npm install\n"
-            "    npm run build\n"
-            "then run this again."
+            "The viewer's page (gui/built) is missing, so there is nothing to show.\n"
+            "It normally comes with the viewer. Reinstall it with:\n"
+            "    pip install --force-reinstall "
+            "git+https://github.com/thomdehoog/ZMART-viewer@release-candidate-zmart-viewer\n"
+            "or, in a copy of the repository where you changed gui/, rebuild it with:\n"
+            "    npm install && npm run build"
         )
         return 1
 

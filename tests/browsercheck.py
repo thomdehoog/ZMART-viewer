@@ -130,7 +130,7 @@ def _picture_was_drawn(path: Path) -> tuple[bool, str]:
 
 
 def run_check() -> int:
-    # 1. The page must be built first — a fresh checkout has no dist/.
+    # 1. The page must be built first — a checkout without gui/built has nothing to open.
     if not (_FRONTEND_DIST / "index.html").exists():
         print(
             "The viewer page is not built. Build it first:\n"
