@@ -19,3 +19,15 @@ except ImportError:
     _module = importlib.util.module_from_spec(_spec)
     sys.modules["zmart_viewer"] = _module
     _spec.loader.exec_module(_module)
+    # The viewer's own window lives in gui/ but is imported as
+    # zmart_viewer.gui, the way the installed package lays it out.
+    _gui = _engine.parent / "gui"
+    _spec = importlib.util.spec_from_file_location(
+        "zmart_viewer.gui",
+        _gui / "__init__.py",
+        submodule_search_locations=[str(_gui)],
+    )
+    _window = importlib.util.module_from_spec(_spec)
+    sys.modules["zmart_viewer.gui"] = _window
+    _module.gui = _window
+    _spec.loader.exec_module(_window)

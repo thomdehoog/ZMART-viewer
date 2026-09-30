@@ -195,7 +195,7 @@ depth into the screen, which is the plane an operator scrolls through. Those
 two go together and **must be changed together**: either on its own gives a view
 that is edge-on, with the stack collapsed to a line, or mirrored again. The pair
 of them live in `engine/drawing/neuroglancer.js`, in
-`pinTheAxesThatMeasureDistance`, and in `interface/App.jsx`, at
+`pinTheAxesThatMeasureDistance`, and in `gui/App.jsx`, at
 `SLICE_LAYOUT`, and each says so at the other.
 
 **How it is held in place.** `tests/test_the_picture_is_not_mirrored.py` opens a

@@ -1,4 +1,4 @@
-"""The command that opens the viewer: ``zmart-viewer``, with a folder or without.
+"""The viewer's own window, and the ``zmart-viewer`` command that opens it.
 
 This is the front door for anyone who wants to look at their own images.
 After installing the package, type ``zmart-viewer`` to open an empty window
@@ -11,9 +11,9 @@ that ships with Edge). When no such window can be shown, the viewer prints an
 address instead, and you open that address in an ordinary browser. Either way
 the same page appears and works the same.
 
-Smart-microscopy integrations do not go through here. They start the engine
-directly with :func:`zmart_viewer.serving.server.make_server` and build their own
-window around it; see ``docs/inside-your-own-interface.md``.
+Smart-microscopy interfaces do not go through here. They start the engine
+directly with :func:`zmart_viewer.make_server` and build their own window
+around it; see ``docs/inside-your-own-interface.md``.
 """
 
 from __future__ import annotations

@@ -450,13 +450,13 @@ class TestStartingTheViewerOnSuchAFolder:
         at the bottom, which is not something anyone should have to read at a
         microscope.
         """
-        if not (_VIZ_ROOT / "interface" / "dist" / "index.html").exists():
+        if not (_VIZ_ROOT / "gui" / "dist" / "index.html").exists():
             pytest.skip(
-                "interface/dist is not built, so the zmart-viewer command stops "
+                "gui/dist is not built, so the zmart-viewer command stops "
                 "before it gets as far as the folder — build it with "
                 "`npm install && npm run build`"
             )
-        from zmart_viewer import command as launcher
+        from zmart_viewer.gui import window as launcher
 
         folder = tmp_path / "mixed"
         _store(folder / "overview_pos001.ome.zarr")

@@ -113,7 +113,7 @@ for source_root in (_REPO_ROOT, _VIZ_ROOT, _TESTS):
 from demo_data import write_demo_zarr  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
-_DIST = _VIZ_ROOT / "interface" / "dist"
+_DIST = _VIZ_ROOT / "gui" / "dist"
 
 
 @pytest.fixture(scope="session")
@@ -124,9 +124,9 @@ def viz_root() -> Path:
 def _newest_source_change() -> float:
     """When the viewer's own source was last edited."""
     newest = 0.0
-    for folder in (_VIZ_ROOT / "interface", _VIZ_ROOT / "engine" / "drawing"):
+    for folder in (_VIZ_ROOT / "gui", _VIZ_ROOT / "engine" / "drawing"):
         for path in folder.rglob("*"):
-            if path.is_file() and "dist" not in path.parts:
+            if path.is_file() and not {"dist", "__pycache__"} & set(path.parts):
                 newest = max(newest, path.stat().st_mtime)
     return newest
 
@@ -153,7 +153,7 @@ def built_dist() -> Path:
     if not (_DIST / "index.html").exists():
         _give_up_on_the_picture(
             "the viewer page has not been built, so there was nothing to open "
-            "(interface/dist/index.html is missing). Build it with "
+            "(gui/dist/index.html is missing). Build it with "
             "`npm install && npm run build`"
         )
     built = (_DIST / "index.html").stat().st_mtime

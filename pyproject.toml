@@ -41,7 +41,7 @@ Homepage = "https://github.com/thomdehoog/ZMART-viewer"
 
 # The command that opens the viewer: `zmart-viewer`, with a folder or without.
 [project.scripts]
-zmart-viewer = "zmart_viewer.command:main"
+zmart-viewer = "zmart_viewer.gui.window:main"
 
 [tool.setuptools]
 packages = [
@@ -53,16 +53,24 @@ packages = [
     "zmart_viewer.live",
     "zmart_viewer.live.record",
     "zmart_viewer.drawing",
+    "zmart_viewer.gui",
     "zmart_viewer._frontend",
 ]
 
 [tool.setuptools.package-dir]
 "zmart_viewer" = "engine"
-"zmart_viewer._frontend" = "interface/dist"
+"zmart_viewer.gui" = "gui"
+"zmart_viewer._frontend" = "gui/dist"
 
 [tool.setuptools.cmdclass]
 build_py = "build_support.BuildPy"
 bdist_wheel = "build_support.Wheel"
+
+# The GUI's JavaScript sources are built into gui/dist, which ships as
+# zmart_viewer._frontend. The sources themselves stay out of the wheel: an
+# installed viewer needs the built page, never Node, npm or Vite.
+[tool.setuptools.exclude-package-data]
+"zmart_viewer.gui" = ["*.jsx", "*.js", "*.css", "*.html", "dist/**/*", "__pycache__/*"]
 
 [tool.setuptools.package-data]
 "zmart_viewer.drawing" = ["*.js", "*.mjs", "*.css"]
@@ -78,7 +86,7 @@ extend-exclude = [
     ".eggs",
     "**/__pycache__",
     # Generated, not written.
-    "interface/dist",
+    "gui/dist",
     "node_modules",
     # Roads explored and not taken. Kept for the reasoning, not held to the
     # standards of code anybody runs.

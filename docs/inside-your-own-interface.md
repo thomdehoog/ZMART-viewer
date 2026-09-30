@@ -26,7 +26,6 @@ The public surface, which the release keeps stable, is:
 | `GET /embedding.js` | HTTP | placing the named views on your own canvas |
 | `PublishedAcquisition`, `STORE` | `zmart_viewer` | reading what the engine has published for an acquisition |
 | `write_projection(...)` | `zmart_viewer` | writing a Top, Min, Max or Sum view beside an image |
-| `open_window(...)`, `main(...)` | `zmart_viewer` | opening the viewer's own window from Python, when you want it |
 
 Import these from `zmart_viewer` itself, as shown below. They stay where they are
 between versions; everything deeper inside the package may move.
@@ -97,7 +96,7 @@ up the microscope.
 ## 3. Put the picture on your page
 
 Your interface brings its own controls: sliders, channel settings, and
-whatever else your experiment needs. The viewer's own window (`interface/`) is
+whatever else your experiment needs. The viewer's own window (`gui/`) is
 not part of this; it is the interface for people who use the viewer on its
 own. The picture itself is drawn by [neuroglancer](https://github.com/google/neuroglancer),
 the one drawing engine the viewer supports.

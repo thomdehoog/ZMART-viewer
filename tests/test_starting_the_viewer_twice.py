@@ -79,7 +79,7 @@ def test_two_viewers_can_run_side_by_side(tmp_path: Path) -> None:
 
 def test_the_command_offers_a_port_and_passes_it_on() -> None:
     """``--port`` has to reach the window, not merely be accepted and ignored."""
-    from zmart_viewer import command
+    from zmart_viewer.gui import window as command
 
     passed = {}
 
