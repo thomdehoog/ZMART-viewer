@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZMART Viewer</title>
+    <!-- The browser-tab icon, carried inside the page itself. Without one the
+         browser asks the server for /favicon.ico on every visit, the server
+         answers 404, and that shows up as an error in the browser console --
+         which the storm test reads as the page breaking. A microscope, aptly. -->
+    <link rel="icon"
+          href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%AC%3C/text%3E%3C/svg%3E" />
+    <style>
+      html,
+      body,
+      #root {
+        margin: 0;
+        height: 100%;
+        width: 100%;
+        background: var(--page-bg, #0b0d10);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      /* neuroglancer's own stylesheet sizes its viewer by assuming it fills the
+         page body. When we embed it inside our own layout instead, its viewer
+         element has no height and collapses to just its toolbar. Making the
+         viewer fill whatever box we mount it into restores a full-size canvas. */
+      .neuroglancer-viewer {
+        position: absolute;
+        inset: 0;
+      }
+      html:root[data-transparent-background] {
+        --page-bg: transparent;
+        --image-surface-bg: transparent;
+        /* A CSS opacity fade would make acquired black pixels translucent. */
+        --image-arrival-transition: none;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-PqKvSwV6.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B6z7Hmlt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

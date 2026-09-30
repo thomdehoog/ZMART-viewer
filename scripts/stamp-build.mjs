@@ -2,7 +2,7 @@
 //
 // The inputs are everything the page is built from: the interface, the
 // engine's drawing code, these build scripts, and the three files at the
-// root that describe the build. The outputs are what lands in gui/dist.
+// root that describe the build. The outputs are what lands in gui/built.
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -20,15 +20,17 @@ async function hashes(paths) {
     createHash("sha256").update(await readFile(path)).digest("hex"),
   ])));
 }
+// Python files in gui/ open the window; they are not part of the page.
+const page = path => !path.endsWith(".py");
 const inputs = [
-  ...await files(join(root, "gui"), ["dist", "node_modules", "__pycache__"]),
+  ...(await files(join(root, "gui"), ["built", "node_modules", "__pycache__"])).filter(page),
 
   ...await files(join(root, "engine", "drawing"), ["__pycache__"]),
   ...await files(join(root, "scripts")),
   join(root, "package.json"), join(root, "package-lock.json"), join(root, "vite.config.js"),
 ];
-const dist = join(root, "gui", "dist");
-const outputs = (await files(dist)).filter(path => !path.endsWith("build-manifest.json"));
-await writeFile(join(dist, "build-manifest.json"), JSON.stringify({
+const built = join(root, "gui", "built");
+const outputs = (await files(built)).filter(path => !path.endsWith("build-manifest.json"));
+await writeFile(join(built, "build-manifest.json"), JSON.stringify({
   inputs: await hashes(inputs), outputs: await hashes(outputs),
 }));

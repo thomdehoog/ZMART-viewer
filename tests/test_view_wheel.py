@@ -16,14 +16,15 @@ from zmart_viewer.views.slice_top_projection import ViewSet
 
 def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
     repo = Path(__file__).resolve().parents[1]
-    # Build from the current tracked sources without touching checkout staging.
+    # Build from exactly what the repository tracks, the built page in gui/built
+    # included, without touching the checkout's own staging. That is what a
+    # `pip install git+https://...` sees.
     checkout = tmp_path / "source"
     tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=repo).decode().split("\0")
     for name in filter(None, tracked):
         target = checkout / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(repo / name, target)
-    shutil.copytree(built_dist, checkout / "gui/dist")
     positions = tmp_path / "positions"
     positions.mkdir()
     write_tile(positions, "p.ome.zarr", np.full((1, 1, 3, 8, 8), 40000, dtype="uint16"))

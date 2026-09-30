@@ -5,24 +5,27 @@ look at them. No microscope is needed, and nothing here can touch one.
 
 ## Install
 
-You need Python 3.10, 3.11 or 3.12. Then install the package from a release
-wheel, which already contains the viewer page, so no other tools are needed:
+You need Python 3.10, 3.11 or 3.12. Then install the viewer straight from
+GitHub with pip:
 
 ```bash
-pip install zmart_viewer-0.5.0rc1-py3-none-any.whl
+pip install git+https://github.com/thomdehoog/ZMART-viewer@release-candidate-zmart-viewer
 ```
 
-The wheel is on the repository's release page. If you would rather install
-from the source checkout, the page has to be built once first, which needs
-[Node.js](https://nodejs.org):
+That is all. The viewer's page comes already built (it is kept in the
+repository, in `gui/built/`), so you need nothing but pip: no Node.js, npm
+or other web tools.
+
+If you change the window's own JavaScript in `gui/`, the page has to be built
+again, and that does need [Node.js](https://nodejs.org). Run this in the
+repository folder, and commit `gui/built/` along with your change:
 
 ```bash
 npm install
 npm run build
-pip install .
 ```
 
-Either way you end up with one command, `zmart-viewer`.
+Installing gives you one command, `zmart-viewer`.
 
 On Windows, the viewer opens in its own window through the WebView2 engine that
 comes with Microsoft Edge. If that engine is missing, the viewer says so and
