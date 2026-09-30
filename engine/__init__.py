@@ -3,7 +3,8 @@
 This package is the engine. It reads OME-Zarr images, places each position
 where it belongs, follows a folder while a microscope is still writing into
 it, and serves the pieces of the picture to a window over HTTP. The viewer's
-own window (``interface/``) is one such window; a smart-microscopy interface
+own window (``gui/``, imported as ``zmart_viewer.gui``) is
+one such window; a smart-microscopy interface
 is another. The engine holds no buttons or panels of its own.
 
 Inside it:
@@ -17,13 +18,11 @@ Inside it:
 - ``drawing``: the JavaScript that creates and drives neuroglancer, with its
   own controls switched off, and ``embedding.js`` for the named views. Any
   interface, this package's own window included, draws through it.
-- ``command``: the ``zmart-viewer`` command.
 
 The names below are what other software may rely on. They stay stable
 between versions; everything deeper inside may move.
 """
 
-from zmart_viewer.command import main, open_window
 from zmart_viewer.serving.server import make_server
 from zmart_viewer.views.projections import write_projection
 from zmart_viewer.views.publishing import STORE, PublishedAcquisition
@@ -31,8 +30,6 @@ from zmart_viewer.views.publishing import STORE, PublishedAcquisition
 __all__ = [
     "PublishedAcquisition",
     "STORE",
-    "main",
     "make_server",
-    "open_window",
     "write_projection",
 ]

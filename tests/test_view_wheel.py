@@ -23,7 +23,7 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
         target = checkout / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(repo / name, target)
-    shutil.copytree(built_dist, checkout / "interface/dist")
+    shutil.copytree(built_dist, checkout / "gui/dist")
     positions = tmp_path / "positions"
     positions.mkdir()
     write_tile(positions, "p.ome.zarr", np.full((1, 1, 3, 8, 8), 40000, dtype="uint16"))
@@ -84,6 +84,14 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
             {
                 p.relative_to(repo / "engine").as_posix(): p.read_bytes()
                 for p in (repo / "engine").rglob("*.py")
+            }
+        )
+        # The GUI ships only its Python (the window and the command); its
+        # JavaScript arrives already built, in _frontend.
+        expected_files.update(
+            {
+                "gui/" + p.name: p.read_bytes()
+                for p in (repo / "gui").glob("*.py")
             }
         )
         # The whole of the engine's drawing code ships in the wheel, so that an

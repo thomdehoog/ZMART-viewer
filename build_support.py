@@ -2,7 +2,7 @@
 
 The wheel may only carry a page that was built from the sources now in the
 checkout. ``scripts/stamp-build.mjs`` writes a manifest of what went in and
-what came out; this checks it before setuptools packages ``interface/dist``.
+what came out; this checks it before setuptools packages ``gui/dist``.
 """
 
 import hashlib
@@ -27,12 +27,12 @@ def _files(folder, skip=()):
 def validate_frontend(root):
     """Refuse a page that was not built from exactly these sources."""
     root = Path(root)
-    dist = root / "interface/dist"
+    dist = root / "gui/dist"
     try:
         manifest = json.loads((dist / "build-manifest.json").read_text())
         inputs = [
-            *_files(root / "interface", skip=("dist", "node_modules")),
-            *_files(root / "engine/drawing"),
+            *_files(root / "gui", skip=("dist", "node_modules", "__pycache__")),
+            *_files(root / "engine/drawing", skip=("__pycache__",)),
             *_files(root / "scripts"),
             root / "package.json", root / "package-lock.json", root / "vite.config.js",
         ]

@@ -1,5 +1,5 @@
 include build_support.py package.json package-lock.json vite.config.js
-recursive-include interface *
+recursive-include gui *
 recursive-include scripts *
 prune node_modules
-prune interface/dist
+prune gui/dist

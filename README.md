@@ -33,7 +33,7 @@ The ZMART Viewer is two things in one repository:
    (one plane at a time), **Top** (the surface seen from above) and
    **Min/Max/Sum** projections.
 
-2. **A window** (`interface/`). Sliders through depth (Z) and time (T), a panel
+2. **A window** (`gui/`). Sliders through depth (Z) and time (T), a panel
    to set each channel's colour and contrast, a load window to choose data, and a
    3-D view. It opens as its own desktop window and never talks to a microscope,
    so it can be used on anybody's data, on any machine, with no possibility of

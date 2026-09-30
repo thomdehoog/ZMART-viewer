@@ -374,14 +374,15 @@ wants to know which one to open.
 ```
                               ┌─────────────────────────────────────┐
    WHAT YOU RUN               │  zmart-viewer (the command)           │
-                              │  command.py   — opens a window, or  │
+                              │  gui/window.py — a window, or │
                               │                 prints an address   │
                               └────────────────┬────────────────────┘
                                                │ starts
  ══════════════════════════════════════════════▼══════════════════════════════
-   THE INTERFACE — what you see          interface/   (only the viewer's own window)
+   THE INTERFACE — what you see          gui/   (only the viewer's own window)
  ══════════════════════════════════════════════════════════════════════════════
 
+     window.py ───────────── the zmart-viewer command: opens this window (pywebview)
      App.jsx ─────────────── holds the whole window's state, and the load window
        ├── NeuroglancerView.jsx ── gives the engine an element to draw into
        ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
@@ -419,7 +420,6 @@ wants to know which one to open.
                 projections.py ─── writing a projection beside an image
      live/      following.py ───── announce changes; adapt live runs
                 record/ ────────── how a live run writes and publishes itself
-     command.py ─────────────────── the zmart-viewer command: a window, or an address
 
      tests/browsercheck.py ─ the safety net: serves the page, opens it,
                              reads the pixels that came out

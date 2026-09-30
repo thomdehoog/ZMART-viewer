@@ -5,7 +5,7 @@ export default defineConfig({
   // The interface is the page; the engine's drawing code sits beside it and is
   // imported by relative path, so the build must be allowed to read outside
   // the page's own folder.
-  root: "interface",
+  root: "gui",
   plugins: [react()],
 
   // --- production build ---

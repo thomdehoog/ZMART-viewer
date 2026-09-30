@@ -61,7 +61,7 @@ _ENGINE = _HERE.parent
 _DRAWING = _ENGINE / "drawing"
 _FRONTEND_DIST = _ENGINE / "_frontend"
 if not _FRONTEND_DIST.is_dir():
-    _FRONTEND_DIST = (_ENGINE.parent / "interface" / "dist").resolve()
+    _FRONTEND_DIST = (_ENGINE.parent / "gui" / "dist").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
