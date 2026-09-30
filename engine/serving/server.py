@@ -1134,7 +1134,14 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         try:
-            self._library.open(str(opened.target), names=opened.names)
+            # A folder is watched for new images only while the data is still
+            # being written. A viewer started for finished data (--static)
+            # watches nothing, whichever way the folder was opened.
+            self._library.open(
+                str(opened.target),
+                names=opened.names,
+                watch=self._live and opened.names is None,
+            )
         except FileNotFoundError as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             return

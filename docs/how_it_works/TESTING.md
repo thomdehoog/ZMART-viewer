@@ -2,18 +2,21 @@
 
 ## The short version
 
-From the repository folder, install the viewer with its test tools, and the
-browser the picture tests drive:
+From the repository folder, install the viewer with its test tools, the
+JavaScript packages some tests use, and the browser the picture tests drive:
 
 ```
 pip install -e .[dev]
+npm ci
 python -m playwright install chromium
 python -m pytest tests
 ```
 
-The built page is already in the repository (`gui/built/`), so the tests need
-no Node or npm. You need them only after changing the GUI's JavaScript; then
-run `npm install && npm run build` first.
+Running the full suite needs [Node.js](https://nodejs.org) and `npm ci`: several
+tests run small JavaScript checks with Node, and some import the neuroglancer
+package it installs. That is only for testing. **Using** the viewer needs pip
+alone, and the built page is already in the repository (`gui/built/`), so it
+needs rebuilding (`npm run build`) only after you change the GUI's JavaScript.
 
 The browser tests open the real viewer in a headless browser and read the
 pixels it drew. Where no browser can be started they skip, and the end of the
