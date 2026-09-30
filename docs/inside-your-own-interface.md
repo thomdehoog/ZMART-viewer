@@ -156,6 +156,5 @@ drivers or workflow steps. Those belong to your interface:
 - turning a click on the picture into a stage coordinate and a target;
 - deciding which folder is the current run, and when a run starts or ends.
 
-Keeping that line clean is what lets the same engine serve a Leica, a Nikon, a
-ZEISS and a mesoSPIM from one operator window, and still be a plain viewer for
-anyone else.
+Keeping that line clean is what lets the same engine serve every microscope
+behind one operator window, and still be a plain viewer for anyone else.

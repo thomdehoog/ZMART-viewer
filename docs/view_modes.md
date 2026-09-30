@@ -79,7 +79,7 @@ them. Originals recorded with the old writer's false Z=0 convention require
 correct specimen metadata before they can supply a faithful absolute Slice.
 
 Normalize raw instrument plane order upstream: plane zero must be the lowest
-specimen plane. This API is not a Leica raw-file importer.
+specimen plane. This API does not import a microscope's own raw files.
 
 Use `regions: "complete"` only when the entire declared position is acquired.
 For sparse producers, supply a map from each position name to acquired regions:

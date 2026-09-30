@@ -89,10 +89,10 @@ The details are in [Inside your own interface](docs/inside-your-own-interface.md
 
 This is version 0.5, a release candidate. At the ZMB it is the image engine inside
 our smart-microscopy operator window, where it follows runs of thousands of
-positions on Leica, Nikon, ZEISS and mesoSPIM systems. The standalone window is
-younger than the engine: it opens OME-Zarr version 2 and 3, HCS plates, and runs
-that are still being written, but it does not yet open OME-TIFF or vendor formats,
-and it runs best on Windows, where the native window uses the WebView2 engine.
+positions on several microscopes. The standalone window is younger than the
+engine: it opens OME-Zarr version 2 and 3, HCS plates, and runs that are still
+being written, but it does not yet open OME-TIFF or other file formats, and it
+runs best on Windows, where the native window uses the WebView2 engine.
 
 ## Author
 
