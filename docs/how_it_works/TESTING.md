@@ -34,7 +34,7 @@ python -m pytest tests -s -k gpu       # print which GPU the renderer found
 The focused non-browser path for the live publication integration is:
 
 ```bash
-../.venv/bin/pytest -q \
+python -m pytest -q \
   tests/test_manifest_driven_refresh.py \
   tests/test_frontend_live_refresh_contract.py \
   tests/test_live_publication_gateway.py
@@ -49,7 +49,7 @@ runs, SSE loss, fallback and reconnection. Run them with a browser-required flag
 on a machine intended to qualify the viewer:
 
 ```bash
-ZMART_REQUIRE_BROWSER=1 ../.venv/bin/pytest -q \
+ZMART_REQUIRE_BROWSER=1 python -m pytest -q \
   tests/test_manifest_refresh_browser.py
 ```
 

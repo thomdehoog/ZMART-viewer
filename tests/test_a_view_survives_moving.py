@@ -33,8 +33,8 @@ sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ))
 sys.path.insert(0, str(VIZ.parent))
 
+from grid_scans import _a_grid_scan, _post  # noqa: E402
 from record_fixtures import a_live_run, some_specimen  # noqa: E402
-from test_a_dataset_is_relived_as_a_live_run import _a_grid_scan, _post  # noqa: E402
 from test_open_and_close import _store  # noqa: E402
 
 from zmart_viewer.building import declare_a_built_picture  # noqa: E402

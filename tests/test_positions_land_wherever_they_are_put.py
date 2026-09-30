@@ -396,7 +396,7 @@ def test_the_real_door_serves_the_scattered_picture(tmp_path):
         thread.join(timeout=5)
 
 
-# -- the sequential column: live and replay -------------------------------------
+# -- the sequential column: live ------------------------------------------------
 
 
 def _writer_decides_on_day_zero() -> bool:
@@ -570,49 +570,6 @@ def test_a_scattered_run_finishes_cleanly_without_the_pointer_map(tmp_path):
 
 
 @needs_day_zero_writer
-def test_a_scattered_dataset_replays_where_it_sits(tmp_path):
-    """The replay door takes a scattered, off-chunk dataset end to end."""
-    from zmart_viewer.rehearsal import plan_a_replay, replay_the_dataset
-
-    dataset = tmp_path / "dataset"
-    dataset.mkdir()
-    places = [(0.0, 0.0), (25.0, 41.0), (10.0, 500.0)]
-
-    for index, place in enumerate(places):
-        write_position(dataset / f"pos_{index:02d}.zarr", 100 + index, place, size=FRAME, levels=1)
-
-    plan = plan_a_replay(dataset)
-    assert not plan.on_whole_chunks
-    replay_the_dataset(dataset, tmp_path / "replayed", every_s=0)
-
-    run = tmp_path / "replayed"
-    expected = {
-        f"pos_{index:02d}.zarr": (int(place[0]), int(place[1]))
-        for index, place in enumerate(places)
-    }
-    meta = run / "views" / "live" / "metadata"
-    placed = {
-        one["position_id"]: (one["origin"]["y"], one["origin"]["x"])
-        for one in json.loads((meta / "locations.json").read_text())["positions"]
-    }
-    assert placed == expected, placed
-
-    governed = GovernedRun(run)
-    composer = governed.composer()
-    composer.stop_warming()
-
-    try:
-        served = served_level(composer, 0)
-
-        for name, (top, left) in expected.items():
-            stamp = 100 + int(name.removesuffix(".zarr")[-2:])
-            assert served[top, left] == _marker_floor(np.uint16) + stamp % 40, (
-                f"{name} asked ({top}, {left}); found {served[top, left]}"
-            )
-    finally:
-        composer.close()
-
-
 # -- growth: one more landing costs the same at any survey size -----------------
 
 

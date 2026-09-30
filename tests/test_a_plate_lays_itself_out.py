@@ -523,7 +523,7 @@ def test_a_plate_store_opened_directly_lays_itself_out(door):
     as the build tab would, and serves THAT: what reaches the screen is
     the laid-out plate, whichever tab opened it.
     """
-    from test_a_dataset_is_relived_as_a_live_run import _post
+    from grid_scans import _post
 
     address, screen = door
     status, answer = _post(address, "/api/stores/open", {"path": str(screen / "plate.ome.zarr")})
@@ -558,7 +558,7 @@ def test_a_real_plate_lives_beside_other_data(door, tmp_path):
     cost the operator the plate: the door reads the plate's own
     description and builds the scene beside it, from it alone.
     """
-    from test_a_dataset_is_relived_as_a_live_run import _post
+    from grid_scans import _post
     from test_open_and_close import _store
 
     address, _ = door
@@ -594,7 +594,7 @@ def test_an_unbaked_scene_opens_at_a_measured_window(door):
     composer makes any piece in milliseconds -- so the measurement follows
     the composer, exactly as a live picture's follows its members.
     """
-    from test_a_dataset_is_relived_as_a_live_run import _post
+    from grid_scans import _post
 
     address, screen = door
     status, answer = _post(address, "/api/stores/open", {"path": str(screen / "plate.ome.zarr")})
@@ -621,7 +621,7 @@ def test_a_scene_already_built_for_the_plate_is_reused(door):
     deliberately removes yesterday's files). A scene that says it was
     built from this plate's folder is opened as it stands.
     """
-    from test_a_dataset_is_relived_as_a_live_run import _post
+    from grid_scans import _post
 
     address, screen = door
     scene = declare_a_built_picture(

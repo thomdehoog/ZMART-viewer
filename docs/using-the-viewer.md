@@ -109,23 +109,23 @@ viewer offers the ones it finds. See [what the named views are](view_modes.md).
 
 ## The load window
 
-The **load data** button opens a window with three tabs. One click selects a
-row, a double click steps into a folder, and **Choose folder…** opens your
-operating system's own chooser where one is available.
+The **load data** button opens a window listing the folders where you are.
+One click selects a row, a double click steps into a folder, **..** goes up
+one folder, and **Choose folder…** opens your operating system's own chooser
+where one is available. You can also type or paste a path into the box at the
+top.
 
-- **load existing scene** walks to a scene built earlier. Select it, press Open,
-  and it appears exactly as it was.
-- **build new scene** is for raw data straight from the microscope: a folder
-  holding one OME-Zarr per position, or a folder holding an HCS plate. Building
-  reads as three numbered steps: choose the raw data, say where the scene is
-  saved, and build. A scene links the raw data into one virtual OME-Zarr, so
-  nothing is copied. Ticking *include a hard copy of the low-resolution overview*
-  also computes the zoomed-out picture once and keeps it as files (well under one
-  percent of the data), which we recommend: the survey then opens instantly.
-- **other** opens everything else the viewer can read directly. A folder of raw
-  positions can also be **replayed** here: instead of appearing all at once, its
-  positions land on screen one at a time, through the very doorway a microscope
-  uses during a live run, which is a dress rehearsal on data already on disk.
+Each row wears a small tag that says what it is: a built view, one image, a
+plate, or raw positions from the microscope. Choose one and press **Open**.
+
+- **A view, an image or a plate** opens directly.
+- **Raw positions** are linked into one picture on the spot, so nothing is
+  copied and nothing is written beside your data. Tick *build the
+  low-resolution mosaic and keep the view* if you will open this data again:
+  the zoomed-out picture is then computed once and kept as files (well under
+  one percent of the data), and the view opens instantly next time. A
+  progress bar follows the build, and **Stop** abandons it without leaving
+  anything half-made behind.
 
 ## Options worth knowing
 

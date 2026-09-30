@@ -1,6 +1,6 @@
 """One door: classify what a path is, then open it the one right way.
 
-Every way into the viewer — the load window, the CLI, the replay, a live
+Every way into the viewer — the load window, the command line, a live
 run binding — goes through :func:`load`. It decides what the path holds
 (a plate, a run of positions, a built scene, a live run, a plain store)
 and answers with what the library should open. A path that cannot be

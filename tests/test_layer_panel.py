@@ -594,7 +594,7 @@ def test_channels_of_one_picture_blend_like_light(browser, built_dist, tmp_path)
     rows must keep the covering rule, including a live row that started
     as one source and grew.
     """
-    from test_a_dataset_is_relived_as_a_live_run import _post
+    from grid_scans import _post
     from test_a_run_arriving import ANNOUNCE
     from test_open_and_close import _store
 

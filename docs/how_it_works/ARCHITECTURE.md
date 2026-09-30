@@ -408,8 +408,8 @@ wants to know which one to open.
        ├── building.py ─── a picture written down; a governed one patched
        ├── live.py ─────── announce changes; adapt live runs
        ├── contrast.py ─── without this, real acquisitions draw black
-       ├── rehearsal.py ── replay a finished run through the live writer
-       └── launcher.py ─── the native window, or a printed address
+       ├── launcher.py ─── the zmart-viewer command: a window, or an address
+       └── embedding.js ── named views, for interfaces that draw for themselves
 
      tests/browsercheck.py ─ the safety net: serves the page, opens it,
                              reads the pixels that came out

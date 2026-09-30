@@ -1,4 +1,4 @@
-# Named acquisition views in 0.4.0
+# Named views of an acquisition
 
 One renderer displays the available views of an acquisition. The dropdown defaults
 to **Slice**, then Top or a projection if Slice is absent. Opening saved data never

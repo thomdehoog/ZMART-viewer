@@ -25,7 +25,7 @@ import pytest
 VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VIZ))
 
-from test_a_dataset_is_relived_as_a_live_run import _post  # noqa: E402
+from grid_scans import _post  # noqa: E402
 from test_open_and_close import _store  # noqa: E402
 
 from zmart_viewer.server import make_server  # noqa: E402
