@@ -1,6 +1,6 @@
 """Make a small pretend microscope volume you can explore without a microscope.
 
-The visualization studio needs *something* to show. In the real workflow that
+The viewer needs *something* to show. In the real workflow that
 "something" is a stack of images that the microscope just acquired. For the
 demo we conjure one up in software instead — a little three-dimensional,
 three-colour volume with blob-like "cells" scattered through it — and save it

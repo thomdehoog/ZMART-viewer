@@ -1,384 +1,112 @@
-# ZMART Viz Studio
+# ZMART Viewer
 
-A visualization tool for large, three-dimensional, multi-channel microscopy
-images — the kind the Stellaris and mesoSPIM produce — that runs as its own
-desktop window and is built entirely from web technology, so **you** own how it
-looks and behaves.
+[![python](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-pytest-blue)](docs/how_it_works/TESTING.md)
 
-Under the hood it uses [neuroglancer](https://github.com/google/neuroglancer)
-as the image engine (it streams only the pieces of a huge volume you are
-looking at, so even very large data feels light, and it does true 3-D), wrapped
-in a [React](https://react.dev) interface that is entirely ours to shape. The
-analysis stays in Python; this tool is the view and the controls.
+The **ZMART Viewer** shows large, three-dimensional, multi-channel microscopy images,
+and keeps showing them while the microscope is still writing. Point it at a folder of
+OME-Zarr images and it draws what is there; new positions and new time points appear
+on their own. It is part of **ZMART** (ZMB's Microscopy-Agnostic Research Toolkit),
+the tools we use for smart microscopy at the Center for Microscopy and Image Analysis
+(ZMB), University of Zurich.
 
-It does not talk to the microscope, and cannot. Places you mark on an image are
-saved to a file beside the data, and the control application reads them from
-there. That separation is deliberate: it means the viewer can be opened on
-anybody's data, on any machine, including one sitting next to a running
-experiment, with no possibility of it disturbing the instrument.
+## The Problem
 
-## What is on screen
+A smart-microscopy run produces images that are too large to load, that arrive
+while the experiment is running, and that come as hundreds or thousands of positions
+which only make sense when they are placed where they were taken on the stage.
+Most viewers open one finished file at a time. During an experiment we need to see
+the whole specimen grow, and we need the same picture inside the interface that
+drives the microscope.
 
-Version 0.4.0 adds named **Slice**, **Top** and per-position **Min/Max/Sum** views,
-with sparse coverage and optional per-view coarse baking. Slice is the standalone
-default. See [named views: API, storage and limits](docs/view_modes.md) and the
-[verification record](docs/design/view_modes_030_results.md).
+## The Solution
 
-The image fills the window. Two sliders move you through it, and each is placed to
-match the direction the thing it moves through lies in: **depth (Z) stands upright
-along the right-hand edge**, the way a stack of planes is pictured, and **time (T)
-lies along the bottom**, the way a recording is. That way you can reach for the
-right one without stopping to read the labels, which matters when both are on
-screen and one hand is on the stage.
+The ZMART Viewer is two things in one repository:
 
-Each appears only if the image really has that axis with more than one step along
-it, so a still picture gets no time slider and a single plane no depth slider. Each
-has a play button that steps through on its own. A scale bar sits in the top-right
-corner and follows the zoom.
+1. **An engine** (`zmart_viewer/`, Python). It reads OME-Zarr images, places each
+   position where it belongs, follows a folder while a microscope writes into it,
+   and serves only the pieces of the picture that are on screen, so even enormous
+   data feels light. It also offers named views of an acquisition: **Slice** (one
+   plane at a time), **Top** (the surface seen from above) and **Min/Max/Sum**
+   projections.
 
-Everything else is one bar of controls down one edge, which folds away when you
-want the whole screen for the specimen. It has up to four parts:
+2. **A window** (`app/page/`, built on [neuroglancer](https://github.com/google/neuroglancer)).
+   Sliders through depth (Z) and time (T), a panel to set each channel's colour
+   and contrast, a load window to choose data, and a 3-D view. It opens as its own
+   desktop window and never talks to a microscope, so it can be used on anybody's
+   data, on any machine, with no possibility of disturbing an experiment.
 
-- **load data** — opens the load window (described below), where scenes are
-  loaded, built from raw data, or replayed. Left out when a workflow is
-  deciding what to show (see `--no-open-button`).
-- **display settings** — the histogram, black and white points, opacity and colour
-  for whichever channel is picked out below. There is one set of these rather than
-  one per channel: you adjust one channel at a time, and with sliders on every row
-  only two or three channels fitted on a screen.
-- **image data** — every acquisition open, with its channels under it. Click a
-  channel to adjust it, use the eye to hide it, and the × to close an
-  acquisition you are done with.
-- **selection** — the places you have marked. Off unless asked for (`--select`).
+Smart-microscopy interfaces use the engine and bring their own window. The ZMART
+operator window in [ZMART Microscopy](https://github.com/thomdehoog/ZMART-microscopy)
+does exactly that. Anyone else uses the window that comes with this package.
 
-## Opening your own data
+### What you can do
 
-Point the viewer at a folder of OME-Zarr stores:
-
-```
-python run_demo.py --data /path/to/your/run
-```
-
-That may be a single `.ome.zarr` store or a folder holding many of them — both
-work, so you do not have to know which you have. If nothing is found, the viewer
-says so and suggests the folder above or below.
-
-A few things worth knowing:
-
-- **A folder being written to is fine.** Positions that appear while you are
-  watching are picked up on their own, usually within a second, and a timelapse
-  growing in time extends its own slider as frames arrive.
-- **Many positions can be shown as one picture, without copying any of them.** A
-  folder of a few thousand stores is slow to open as a few thousand pictures,
-  because the drawing engine gives each of them part of every frame. If the run has
-  a *view* built beside it — a small file saying which piece of the picture is which
-  piece of which tile — the viewer opens it as one image instead, and the number of
-  positions stops mattering: a hundred and six thousand four hundred draw at the
-  same rate and open in the same second. Nothing is copied; the tiles stay exactly
-  as the microscope wrote them and stay readable by anything else. The top-level
-  `parked/prototype/README.md` shows how to build one, under "One picture out of many stores".
-- **One folder, one acquisition.** What you open becomes a single heading in the
-  panel, named after the folder you chose, and every store in it feeds it — the
-  positions of a tiled overview are pieces of one specimen, so they are drawn as
-  one picture. Which stores belong together is read from the stores themselves,
-  not from their names: an overview and a close-up target scan were taken at
-  different magnifications, and that is recorded inside each store where nobody
-  can rename it. If the folder you pick already holds two of them, the viewer
-  says so and lists both, so you can point it at the one you wanted.
-- **A second kind of scan appearing during a run gets its own heading.** While a
-  run is being watched, a target scan written into the same folder as the overview
-  is not added to it — it is a different picture at a different magnification, and
-  merging the two would leave you one row, one eye and one set of brightness
-  controls for both. It appears as a heading of its own instead, named after the
-  kind of scan, with its own controls and its own close button.
-- **Names are used for labels, not for grouping.** `Ch488` in a store's name gives
-  a row its name and its false colour, and `Tile0` and the filter block keep the
-  labels short and distinct (that is also what `--tiles` and `--filter` select on).
-  `docs/how_it_works/DATA_LAYOUT.md` records how a run is written to disk and why.
-
-## The load window
-
-The **load data** button opens a window with three tabs. In its list, one
-click selects a row and highlights it, the way your operating system's own
-file choosers work; a double click steps into a folder. The **Choose
-folder…** button opens the system's chooser where one is available.
-
-- **load existing scene** — the tab the window starts on. Walk to a scene
-  built earlier, select it, press Open, and it appears exactly as it was.
-- **build new scene** — for raw data straight from the microscope: a folder
-  holding one OME-Zarr per position, or a folder holding an HCS **plate**
-  (wells of fields — both the current and the older 0.4 metadata). A plate's
-  wells are laid out from the plate's own rows and columns, with a small gap
-  between wells so the plate reads as a plate. Within a well, fields keep
-  the places their microscope recorded for them; where nothing was
-  recorded, they go side by side in a grid as square as possible. Opening
-  a plate from any other tab quietly builds the same scene, so a plate
-  always draws as a plate. Building reads as three
-  numbered steps:
-  choose the raw data, say where the scene is saved, and build. A scene is
-  assembled by linking the raw data into a virtual OME-Zarr, so nothing is
-  copied; ticking *include a hard copy of the low-resolution overview* also
-  computes the zoomed-out picture once and keeps it as files (well under one
-  percent of the data), which we recommend — the survey then opens
-  instantly. A progress bar follows the build, and the finished scene waits
-  for your own click on Show.
-- **other** — everything else the viewer can read, opened directly: demo
-  data, test runs, a scene from somewhere unusual. A folder of raw grid
-  positions can also be **replayed** here: instead of appearing all at once,
-  its positions land on screen one at a time through the very doorway the
-  microscope uses during smart microscopy — a dress rehearsal for a live
-  run, on data already on disk. A timelapse replays the way it was
-  acquired, every position of one moment and then the next, so the time
-  slider grows on screen and the view follows each new moment as it lands.
-  The replay writes a real run into a `replays` folder beside the dataset,
-  so it can be opened again later. A running build or replay can be
-  stopped from this window: a stopped build keeps nothing, and a stopped
-  replay keeps what landed.
-- **Put the controls on the left** with `--panel-side left`, if that side is easier
-  to reach at your microscope.
-- **Show the selection list** with `--select` if you want to mark places.
-- **Say `--static` for a run that has finished.** The viewer then stops looking for
-  new acquisitions and new frames, and lets your browser keep its own copy of the
-  image — which is what makes moving around yesterday's data feel instant. Leave it
-  off while an experiment is still producing data, or new acquisitions will not
-  appear until you reopen the viewer.
-- **Set the brightness yourself** with `--range LOW,HIGH` if the measured one does
-  not suit your specimen. Without it the viewer uses the window your store asks
-  for, or measures one from the smallest copy of the image.
-- **If the viewer will not start, it is usually the port.** The viewer answers on
-  8848, and it cannot start if something else on the machine is already using that
-  number — most often a copy of the viewer you left open. It will say so and
-  suggest what to do. To run a second one alongside the first, or to get past
-  other software that has taken 8848, give it another number:
-
-  ```
-  python run_demo.py --data /path/to/your/run --port 8849
-  ```
-
-  Any free number between 1024 and 65535 will do, and `--port 0` lets the machine
-  pick one for you and prints which it chose.
-
-## Try the demo (no microscope needed)
-
-The demo makes a small pretend 3-D, three-colour volume so you can try
-everything with no hardware.
+From a terminal, once the package is installed:
 
 ```bash
-# 1. Set up the environment (Python + the build tools)
-conda env create -f environment.yml
-conda activate zmart-viz
+# Open an empty viewer and choose a folder from inside it
+zmart-viewer
 
-# 2. Build the viewer page (once)
-npm --prefix app/page install
-npm --prefix app/page run build
+# Open one image, or a folder holding many positions of one acquisition
+zmart-viewer /path/to/run
 
-# 3. Launch it
-python run_demo.py
+# Watch a run that is being written right now (the default), or say it is finished
+zmart-viewer /path/to/run
+zmart-viewer /path/to/run --static
+
+# Print an address instead of opening a window, for a remote desktop or a browser
+zmart-viewer /path/to/run --no-window
 ```
 
-A native window opens on the demo volume. On Windows it uses the built-in
-WebView2 engine (Chromium), so the 3-D rendering runs on your graphics card. If
-a native window cannot open, the address is printed so you can open it in a
-browser instead.
-
-### Try transparent live refresh
-
-After building the page, run this from the repository root:
-
-```bash
-python demos/show_source_refresh.py
-```
-
-The native window starts with one of six synthetic positions. **Add position**
-fills another footprint; **Rewrite last** changes an acquired image. The
-checkerboard lies below the viewer, black acquired pixels stay opaque, and the
-demo controls sit above it. **Repeat unchanged hint** sends a notification
-without advancing the revision; it should not refetch image data.
-
-Each launch keeps a fresh dataset and window profile under
-`testdata/source_refresh_demo/` (ignored by Git). Use `--output PATH` to choose
-another writable location. Closing the window stops its server. This exercises
-the shared viewer's revisioned-source path, not the operator integration.
-
-### Optional live coarse overview (experimental)
-
-Baking is **off by default**. Add `--bake` to the refresh demo above to exercise
-the governed-run baker. For an external folder of completed position stores,
-the shared server also accepts `make_server(..., bake=True, canvas=...)`, where
-`canvas` is the full fixed specimen area, for example
-`{"x_um": [0, 10000], "y_um": [0, 5000]}` in micrometres.
-
-The external-folder adapter exposes one source. Fine chunks read the original
-positions; coarse chunks are baked under `.zmart-viewer/overview.ome.zarr` in
-that folder. It does not copy level 0. Coverage is independent of intensity:
-empty ground is transparent and acquired black pixels remain opaque.
-
-Acquisition integrations should open the folder with `POST /api/stores/open`:
-
-```json
-{"path": "PATH_TO_POSITIONS", "bake": true,
- "canvas": {"x_um": [0, 10000], "y_um": [0, 5000]},
- "source_revisions": {"P000.ome.zarr": 1}}
-```
-
-After completed writes, send the full current position-revision mapping using
-`POST /api/announce`:
-
-```json
-{"publications": [{"path": "PATH_TO_POSITIONS",
-                   "source_revisions": {"P000.ome.zarr": 2, "P001.ome.zarr": 1}}]}
-```
-
-Unchanged mappings do no pixel work. Changes patch affected coarse chunks, then
-advance one aggregate revision. Neuroglancer refreshes that **whole source**;
-chunk-selective client invalidation is not implemented. Publication belongs on
-the acquisition's background publisher, not in capture or status callbacks.
-Without explicit revisions, the standalone server uses position metadata file
-timestamps; chunk-only rewrites must supply explicit revisions.
-
-This adapter supports unrotated ZYX, CZYX and TCZYX positions with matching,
-fixed C/Z/T geometry and at least two mean-reduced pyramid levels. Other
-reduction methods are refused because the shared coarse baker averages pixels.
-It is for complete rectangular position footprints, not already-sparse
-resolved mosaics. Changing the canvas or source geometry, or removing the last
-position, requires opening a new acquisition. An interrupted bake refuses reads
-until publication retries.
-
-The experimental operator branch's **Bake coarse overview (experimental)**
-checkbox selects this path before Connect. It affects overview scans only; focus and target sources
-keep their existing representation. Leave it unchecked for the original path.
-
-The explicit [acquired-composition publication API](docs/design/acquired_composition_contract.md)
-now aggregates complete or sparse stores with baking off or on. Complete-store
-producers declare completeness; sparse producers supply acquired regions. Both
-use the same aggregate and separate original files. This new API is not yet
-integrated into the operator. Do not pass sparse stores to the legacy rectangular
-adapter above.
-
-## Try the time slider
-
-If your data is a timelapse — the same specimen imaged repeatedly — the viewer
-offers a **T** slider under the image to step through the frames, in exactly the
-same way the **Z** slider steps through the planes of a stack. Each slider
-appears only when the image actually has that axis, so a single-moment volume
-shows just Z, and a flat overview shows neither. Nothing to configure.
-
-To see it on the demo, ask for a few frames:
-
-```bash
-python run_demo.py --timepoints 5
-```
-
-That writes a second demo store beside the ordinary one (your single-volume demo
-is left alone) in which the cells drift a little and one marker brightens while
-the other fades, so moving the slider visibly does something.
-
-## Marking targets for the control application
-
-Draw a point or a box around something interesting and give it a name. The marks
-are saved to `zmart-annotations.json`, in the same folder as the images, a moment
-after you make them — there is no save button to remember.
-
-The viewer does not move the microscope, and cannot. It has no connection to an
-instrument at all. Acting on a target — driving the stage there, starting an
-acquisition — belongs to the control application, which reads that same file. The
-separation is deliberate rather than unfinished: it means this viewer can be
-opened on anyone's data, on any machine, including one sitting next to a running
-experiment, with no possibility of it disturbing anything.
-
-## Telling an open viewer that new data has arrived
-
-If you are writing the script that runs the experiment, this is the part that
-concerns you. When an acquisition has finished writing, say so:
+From your own software, to put the picture inside your own interface:
 
 ```python
-import json, urllib.request
+from zmart_viewer.server import make_server
 
-def announce(port=8848):
-    """Tell an open viewer to look again. Returns how many windows were told."""
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{port}/api/announce",
-        data=json.dumps({}).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=5) as answer:
-        return json.load(answer)["told"]
+# 1) Start the engine on a port of the machine's choosing, watching a folder
+server = make_server(port=0, data_dir="/path/to/run", live=True)
+
+# 2) Tell it when an acquisition has finished writing (optional, but better than guessing)
+#    POST http://127.0.0.1:<port>/api/announce     {"publications": [...]}
+
+# 3) Put the named views on your own canvas with the embedding script it serves
+#    <script type="module"> import { viewChoices } from "http://127.0.0.1:<port>/embedding.js" </script>
 ```
 
-Every open window then re-reads what is on disk, so a new position appears and a
-timelapse that has gained a frame gets a longer time slider. You do not have to
-say *what* changed — the viewer reads that from the files, which keeps the data on
-disk the single description of the experiment that has to be right.
+The engine answers over HTTP, so an interface can be written in any language.
+The details are in [Inside your own interface](docs/inside-your-own-interface.md).
 
-The answer tells you how many windows heard you. Nought is not an error; it means
-nobody has the viewer open, and your script should carry on regardless.
+## Try it yourself
 
-Announcing is not compulsory. The server also watches the folder and notices
-changes on its own, which is what makes the viewer work with a microscope that
-writes its own files and has never heard of ZMART. But announcing is better: the
-watching can only ever *infer* that a write has finished, and your script knows.
+- [Install it and open your first images](docs/using-the-viewer.md)
+- [Use the engine inside your own interface](docs/inside-your-own-interface.md)
+- [The embedding API for named views](docs/embedding.md) and [what the named views are](docs/view_modes.md)
+- [How it works](docs/how_it_works/ARCHITECTURE.md): the design, the file layout on disk, and [how to run the tests](docs/how_it_works/TESTING.md)
 
-To put a whole new folder on screen — rather than nudge the viewer about one it is
-already showing — post the path to `/api/stores/open` instead.
+### Status
 
-## Check that it really renders
+This is version 0.5, a release candidate. At the ZMB it is the image engine inside
+our smart-microscopy operator window, where it follows runs of thousands of
+positions on Leica, Nikon, ZEISS and mesoSPIM systems. The standalone window is
+younger than the engine: it opens OME-Zarr version 2 and 3, HCS plates, and runs
+that are still being written, but it does not yet open OME-TIFF or vendor formats,
+and it runs best on Windows, where the native window uses the WebView2 engine.
 
-The acceptance test drives a real headless browser and asserts that pixels
-arrived, not merely that the page loaded. It needs a one-time browser download:
+## Author
 
-```bash
-playwright install chromium
-python tests/browsercheck.py     # 0 = rendered, 1 = did not, 2 = could not run
-```
+Thom de Hoog, Center for Microscopy and Image Analysis (ZMB), University of
+Zurich (thom.dehoog@zmb.uzh.ch, thomdehoog@gmail.com).
 
-It prints a per-check table and writes a screenshot to `backend/_check/render.png`.
-Read the `RESULT:` line rather than the exit status alone — exit 2 means the
-check could not run (page not built, no browser), which is neither a pass nor a
-regression.
+## License
 
-If your machine restricts where executables may run (AppLocker/SRP, common on
-managed lab PCs), send the browser download somewhere allowed *before* the two
-commands above, or Chromium will download fine and then fail to start with
-`spawn UNKNOWN`:
+MIT License. See the LICENSE file for details.
 
-```bash
-set PLAYWRIGHT_BROWSERS_PATH=C:\some\allowed\path\ms-playwright
-```
+## Links
 
-If the machine already has a Chromium and you would rather use that one — because
-the download is blocked, or the browser it wants is not the one that is there —
-name it and both the check above and the test suite will use it:
-
-```bash
-set ZMART_CHROMIUM=C:\some\allowed\path\chrome.exe
-```
-
-## What is here
-
-| Path | What it is |
-|---|---|
-| `app/page/` | The React + neuroglancer app (built into `app/page/dist`). |
-| `zmart_viewer/` | The backend package: the server, the one loading door, the picture builders. |
-| `testdata/demo_data.py` | Makes the demo OME-Zarr volume. |
-| `tests/browsercheck.py` | Automated rendering check in a real headless browser. |
-| `demos/run_demo.py` | One command: make the demo volume and open the window. |
-| `docs/how_it_works/DATA_LAYOUT.md` | How a run is written to disk and shown, and why. The design record. |
-| `docs/open/NEXT_STEPS.md` | What is known to be unfinished or wrong, and what to pick up next. |
-| `docs/how_it_works/TESTING.md` | How to run the tests, and what each group of them is for. |
-| `INDEX.md` | The map, if you are new: which document answers which question. |
-
-## How the pieces talk
-
-```
-  Python (analysis, microscope control, writes OME-Zarr)
-      │  serves image chunks over HTTP  +  small JSON commands
-      ▼
-  zmart_viewer/server.py  ──►  one local address (http://127.0.0.1:8848)
-      ▲
-      │  reads image chunks, sends commands
-  frontend (React UI + neuroglancer engine)  ──►  shown in a native window
-```
-
-Python stays the brain and the hands; the window is the eyes and the controls.
-The image data travels as OME-Zarr files (only the visible pieces are fetched);
-commands and results travel as small messages.
+- [ZMART Microscopy](https://github.com/thomdehoog/ZMART-microscopy): the main repository, with the workflows, the operator window and the drivers
+- [ZMART Controller](https://github.com/thomdehoog/ZMART-microscopy/tree/release-candidate-zmart-controller): the small universal schema for driving a microscope from Python
+- [Smart Analysis](https://github.com/thomdehoog/smart-analysis): the analysis engine that runs between acquisitions
+- [OME-Zarr](https://ngff.openmicroscopy.org/): the image format the viewer reads and writes
+- [Center for Microscopy and Image Analysis (ZMB)](https://www.zmb.uzh.ch), University of Zurich

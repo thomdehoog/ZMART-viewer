@@ -4,7 +4,7 @@ Every tile carries its own stage corner; the arrangement follows. Tiles
 land at fractional offsets, so pieces are built — the tiles covering a
 piece are read at the level being drawn, laid into one array, encoded —
 never pointed at. Slabs are cached and tiles indexed per level, so cost
-per piece stays flat with survey size. Measurements: docs/measured/.
+per piece stays flat with survey size.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ This describes **what belongs to the drawing engine and what belongs to the
 application's own canvas**, and why the line falls where it does. It is worth
 writing down separately from the question of *which* engine draws, because the
 answer is the same either way. That question has since been settled — the engine
-is neuroglancer, and the reasoning is recorded in `docs/history/WHERE_THINGS_STAND.md` — but
+is neuroglancer, and the reasoning is recorded in an earlier note kept in the repository's history — but
 nothing below depends on it.
 
 ---
@@ -158,7 +158,7 @@ drawing over it and nothing reports that it has.
 
 **Which engine draws is no longer one of these questions.** It is neuroglancer,
 chosen on the strength of what it lets you build around it rather than on what it
-can hold; `docs/history/WHERE_THINGS_STAND.md` sets out the reasoning, along with the one
+can hold; an earlier note kept in the repository's history sets out the reasoning, along with the one
 drawback that does not go away, which is that every import comes through a path
 the package itself calls unpromised. None of the stack above depended on that
 answer, which is why it was worth writing down before the choice was made.
@@ -171,7 +171,7 @@ single canvas — behind one interface and measured with one suite, so that any
 difference you feel is the approach rather than the way somebody happened to wire
 it up. Viv is still among them on purpose, so that the choice of engine is checked
 against a real machine and a real dataset instead of being argued about. See
-`docs/history/OPTIONS.md` for the three and `parked/RESULTS.md` for the readings so far.
+an earlier note kept in the repository's history for the three and an earlier prototype's notes for the readings so far.
 
 One measured fact belongs here because it decides how each arrangement can be
 assembled, and because the two halves of it are easy to run together by mistake.
@@ -183,7 +183,7 @@ instead drawn on the surface above with holes cut wherever there is picture.
 and does show through**, measured exactly. So the stack above can also be built
 entirely as layers within the engine, which is how the layer-stack probe built
 it — the plate and the plan each written into the store as an image layer of
-their own. Both measurements are written up: the first in `parked/RESULTS.md`,
+their own. Both measurements are written up: the first in an earlier prototype's notes,
 the second in `LAYER_STACK.md`, which as noted above is not on this branch — it
 lives on `claude/layer-stack-probe`, commit `4960d17`.
 

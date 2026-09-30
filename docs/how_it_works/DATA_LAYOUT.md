@@ -408,7 +408,7 @@ then shows as empty rather than as missing.
   all. The rule is kept because it is cheap and certainly correct — a round trip for a few
   hundred bytes, answered from memory — and because nothing has measured a case where it
   costs anything. Letting the browser keep a copy and check it is the obvious refinement,
-  and it is listed in `docs/open/NEXT_STEPS.md` under the smaller things worth doing; it should be
+  and it is listed in an earlier note kept in the repository's history under the smaller things worth doing; it should be
   done on evidence rather than on this paragraph.
 
 **One depth per image, and let it be the camera's own.** The kind of number a voxel

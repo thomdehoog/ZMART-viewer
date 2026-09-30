@@ -28,7 +28,7 @@ nothing can drift.
 **The middle layer is swappable.** Neuroglancer or Viv sits there behind one
 interface, so choosing differently later means replacing one module rather than
 unpicking an engine from the whole front end. That interface is
-`zmart-viewer/parked/contract.md`, and three implementations of it already exist.
+an earlier prototype's notes, and three implementations of it already exist.
 
 The interface this serves: the viewer on the left, the workflow's own controls on
 the right, and nothing else competing for attention.
@@ -62,7 +62,7 @@ That has since been measured again, from the other end. The framework now has a
 bottom slot that an application actually writes against, and a colour drawn *in
 that slot* was photographed: 96.95% of the window under both Viv options, 0% under
 neuroglancer. Implementing a slot and honouring it are two different things, and
-this is the reading that tells them apart. It is `parked/RESULTS.md` measurement 0b.
+this is the reading that tells them apart. It is an earlier prototype's notes measurement 0b.
 
 **This is fine, and it is not something to work around.** The framework is the
 same shape whichever engine is plugged in; an engine that cannot honour the bottom
@@ -114,7 +114,7 @@ the run.
 ## What is already built
 
 Three implementations of the middle layer, behind one interface, each measured on
-the same questions: `zmart-viewer/parked/`, with the table in `parked/RESULTS.md`. All
+the same questions: an earlier prototype folder, no longer in this repository, with the table in an earlier prototype's notes. All
 three hold the same two gestures, the same handedness, the same coordinate system,
 and keep pace over hundreds of tiles arriving live.
 
@@ -130,7 +130,7 @@ they are the whole of it:
    drawing really ends up beneath the picture and `false` where the engine cannot
    allow it, with `viewer.drawsUnderBecause` giving the reason in a sentence. A
    page finds this out without knowing which engine it is talking to.
-3. **A measurement.** `parked/RESULTS.md` rows 0b and 1b report, per option and from a
+3. **A measurement.** an earlier prototype's notes rows 0b and 1b report, per option and from a
    photograph, whether a colour drawn in the bottom slot is seen at all and
    whether it stays locked to the picture while the view is panned, zoomed and
    thrown about.
@@ -205,7 +205,7 @@ options, no for neuroglancer.
 ## The shape of the framework, in one place
 
 For somebody arriving here from the code, this is the whole of what the three
-layers come to. The details are in `zmart-viewer/parked/contract.md`.
+layers come to. The details are in an earlier prototype's notes.
 
 ```js
 viewer.drawUnder(paint)   // the bottom layer: the application's own ground

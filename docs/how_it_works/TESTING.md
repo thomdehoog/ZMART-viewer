@@ -2,31 +2,31 @@
 
 ## The short version
 
-From the `zmart-viewer` folder, one command runs everything:
+From the repository folder, with the test tools installed
+(`pip install -e .[dev]`) and the page built once
+(`npm --prefix app/page install && npm --prefix app/page run build`):
 
 ```
-python run_tests.py
+python -m pytest tests
 ```
 
-That is all you need. It installs the test tools if they are missing, builds the
-two pages the tests open — the viewer itself, and the small page the three
-drawing options are compared on — and then runs every test. The first run takes a
-few minutes (building those pages and, on a real machine, downloading the browser
-the render tests drive); after that it is quick.
+That runs every test. The browser tests drive a real headless browser; on a
+machine without one, or without a graphics card, they skip and the rest still
+run. The first run takes a few minutes; after that it is quick.
 
 To test against a **real acquisition** as well, point it at an OME-Zarr store:
 
 ```
-ZMART_TEST_STORE=/path/to/acquisition.ome.zarr python run_tests.py
+ZMART_TEST_STORE=/path/to/acquisition.ome.zarr python -m pytest tests
 ```
 
 Anything you add after the command goes straight to pytest, so you can run just
 part of the suite while you work:
 
 ```
-python run_tests.py -k omezarr     # only the OME-Zarr tests
-python run_tests.py -v              # one line per test
-python run_tests.py -s -k gpu       # print which GPU the renderer found
+python -m pytest tests -k omezarr     # only the OME-Zarr tests
+python -m pytest tests -v              # one line per test
+python -m pytest tests -s -k gpu       # print which GPU the renderer found
 ```
 
 ## Manifest-driven production refresh
@@ -80,7 +80,7 @@ reason. Three things decide what runs:
   These run everywhere.
 - **When the page is built, and a browser can be started.** The browser tests
   load the real viewer and check that pixels actually reach the renderer.
-  `run_tests.py` builds the page for you; without Node.js they skip. They also
+  The page must be built first (see above); without it they skip. They also
   need a Chromium, and the suite goes to some trouble to find one — see
   "Finding a browser this machine already has" below.
 - **When a GPU / real data is present.** Two tests only make sense on a real
@@ -118,7 +118,7 @@ beneath the measured limit — that one is instant and it is what fails if someb
 raises the number. The measurement itself is opt-in:
 
 ```
-ZMART_FIND_THE_LIMIT=1 python run_tests.py -s -k finds_the_limit
+ZMART_FIND_THE_LIMIT=1 python -m pytest tests -s -k finds_the_limit
 ```
 
 It turns the pacing off and opens folders of increasing size until positions
@@ -142,7 +142,7 @@ safe on the slowest machine is safe everywhere.
 ## Finding a browser this machine already has
 
 Playwright downloads its own Chromium and will only launch that one exact build.
-That is usually fine, and it is why `run_tests.py` offers to fetch it for you. But
+That is usually fine: `playwright install chromium` fetches it once. But
 some machines cannot download one — a lab PC behind a policy that blocks it, or a
 container that ships a browser of its own — and on those machines Playwright
 refuses to start the perfectly good Chromium sitting right there, because its build
@@ -161,7 +161,7 @@ If that search picks the wrong one, or finds nothing on a machine you know has a
 browser, name the one you want:
 
 ```
-ZMART_CHROMIUM=/path/to/chrome python run_tests.py
+ZMART_CHROMIUM=/path/to/chrome python -m pytest tests
 ```
 
 Naming a file that does not exist means "there is no browser here", which is a
@@ -200,7 +200,7 @@ The second is for machines that really should be able to draw — a CI runner, t
 microscope PC. On those, set:
 
 ```
-ZMART_REQUIRE_BROWSER=1 python run_tests.py
+ZMART_REQUIRE_BROWSER=1 python -m pytest tests
 ```
 
 and a run where the pixel tests did not happen **fails**, saying why. The project's
@@ -223,7 +223,7 @@ the whole machine is slow, both halves are slow and the ratio does not move.
 There are two tests in it and they say different things. One holds the line where
 the viewer is today, so that a further slide is noticed. The other states the rate
 that is actually wanted and is **expected to fail**, because the viewer pays a cost
-per position on every frame and that is not fixed — `docs/open/NEXT_STEPS.md` records the
+per position on every frame and that is not fixed — an earlier note kept in the repository's history records the
 cause and why the fix is an architectural change. The day somebody does fix it, that
 test will start passing, the run will say so, and the marker should come off.
 
@@ -232,7 +232,7 @@ test will start passing, the run will say so, and the marker should come off.
 The clearest single check:
 
 ```
-python run_tests.py -s -k hardware_accelerated
+python -m pytest tests -s -k hardware_accelerated
 ```
 
 On a machine with a graphics card this prints the renderer, for example
@@ -293,8 +293,8 @@ passed. The only skipped tests required an explicit real acquisition through
 Testing aside, to actually look at a real acquisition through the viewer:
 
 ```
-python run_demo.py --data /path/to/acquisition.ome.zarr
+zmart-viewer /path/to/acquisition.ome.zarr
 ```
 
 This opens the store through the neuroglancer engine, streaming it out-of-core,
-in a native window (falling back to a browser). See `parked/prototype/README.md` for the details.
+in a native window (falling back to a browser).

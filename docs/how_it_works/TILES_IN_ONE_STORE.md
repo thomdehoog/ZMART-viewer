@@ -11,7 +11,7 @@ than believed.
 
 Two things the project wants have so far been in direct conflict.
 
-**The viewer needs one store.** `docs/open/NEXT_STEPS.md` establishes this and
+**The viewer needs one store.** an earlier note kept in the repository's history establishes this and
 `measure_one_stitched_store.py` measures it: one image draws at 255 frames in five
 seconds where the same specimen as 300 separate positions manages 62, because
 Neuroglancer builds render layers per source and every one of them takes part in

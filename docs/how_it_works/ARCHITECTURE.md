@@ -9,7 +9,7 @@ exception: it has been built, and that section describes the code rather than an
 intention.** Everything else still stands as intent.
 
 Read `docs/how_it_works/DATA_LAYOUT.md` for how data is stored, `docs/history/LIVE_MODE_PLAN.md` for the live-mode
-proposal that sits on top of this, and `docs/open/NEXT_STEPS.md` for the honest list of what is
+proposal that sits on top of this, and an earlier note kept in the repository's history for the honest list of what is
 unfinished — with the caveat, below, that several of its remaining items are ruled out by
 the rule in section 2.
 
@@ -127,7 +127,7 @@ before and after.
 
 ### What the rule strikes from the roadmap
 
-Applying section 2 honestly removes several items `docs/open/NEXT_STEPS.md` still carries:
+Applying section 2 honestly removes several items an earlier note kept in the repository's history still carries:
 
 - **HTTP/2.** It treats a symptom of the engine's fan-out and costs a dependency.
 - **The coordinate-space quadratic.** Already correctly declined — halving an 800-position
@@ -296,7 +296,7 @@ questions.** That is the whole benefit, and everything else is a consequence:
 - A tile's position can be corrected *after* acquisition — once a stitcher has
   worked out where the stage really went — without a byte being rewritten.
 - The number of images on disk stops setting the viewer's frame rate, which is
-  what `docs/open/NEXT_STEPS.md` spends its scale audits establishing.
+  what an earlier note kept in the repository's history spends its scale audits establishing.
 
 There is one arrangement this makes possible that is otherwise a straight
 contradiction: **keeping the overlap between tiles while still showing one
@@ -373,7 +373,7 @@ wants to know which one to open.
 
 ```
                               ┌─────────────────────────────────────┐
-   WHAT YOU RUN               │  zmart-viewer/run_demo.py             │
+   WHAT YOU RUN               │  zmart-viewer (the command)           │
                               │  launcher.py  — opens a window, or  │
                               │                 prints an address   │
                               └────────────────┬────────────────────┘

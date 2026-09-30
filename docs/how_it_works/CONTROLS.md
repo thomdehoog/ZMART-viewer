@@ -113,8 +113,8 @@ microscope should be able to sit down and move around without being taught, and
 every extra gesture is one more thing that can be triggered by accident. The
 sections below explain what each removal is protecting.
 
-**Where this now lives.** For the three viewers in `zmart-viewer/parked/`, the two
-gestures are in one shared file, `parked/gestures.js`, which each of them
+**Where this now lives.** For the three viewers in an earlier prototype folder, no longer in this repository, the two
+gestures are in one shared file, an earlier prototype, which each of them
 imports; the viewer puts the listeners on when it opens and takes them off when it
 closes. A page that shows one of those viewers therefore inherits this decision
 rather than making it again, which is the point of writing it down here at all.
@@ -122,7 +122,7 @@ rather than making it again, which is the point of writing it down here at all.
 **And one thing a page may change.** An operator who has chosen a pen needs a drag
 to draw rather than pan, and it cannot do both. So a page may tell the viewer that
 a drag means something other than panning — `handDragsTo`, set out in
-`parked/contract.md` §2a — and the viewer hands the drag over instead of moving
+an earlier prototype's notes §2a — and the viewer hands the drag over instead of moving
 the view. What the two gestures *are* does not change; what a drag means is the
 application's to decide, exactly as it is in every drawing program an operator has
 already used.
@@ -160,7 +160,7 @@ had just been taught that the wheel zooms found it doing nothing in three
 dimensions, and on a run one plane deep it could do nothing at all. That looked
 exactly like a volume renderer unable to draw at any resolution but the coarsest,
 and it was diagnosed as such, twice, before anybody varied the zoom the volume
-view actually reads. It refines the whole pyramid; see `docs/open/HANDOVER_3D.md`.
+view actually reads. It refines the whole pyramid; see an earlier note on 3-D, kept in the repository's history.
 
 The decision this section records was written down on 30 July and not carried out
 until 6 August, which is its own small lesson: a decision recorded and not

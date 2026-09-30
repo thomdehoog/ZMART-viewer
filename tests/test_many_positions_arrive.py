@@ -316,8 +316,8 @@ def test_the_shipped_group_size_leaves_room_beneath_the_measured_limit():
         f"leaves too little room: at most {ceiling} keeps a margin for a machine "
         "slower or busier than the one the limit was measured on.\n\n"
         "If the limit is genuinely higher than it was, measure it again rather than "
-        f"raising this ceiling from memory:\n\n    {FIND_THE_LIMIT}=1 python "
-        "run_tests.py -s -k finds_the_limit\n"
+        f"raising this ceiling from memory:\n\n    {FIND_THE_LIMIT}=1 python -m pytest "
+        "tests -s -k finds_the_limit\n"
     )
 
 
