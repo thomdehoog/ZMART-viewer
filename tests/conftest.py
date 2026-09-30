@@ -25,7 +25,6 @@ import re
 import socket
 import sys
 import threading
-import time
 from pathlib import Path
 
 import engine_on_path  # noqa: F401  -- makes ``zmart_viewer`` importable from the checkout
@@ -121,57 +120,44 @@ def viz_root() -> Path:
     return _VIZ_ROOT
 
 
-def _newest_source_change() -> float:
-    """When the viewer's own source was last edited."""
-    newest = 0.0
-    for folder in (_VIZ_ROOT / "gui", _VIZ_ROOT / "engine" / "drawing"):
-        for path in folder.rglob("*"):
-            if (
-                path.is_file()
-                and path.suffix != ".py"
-                and not {"built", "__pycache__"} & set(path.parts)
-            ):
-                newest = max(newest, path.stat().st_mtime)
-    return newest
-
-
 @pytest.fixture(scope="session")
 def built_dist() -> Path:
-    """The built viewer page — and a check that it was built from today's source.
+    """The built viewer page, and a check that it was built from these sources.
 
-    Every test that opens a browser reads the *built* page, not the source beside
-    it, and the built page is not kept in the repository because it is generated.
-    So it is entirely possible to edit the viewer, run the tests, and be told
-    something confident and completely wrong about code that was never running.
+    Every test that opens a browser reads the *built* page in ``gui/built``, not
+    the source beside it. So it is entirely possible to edit the viewer, run the
+    tests, and be told something confident and completely wrong about code that
+    was never running. That once cost this project a session.
 
-    That is not a hypothetical. It cost this project a session: the tests for
-    noticing a tile written into an open store were passing and failing against a
-    bundle two days older than the source, and the conclusions drawn from them
-    were nonsense in both directions.
+    The check is the same one the wheel build makes: ``scripts/stamp-build.mjs``
+    records a fingerprint of every source and every built file, and
+    ``validate_frontend`` compares them with what is on disk now. File dates are
+    not used, because a fresh checkout or a restored file changes a date
+    without changing the content.
 
-    A missing build is a *skip*, because a machine that has never built the page
-    has simply not been set up for these tests and there is nothing wrong with it.
-    A build older than the source is a **failure**, because that machine is about
-    to answer questions about the wrong program.
+    A missing page is a *skip*: that machine has not been set up to draw. A page
+    that no longer matches its sources is a **failure**, because that machine is
+    about to answer questions about the wrong program.
     """
+    from setuptools.errors import SetupError
+
+    from build_support import validate_frontend
+
     if not (_DIST / "index.html").exists():
         _give_up_on_the_picture(
             "the viewer page has not been built, so there was nothing to open "
             "(gui/built/index.html is missing). Build it with "
             "`npm install && npm run build`"
         )
-    built = (_DIST / "index.html").stat().st_mtime
-    changed = _newest_source_change()
-    if changed > built:
+    try:
+        validate_frontend(_VIZ_ROOT)
+    except SetupError:
         raise AssertionError(
-            "the built viewer page is older than the source it was built from, so "
-            "these tests would be measuring a program that is no longer the one in "
-            "the repository. Rebuild it first:\n\n"
-            "    npm run build\n\n"
-            f"(built {time.strftime('%H:%M:%S', time.localtime(built))}, "
-            f"source last changed "
-            f"{time.strftime('%H:%M:%S', time.localtime(changed))})"
-        )
+            "the built viewer page in gui/built does not match the sources it "
+            "was built from, so these tests would be measuring a program that is "
+            "no longer the one in the repository. Rebuild it first:\n\n"
+            "    npm run build\n"
+        ) from None
     return _DIST
 
 

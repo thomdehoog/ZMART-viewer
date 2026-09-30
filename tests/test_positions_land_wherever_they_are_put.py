@@ -1,6 +1,6 @@
 """Positions land wherever they are put, and a wrong landing names itself.
 
-The free-placement gate of docs/open/PLAN_positions_land_wherever_they_are_put.md:
+The free-placement gate of an earlier note (kept in the repository's git history):
 scattered, overlapping, fractional and negative translations across both
 OME-Zarr generations, the awkward shapes, plates, and the live path — served
 unbaked, baked, and through the real door — all compared against a reference
@@ -408,7 +408,7 @@ def _writer_decides_on_day_zero() -> bool:
 needs_day_zero_writer = pytest.mark.skipif(
     not _writer_decides_on_day_zero(),
     reason="the installed zmart_viewer.live.record does not yet decide the pointer map at "
-    "construction -- apply docs/open/HANDOVER_the_pointer_map_decides_on_day_zero.md",
+    "construction -- apply an earlier note (kept in the repository's git history)",
 )
 
 FRAME = 384
@@ -635,7 +635,7 @@ needs_growing_writer = pytest.mark.skipif(
     not _writer_can_add_a_position(),
     reason="the installed zmart_viewer.live.record cannot yet add a position to a running "
     "run -- see the growth items in "
-    "docs/open/HANDOVER_the_pointer_map_decides_on_day_zero.md",
+    "an earlier note (kept in the repository's git history)",
 )
 
 

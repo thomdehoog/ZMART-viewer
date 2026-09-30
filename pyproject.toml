@@ -26,6 +26,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # The tests check the wheel build, so they need the build tool itself.
+    "setuptools>=77",
     "pytest>=8",
     "pytest-timeout>=2",
     "pytest-cov>=5",

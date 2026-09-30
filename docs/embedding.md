@@ -45,5 +45,5 @@ an explicit build error requiring `npm ci`, never a marker-only success.
 The static `/embedding.js` route permits cross-origin imports and is revalidated
 instead of cached as an immutable hashed asset.
 
-This feature is isolated as `0.5.0.dev0`; it is not a release or a main-branch
-deployment. The wheel build certificate includes both shared JavaScript files.
+The wheel's build check covers both shared JavaScript files, so an installed
+viewer always serves the `embedding.js` its page was built with.

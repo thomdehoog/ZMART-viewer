@@ -791,7 +791,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // where the operator was looking at one moment, not the channel: pan away
   // and the old reading is no longer about anything.
   const [here, setHere] = React.useState(null);
-  // The same resting window the canvas draws with (see scene.js): the run's
+  // The same resting window the canvas draws with (see layers.js): the run's
   // recorded window, or the measured one when the run said nothing.
   const window_ = entry.window || restingWindow(layer, mode === "volume")
     || { low: 0, high: 65535 };

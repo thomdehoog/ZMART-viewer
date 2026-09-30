@@ -70,12 +70,23 @@ def open_window(
     transparent_background: bool = False,
     open_from: Path | None = None,
     native: bool = True,
-) -> None:
+    open_path: Path | None = None,
+) -> int:
     """Start the engine and open the viewer in a native window.
+
+    ``open_path`` is a folder to show at once. It is opened through the
+    engine's own door (``/api/stores/open``), the same one the load window
+    uses, so a plate, a run of positions or a live run opens here exactly as
+    it would there. If the engine refuses it, the reason is printed and
+    nothing is left running.
 
     With ``native=False`` no window is opened: the address is printed and the
     engine keeps serving until you press Ctrl+C. That is the way to use the
     viewer over a remote desktop or from a machine without a window library.
+    The same happens when a native window cannot be started.
+
+    Returns the exit code for the shell: 0 when the viewer ran, 1 when the
+    folder could not be opened.
     """
     chooser: dict = {}
 
@@ -112,9 +123,17 @@ def open_window(
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{server.server_address[1]}"
 
+    if open_path is not None:
+        refused = _open_through_the_door(url, open_path)
+        if refused is not None:
+            server.shutdown()
+            server.server_close()
+            print(f"\n{refused}")
+            return 1
+
     if not native:
         _serve_until_interrupt(server, url)
-        return
+        return 0
 
     if not _webview2_present():
         print(
@@ -125,7 +144,7 @@ def open_window(
             f"or Chrome:\n    {url}"
         )
         _serve_until_interrupt(server, url)
-        return
+        return 0
 
     try:
         import webview  # pywebview
@@ -137,9 +156,12 @@ def open_window(
             "(To get the pop-up window, install it with: pip install pywebview)"
         )
         _serve_until_interrupt(server, url)
-        return
+        return 0
 
-    native_window = webview.create_window("ZMART Viewer", url, width=width, height=height)
+    try:
+        native_window = webview.create_window("ZMART Viewer", url, width=width, height=height)
+    except Exception as why:  # noqa: BLE001 -- any failure here has the same answer
+        return _serve_without_a_window(server, url, why, chooser)
 
     def show_folder_dialog():
         """Show the operating system's own folder chooser and return what was picked."""
@@ -151,8 +173,52 @@ def open_window(
         return chosen[0] if isinstance(chosen, (list, tuple)) else str(chosen)
 
     chooser["show"] = show_folder_dialog
-    webview.start()
+    try:
+        webview.start()
+    except Exception as why:  # noqa: BLE001 -- any failure here has the same answer
+        # pywebview installs on every system, but it can only open a window
+        # when the system also has a window toolkit it can use (on Linux, GTK
+        # or Qt with their Python bindings). Without one, it fails here, and
+        # the viewer carries on in a browser instead.
+        return _serve_without_a_window(server, url, why, chooser)
     server.shutdown()
+    return 0
+
+
+def _serve_without_a_window(server, url: str, why: Exception, chooser: dict) -> int:
+    """Explain that no native window could open, and serve for a browser instead."""
+    chooser.pop("show", None)  # the native folder chooser went with the window
+    print(
+        "A native window could not be opened on this computer:\n"
+        f"    {why}\n"
+        "The viewer is running anyway. Open this address in a browser:\n"
+        f"    {url}"
+    )
+    _serve_until_interrupt(server, url)
+    return 0
+
+
+def _open_through_the_door(url: str, path: Path) -> str | None:
+    """Ask the running engine to open ``path``. Returns the refusal, or None."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    asked = urllib.request.Request(
+        f"{url}/api/stores/open",
+        data=json.dumps({"path": str(path)}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(asked, timeout=600):
+            return None
+    except urllib.error.HTTPError as refusal:
+        try:
+            answer = json.loads(refusal.read() or b"{}")
+        except ValueError:
+            answer = {}
+        return answer.get("error") or f"the folder could not be opened ({refusal.code})"
 
 
 def _serve_until_interrupt(server, url: str) -> None:
@@ -165,6 +231,34 @@ def _serve_until_interrupt(server, url: str) -> None:
             time.sleep(0.5)
     except KeyboardInterrupt:
         server.shutdown()
+        server.server_close()
+
+
+def _a_display_window(text: str) -> tuple[float, float]:
+    """Read ``--range LOW,HIGH`` into two numbers, or say plainly what is wrong."""
+    import argparse
+
+    low, comma, high = text.partition(",")
+    try:
+        if not comma:
+            raise ValueError
+        return float(low), float(high)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not LOW,HIGH -- give two numbers with a comma, e.g. 100,4000"
+        ) from None
+
+
+def _tile_numbers(text: str) -> list[int]:
+    """Read ``--tiles 0,1,2`` into whole numbers, or say plainly what is wrong."""
+    import argparse
+
+    try:
+        return [int(part) for part in text.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not a list of tile numbers -- use whole numbers with commas, e.g. 0,1"
+        ) from None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -187,11 +281,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--range",
+        type=_a_display_window,
         help="display window as LOW,HIGH; by default it is read from the "
         "image's own description, or measured from the smallest copy of it",
     )
     parser.add_argument(
         "--tiles",
+        type=_tile_numbers,
         help="which tiles to open, e.g. 0,1 — default is every tile found",
     )
     parser.add_argument(
@@ -264,14 +360,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    window = None
-    if args.range:
-        low, _, high = args.range.partition(",")
-        window = (float(low), float(high))
-
     common = {
         "port": args.port,
-        "window": window,
+        "window": args.range,
         "depth_samples": args.depth_samples,
         "chrome": args.chrome,
         "allow_selection": args.select,
@@ -280,13 +371,55 @@ def main(argv: list[str] | None = None) -> int:
         "native": not args.no_window,
     }
 
-    if args.folder is None:
-        # Nothing to open yet: an empty viewer with the load window, where a
-        # folder can be chosen by hand.
-        print("Opening the ZMART Viewer. Use the load button to choose a folder.")
-        open_window(live=not args.static, **common)
-        return 0
+    try:
+        if args.folder is None:
+            # Nothing to open yet: an empty viewer with the load window, where
+            # a folder can be chosen by hand.
+            print("Opening the ZMART Viewer. Use the load button to choose a folder.")
+            return open_window(live=not args.static, **common) or 0
 
+        if args.tiles or args.filter_name:
+            return _open_some_tiles(args, common)
+
+        return _open_a_folder(args, common)
+    except OSError as why:
+        # Most often the port is taken; the engine's own message says what to do.
+        print(f"\n{why}")
+        return 1
+
+
+def _open_a_folder(args, common: dict) -> int:
+    """Open whatever the folder holds, through the engine's own door.
+
+    The engine works out what the folder is (one image, a folder of images, an
+    HCS plate, raw positions from a microscope, or a run still being written)
+    and opens it the right way, exactly as the load window would.
+    """
+    from zmart_viewer.opening.open_folders import is_store
+
+    folder = args.folder.expanduser()
+    if not folder.exists():
+        print(f"There is no folder at {folder}.")
+        return 1
+    print(f"Opening {folder.name}...")
+    return (
+        open_window(
+            # Where marks are saved and where the load window starts browsing.
+            data_dir=folder.parent if is_store(folder) else folder,
+            live=not args.static,
+            open_path=folder,
+            **common,
+        )
+        or 0
+    )
+
+
+def _open_some_tiles(args, common: dict) -> int:
+    """Open only some tiles or one filter's images from a folder of images.
+
+    Choosing tiles or a filter narrows a plain folder of images, so this reads
+    the folder's images directly rather than asking the engine what it is.
+    """
     from zmart_viewer.opening.open_folders import discover, prefer_filter, select_tiles
 
     try:
@@ -295,45 +428,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"That folder could not be read: {unreadable}")
         return 1
     if args.tiles:
-        names = select_tiles(names, [int(t) for t in args.tiles.split(",")])
+        names = select_tiles(names, args.tiles)
     names = prefer_filter(names, args.filter_name)
     if not names:
         print(
-            f"No OME-Zarr image was found at {args.folder}.\n"
-            "The viewer opens OME-Zarr folders (usually ending in .ome.zarr or "
-            ".zarr), or a folder that holds several of them. Try the folder above "
-            "or below this one."
+            f"No OME-Zarr image matching those tiles or that filter was found at "
+            f"{args.folder}.\n--tiles and --filter pick images out of one folder of "
+            "OME-Zarr images; leave them out to open the folder as a whole."
         )
         return 1
-    what = names[0] if len(names) == 1 else f"{len(names)} images from {parent.name}"
-    print(f"Opening {what}...")
-    # A narrowed selection must stay narrowed: were the folder still being
-    # watched, the tiles and filters deliberately left out would reappear.
-    narrowed = bool(args.tiles or args.filter_name)
+    print(f"Opening {len(names)} of the images in {parent.name}...")
     try:
-        open_window(
-            data_dir=parent,
-            store=names,
-            live=not narrowed and not args.static,
-            **common,
-        )
+        # A narrowed selection must stay narrowed: were the folder still being
+        # watched, the tiles and filters deliberately left out would reappear.
+        return open_window(data_dir=parent, store=names, live=False, **common) or 0
     except ValueError as refused:
-        # The viewer declines to open a folder holding more than one acquisition
-        # (an overview and a target scan are two pictures, not one) and names
-        # the images in each. The message was written for the person at the
-        # microscope, so it is printed as it stands rather than as a traceback.
+        # More than one acquisition among the chosen images. The message names
+        # the images in each and was written for the person at the microscope,
+        # so it is printed as it stands rather than as a traceback.
         print(f"\n{refused}")
-        print(
-            "\nPoint the command at one of the images listed above to open that "
-            "acquisition on its own, for example:\n"
-            f'    zmart-viewer "{parent / names[0]}"\n'
-            "While the folder is being watched, the rest of that acquisition "
-            "joins it as it is written, and a different acquisition appearing "
-            "in the folder is given its own heading."
-        )
         return 1
-    return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

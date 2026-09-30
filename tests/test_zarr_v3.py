@@ -783,7 +783,7 @@ def test_a_sharded_version_3_store_reaches_the_renderer(tmp_path, built_dist, br
         # throughout, because the contrast this store is given does not reach the
         # drawing at all. Measured: the picture comes out one flat white shape
         # whatever brightness range the server is told to use, which is a fault in
-        # its own right and is written down in docs/open/NEXT_STEPS.md.
+        # its own right and is written down in an earlier note (kept in the repository's git history).
         #
         # So variety of colour would be the wrong question here. It is the right
         # question for the demo volume, which has three coloured channels, and

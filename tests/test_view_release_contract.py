@@ -142,6 +142,13 @@ def test_partial_publication_notifies_and_retries_without_blocking_config(tmp_pa
                 raise OSError("injected bake failure")
             return result
 
+        # A page is already showing this acquisition: it has read the coverage
+        # of the generation now published. That is the reader the engine keeps
+        # serving while the next generation is being made.
+        assert (
+            _request(address, "/data/0/a_top.zmartview.zarr/__zmart_coverage__/zarr.json")[0]
+            == 200
+        )
         monkeypatch.setattr(PublishedTransfer, "_declare_levels", failing)
         payload["source_revisions"]["p.ome.zarr"] = 2
         publication = {key: payload[key] for key in ("path", "source_revisions", "composition")}
@@ -157,8 +164,12 @@ def test_partial_publication_notifies_and_retries_without_blocking_config(tmp_pa
         config_ms = (time.perf_counter() - started) * 1000
         assert status == 200, body
         assert time.perf_counter() - started < 1
+        # While the next generation is made, that page keeps being answered,
+        # promptly, from the generation it already has.
         for path in ("zarr.json", "0/zarr.json", "__zmart_coverage__/zarr.json"):
-            assert _request(address, f"/data/0/a_top.zmartview.zarr/{path}")[0] == 503
+            asked = time.perf_counter()
+            assert _request(address, f"/data/0/a_top.zmartview.zarr/{path}")[0] == 200
+            assert time.perf_counter() - asked < 1
         release.set()
         operation.join(10)
         assert responses[0][0] == 503

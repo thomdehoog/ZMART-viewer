@@ -3,7 +3,7 @@
 The refresh pump deliberately has no deadline: a slow answer is usually the
 server doing useful composition, and abandoning it only makes the server do
 the same expensive work again. The measured history behind that decision is in
-``building/HANDOVER_codex_storm_bake_and_client_staleness.md``. But "no
+an earlier note (kept in the repository's git history). But "no
 deadline" must not mean "no liveness": a request that will genuinely never
 finish — a stalled socket, a server thread wedged behind a lock — is rare and
 real, and an earlier pump serialized whole batches of refreshes, so one such
