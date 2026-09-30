@@ -6,8 +6,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import zarr
-
-from zmart_viewer.compose import (
+from zmart_viewer.picture.compose import (
     MEAN_REDUCTION,
     Composer,
     Mosaic,
@@ -298,7 +297,7 @@ def test_odd_canvas_edges_match_the_shared_mean_reduction(tmp_path):
 
 
 def test_existing_chunk_baker_preserves_sparse_composition_without_l0_copy(tmp_path):
-    from zmart_viewer.published import PublishedTransfer
+    from zmart_viewer.views.published import PublishedTransfer
 
     a, b = (
         source(tmp_path / "originals", "a.ome.zarr", 120),

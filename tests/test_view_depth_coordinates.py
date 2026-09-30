@@ -6,10 +6,14 @@ import numpy as np
 import pytest
 import zarr
 from test_view_sampling import write_tile
-
-from zmart_viewer import pieces, published
-from zmart_viewer.compose import Composer, read_the_mosaic_as_written, the_mosaic_written_down
-from zmart_viewer.views import ViewSet
+from zmart_viewer.picture.compose import (
+    Composer,
+    read_the_mosaic_as_written,
+    the_mosaic_written_down,
+)
+from zmart_viewer.serving import pieces
+from zmart_viewer.views import published
+from zmart_viewer.views.named import ViewSet
 
 
 @pytest.mark.parametrize("bake", [False, True])

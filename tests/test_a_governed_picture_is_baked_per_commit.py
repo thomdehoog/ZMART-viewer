@@ -32,9 +32,8 @@ sys.path.insert(0, str(VIZ.parent))
 
 from record_fixtures import some_specimen  # noqa: E402
 from test_the_composer_obeys_the_manifest import PIECE, a_governed_run, the_columns_of  # noqa: E402
-
-from zmart_viewer import pieces as served  # noqa: E402
-from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
+from zmart_viewer.picture.building import GovernedRun, declare_a_governed_picture  # noqa: E402
+from zmart_viewer.serving import pieces as served  # noqa: E402
 
 
 def every_baked_file(store: Path) -> dict[str, bytes]:
@@ -199,7 +198,7 @@ def test_the_bake_retries_a_transient_windows_sharing_violation(tmp_path, monkey
     )
     governed = GovernedRun(run.folder, piece=PIECE, store=store)
     governed.composer()
-    from zmart_viewer import building as governed_module
+    from zmart_viewer.picture import building as governed_module
 
     real_replace = governed_module.os.replace
     refused = {"left": 1}
@@ -245,8 +244,7 @@ def test_the_http_route_consults_the_manifest_before_any_baked_file(tmp_path):
         sys.path.insert(0, backend)
     import numpy as np
     from check_the_built_picture import decode
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -340,7 +338,7 @@ def test_a_commit_landing_during_the_initial_bake_is_not_lost(tmp_path, monkeypa
     generation from files forever. The stamp must say what the bake actually
     absorbed — the fold count of the snapshot it baked.
     """
-    from zmart_viewer import building as declaring
+    from zmart_viewer.picture import building as declaring
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -393,7 +391,7 @@ def test_the_bake_catches_up_after_demand_stops(tmp_path):
     backend = str(Path(__file__).resolve().parent.parent)
     if backend not in sys.path:
         sys.path.insert(0, backend)
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     # One piece ask opens and remembers the governed run.  It is deliberately
     # the final image request in this test.
@@ -488,10 +486,9 @@ def test_an_older_derive_cannot_regress_the_bake_behind_a_newer_one(tmp_path, mo
     history current while B's hole survives forever.
     """
     from record_fixtures import FRAME
-
-    from zmart_viewer.record.coordinator import LivePublisher
-    from zmart_viewer.record.model import GridCell
-    from zmart_viewer.record.profiles import plan_the_writing
+    from zmart_viewer.live.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.model import GridCell
+    from zmart_viewer.live.record.profiles import plan_the_writing
 
     profile, _ = plan_the_writing("overview", frame=FRAME, z_planes=1)
     cells = {
@@ -671,7 +668,7 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
     backend = str(Path(__file__).resolve().parent.parent)
     if backend not in sys.path:
         sys.path.insert(0, backend)
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -720,7 +717,7 @@ def test_a_baked_picture_still_warms_the_composer_for_its_patcher(tmp_path):
     """
     import time
 
-    from zmart_viewer.building import GovernedRun
+    from zmart_viewer.picture.building import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -764,8 +761,7 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
     padding included.
     """
     import numpy as np
-
-    from zmart_viewer.building import GovernedRun
+    from zmart_viewer.picture.building import GovernedRun
 
     run = a_governed_run(tmp_path)
     run.write_and_publish("posA", some_specimen(700))
@@ -794,6 +790,6 @@ def test_the_warm_reads_the_bake_and_holds_the_composed_ground(tmp_path):
                 "warm's shortcut changed what the operator would be shown"
             )
     finally:
-        from zmart_viewer import pieces as served
+        from zmart_viewer.serving import pieces as served
 
         served.forget(store)

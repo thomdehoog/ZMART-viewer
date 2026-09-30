@@ -5,10 +5,9 @@ import threading
 import numpy as np
 import pytest
 import zarr
-
-from zmart_viewer import coverage, pieces
-from zmart_viewer.library import Library
-from zmart_viewer.published import STORE, PublishedFolders, PublishedTransfer
+from zmart_viewer.opening.library import Library
+from zmart_viewer.serving import coverage, pieces
+from zmart_viewer.views.published import STORE, PublishedFolders, PublishedTransfer
 
 
 def write_position(folder, name, x, value, *, frames=1, channels=1, depth=1):
@@ -375,8 +374,7 @@ def test_http_publication_reports_refusals_and_advances_only_changed_revisions(
     tmp_path, monkeypatch
 ):
     from test_server import request
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     write_position(tmp_path, "a.ome.zarr", 0, 1200)
     server = make_server(port=0, data_dir=tmp_path, live=True, allow_open=True)
@@ -440,7 +438,7 @@ def test_publication_keeps_its_own_revision_snapshot(tmp_path):
 
 
 def test_initial_external_folder_bake_requires_canvas(tmp_path):
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     write_position(tmp_path, "a.ome.zarr", 0, 1200)
     with pytest.raises(ValueError, match="canvas bounds"):
@@ -456,8 +454,7 @@ def test_a_publication_under_way_keeps_serving_all_but_the_pieces_it_rewrites(tm
     named pieces alone say "try again shortly", and only until the commit.
     """
     from test_server import request
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     write_position(tmp_path, "a.ome.zarr", 0, 1200)
     write_position(tmp_path, "b.ome.zarr", 512, 900)

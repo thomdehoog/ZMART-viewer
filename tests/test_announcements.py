@@ -20,10 +20,9 @@ import threading
 import time
 
 import pytest
-
-from zmart_viewer import live as announcements_mod
-from zmart_viewer.live import Announcements, FolderWatcher
-from zmart_viewer.server import make_server
+from zmart_viewer.live import following as announcements_mod
+from zmart_viewer.live.following import Announcements, FolderWatcher
+from zmart_viewer.serving.server import make_server
 
 
 class TestKeepingTrackOfWhoIsListening:

@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { rename } from "node:fs/promises";
 import { statSync } from "node:fs";
-import { workerEntry } from "../../zmart_viewer/neuroglancer-growth.mjs";
+import { workerEntry } from "../../engine/drawing/neuroglancer-growth.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "node_modules", "neuroglancer", "lib");

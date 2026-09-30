@@ -19,8 +19,7 @@ from __future__ import annotations
 import numpy as np
 from pixels import fraction_lit
 from pointed_by_hand import TILE, a_pointed_view, a_tile
-
-from zmart_viewer.library import channels
+from zmart_viewer.opening.library import channels
 
 # The band the specimen really occupies, and what the run asks to be shown.
 # Well inside the camera's range on purpose: that gap is the whole subject.
@@ -85,7 +84,7 @@ def test_a_picture_that_holds_no_pixels_still_opens_bright(browser, built_dist, 
     """
     import threading
 
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     folder = tmp_path / "experiment"
     picture = _a_pointed_picture(folder)

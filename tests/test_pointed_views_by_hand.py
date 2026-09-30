@@ -17,9 +17,8 @@ import urllib.request
 
 import numpy as np
 from pointed_by_hand import a_small_scene, a_tile, decoded, the_tiles_bytes
-
-from zmart_viewer import pieces
-from zmart_viewer.server import make_server
+from zmart_viewer.serving import pieces
+from zmart_viewer.serving.server import make_server
 
 
 def test_a_pointer_says_where_the_bytes_are_and_it_is_the_whole_file(tmp_path):

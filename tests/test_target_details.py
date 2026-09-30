@@ -12,8 +12,7 @@ import json
 import threading
 
 import pytest
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 
 def add_box(page, annotation_id="detail-box"):

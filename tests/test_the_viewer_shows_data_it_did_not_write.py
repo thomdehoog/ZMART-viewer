@@ -28,8 +28,7 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from a_microscope import AMicroscope  # noqa: E402
-
-from zmart_viewer.server import make_server  # noqa: E402
+from zmart_viewer.serving.server import make_server  # noqa: E402
 
 FRAME = 256
 

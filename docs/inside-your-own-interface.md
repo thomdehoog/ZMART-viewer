@@ -21,20 +21,21 @@ The public surface, which the release keeps stable, is:
 
 | What | Where | Used for |
 |---|---|---|
-| `make_server(...)` | `zmart_viewer.server` | starting the engine on a port |
+| `make_server(...)` | `zmart_viewer` | starting the engine on a port |
 | `POST /api/stores/open`, `POST /api/announce` | HTTP | telling the engine what to show and when it changed |
 | `GET /embedding.js` | HTTP | placing the named views on your own canvas |
-| `PublishedAcquisition`, `STORE` | `zmart_viewer.published` | reading what the engine has published for an acquisition |
-| `write_projection(...)` | `zmart_viewer.projections` | writing a Top, Min, Max or Sum view beside an image |
-| `open_window(...)`, `main(...)` | `zmart_viewer.launcher` | opening the viewer's own window from Python, when you want it |
+| `PublishedAcquisition`, `STORE` | `zmart_viewer` | reading what the engine has published for an acquisition |
+| `write_projection(...)` | `zmart_viewer` | writing a Top, Min, Max or Sum view beside an image |
+| `open_window(...)`, `main(...)` | `zmart_viewer` | opening the viewer's own window from Python, when you want it |
 
-Everything else in the package is internal and may change between versions.
+Import these from `zmart_viewer` itself, as shown below. They stay where they are
+between versions; everything deeper inside the package may move.
 
 ## 1. Start the engine
 
 ```python
 import threading
-from zmart_viewer.server import make_server
+from zmart_viewer import make_server
 
 server = make_server(
     port=0,                      # 0: let the machine pick a free port
@@ -127,7 +128,7 @@ When your own code needs to know what the engine has made of an acquisition,
 for instance to save a thumbnail or to check that a run is complete:
 
 ```python
-from zmart_viewer.published import STORE, PublishedAcquisition
+from zmart_viewer import STORE, PublishedAcquisition
 
 view = PublishedAcquisition(run_folder, piece=64)
 view.sources     # which published pictures exist for this run
@@ -138,7 +139,7 @@ And to write a projection of one position beside it, for example a maximum
 projection an analysis step will look at:
 
 ```python
-from zmart_viewer.projections import write_projection
+from zmart_viewer import write_projection
 
 write_projection(source_store, target_folder / "P000-max.ome.zarr", "max", revision=2)
 ```

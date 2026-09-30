@@ -17,8 +17,7 @@ import pytest
 import zarr
 from driving import pick_colormap  # noqa: E402
 from pixels import colour_spread, image_middle
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 
 def _image(path, *, channels=2, frames=1, written=None):

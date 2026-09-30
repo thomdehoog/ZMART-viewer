@@ -25,11 +25,10 @@ from test_a_governed_picture_is_baked_per_commit import (  # noqa: E402
     every_baked_file,
 )
 from test_the_composer_obeys_the_manifest import FRAME, PIECE  # noqa: E402
-
-from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
-from zmart_viewer.record.coordinator import LivePublisher  # noqa: E402
-from zmart_viewer.record.model import GridCell  # noqa: E402
-from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.coordinator import LivePublisher  # noqa: E402
+from zmart_viewer.live.record.model import GridCell  # noqa: E402
+from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.picture.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 
 def _a_grown_run(folder: Path) -> LivePublisher:

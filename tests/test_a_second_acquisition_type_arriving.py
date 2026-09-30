@@ -31,9 +31,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
-
-from zmart_viewer.library import Library
-from zmart_viewer.server import group_labels, make_server
+from zmart_viewer.opening.library import Library
+from zmart_viewer.serving.server import group_labels, make_server
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
 
@@ -457,7 +456,7 @@ class TestStartingTheViewerOnSuchAFolder:
                 "before it gets as far as the folder — build it with "
                 "`npm --prefix app/page install && npm --prefix app/page run build`"
             )
-        from zmart_viewer import launcher
+        from zmart_viewer import command as launcher
 
         folder = tmp_path / "mixed"
         _store(folder / "overview_pos001.ome.zarr")

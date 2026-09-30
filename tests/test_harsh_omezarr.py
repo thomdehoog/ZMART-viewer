@@ -20,9 +20,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
-from zmart_viewer.contrast import display_window
-from zmart_viewer.library import (
+from zmart_viewer.opening.contrast import display_window
+from zmart_viewer.opening.library import (
     channel_color,
     channel_of,
     discover,
@@ -31,7 +30,7 @@ from zmart_viewer.library import (
     prefer_filter,
     select_tiles,
 )
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 # --------------------------------------------------------------------------
 # Helpers: write real OME-Zarr v2 stores, the way the acquisition does.

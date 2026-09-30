@@ -7,11 +7,10 @@ import numpy as np
 import pytest
 import zarr
 from record_fixtures import a_live_run, prepare_without_publishing, some_specimen
-
-from zmart_viewer import coverage
-from zmart_viewer.building import GovernedRun
-from zmart_viewer.compose import Composer, Copy, Mosaic, Tile
-from zmart_viewer.server import make_server
+from zmart_viewer.picture.building import GovernedRun
+from zmart_viewer.picture.compose import Composer, Copy, Mosaic, Tile
+from zmart_viewer.serving import coverage
+from zmart_viewer.serving.server import make_server
 
 
 @pytest.mark.parametrize("level", [0, 1])

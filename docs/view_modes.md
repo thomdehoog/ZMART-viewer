@@ -210,7 +210,7 @@ installed package:
 
 ```python
 from pathlib import Path
-from zmart_viewer.server import make_server
+from zmart_viewer import make_server
 
 server = make_server(port=8848, data_dir=Path("run/view"), live=False,
                      loads=[{"path": "run/view"}])

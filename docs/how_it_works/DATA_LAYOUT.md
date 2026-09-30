@@ -656,7 +656,7 @@ every geometry it can make was tried — so this is about the generality the wri
 rather than about the runs it writes today.
 
 The elder writer is the retired elder writer. It once lived outside the viewer; the
-record machinery now lives inside it (`zmart_viewer/record/`), so the whole story of a
+record machinery now lives inside it (`engine/live/record/`), so the whole story of a
 run — writing its record and every way of reading it — is one codebase, and a controller
 drives instruments through this same package rather than through a copy that could drift.
 
@@ -1364,7 +1364,7 @@ writer, formerly `zmart_storage`) declares a run's images up front and writes ea
 into its place as it arrives, keeping the smaller copies in step, refusing a run whose
 tiles overlap, and holding two tiles apart when they would otherwise land in one piece of
 image at the same moment; its coverage record records where the run actually imaged.
-Its successor for live runs is `zmart_viewer/record/`, the manifest-governed publisher.
+Its successor for live runs is `engine/live/record/`, the manifest-governed publisher.
 
 What is genuinely still open is **where the writer belongs in the pipeline**, which is a
 different question. The mesoSPIM writes its own OME-Zarr today and our driver copies the

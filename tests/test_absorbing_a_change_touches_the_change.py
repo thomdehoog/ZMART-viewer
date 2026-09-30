@@ -36,9 +36,8 @@ from pathlib import Path
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-import measure_a_governed_run_at_scale as harness  # noqa: E402
-
-from zmart_viewer.building import GovernedRun, declare_a_governed_picture  # noqa: E402
+import a_governed_run as harness  # noqa: E402
+from zmart_viewer.picture.building import GovernedRun, declare_a_governed_picture  # noqa: E402
 
 # The scaling comparison's two sizes. Sixteen times the positions: a
 # bookkeeping cost that followed the survey would show as many times the
@@ -106,10 +105,9 @@ def test_the_fold_today_sweeps_every_published_moment(tmp_path):
     multiplication as surely as two hundred would.
     """
     import numpy as np
-
-    from zmart_viewer.record.coordinator import LivePublisher
-    from zmart_viewer.record.model import GridCell
-    from zmart_viewer.record.profiles import plan_the_writing
+    from zmart_viewer.live.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.model import GridCell
+    from zmart_viewer.live.record.profiles import plan_the_writing
 
     moments = 8
     profile, _ = plan_the_writing("overview", frame=harness.FRAME, z_planes=1, timepoints=moments)

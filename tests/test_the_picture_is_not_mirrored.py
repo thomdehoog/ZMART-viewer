@@ -64,8 +64,7 @@ import pytest
 from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 # The little acquisition this file draws. It is one plane of one channel, a few
 # hundred voxels across, at half a micrometre to a voxel — big enough to fill a

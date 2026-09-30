@@ -9,8 +9,7 @@ import numpy as np
 import pytest
 import zarr
 from test_acquired_composition import region, source
-
-from zmart_viewer.compose import (
+from zmart_viewer.picture.compose import (
     MEAN_CROP_REDUCTION,
     Composer,
     Mosaic,
@@ -19,7 +18,7 @@ from zmart_viewer.compose import (
     read_the_mosaic_as_written,
     the_mosaic_written_down,
 )
-from zmart_viewer.published import STORE, PublishedTransfer
+from zmart_viewer.views.published import STORE, PublishedTransfer
 
 
 @pytest.mark.parametrize(
@@ -265,8 +264,7 @@ def test_actual_writer_browser_placement_and_idle(
 
     from test_manifest_refresh_browser import _wait_for_picture
     from test_transparent_2d_browser import READ_ALPHA
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     folder = tmp_path / "positions"
     a = write_capture(operator_writer, folder, "signal", 0, value=2400)

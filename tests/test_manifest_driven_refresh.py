@@ -7,10 +7,8 @@ import json
 import threading
 
 from record_fixtures import a_live_run, prepare_without_publishing, some_specimen  # noqa: E402
-
-from zmart_viewer import live as live_config
-from zmart_viewer.library import Library
-from zmart_viewer.live import (
+from zmart_viewer.live import following as live_config
+from zmart_viewer.live.following import (
     LIVE_PICTURE,
     Announcements,
     LiveBinding,
@@ -18,8 +16,9 @@ from zmart_viewer.live import (
     ManifestWatcher,
     live_rows,
 )
-from zmart_viewer.record.live_state import LiveStateTracker
-from zmart_viewer.server import make_server
+from zmart_viewer.live.record.live_state import LiveStateTracker
+from zmart_viewer.opening.library import Library
+from zmart_viewer.serving.server import make_server
 
 
 def _request(port: int, path: str, *, headers=None):
@@ -244,7 +243,7 @@ def test_the_rows_report_committed_time_ranges_and_no_false_high_water(tmp_path)
 
     # Written but unpublished never reaches the config: the record, not the
     # files, says what exists (the tracker-level twin lives in
-    # zmart_viewer.record/tests/test_live_state.py; this pins the rows on top).
+    # zmart_viewer.live.record/tests/test_live_state.py; this pins the rows on top).
     prepare_without_publishing(run, "posA", 2400, moment=2)
     assert ranges() == ([{"start": 0, "stop": 1}], 1)
 

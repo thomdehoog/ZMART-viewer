@@ -20,10 +20,9 @@ _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
 from check_the_built_picture import decode  # noqa: E402
-
-from zmart_viewer.building import GovernedRun  # noqa: E402
-from zmart_viewer.record.model import GridCell  # noqa: E402
-from zmart_viewer.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.live.record.model import GridCell  # noqa: E402
+from zmart_viewer.live.record.profiles import plan_the_writing  # noqa: E402
+from zmart_viewer.picture.building import GovernedRun  # noqa: E402
 
 FRAME = 384
 PLANES = 3
@@ -43,7 +42,7 @@ def a_stack(moment: int, *, retaken: bool = False) -> np.ndarray:
 
 
 def a_grown_run(folder, *, timepoints=3):
-    from zmart_viewer.record.coordinator import LivePublisher
+    from zmart_viewer.live.record.coordinator import LivePublisher
 
     profile, _ = plan_the_writing(
         "overview", frame=FRAME, z_planes=PLANES, timepoints=timepoints, channels=("green", "red")
@@ -151,11 +150,11 @@ def test_concurrent_fire_across_every_axis_stays_frame_pure(tmp_path):
 
 def test_malformed_and_boundary_addresses_answer_absent_never_crash(tmp_path):
     """The wire door under abuse: junk in, ``None`` out, no exceptions."""
-    from zmart_viewer import pieces as served
+    from zmart_viewer.serving import pieces as served
 
     run = a_grown_run(tmp_path)
     run.write_and_publish("p00", a_stack(0), timepoint=0)
-    from zmart_viewer.building import declare_a_governed_picture
+    from zmart_viewer.picture.building import declare_a_governed_picture
 
     store = declare_a_governed_picture(run.folder / "views" / "shown", run.folder, name="live")
     hostile = [

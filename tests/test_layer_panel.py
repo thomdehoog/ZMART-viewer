@@ -13,8 +13,7 @@ import threading
 
 import pytest
 from driving import colour_shown, pick_colormap  # noqa: E402
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 # What the engine ended up holding, read back from the engine itself rather than
 # from the panel. The contrast window is deliberately *not* part of the shader

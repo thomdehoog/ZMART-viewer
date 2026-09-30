@@ -1,6 +1,6 @@
 """Pointed-at views written by hand, straight from the format's own contract.
 
-The map format belongs to the viewer (`zmart_viewer.pieces` reads it), so the
+The map format belongs to the viewer (`zmart_viewer.serving.pieces` reads it), so the
 gates that pin it write it themselves: a few plain tile stores and a small
 JSON map, no writer machinery. What these helpers produce is the shape every
 pointed view shares -- a store that holds no pixels, whose pieces are the

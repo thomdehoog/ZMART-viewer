@@ -7,10 +7,9 @@ import numpy as np
 import pytest
 import zarr
 from test_published_transfer import write_position
-
-from zmart_viewer.acquired import AcquiredRegion
-from zmart_viewer.compose import _read_one_tile
-from zmart_viewer.published import STORE, PublishedTransfer, _place_depth
+from zmart_viewer.picture.acquired import AcquiredRegion
+from zmart_viewer.picture.compose import _read_one_tile
+from zmart_viewer.views.published import STORE, PublishedTransfer, _place_depth
 
 CANVAS = {"x_um": [0, 2048], "y_um": [0, 128]}
 HEIGHTS = [62.99, 62.79, 64.26, 64.01, 61.10, 60.40, 62.20, 61.40]
@@ -292,8 +291,7 @@ def test_browser_aggregate_depth_pixels_and_zoom(browser, built_dist, tmp_path, 
 
     from test_manifest_refresh_browser import _wait_for_picture
     from test_transparent_2d_browser import READ_ALPHA
-
-    from zmart_viewer.server import make_server
+    from zmart_viewer.serving.server import make_server
 
     if kind == "flat":
         names = [f"tile{i}.ome.zarr" for i in range(8)]

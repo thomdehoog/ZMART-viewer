@@ -50,11 +50,10 @@ import pytest
 _VIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_VIZ))
 
-import measure_a_governed_run_at_scale as harness  # noqa: E402
+import a_governed_run as harness  # noqa: E402
 from test_a_commit_storm_under_zooming import _announce, _dirty_for  # noqa: E402
-
-from zmart_viewer.building import declare_a_governed_picture  # noqa: E402
-from zmart_viewer.server import make_server  # noqa: E402
+from zmart_viewer.picture.building import declare_a_governed_picture  # noqa: E402
+from zmart_viewer.serving.server import make_server  # noqa: E402
 
 ACROSS = int(os.environ.get("ZMART_SPIRAL_ACROSS", "12"))
 SEED_RINGS = int(os.environ.get("ZMART_SPIRAL_SEED_RINGS", "2"))
@@ -202,9 +201,9 @@ class TestTheSpiralWithColoursAndMoments:
     ACROSS = 4  # rings 0..1: a seeded 2x2 centre and one spiral ring
 
     def a_two_colour_timelapse(self, folder):
-        from zmart_viewer.record.coordinator import LivePublisher
-        from zmart_viewer.record.model import GridCell
-        from zmart_viewer.record.profiles import plan_the_writing
+        from zmart_viewer.live.record.coordinator import LivePublisher
+        from zmart_viewer.live.record.model import GridCell
+        from zmart_viewer.live.record.profiles import plan_the_writing
 
         profile, _ = plan_the_writing(
             "overview",
@@ -277,7 +276,7 @@ class TestTheSpiralWithColoursAndMoments:
         assert set(np.unique(source[1, 1])) == {3001}
 
     def test_the_record_and_the_walk_agree_moment_by_moment(self, tmp_path):
-        from zmart_viewer.record.gateway import _LiveRun
+        from zmart_viewer.live.record.gateway import _LiveRun
 
         run, width = self.a_two_colour_timelapse(tmp_path)
         spiral = [f"p{row:0{width}d}{column:0{width}d}" for row, column in the_spiral(self.ACROSS)]

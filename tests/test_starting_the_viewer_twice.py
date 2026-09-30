@@ -27,7 +27,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from zmart_viewer.server import make_server  # noqa: E402
+from zmart_viewer.serving.server import make_server  # noqa: E402
 
 
 def test_a_port_already_in_use_is_explained(tmp_path: Path) -> None:
@@ -77,26 +77,26 @@ def test_two_viewers_can_run_side_by_side(tmp_path: Path) -> None:
         second.server_close()
 
 
-def test_run_demo_offers_a_port_and_passes_it_on() -> None:
-    """``--port`` has to reach the launcher, not merely be accepted and ignored."""
-    import run_demo
+def test_the_command_offers_a_port_and_passes_it_on() -> None:
+    """``--port`` has to reach the window, not merely be accepted and ignored."""
+    from zmart_viewer import command
 
     passed = {}
 
     def remember(**kwargs):
         passed.update(kwargs)
 
-    original = run_demo.open_window
-    run_demo.open_window = remember
+    original = command.open_window
+    command.open_window = remember
     try:
-        # The demo path needs the built page to exist; where it does not, the
-        # command stops before opening anything and there is nothing to check.
-        if not (Path(run_demo._HERE) / "app" / "page" / "dist" / "index.html").exists():
-            pytest.skip("the viewer page has not been built, so run_demo stops early")
-        assert run_demo.main(["--port", "8899"]) == 0
+        # The command needs the built page to exist; where it does not, it
+        # stops before opening anything and there is nothing to check.
+        if not (command._FRONTEND_DIST / "index.html").exists():
+            pytest.skip("the viewer page has not been built, so the command stops early")
+        assert command.main(["--port", "8899"]) == 0
     finally:
-        run_demo.open_window = original
+        command.open_window = original
 
     assert passed.get("port") == 8899, (
-        f"--port did not reach the launcher; it was given {passed.get('port')!r}"
+        f"--port did not reach the window; it was given {passed.get('port')!r}"
     )

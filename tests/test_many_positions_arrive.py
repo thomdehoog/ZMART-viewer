@@ -37,8 +37,7 @@ from pixels import assert_something_was_drawn
 from watching import (  # noqa: E402
     EVERY_SOURCE_RESOLVED,
 )
-
-from zmart_viewer.server import make_server
+from zmart_viewer.serving.server import make_server
 
 # Enough positions to show pacing plainly at a small group size, and few enough that
 # the folder is written and read in a couple of seconds. One channel, so the number of

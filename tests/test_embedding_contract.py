@@ -8,9 +8,8 @@ import numpy as np
 import pytest
 import zarr
 from test_view_sampling import write_tile
-
-from zmart_viewer.server import make_server
-from zmart_viewer.views import ViewSet
+from zmart_viewer.serving.server import make_server
+from zmart_viewer.views.named import ViewSet
 
 
 @pytest.mark.parametrize("spacing", [1, 2.5, 4])

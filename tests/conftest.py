@@ -2,7 +2,7 @@
 
 The backend is the ``zmart_viewer`` package at the repository root, so tests
 put that root on ``sys.path``; the checkout's parent is included as well
-because the live-publication gate is the installed ``zmart_viewer.record`` package in
+because the live-publication gate is the installed ``zmart_viewer.live.record`` package in
 production, while a source-tree test must be able to exercise it before the
 editable install has been made.
 
@@ -21,6 +21,24 @@ banner that is hard to read past, whether or not anything failed.
 from __future__ import annotations
 
 import os
+
+# The engine lives in ``engine/`` but is imported as ``zmart_viewer``. An
+# installed package (``pip install -e .``) is found the usual way; without
+# one, the tests point the name at the folder themselves.
+try:
+    import zmart_viewer  # noqa: F401
+except ImportError:
+    import importlib.util as _util
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _engine = _Path(__file__).resolve().parents[1] / "engine"
+    _spec = _util.spec_from_file_location(
+        "zmart_viewer", _engine / "__init__.py", submodule_search_locations=[str(_engine)]
+    )
+    _module = _util.module_from_spec(_spec)
+    _sys.modules["zmart_viewer"] = _module
+    _spec.loader.exec_module(_module)
 import re
 import socket
 import sys
@@ -31,8 +49,6 @@ from pathlib import Path
 import pytest
 
 _VIZ_ROOT = Path(__file__).resolve().parent.parent
-_MEASURE = _VIZ_ROOT / "measure"
-_DEMOS = _VIZ_ROOT / "demos"
 _TESTS = Path(__file__).resolve().parent
 _REPO_ROOT = _VIZ_ROOT.parent
 
@@ -107,13 +123,12 @@ def _give_up_on_the_picture(reason: str) -> None:
     pytest.skip(f"{PIXELS_NOT_LOOKED_AT}: {reason}")
 
 
-for source_root in (_REPO_ROOT, _VIZ_ROOT, _MEASURE, _DEMOS, _TESTS):
+for source_root in (_REPO_ROOT, _VIZ_ROOT, _TESTS):
     if str(source_root) not in sys.path:
         sys.path.insert(0, str(source_root))
 
 from demo_data import write_demo_zarr  # noqa: E402
-
-from zmart_viewer.server import make_server  # noqa: E402
+from zmart_viewer.serving.server import make_server  # noqa: E402
 
 _DIST = _VIZ_ROOT / "app" / "page" / "dist"
 
