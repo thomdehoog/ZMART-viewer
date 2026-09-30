@@ -148,7 +148,7 @@ def group_labels(datasets) -> dict[int, str]:
 
 
 class _StoppedByTheOperator(Exception):
-    """Raised inside a build or replay loop when the operator asked to stop."""
+    """Raised inside a build loop when the operator asked to stop."""
 
 
 class _Handler(SimpleHTTPRequestHandler):
@@ -170,7 +170,6 @@ class _Handler(SimpleHTTPRequestHandler):
         library=None,
         browse=None,
         bake_job=None,
-        replay_job=None,
         scratch=None,
         allow_open: bool = True,
         transparent_background: bool = False,
@@ -190,9 +189,6 @@ class _Handler(SimpleHTTPRequestHandler):
         # One prebake at a time, shared by every request this server answers.
         # See _serve_bake for the shape of what it holds.
         self._bake_job = bake_job if bake_job is not None else {}
-        # One replay at a time, for the same reason: "how far along?" must
-        # mean one thing. See _serve_replay.
-        self._replay_job = replay_job if replay_job is not None else {}
         # Where this viewer puts the pictures it composes for itself, shared
         # by every request it answers. See loading.scene_behind_a_run.
         self._scratch = scratch if scratch is not None else {}
@@ -825,9 +821,6 @@ class _Handler(SimpleHTTPRequestHandler):
             "/api/stores/construct",
             "/api/stores/construct-status",
             "/api/stores/construct-cancel",
-            "/api/stores/replay",
-            "/api/stores/replay-status",
-            "/api/stores/replay-cancel",
             "/api/measure",
             "/api/annotations",
             "/api/announce",
@@ -842,9 +835,6 @@ class _Handler(SimpleHTTPRequestHandler):
                 "/api/stores/construct",
                 "/api/stores/construct-status",
                 "/api/stores/construct-cancel",
-                "/api/stores/replay",
-                "/api/stores/replay-status",
-                "/api/stores/replay-cancel",
             )
             and not self._allow_open
         ):
@@ -873,12 +863,6 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json(dict(self._bake_job) or {"state": "idle"})
         elif route == "/api/stores/construct-cancel":
             self._serve_cancel(self._bake_job)
-        elif route == "/api/stores/replay":
-            self._serve_replay(payload)
-        elif route == "/api/stores/replay-status":
-            self._send_json(dict(self._replay_job) or {"state": "idle"})
-        elif route == "/api/stores/replay-cancel":
-            self._serve_cancel(self._replay_job)
         elif route == "/api/measure":
             self._serve_measurement(payload)
         elif route == "/api/announce":
@@ -992,7 +976,7 @@ class _Handler(SimpleHTTPRequestHandler):
         )
 
     def _serve_cancel(self, job: dict) -> None:
-        """Ask the running build or replay to stop at its next step."""
+        """Ask the running build to stop at its next step."""
         running = job.get("state") == "running"
 
         if running:
@@ -1074,95 +1058,6 @@ class _Handler(SimpleHTTPRequestHandler):
 
         threading.Thread(target=work, daemon=True).start()
         self._send_json({"started": True})
-
-    def _serve_replay(self, payload: object) -> None:
-        """Relive a dataset as a live run, one position at a time."""
-        asked = payload if isinstance(payload, dict) else {}
-        path = asked.get("path")
-
-        if not isinstance(path, str) or not path.strip():
-            self._send_json(
-                {"error": "the folder holding the dataset is needed"},
-                HTTPStatus.BAD_REQUEST,
-            )
-            return
-
-        if self._replay_job.get("state") == "running":
-            self._send_json({"error": "a replay is already running"}, HTTPStatus.CONFLICT)
-            return
-
-        data_path = Path(path.strip()).expanduser()
-
-        if not data_path.is_dir():
-            self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
-            return
-
-        from .rehearsal import replay_the_dataset
-
-        every = asked.get("every")
-        every_s = float(every) if isinstance(every, (int, float)) else 0.7
-        every_s = max(0.0, every_s)
-        replays = self._a_session_folder("replays")
-        number = 1
-
-        while (replays / f"replay-{number}").exists():
-            number += 1
-
-        run_folder = replays / f"replay-{number}"
-        job = self._replay_job
-        job.clear()
-        job.update({"state": "running", "done": 0, "total": None})
-        ready = threading.Event()
-        announcements = self._announcements
-
-        def told(done, total):
-            job["done"], job["total"] = done, total
-            ready.set()
-
-            if job.get("stop"):
-                raise _StoppedByTheOperator()
-
-        def work():
-            try:
-                view = replay_the_dataset(
-                    data_path,
-                    run_folder,
-                    every_s=every_s,
-                    told=told,
-                    announce=lambda: announcements.say_something_changed(
-                        image_written_in_place=True
-                    ),
-                )
-                job.update({"state": "done", "view": str(view)})
-            except _StoppedByTheOperator:
-                job.update({"state": "cancelled"})
-            except Exception as why:  # noqa: BLE001 -- shown to the operator whole
-                job.update({"state": "error", "error": str(why)})
-            finally:
-                ready.set()
-
-        threading.Thread(target=work, daemon=True).start()
-        ready.wait(timeout=120)
-
-        if job.get("state") == "error":
-            self._send_json({"error": job["error"]}, HTTPStatus.BAD_REQUEST)
-            return
-
-        self._library.close_group(f"{data_path.name} replay")
-
-        try:
-            self._library.open(
-                str(run_folder),
-                names=loading.live_run_view(
-                    run_folder, bake=self._asked_for_the_live_bake(run_folder, asked)
-                ),
-                name=f"{data_path.name} replay",
-            )
-        except (FileNotFoundError, ValueError, OSError) as exc:
-            self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
-
-        self._send_json(self._config())
 
     def _scenes_of_this_session(self) -> Path:
         """The folder this viewer composes into, made the first time it is wanted."""
@@ -1699,7 +1594,7 @@ def make_server(
             registry.stop()
             published.close()
 
-            for own in ("scenes", "replays"):
+            for own in ("scenes",):
                 made = scratch.pop(own, None)
 
                 if made is not None:
@@ -1716,7 +1611,6 @@ def make_server(
         library=library,
         browse=browse,
         bake_job={},
-        replay_job={},
         open_from=Path(open_from).resolve() if open_from else None,
         allow_open=allow_open,
         transparent_background=transparent_background,

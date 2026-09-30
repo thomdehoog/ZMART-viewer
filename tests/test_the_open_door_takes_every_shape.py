@@ -35,7 +35,7 @@ import threading
 import numpy as np
 import pytest
 import zarr
-from driving import open_through_the_window, replay_through_the_window
+from driving import open_through_the_window
 from pixels import fraction_lit, image_middle
 from test_a_plate_lays_itself_out import a_small_plate
 
@@ -570,42 +570,6 @@ def test_a_bake_changes_how_fast_the_picture_arrives_and_nothing_else(
         "average -- a bake must change how fast the picture arrives and "
         "nothing about what it shows"
     )
-
-
-def test_the_awkward_run_rehearses_through_the_experimental_door(page_on):
-    """The same awkward fixtures go through the live path, not around it.
-
-    The experimental door is a dress rehearsal for smart microscopy, and its
-    whole worth is that nothing about the live path is faked: the positions
-    go through the live writer, its sealed profile and its manifest, one
-    commit each, exactly as they would during an acquisition. A door that
-    took a shortcut for difficult data would still draw a picture and would
-    rehearse nothing.
-
-    So the run replayed here sits at fractional offsets no grid would put it
-    at -- 17.5 micrometres down, 260.25 across. Until the live path placed
-    positions where they sit, that was refused outright: a replay could only
-    lay tiles on the writer's own grid. Rehearsing only the runs that happen
-    to be tidy is rehearsing the easy day.
-
-    Its frame is a camera's, and that is not a fudge but the other half of
-    the point. The live writer plans a pyramid over the frame the camera
-    records, so a 48-pixel toy frame is refused for a reason that has
-    nothing to do with placement. What is being rehearsed here is an awkward
-    PLACE, which is the thing that used to be impossible; an awkward frame
-    size is a property of a transfer, and belongs to the open door above.
-    """
-    page, root = page_on
-    replay_through_the_window(page, "awkward", folder=root)
-    page.wait_for_function(
-        "() => window.zmartConfig.groups.some((one) => one.includes('replay'))", timeout=60_000
-    )
-    heading = next(
-        one for one in page.evaluate("() => window.zmartConfig.groups") if "replay" in one
-    )
-    _wait_until_drawn(page, heading)
-    page.wait_for_timeout(3000)
-    assert fraction_lit(page) > 0.02, f"{heading} rehearsed but put nothing on screen"
 
 
 def test_auto_reads_the_tiles_and_not_the_ground_between_them(page_on):

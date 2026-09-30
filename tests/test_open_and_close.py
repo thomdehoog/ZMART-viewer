@@ -534,17 +534,12 @@ class TestTheLoadWindow:
         does, so it is the tab the window starts on -- no click needed
         before walking. A click on a row selects and highlights it, the way
         the operating system's own choosers behave, and the window's one
-        Open button acts on the selection. Switching to "open positions
-        sequentially" withdraws the plain Open offer: that door replays raw
-        positions through the live writer, so its button says what it does
-        instead.
+        Open button acts on the selection.
         """
         page, first, second = no_chooser
         page.get_by_label("open images").click()
         window = page.get_by_role("dialog", name="load data")
         window.wait_for(timeout=10_000)
-        chosen = page.get_by_label("default", exact=True)
-        assert chosen.get_attribute("aria-pressed") == "true"
         assert str(first) in page.get_by_label("folder path").input_value()
         row = window.get_by_label("overview_pos001.ome.zarr", exact=True)
         assert row.count() == 1
@@ -553,8 +548,6 @@ class TestTheLoadWindow:
             "the clicked row must show as the selection"
         )
         assert page.get_by_label("open overview_pos001.ome.zarr", exact=True).count() == 1
-        page.get_by_label("open positions sequentially", exact=True).click()
-        assert page.get_by_label("open overview_pos001.ome.zarr", exact=True).count() == 0
 
     def test_raw_data_opens_through_the_default_door_leaving_no_trace(self, no_chooser):
         """A raw run opens with one plain press, and nothing lands on disk.
@@ -669,7 +662,7 @@ class TestTheLoadWindow:
         gate says so instead of guessing.
         """
         import pytest
-        from test_a_dataset_is_relived_as_a_live_run import _a_grid_scan
+        from grid_scans import _a_grid_scan
 
         first = tmp_path / "overview"
         first.mkdir()

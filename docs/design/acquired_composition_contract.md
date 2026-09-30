@@ -145,7 +145,7 @@ changed by this increment.
 The measurements below describe the initial L0-only implementation at `c3b1e00`;
 the following section records the guarded native-pyramid improvement.
 
-`measure/measure_acquired_coarse.py NEW_DIRECTORY` measures a fixed 100-position
+The measurement (its script is kept in the repository's history) used a fixed 100-position
 fixture: separate 1024x1024 uint16 images on a 10x10 grid, six native mean-pyramid
 levels, one channel, plane and timepoint. Every request starts with empty viewer
 caches; the operating-system file cache is not flushed. It compares encoded
