@@ -4,12 +4,15 @@
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![tests](https://img.shields.io/badge/tests-pytest-blue)](docs/how_it_works/TESTING.md)
 
+<img src="docs/zmart-viewer-icon.png" align="left" width="150" alt="ZMART Viewer">
+
 The **ZMART Viewer** shows large, three-dimensional, multi-channel microscopy images,
 and keeps showing them while the microscope is still writing. Point it at a folder of
 OME-Zarr images and it draws what is there; new positions and new time points appear
 on their own. It is part of **ZMART** (ZMB's Microscopy-Agnostic Research Toolkit),
 the tools we use for smart microscopy at the Center for Microscopy and Image Analysis
 (ZMB), University of Zurich.
+<br clear="left"/>
 
 ## The Problem
 
