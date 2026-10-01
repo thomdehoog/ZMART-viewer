@@ -761,13 +761,19 @@ async function closeGroup(group) {
   return { config: answer };
 }
 
+// The targets saved beside the images, as ``{ targets }``, or ``{ error }`` when
+// the file is there but could not be read. A failed read is never an empty list:
+// that list would be saved back over the file and lose what is in it.
 async function loadTargets() {
   try {
     const response = await fetch("/api/annotations");
-    if (!response.ok) return [];
-    return (await response.json()).annotations || [];
+    const answer = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { error: answer?.error || `the saved targets could not be read (${response.status})` };
+    }
+    return { targets: answer?.annotations || [] };
   } catch {
-    return [];
+    return { error: "the saved targets could not be read: the server did not answer" };
   }
 }
 
@@ -1012,6 +1018,11 @@ export default function App() {
   // if the description of the scene depended on it, drawing would rebuild the very
   // layer being drawn into.
   const targetsFromDisk = React.useRef([]);
+  // The target list as last read from or written to disk, as text, so a save is
+  // only sent for a real change. Null until the engine's list is first seen.
+  const lastSavedText = React.useRef(null);
+  // True when the saved file could not be read: nothing may be saved over it.
+  const targetsUnreadable = React.useRef(false);
   // The set of images last taken on, used to spot an answer that says nothing new.
   const applied = React.useRef(null);
   // Whether the (expensive) question of what is open is already outstanding.
@@ -1170,10 +1181,16 @@ export default function App() {
   // know the server is actually answering.
   React.useEffect(() => {
     let cancelled = false;
-    loadTargets().then((savedTargets) => {
+    loadTargets().then(({ targets: savedTargets, error }) => {
       if (cancelled) return;
-      targetsFromDisk.current = savedTargets;
-      setTargets(savedTargets);
+      if (error) {
+        // Drawing still works, but nothing is saved for the rest of this
+        // session, and the panel says why.
+        targetsUnreadable.current = true;
+        setSaveState({ status: "error", message: error });
+      }
+      targetsFromDisk.current = savedTargets || [];
+      setTargets(savedTargets || []);
       setTargetsLoaded(true);
     });
     return () => {
@@ -1582,7 +1599,11 @@ export default function App() {
       annotationSource.current = source;
       stopListening.current = source.changed.add(() => setTargets(source.toJSON()));
       window.zmartAnnotationSource = source;
-      setTargets(source.toJSON());
+      const present = source.toJSON();
+      // What is on disk, as the engine holds it: only a list that differs from
+      // this is worth saving, so opening the viewer writes nothing.
+      if (lastSavedText.current === null) lastSavedText.current = JSON.stringify(present);
+      setTargets(present);
       return true;
     };
     if (connect()) return undefined;
@@ -1598,7 +1619,9 @@ export default function App() {
   // that saved, right up until the acquisition is reopened and the targets are
   // gone.
   React.useEffect(() => {
-    if (!targetsLoaded) return undefined;
+    if (!targetsLoaded || targetsUnreadable.current) return undefined;
+    const text = JSON.stringify(targets);
+    if (lastSavedText.current === null || text === lastSavedText.current) return undefined;
     let cancelled = false;
     const timer = setTimeout(async () => {
       setSaveState({ status: "saving" });
@@ -1610,6 +1633,7 @@ export default function App() {
         });
         if (cancelled) return;
         if (response.ok) {
+          lastSavedText.current = text;
           setSaveState({ status: "saved" });
           return;
         }

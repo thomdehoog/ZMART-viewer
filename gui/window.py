@@ -224,7 +224,9 @@ def _open_through_the_door(url: str, path: Path) -> str | None:
 def _serve_until_interrupt(server, url: str) -> None:
     import time
 
-    print(f"Serving at {url} — press Ctrl+C to stop.")
+    # Flushed at once: a program that started the viewer reads the address from
+    # here, and with the output going to a pipe it would otherwise wait in a buffer.
+    print(f"Serving at {url} — press Ctrl+C to stop.", flush=True)
 
     try:
         while True:
@@ -354,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
             "The viewer's page (gui/built) is missing, so there is nothing to show.\n"
             "It normally comes with the viewer. Reinstall it with:\n"
             "    pip install --force-reinstall "
-            "git+https://github.com/thomdehoog/ZMART-viewer@release-candidate-zmart-viewer\n"
+            "git+https://github.com/thomdehoog/ZMART-viewer\n"
             "or, in a copy of the repository where you changed gui/, rebuild it with:\n"
             "    npm install && npm run build"
         )

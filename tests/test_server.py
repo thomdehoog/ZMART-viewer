@@ -223,6 +223,29 @@ def test_channels_are_coloured_only_when_overlaid(tmp_path):
     assert magenta == [1.0, 0.2, 1.0]
 
 
+def test_an_unreadable_target_file_is_never_overwritten(tmp_path):
+    """The server says the file "has not been changed"; a save must keep that true.
+
+    A file that cannot be read for a moment (locked by a virus scanner, say)
+    used to be shown as an empty list, which the page then saved back over it,
+    losing every target.
+    """
+    port, stop = _serve_tree(tmp_path)
+    sidecar = tmp_path / "data" / "zmart-annotations.json"
+    sidecar.write_text('{"version": 1, "annotations": [{"id": "p1", "type": "po', encoding="utf-8")
+    before = sidecar.read_bytes()
+    try:
+        status, _, body = request(port, "/api/annotations")
+        assert status == 500 and b"has not been changed" in body
+        empty = json.dumps({"version": 1, "annotations": []}).encode()
+        status, _, body = request(port, "/api/annotations", method="POST", body=empty)
+        assert status == 409, body
+        assert b"could not be read" in body
+    finally:
+        stop()
+    assert sidecar.read_bytes() == before
+
+
 def test_annotations_start_empty_and_round_trip_as_a_sidecar(serving):
     status, _, body = request(serving, "/api/annotations")
     assert status == 200
@@ -688,3 +711,39 @@ def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
         "own content, so refusing to cache it makes every reload pay for the "
         "whole viewer again"
     )
+
+
+def test_a_browser_that_hung_up_is_noticed_before_its_piece_is_built():
+    """A piece is only worth building while somebody is still waiting for it.
+
+    A burst of zooming leaves thousands of requests whose page has moved on; each
+    used to build its piece anyway, and the queue behind them stalled the server.
+    """
+    import socket
+
+    from zmart_viewer.serving.server import _peer_has_gone
+
+    ours, theirs = socket.socketpair()
+    try:
+        ours.settimeout(7.0)
+        assert _peer_has_gone(ours) is False
+        theirs.close()
+        assert _peer_has_gone(ours) is True
+        assert ours.gettimeout() == 7.0
+    finally:
+        ours.close()
+
+
+def test_a_request_still_unread_is_not_mistaken_for_a_hang_up():
+    """Bytes the browser sent but nobody has read yet mean it is still there."""
+    import socket
+
+    from zmart_viewer.serving.server import _peer_has_gone
+
+    ours, theirs = socket.socketpair()
+    try:
+        theirs.sendall(b"GET / HTTP/1.1\r\n")
+        assert _peer_has_gone(ours) is False
+    finally:
+        ours.close()
+        theirs.close()

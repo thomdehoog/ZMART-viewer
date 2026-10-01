@@ -9,10 +9,12 @@ per piece stays flat with survey size.
 
 from __future__ import annotations
 
+import atexit
 import json
 import math
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -1772,8 +1774,9 @@ class Composer:
         return pool.submit(_build_in_worker, level, plane, row, column, moment, channel).result()
 
     def close(self) -> None:
-        """Stop the warmer and let the worker processes go."""
+        """Stop the warmer, wait for it, and let the worker processes go."""
         self.stop_warming()
+        self._wait_for_the_warmer()
 
         with self._pool_guard:
             pool, self._pool = self._pool, None
@@ -1794,10 +1797,17 @@ class Composer:
             daemon=True,
         )
         self._warmer.start()
+        _WARMING.add(self)
 
     def stop_warming(self) -> None:
         """Tell a running warm pass to stop after the slab it is on."""
         self._stop_warming.set()
+
+    def _wait_for_the_warmer(self, timeout: float = 30.0) -> None:
+        """Wait until a stopped warm pass has really finished its slab."""
+        warmer = self._warmer
+        if warmer is not None and warmer is not threading.current_thread():
+            warmer.join(timeout)
 
     def _my_encoder(self):
         """This thread's own little array to encode a piece through."""
@@ -1984,3 +1994,20 @@ class Composer:
                 "dimension_names": (["t", "c"] if grown else []) + list(self.mosaic.axes),
             }
         ).encode()
+
+
+# Every composer whose warmer has been started. When Python exits, each is
+# stopped and waited for first: a warmer still running while the interpreter
+# shuts down fails half-way through its slab, and on Windows the error it then
+# prints can bring the whole process down with "could not acquire lock for
+# <stderr> at interpreter shutdown".
+_WARMING: weakref.WeakSet = weakref.WeakSet()
+
+
+@atexit.register
+def _stop_every_warmer() -> None:
+    composers = list(_WARMING)
+    for composer in composers:
+        composer.stop_warming()
+    for composer in composers:
+        composer._wait_for_the_warmer(timeout=10.0)

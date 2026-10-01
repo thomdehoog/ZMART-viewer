@@ -64,6 +64,56 @@ if not _FRONTEND_DIST.is_dir():
     _FRONTEND_DIST = (_ENGINE.parent / "gui" / "built").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
+
+# How many pieces are built at the same time. Building one reads the source
+# images and encodes the result; with no limit, a burst of zooming started a
+# thread per request, thousands of them, all queued behind the same readers,
+# and the server stopped answering until they had all finished.
+_BUILDS_AT_ONCE = max(4, os.cpu_count() or 4)
+_BUILDING = threading.BoundedSemaphore(_BUILDS_AT_ONCE)
+
+
+class _NobodyIsWaiting(Exception):
+    """The browser that asked for a piece has hung up, so it is not built."""
+
+
+def _peer_has_gone(connection: socket.socket) -> bool:
+    """Whether the other end of ``connection`` has closed it.
+
+    A peek reads nothing away: an orderly close shows as an empty read, a reset
+    as an error, and a browser still connected as nothing to read yet (or the
+    next request it sent). The socket's timeout is put back as it was.
+    """
+    before = connection.gettimeout()
+    try:
+        connection.setblocking(False)
+        return connection.recv(1, socket.MSG_PEEK) == b""
+    except (BlockingIOError, InterruptedError):
+        return False
+    except OSError:
+        return True
+    finally:
+        try:
+            connection.settimeout(before)
+        except OSError:
+            pass
+
+
+# What can go wrong reading the targets file, short of it being absent: a file
+# locked by another program for a moment, or one that is not (or no longer)
+# what the viewer writes.
+_UNREADABLE = (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError)
+
+
+def _saved_annotations(path: Path) -> dict:
+    """The targets saved in ``path``; an absent file is an empty list.
+
+    Raises one of :data:`_UNREADABLE` when the file is there but cannot be read.
+    """
+    try:
+        return _validate_annotations(json.loads(path.read_text("utf-8")))
+    except FileNotFoundError:
+        return _EMPTY_ANNOTATIONS
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
 # suffix. Only single ranges are honoured, which is all the engine ever asks for.
 _RANGE_HEADER = re.compile(r"^bytes=(\d*)-(\d*)$")
@@ -329,7 +379,9 @@ class _Handler(SimpleHTTPRequestHandler):
                 self._send_empty(HTTPStatus.FORBIDDEN)
                 return
             try:
-                body = coverage.answer(store, inside)
+                body = self._build(coverage.answer, store, inside)
+            except _NobodyIsWaiting:
+                return
             except pieces.TemporarilyUnanswerable:
                 # A piece a publication is rewriting just now: try again shortly.
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
@@ -389,7 +441,9 @@ class _Handler(SimpleHTTPRequestHandler):
                 return
 
             try:
-                made = self._built(rel)
+                made = self._build(self._built, rel)
+            except _NobodyIsWaiting:
+                return
             except pieces.TemporarilyUnanswerable:
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
                 return
@@ -405,7 +459,9 @@ class _Handler(SimpleHTTPRequestHandler):
 
         if governed is not None:
             try:
-                made = pieces.built_bytes_behind(*governed)
+                made = self._build(pieces.built_bytes_behind, *governed)
+            except _NobodyIsWaiting:
+                return
             except pieces.TemporarilyUnanswerable:
                 self._send_empty(HTTPStatus.SERVICE_UNAVAILABLE)
                 return
@@ -418,6 +474,24 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         self._send_file(target)
+
+    def _build(self, make, *args):
+        """Build a piece in one of the few building slots, for a browser still waiting.
+
+        Raises :class:`_NobodyIsWaiting`, and the connection is closed without an
+        answer, when the browser hangs up before the piece is started.
+        """
+        while not _BUILDING.acquire(timeout=0.25):
+            if _peer_has_gone(self.connection):
+                self.close_connection = True
+                raise _NobodyIsWaiting
+        try:
+            if _peer_has_gone(self.connection):
+                self.close_connection = True
+                raise _NobodyIsWaiting
+            return make(*args)
+        finally:
+            _BUILDING.release()
 
     def _a_governed_piece_behind(self, target: Path) -> tuple[Path, str] | None:
         """The (store, piece address) when this FILE is a governed chunk."""
@@ -641,10 +715,8 @@ class _Handler(SimpleHTTPRequestHandler):
             path = self._data_dir / _ANNOTATIONS_FILE
 
             try:
-                payload = _validate_annotations(json.loads(path.read_text("utf-8")))
-            except FileNotFoundError:
-                payload = _EMPTY_ANNOTATIONS
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                payload = _saved_annotations(path)
+            except _UNREADABLE:
                 # Named plainly rather than as "the sidecar", which is our word for
                 # it and means nothing to somebody reading it for the first time.
                 self._send_json(
@@ -1201,6 +1273,25 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         path = self._data_dir / _ANNOTATIONS_FILE
+
+        # Replacing a file that cannot be read would throw away whatever is in
+        # it, which the page was never able to show. It is left alone instead.
+        try:
+            _saved_annotations(path)
+        except _UNREADABLE:
+            self._send_json(
+                {
+                    "error": (
+                        f"the file of marked places beside the images ({_ANNOTATIONS_FILE}) "
+                        "could not be read, so it was not replaced: saving now would lose "
+                        "what is in it. Close any program that has it open, or move it "
+                        "aside, then reopen the viewer."
+                    )
+                },
+                HTTPStatus.CONFLICT,
+            )
+            return
+
         temporary = None
 
         try:

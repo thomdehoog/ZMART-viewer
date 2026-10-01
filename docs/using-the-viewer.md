@@ -9,7 +9,7 @@ You need Python 3.10, 3.11 or 3.12. Then install the viewer straight from
 GitHub with pip:
 
 ```bash
-pip install git+https://github.com/thomdehoog/ZMART-viewer@release-candidate-zmart-viewer
+pip install git+https://github.com/thomdehoog/ZMART-viewer
 ```
 
 That is all. The viewer's page comes already built (it is kept in the
