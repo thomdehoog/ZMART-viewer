@@ -6,7 +6,7 @@ the release; delete it once the review is done.
 ## Where to look
 
 - Repository: https://github.com/thomdehoog/ZMART-viewer
-- Branch: `release-candidate-zmart-viewer`
+- Branch: `main` (it was `release-candidate-zmart-viewer`, since merged into main)
 - Starting point: commit `6791d28` (version `0.5.0.dev0`), which is exactly
   what the ZMART operator window installs today.
 - Review everything on the branch since then: `git diff 6791d28...HEAD`.

@@ -110,3 +110,66 @@ def test_color_and_visibility_reach_the_annotation_layer(viewer_page):
     assert not viewer_page.evaluate(
         "() => window.zmartViewer.layerManager.getLayerByName('Targets').visible"
     )
+
+
+def _posts_to_annotations(page) -> list:
+    """Collect every save the page sends, from now on."""
+    posts = []
+    page.on(
+        "request",
+        lambda request: posts.append(request.url)
+        if request.method == "POST" and request.url.endswith("/api/annotations")
+        else None,
+    )
+    return posts
+
+
+def test_opening_the_page_writes_nothing(browser, live_server, demo_store):
+    """Only a change the operator makes is saved; looking at the data writes nothing.
+
+    The viewer is often pointed at an acquisition it is only meant to read. It
+    used to save the (unchanged) target list a moment after opening, which wrote
+    a file into that folder every time.
+    """
+    sidecar = demo_store / "zmart-annotations.json"
+    if sidecar.exists():
+        sidecar.unlink()
+    page = browser.new_page()
+    posts = _posts_to_annotations(page)
+    try:
+        page.goto(live_server, wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartAnnotationSource !== undefined", timeout=30_000)
+        page.wait_for_timeout(1000)
+        assert posts == []
+        assert not sidecar.exists()
+        add_box(page)
+        page.wait_for_function("() => true")
+        page.wait_for_timeout(1000)
+        assert len(posts) >= 1
+        assert sidecar.exists()
+    finally:
+        page.close()
+        if sidecar.exists():
+            sidecar.unlink()
+
+
+def test_an_unreadable_target_file_is_reported_and_never_saved_over(
+    browser, live_server, demo_store
+):
+    """A target file that cannot be read is said so, and the page never answers it with a save."""
+    sidecar = demo_store / "zmart-annotations.json"
+    sidecar.write_text('{"version": 1, "annotations": [{"id": "p1", "ty', encoding="utf-8")
+    before = sidecar.read_bytes()
+    page = browser.new_page()
+    posts = _posts_to_annotations(page)
+    try:
+        page.goto(live_server, wait_until="domcontentloaded")
+        page.wait_for_function("() => window.zmartAnnotationSource !== undefined", timeout=30_000)
+        page.get_by_text("could not be read", exact=False).wait_for(timeout=10_000)
+        add_box(page)
+        page.wait_for_timeout(1000)
+        assert posts == []
+        assert sidecar.read_bytes() == before
+    finally:
+        page.close()
+        sidecar.unlink()

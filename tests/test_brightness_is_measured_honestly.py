@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -119,6 +120,12 @@ def _unwrite_the_smallest_copy(store: Path) -> str:
     for entry in (store / level).iterdir():
         if entry.name != ".zarray":
             shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
+    # On Windows a deleted file can still be listed for a moment, while the
+    # deletion is pending; the store only reads as unwritten once it is gone.
+    deadline = time.monotonic() + 5.0
+    while any(e.name != ".zarray" for e in (store / level).iterdir()):
+        assert time.monotonic() < deadline, "the emptied copy still lists files"
+        time.sleep(0.01)
     return level
 
 

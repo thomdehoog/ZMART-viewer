@@ -1160,9 +1160,8 @@ def test_every_zoom_shows_the_survey_after_a_storm_of_landings(browser, built_di
             )
             zoom_to(1.0)
             page.wait_for_timeout(2_500)
-            page.screenshot(
-                path=str(Path(os_module.environ["ZMART_STORM_DEBUG"]) / "storm_probe_page_1x.png")
-            )
+            if debug_folder is not None:
+                page.screenshot(path=str(debug_folder / "storm_probe_page_1x.png"))
             wanting = page.evaluate(
                 """() => {
                   const out = [];
