@@ -154,9 +154,14 @@ export function growthPatches(lib) {
         const upper = Float32Array.from(spec.upperVoxelBound, (_, i) => metadata.shape[permutation[spec.rank - 1 - i]]);
         spec.upperVoxelBound.set(upper);
         for (let i = 0; i < spec.rank; i++) spec.upperChunkBound[i] = Math.ceil(upper[i] / spec.chunkDataSize[i]);
+        // Only a shape that actually moved can have changed a held piece: a
+        // boundary piece that was partly outside the old extent. A timelapse
+        // whose length was declared up front gains frames without its shape
+        // moving, and invalidating then re-read every piece already on screen.
+        const grew = metadata.shape.some((size, i) => size !== source.parameters.metadata.shape[i]);
         source.parameters.metadata = metadata;
-        const invalidate = !refreshed.has(source);
-        refreshed.add(source);
+        const invalidate = grew && !refreshed.has(source);
+        if (invalidate) refreshed.add(source);
         source.rpc.invoke("zarr/extendBounds", { id: source.rpcId, upper, shape: metadata.shape, invalidate });
       }
     }

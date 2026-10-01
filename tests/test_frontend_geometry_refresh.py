@@ -237,19 +237,23 @@ def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
         let workerInvalidations = 0;
         const worker = {{spec: spec(), parameters: {{metadata: {{shape: [1]}}}},
           chunkManager: {{queueManager: {{invalidateSourceCache() {{workerInvalidations++;}}}}}}}};
-        const chunk = {{spec: spec(), parameters: {{url: 'test'}}, rpcId: 1,
+        const chunk = {{spec: spec(), parameters: {{url: 'test', metadata: {{shape: [1]}}}}, rpcId: 1,
           rpc: {{invoke(name, payload) {{receive.call({{get: () => worker}}, payload);}}}}}};
         const volume = new Volume();
         volume.sourceCache = new Map([['shared', [[{{chunkSource: chunk}}]]]]);
-        const other = {{multiscale: {{scales: [{{url: 'test', metadata: {{shape: [3],
+        const shaped = size => ({{multiscale: {{scales: [{{url: 'test', metadata: {{shape: [size],
           codecs: {{layoutInfo: [{{physicalToLogicalDimension: [0]}}]}}
-        }}}}]}}}};
+        }}}}]}}}});
+        // A timelapse declared at full length gains frames without its shape
+        // moving, so no piece already held can have changed.
+        volume.extendBounds(shaped(1), new Set());
+        assert.equal(workerInvalidations, 0);
         // Pixels may have been refreshed already, but worker bounds must still grow.
-        volume.extendBounds(other, new Set([chunk]));
+        volume.extendBounds(shaped(3), new Set([chunk]));
         assert.deepEqual(worker.parameters.metadata.shape, [3]);
         assert.equal(worker.spec.upperVoxelBound[0], 3);
         assert.equal(workerInvalidations, 0);
-        volume.extendBounds(other, new Set());
+        volume.extendBounds(shaped(5), new Set());
         assert.equal(workerInvalidations, 1);
         """,
         ],

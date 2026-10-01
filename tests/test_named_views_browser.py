@@ -531,6 +531,10 @@ def test_geometry_refreshes_pixels_and_final_failure_retries(
         if fail_metadata:
             # One final metadata request fails; no later acquisition or rewrite
             # may be required to make the successfully published revision visible.
+            # Only a refresh that changes the view's geometry reads its metadata:
+            # a rewrite that keeps the shape refreshes pixels in place and must not
+            # re-read the description (see syncSources), so there it is the
+            # injected failure going unused that is checked.
             failed = []
 
             def first_failure(route):
@@ -574,7 +578,7 @@ def test_geometry_refreshes_pixels_and_final_failure_retries(
         page.wait_for_timeout(2300)
         assert not [u for u in requests[mark:] if "/data/" in u]
         if fail_metadata:
-            assert len(failed) == 1
+            assert len(failed) == (1 if grow_frames else 0), failed
         assert not errors, errors
         page.screenshot(path=str(tmp_path / "same-shape-rewrite.png"))
         print(

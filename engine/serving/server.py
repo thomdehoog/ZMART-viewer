@@ -50,6 +50,7 @@ from zmart_viewer.opening.open_folders import (
     written_timepoints,
     zarr_scheme,
 )
+from zmart_viewer.picture.arrangement import the_frame_room_as_written
 
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
@@ -844,6 +845,13 @@ class _Handler(SimpleHTTPRequestHandler):
                 )
                 self._send_json({"error": str(why)}, status)
                 return
+        else:
+            # A hint names no snapshot, so the folders this server publishes on
+            # its own are brought up to date before anyone is told. Telling first
+            # sent the page for a configuration still holding the old revision,
+            # and the watcher, which commits the new one a moment later, stays
+            # quiet about a change it counts as already announced.
+            self._scratch["published"].refresh()
         covering = None
 
         try:
@@ -1553,6 +1561,16 @@ def make_server(
                     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
                     revision = snapshot["revision"]
                     geometry_revision = snapshot.get("geometry_revision", 0)
+                    # The length comes from the same committed snapshot as the
+                    # revisions, never from the array description on disk. A
+                    # publication that changes the view's geometry declares the
+                    # new arrays first and commits publication.json last, so a
+                    # description read in between already counts frames that
+                    # the revisions do not yet promise. The page took that
+                    # half-written answer as frames arriving and re-read the
+                    # view twice, once for the torn answer and once for the
+                    # committed one.
+                    frames = the_frame_room_as_written(snapshot["mosaic"])[0]
 
             for index, channel_name, color, declared_range, active in found:
                 logical_channel = 0 if depth is not None and index is None else index
