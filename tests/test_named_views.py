@@ -350,3 +350,69 @@ def test_reopen_preserves_original_folder_identity(tmp_path, modes, methods):
             view.publish(tmp_path / "b", {"p.ome.zarr": 1}, canvas, composition=composition)
     finally:
         view.close()
+
+
+def test_config_counts_only_committed_frames_of_a_view(tmp_path, monkeypatch):
+    """A view's length on the page is the committed one, not the one being written.
+
+    A publication that grows a view declares its new arrays before it commits
+    ``publication.json``. Reading the length from the arrays on disk in between
+    told the page frames had arrived under a revision that did not yet hold them,
+    and the page re-read the view for that torn answer and again for the commit.
+    An interrupted publication holds that in-between state still, so it is used.
+    """
+    import threading
+
+    from test_server import request
+    from zmart_viewer.serving.server import make_server
+
+    source = tmp_path / "positions"
+    source.mkdir()
+    name = "p.ome.zarr"
+    write_tile(source, name, np.ones((2, 1, 3, 8, 8), dtype="uint16"))
+    payload = {
+        "path": str(source),
+        "bake": True,
+        "canvas": {"x_um": [0, 8], "y_um": [0, 8]},
+        "source_revisions": {name: 1},
+        "composition": {
+            "regions": "complete",
+            "order": [name],
+            "pyramid_reduction": MEAN_REDUCTION,
+        },
+        "views": {"path": str(tmp_path / "view"), "acquisition": "a", "modes": ["top"]},
+    }
+    server = make_server(port=0, data_dir=tmp_path, live=True, allow_open=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+
+    def post(route, value):
+        return request(port, route, "POST", json.dumps(value).encode())[0]
+
+    def view_rows():
+        status, _, body = request(port, "/api/config")
+        assert status == 200
+        return [row for row in json.loads(body)["layers"] if row.get("view")]
+
+    declare = PublishedTransfer._declare_levels
+
+    def interrupted(output, *args, **kwargs):
+        declare(output, *args, **kwargs)
+        raise OSError("Interrupted geometry declaration")
+
+    try:
+        assert post("/api/stores/open", payload) == 200
+        assert [(row["frames"], row["sourceRevisions"]) for row in view_rows()] == [(2, [1])]
+        write_tile(source, name, np.ones((3, 1, 3, 8, 8), dtype="uint16"))
+        monkeypatch.setattr(PublishedTransfer, "_declare_levels", interrupted)
+        payload["source_revisions"][name] = 2
+        publication = {k: payload[k] for k in ("path", "source_revisions", "composition")}
+        assert post("/api/announce", {"publications": [publication]}) != 200
+        shape = json.loads((tmp_path / "view" / "a_top.zmartview.zarr/0/zarr.json").read_text())
+        assert shape["shape"][0] == 3, "the interruption must leave the grown arrays declared"
+        assert [(row["frames"], row["sourceRevisions"]) for row in view_rows()] == [(2, [1])]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)

@@ -210,6 +210,47 @@ def test_optional_bake_is_one_source_and_updates_in_the_browser(
             page.close()
 
 
+def test_an_in_place_hint_publishes_before_the_page_is_told(tmp_path):
+    """A page told that an image was rewritten finds the new revision when it asks.
+
+    The hint names no snapshot, so the server publishes its folder itself. It
+    once told the page first and left the publishing to its folder watcher a
+    moment later; the page asked straight away, found the old revision, and was
+    never told again, because the watcher counted the change as announced.
+    """
+    from test_server import request
+    from zmart_viewer.serving.server import make_server
+
+    write_position(tmp_path, "a.ome.zarr", 0, 1200)
+    server = make_server(
+        port=0,
+        data_dir=tmp_path,
+        loads=[{"path": tmp_path, "name": "positions"}],
+        live=True,
+        bake=True,
+        canvas={"x_um": [0, 1024], "y_um": [0, 512]},
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+
+    def revisions():
+        status, _, body = request(port, "/api/config")
+        assert status == 200
+        return [row.get("sourceRevisions") for row in json.loads(body)["layers"]]
+
+    try:
+        assert revisions() == [[1]]
+        write_position(tmp_path, "a.ome.zarr", 0, 2400)
+        hint = json.dumps({"wrote_image_in_place": True}).encode()
+        assert request(port, "/api/announce", "POST", hint)[0] == 200
+        assert revisions() == [[2]]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
+
+
 def test_interrupted_publication_is_refused_until_retry_recovers(tmp_path, monkeypatch):
     write_position(tmp_path, "a.ome.zarr", 0, 1200)
     view = PublishedTransfer(tmp_path / STORE, piece=64)
