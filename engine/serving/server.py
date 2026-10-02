@@ -50,7 +50,6 @@ from zmart_viewer.opening.open_folders import (
     written_timepoints,
     zarr_scheme,
 )
-from zmart_viewer.picture.arrangement import the_frame_room_as_written
 
 # The other way a picture can exist without being written: built when asked
 # for, rather than pointed at.
@@ -1561,16 +1560,14 @@ def make_server(
                     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
                     revision = snapshot["revision"]
                     geometry_revision = snapshot.get("geometry_revision", 0)
-                    # The length comes from the same committed snapshot as the
-                    # revisions, never from the array description on disk. A
-                    # publication that changes the view's geometry declares the
-                    # new arrays first and commits publication.json last, so a
-                    # description read in between already counts frames that
-                    # the revisions do not yet promise. The page took that
-                    # half-written answer as frames arriving and re-read the
-                    # view twice, once for the torn answer and once for the
-                    # committed one.
-                    frames = the_frame_room_as_written(snapshot["mosaic"])[0]
+                    # The length as committed with those revisions. A publication
+                    # that changes the view's geometry declares its new arrays
+                    # first and commits publication.json last, so the arrays read
+                    # in between already count frames the revisions do not yet
+                    # promise, and the page re-read the view for that torn answer
+                    # and again for the commit. A snapshot written before the
+                    # length was recorded is read the old way.
+                    frames = snapshot.get("frames", frames)
 
             for index, channel_name, color, declared_range, active in found:
                 logical_channel = 0 if depth is not None and index is None else index

@@ -225,7 +225,7 @@ def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
         assert.equal(invalidations, 1);
         assert.equal(source.metadataRefresh, undefined);
         const patches = growthPatches('');
-        const extension = patches.find(p => p.marker === 'extendBounds(other, refreshed)').replacement;
+        const extension = patches.find(p => p.marker === 'extendBounds(other, refreshed, replaceHeld').replacement;
         const extend = extension.slice(extension.indexOf('  extendBounds('), extension.indexOf('  get dataType()'));
         const Volume = new Function(`return class {{ ${{extend}} }}`)();
         let receive;
@@ -244,9 +244,9 @@ def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
         const shaped = size => ({{multiscale: {{scales: [{{url: 'test', metadata: {{shape: [size],
           codecs: {{layoutInfo: [{{physicalToLogicalDimension: [0]}}]}}
         }}}}]}}}});
-        // A timelapse declared at full length gains frames without its shape
-        // moving, so no piece already held can have changed.
-        volume.extendBounds(shaped(1), new Set());
+        // Frames arriving on a timelapse declared at full length leave the
+        // shape where it was, and no piece already held can have changed.
+        volume.extendBounds(shaped(1), new Set(), false);
         assert.equal(workerInvalidations, 0);
         // Pixels may have been refreshed already, but worker bounds must still grow.
         volume.extendBounds(shaped(3), new Set([chunk]));
@@ -255,6 +255,10 @@ def test_metadata_refresh_clears_pending_and_detaches_before_invalidation():
         assert.equal(workerInvalidations, 0);
         volume.extendBounds(shaped(5), new Set());
         assert.equal(workerInvalidations, 1);
+        // A changed geometry with an unchanged shape (coverage that moved)
+        // must still drop what is held.
+        volume.extendBounds(shaped(5), new Set());
+        assert.equal(workerInvalidations, 2);
         """,
         ],
         capture_output=True,

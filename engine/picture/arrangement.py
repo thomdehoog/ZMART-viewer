@@ -807,21 +807,6 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
     }
 
 
-def the_frame_room_as_written(held: dict) -> tuple[int, int]:
-    """The (moments, channels) a written-down mosaic keeps room for, touching no tile.
-
-    The same answer :attr:`Mosaic.frame_room` gives for the mosaic read back, from
-    the first copy that names its front axes. It is kept separate so that a reader
-    which needs only the room -- the server describing a view's time slider each
-    time something changes -- need not rebuild every tile and region to learn it.
-    """
-    for tile in held["tiles"]:
-        for copy in tile["copies"]:
-            if copy.get("outer_shape"):
-                return the_frame_room_of(tuple(copy["outer_shape"]))
-    return (1, 1)
-
-
 def read_the_mosaic_as_written(held: dict) -> Mosaic:
     """The mosaic back from its written-down geometry, touching no tile."""
     tiles = [

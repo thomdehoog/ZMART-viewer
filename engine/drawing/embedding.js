@@ -151,7 +151,7 @@ function forgetWhatWasReadAbout(chunkManager, url) {
 
 const pendingGeometry = new WeakMap();
 export const geometryRefreshPending = source => pendingGeometry.has(source);
-export function refreshGeometry(source, chunkManager, refreshed, forgotten) {
+export function refreshGeometry(source, chunkManager, refreshed, forgotten, { replaceHeld = true } = {}) {
   const previous = pendingGeometry.get(source);
   if (previous) clearTimeout(previous.timer);
   const attempt = {};
@@ -180,7 +180,7 @@ export function refreshGeometry(source, chunkManager, refreshed, forgotten) {
       forgetWhatWasReadAbout(chunkManager, store);
       forgotten.add(store);
     }
-    const completed = await source.refreshMetadata(refreshed);
+    const completed = await source.refreshMetadata(refreshed, { replaceHeld });
     if (pendingGeometry.get(source) !== attempt) return;
     if (completed === false) {
       // Retry a failed request, not an unchanged acquisition or periodic cache refresh.

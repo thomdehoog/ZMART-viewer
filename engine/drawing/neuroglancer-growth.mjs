@@ -45,7 +45,7 @@ export function growthPatches(lib) {
       file: join(lib, "layer", "layer_data_source.js"),
       marker: "async refreshMetadata(refreshed",
       anchor: "  set spec(spec) {\n    const { layer } = this;",
-      replacement: `  async refreshMetadata(refreshed = new Set()) {
+      replacement: `  async refreshMetadata(refreshed = new Set(), { replaceHeld = true } = {}) {
     this.metadataRefresh?.abort();
     const held = this.loadState_;
     const owner = this.refCounted_;
@@ -98,7 +98,7 @@ export function growthPatches(lib) {
       transform.spec = held.transform.spec;
       for (const [old, next] of pairs) {
         const volume = old.subsourceEntry.subsource.volume;
-        if (volume) volume.extendBounds(next.subsource.volume, refreshed);
+        if (volume) volume.extendBounds(next.subsource.volume, refreshed, replaceHeld);
         else old.subsourceEntry = next;
       }
       held.transform.defaultTransform = transform.defaultTransform;
@@ -129,7 +129,7 @@ export function growthPatches(lib) {
     },
     {
       file: join(lib, "datasource", "zarr", "frontend.js"),
-      marker: "extendBounds(other, refreshed)",
+      marker: "extendBounds(other, refreshed, replaceHeld",
       anchor: "  volumeType;\n  get dataType() {",
       replacement: `  volumeType;
   sourceCache = new Map();
@@ -144,7 +144,7 @@ export function growthPatches(lib) {
       this.multiscale.scales.every((scale, level) => scale.metadata.shape.every(
         (size, dimension) => size <= other.multiscale.scales[level].metadata.shape[dimension]));
   }
-  extendBounds(other, refreshed) {
+  extendBounds(other, refreshed, replaceHeld = true) {
     const next = other.multiscale;
     for (const sources of this.sourceCache.values()) {
       for (const { chunkSource: source } of sources.flat()) {
@@ -154,13 +154,16 @@ export function growthPatches(lib) {
         const upper = Float32Array.from(spec.upperVoxelBound, (_, i) => metadata.shape[permutation[spec.rank - 1 - i]]);
         spec.upperVoxelBound.set(upper);
         for (let i = 0; i < spec.rank; i++) spec.upperChunkBound[i] = Math.ceil(upper[i] / spec.chunkDataSize[i]);
-        // Only a shape that actually moved can have changed a held piece: a
-        // boundary piece that was partly outside the old extent. A timelapse
-        // whose length was declared up front gains frames without its shape
-        // moving, and invalidating then re-read every piece already on screen.
+        // Held pieces are dropped when they may be out of date: when the caller
+        // says the geometry changed (a view whose coverage moved keeps its
+        // shape, yet its pieces must be read again), or when the shape moved,
+        // which can change a boundary piece. Only frames arriving on a
+        // timelapse declared at full length pass replaceHeld = false: nothing
+        // already on screen can have changed then, and dropping it re-read the
+        // whole picture at every frame.
         const grew = metadata.shape.some((size, i) => size !== source.parameters.metadata.shape[i]);
         source.parameters.metadata = metadata;
-        const invalidate = grew && !refreshed.has(source);
+        const invalidate = (replaceHeld || grew) && !refreshed.has(source);
         if (invalidate) refreshed.add(source);
         source.rpc.invoke("zarr/extendBounds", { id: source.rpcId, upper, shape: metadata.shape, invalidate });
       }
