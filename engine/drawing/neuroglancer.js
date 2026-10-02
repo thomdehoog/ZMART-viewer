@@ -660,7 +660,10 @@ function syncSources(
       // has to be brought up to date -- it is only the forgetting that is shared.
       // The second row then finds the first row's request already in flight and
       // waits for it rather than making one of its own.
-      refreshGeometry(source, chunkManager, refreshed.holders, forgotten);
+      //
+      // Frames arriving add pieces and change none already held, so those are
+      // kept: dropping them re-read the whole picture on screen at every frame.
+      refreshGeometry(source, chunkManager, refreshed.holders, forgotten, { replaceHeld: false });
       sourceRefreshing.sources.push(store);
     }
   }

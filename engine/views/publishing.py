@@ -1149,6 +1149,10 @@ class PublishedTransfer(ComposedPicture):
                     if bake
                     else {str(level): sorted(chunks) for level, chunks in unbaked_dirty.items()},
                     "mosaic": the_mosaic_written_down(mosaic),
+                    # The length the arrays were declared with, committed with
+                    # the revisions so a reader never has to take it from the
+                    # arrays, which change before this file does.
+                    "frames": made.mosaic.frame_room[0],
                 }
                 if (
                     not (self._shown / "zarr.json").exists()
