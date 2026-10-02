@@ -1,0 +1,59 @@
+# The viewer's tests on GitHub.
+#
+# "data" runs on every push and pull request, on Linux and Windows: the tests
+# that read stores, choose contrast windows and serve chunks need only Python.
+# The browser tests skip there, and the end of the run says so (see
+# docs/how_it_works/TESTING.md).
+#
+# "browser" opens the real viewer in a headless Chromium and reads the pixels
+# it drew. Without a graphics card that takes long, so it runs only when started
+# by hand (the "Run workflow" button).
+name: tests
+
+on:
+  push:
+    branches: [main, release-candidate]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  data:
+    name: data / ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the viewer with its test tools
+        run: python -m pip install -e ".[dev]"
+      - name: Tests (browser tests skip without a browser)
+        run: python -m pytest tests -q -p no:cacheprovider --timeout=600
+
+  browser:
+    if: github.event_name == 'workflow_dispatch'
+    name: browser / ubuntu-latest / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the viewer, the page's tools and a Chromium
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          python -m playwright install --with-deps chromium
+      - name: Tests, with a browser required
+        env:
+          ZMART_REQUIRE_BROWSER: "1"
+        run: python -m pytest tests -q -p no:cacheprovider --timeout=600
