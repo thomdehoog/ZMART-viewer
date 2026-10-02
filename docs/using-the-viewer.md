@@ -5,7 +5,7 @@ look at them. No microscope is needed, and nothing here can touch one.
 
 ## Install
 
-You need Python 3.10, 3.11 or 3.12. Then install the viewer straight from
+You need Python 3.11 or 3.12. Then install the viewer straight from
 GitHub with pip:
 
 ```bash
