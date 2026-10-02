@@ -353,12 +353,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if not (_FRONTEND_DIST / "index.html").exists():
         print(
-            "The viewer's page (gui/built) is missing, so there is nothing to show.\n"
+            "The viewer's page (gui/build) is missing, so there is nothing to show.\n"
             "It normally comes with the viewer. Reinstall it with:\n"
             "    pip install --force-reinstall "
             "git+https://github.com/thomdehoog/ZMART-viewer\n"
-            "or, in a copy of the repository where you changed gui/, rebuild it with:\n"
-            "    npm install && npm run build"
+            "or, in a copy of the repository where you changed gui/source, rebuild it with:\n"
+            "    cd gui/source && npm ci && npm run build"
         )
         return 1
 

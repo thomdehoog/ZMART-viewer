@@ -1,4 +1,4 @@
-# Node's packages are downloaded, not source. The built page (gui/built) IS
+# Node's packages are downloaded, not source. The built page (gui/build) IS
 # kept in the repository, so that pip alone can install the viewer.
 node_modules
 
@@ -10,7 +10,8 @@ tests/_check/
 test_stores/
 testdata/
 
-# What an install or a wheel build leaves behind.
+# What an install or a wheel build leaves behind. Only the top-level build/
+# is setuptools' scratch; gui/build is the page and is kept.
 *.egg-info/
-build/
+/build/
 dist/

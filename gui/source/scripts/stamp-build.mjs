@@ -1,14 +1,17 @@
 // A wheel may only package the output of a completed build of these inputs.
 //
-// The inputs are everything the page is built from: the interface, the
-// engine's drawing code, these build scripts, and the three files at the
-// root that describe the build. The outputs are what lands in gui/built.
+// The inputs are everything the page is built from: the whole of gui/source
+// (the interface, its drawing code, these build scripts and the files that
+// describe the build) and the drawing code the engine keeps for itself in
+// engine/drawing. The outputs are what lands in gui/build. Every path is
+// recorded relative to the repository, which is where build_support.py checks
+// them from.
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join, relative } from "node:path";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = fileURLToPath(new URL("../../../", import.meta.url));
 async function files(folder, skip = []) {
   const entries = await readdir(folder, { withFileTypes: true });
   return (await Promise.all(entries.map(entry => entry.isFile() ? [join(folder, entry.name)] :
@@ -20,16 +23,11 @@ async function hashes(paths) {
     createHash("sha256").update(await readFile(path)).digest("hex"),
   ])));
 }
-// Python files in gui/ open the window; they are not part of the page.
-const page = path => !path.endsWith(".py");
 const inputs = [
-  ...(await files(join(root, "gui"), ["built", "node_modules", "__pycache__"])).filter(page),
-
+  ...await files(join(root, "gui", "source"), ["node_modules"]),
   ...await files(join(root, "engine", "drawing"), ["__pycache__"]),
-  ...await files(join(root, "scripts")),
-  join(root, "package.json"), join(root, "package-lock.json"), join(root, "vite.config.js"),
 ];
-const built = join(root, "gui", "built");
+const built = join(root, "gui", "build");
 const outputs = (await files(built)).filter(path => !path.endsWith("build-manifest.json"));
 await writeFile(join(built, "build-manifest.json"), JSON.stringify({
   inputs: await hashes(inputs), outputs: await hashes(outputs),

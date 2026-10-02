@@ -25,10 +25,10 @@ this release candidate:
    was taken on the stage, follows a folder while a microscope is still
    writing into it, and serves the pieces of the picture over HTTP. It draws
    through neuroglancer with neuroglancer's own controls switched off
-   (`engine/drawing/`). A separate smart-microscopy interface, which lives in
+   (`gui/source/drawing/`). A separate smart-microscopy interface, which lives in
    its own repository, uses the engine and nothing else.
 2. **The GUI**, in `gui/`: the viewer's own window, for people who only want
-   to look at their data. It is JavaScript (React) plus `gui/window.py`,
+   to look at their data. It is JavaScript (React), in `gui/source/`, plus `gui/window.py`,
    which opens the window with pywebview and is what the `zmart-viewer`
    command runs. The smart interface does not use it.
 
@@ -37,11 +37,11 @@ The engine's public names, which other software may rely on, are
 importable from `zmart_viewer` itself (see `engine/__init__.py`), plus the
 `/embedding.js` module the server serves.
 
-**Installing needs only pip.** The built page is committed in `gui/built/`,
+**Installing needs only pip.** The built page is committed in `gui/build/`,
 so `pip install git+https://github.com/thomdehoog/ZMART-viewer@<branch>`
 gives a working viewer with no Node, npm or Vite. Node and npm are needed
-only by a developer who changes the GUI's JavaScript: `npm install && npm run
-build` rebuilds `gui/built/`, and the build check in `build_support.py` refuses
+only by a developer who changes the GUI's JavaScript: `npm ci && npm run
+build` in `gui/source/` rebuilds `gui/build/`, and the build check in `build_support.py` refuses
 to package a page that no longer matches its sources.
 
 ## Who reads this code
@@ -82,7 +82,7 @@ be named in the docs.
 2. **The engine/GUI split.** Does anything in `engine/` exist only for the
    standalone window? Does anything in `gui/` belong in the engine, because
    a separate smart interface would need it? Note in particular that
-   `engine/drawing/viewer.js`, `neuroglancer.js` and `layers.js` import
+   `gui/source/drawing/viewer.js`, `neuroglancer.js` and `layers.js` import
    neuroglancer by package name, so a separate interface can only use them
    through its own build. Propose how the engine should offer them
    ready-built, if you agree that it should.

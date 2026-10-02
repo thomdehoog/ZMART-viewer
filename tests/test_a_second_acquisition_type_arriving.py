@@ -450,11 +450,11 @@ class TestStartingTheViewerOnSuchAFolder:
         at the bottom, which is not something anyone should have to read at a
         microscope.
         """
-        if not (_VIZ_ROOT / "gui" / "built" / "index.html").exists():
+        if not (_VIZ_ROOT / "gui" / "build" / "index.html").exists():
             pytest.skip(
-                "gui/built is missing, so the zmart-viewer command stops "
+                "gui/build is missing, so the zmart-viewer command stops "
                 "before it gets as far as the folder — build it with "
-                "`npm install && npm run build`"
+                "`cd gui/source && npm ci && npm run build`"
             )
         from zmart_viewer.gui import window as launcher
 

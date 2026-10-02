@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE = ROOT / "engine" / "drawing" / "live-refresh.js"
-ENGINE = ROOT / "engine" / "drawing" / "neuroglancer.js"
+MODULE = ROOT / "gui" / "source" / "drawing" / "live-refresh.js"
+ENGINE = ROOT / "gui" / "source" / "drawing" / "neuroglancer.js"
 
 
 def _javascript(expression: str):

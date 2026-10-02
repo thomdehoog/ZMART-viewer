@@ -31,7 +31,7 @@ engine or working around it.
 
 This viewer already builds that table by hand rather than accepting whatever the
 engine installs by default. The code is in
-`engine/drawing/viewer.js`, around line 99, and the comment
+`gui/source/drawing/viewer.js`, around line 99, and the comment
 above it explains what was left out and why.
 
 ---
@@ -43,7 +43,7 @@ handled inside an image panel; the rest are keys.
 
 **Since 18 August 2026 the engine's default panel tables are no longer
 installed at all.** The viewer hands each panel an explicit table holding
-exactly the gestures below (`engine/drawing/viewer.js`), so this section now
+exactly the gestures below (`gui/source/drawing/viewer.js`), so this section now
 describes our tables rather than the engine's, and "everything else" is not
 bound — most importantly, no key changes the view and the flat view cannot
 rotate. The engine's defaults, read out of its source when this decision was
@@ -80,7 +80,7 @@ The space bar split the image into four panels with no way back, the digits 1 to
 letters restored scale bars and axis lines that this viewer draws for itself.
 None of it was reachable through our own interface, so leaving it out costs
 nothing and removes a set of traps. The reasoning is written out in full in
-`engine/drawing/viewer.js`.
+`gui/source/drawing/viewer.js`.
 
 ---
 
@@ -88,7 +88,7 @@ nothing and removes a set of traps. The reasoning is written out in full in
 
 **In the flat view there are exactly two ways to move around, and nothing
 else.** Carried out by giving each panel an explicit binding table in
-`engine/drawing/viewer.js` instead of the engine's defaults, and held in place by
+`gui/source/drawing/viewer.js` instead of the engine's defaults, and held in place by
 `tests/test_the_keyboard_cannot_trap_the_operator.py`, whose trap tests were
 written first and shown red against the old build — every removal below was
 proven live before it was removed.
@@ -149,7 +149,7 @@ most often and without thinking, and a browser has taught everyone what it does.
 Stepping through the stack keeps the slider it already has, which is better than a
 gesture anyway because it shows you where in the stack you are.
 
-**Done, 6 August 2026, and on both panels.** `engine/drawing/viewer.js` sets
+**Done, 6 August 2026, and on both panels.** `gui/source/drawing/viewer.js` sets
 `at:wheel → zoom` and `at:shift+wheel → step z` on the slice view *and* the
 perspective view. Guarded by `tests/test_interaction.py`.
 
@@ -194,7 +194,7 @@ then height, then depth — and the layout asked for is the one the engine calls
 depth into the screen, which is the plane an operator scrolls through. Those
 two go together and **must be changed together**: either on its own gives a view
 that is edge-on, with the stack collapsed to a line, or mirrored again. The pair
-of them live in `engine/drawing/neuroglancer.js`, in
+of them live in `gui/source/drawing/neuroglancer.js`, in
 `pinTheAxesThatMeasureDistance`, and in `gui/App.jsx`, at
 `SLICE_LAYOUT`, and each says so at the other.
 

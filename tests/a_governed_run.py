@@ -316,7 +316,7 @@ def main() -> int:
     server = make_server(
         port=0,
         data_dir=shown,
-        site_dir=_VIZ / "gui" / "built",
+        site_dir=_VIZ / "gui" / "build",
         store=[store.name],
         window=(0, BRIGHT[0]),
     )

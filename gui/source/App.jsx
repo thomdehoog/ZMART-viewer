@@ -17,12 +17,12 @@ import {
   syncLayers,
   syncView,
   stretchTheDisplay,
-} from "../engine/drawing/neuroglancer.js";
+} from "./drawing/neuroglancer.js";
 import ScaleBar from "./ScaleBar.jsx";
 import AxisSlider from "./AxisSlider.jsx";
-import { LOOKUP_TABLE_NAMES, engineName, layerKey, layersFor } from "../engine/drawing/layers.js";
-import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../engine/drawing/embedding.js";
-import { liveStateProblem } from "../engine/drawing/live-refresh.js";
+import { LOOKUP_TABLE_NAMES, engineName, layerKey, layersFor } from "./drawing/layers.js";
+import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../../engine/drawing/embedding.js";
+import { liveStateProblem } from "./drawing/live-refresh.js";
 
 // The two ways of looking at a volume, and the only thing the operator has to
 // choose between. 2-D is the working view -- one plane, scroll through the

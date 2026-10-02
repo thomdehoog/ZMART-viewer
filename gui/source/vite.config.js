@@ -2,15 +2,15 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  // The interface is the page; the engine's drawing code sits beside it and is
-  // imported by relative path, so the build must be allowed to read outside
-  // the page's own folder.
-  root: "gui",
+  // npm runs the build from this folder, which holds the page and everything
+  // Node needs to make it. The built page goes to gui/build beside it, which
+  // is the folder the Python package ships.
+  root: ".",
   plugins: [react()],
 
   // --- production build ---
   build: {
-    outDir: "built",
+    outDir: "../build",
     emptyOutDir: true,
     // Emit the engine's background worker as a real file, never inlined as a
     // data: URL. A data:-URL worker has no origin, so absolute-path fetches from
@@ -28,7 +28,10 @@ export default defineConfig({
     exclude: ["neuroglancer"],
   },
   server: {
-    fs: { allow: [".."] },
+    // The page imports embedding.js from engine/drawing, where the Python
+    // server also serves it to other interfaces, so the dev server must be
+    // allowed to read that folder as well as this one.
+    fs: { allow: [".", "../../engine/drawing"] },
     // Under `vite dev` the frontend runs on Vite's own port; anything it asks
     // for under /data (the image volume) or /api (Python) is forwarded to the
     // Python server on 8848, so the browser sees a single origin. The shipped

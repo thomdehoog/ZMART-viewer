@@ -7,16 +7,22 @@ JavaScript packages some tests use, and the browser the picture tests drive:
 
 ```
 pip install -e .[dev]
-npm ci
+cd gui/source && npm ci && cd ../..
 python -m playwright install chromium
 python -m pytest tests
 ```
 
-Running the full suite needs [Node.js](https://nodejs.org) and `npm ci`: several
-tests run small JavaScript checks with Node, and some import the neuroglancer
-package it installs. That is only for testing. **Using** the viewer needs pip
-alone, and the built page is already in the repository (`gui/built/`), so it
-needs rebuilding (`npm run build`) only after you change the GUI's JavaScript.
+Running the full suite needs [Node.js](https://nodejs.org) and `npm ci` in
+`gui/source`: several tests run small JavaScript checks with Node, and some
+import the neuroglancer package it installs there. That is only for testing.
+**Using** the viewer needs pip alone, and the built page is already in the
+repository (`gui/build/`), so it needs rebuilding (`npm run build` in
+`gui/source`) only after you change the GUI's JavaScript.
+
+Playwright keeps its browsers inside your user profile unless
+`PLAYWRIGHT_BROWSERS_PATH` names another folder. Set it before
+`playwright install` and keep it set when running the tests if the profile
+is short of space.
 
 The browser tests open the real viewer in a headless browser and read the
 pixels it drew. Where no browser can be started they skip, and the end of the

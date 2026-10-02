@@ -1050,7 +1050,7 @@ asked in every available way to read the store again fetched no description file
 So the viewer drops what the engine remembers about that one store first, and only then
 asks it to resolve the store again. What is dropped is only what was *read*; the decoded
 image is remembered separately and is deliberately left alone. See
-`forgetWhatWasReadAbout` in `engine/drawing/neuroglancer.js`.
+`forgetWhatWasReadAbout` in `gui/source/drawing/neuroglancer.js`.
 
 Two things follow that are worth keeping in mind. This memory dies with the page, so
 closing the viewer clears it and there is nothing to tidy up on the way out. And because
@@ -1272,7 +1272,7 @@ before the loading starts:
 
 So the speed of a large folder of separate positions is accepted rather than engineered
 around. The two mechanisms proposed to engineer around it are both rejected — a window of
-only the positions in view (see the note in `engine/drawing/neuroglancer.js`) and fusing finished positions into
+only the positions in view (see the note in `gui/source/drawing/neuroglancer.js`) and fusing finished positions into
 a copy (Decision 1b) — and this is the reason: neither was worth its complexity once the
 operator could simply open less.
 

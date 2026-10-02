@@ -11,23 +11,23 @@ from build_support import validate_frontend
 
 def test_frontend_build_certificate(tmp_path):
     root = tmp_path
-    interface = root / "gui"
+    source = root / "gui" / "source"
     drawing = root / "engine" / "drawing"
-    scripts = root / "scripts"
-    for folder in (interface / "built", drawing, scripts):
+    for folder in (root / "gui" / "build", source / "drawing", source / "scripts", drawing):
         folder.mkdir(parents=True)
     sources = {
-        "gui/App.jsx": "app",
+        "gui/source/App.jsx": "app",
+        "gui/source/drawing/viewer.js": "viewer",
+        "gui/source/scripts/stamp-build.mjs": "stamp",
+        "gui/source/package.json": "{}",
+        "gui/source/package-lock.json": "{}",
+        "gui/source/vite.config.js": "export default {}",
         "engine/drawing/embedding.js": "embedding",
         "engine/drawing/neuroglancer-growth.mjs": "growth",
-        "scripts/stamp-build.mjs": "stamp",
-        "package.json": "{}",
-        "package-lock.json": "{}",
-        "vite.config.js": "export default {}",
     }
     outputs = {
-        "gui/built/index.html": "<html>",
-        "gui/built/async_computation.bundle.js": "worker",
+        "gui/build/index.html": "<html>",
+        "gui/build/async_computation.bundle.js": "worker",
     }
     for name, text in {**sources, **outputs}.items():
         (root / name).write_text(text)
@@ -37,7 +37,7 @@ def test_frontend_build_certificate(tmp_path):
         kind: {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}
         for kind, names in (("inputs", sources), ("outputs", outputs))
     }
-    (interface / "built/build-manifest.json").write_text(json.dumps(manifest))
+    (root / "gui/build/build-manifest.json").write_text(json.dumps(manifest))
     validate_frontend(root)
     for name in (*sources, *outputs):
         original = (root / name).read_bytes()
@@ -45,9 +45,17 @@ def test_frontend_build_certificate(tmp_path):
         with pytest.raises(SetupError):
             validate_frontend(root)
         (root / name).write_bytes(original)
-    for name in ("gui/new.js", "engine/drawing/new.js", "gui/built/retired-worker.js"):
+    for name in (
+        "gui/source/new.js",
+        "gui/source/drawing/new.js",
+        "engine/drawing/new.js",
+        "gui/build/retired-worker.js",
+    ):
         (root / name).write_text("new")
         with pytest.raises(SetupError):
             validate_frontend(root)
         (root / name).unlink()
+    (source / "node_modules").mkdir()
+    (source / "node_modules" / "downloaded.js").write_text("not a source")
+    (root / "gui" / "window.py").write_text("# opens the window, not part of the page")
     validate_frontend(root)

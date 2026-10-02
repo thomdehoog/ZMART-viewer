@@ -35,13 +35,21 @@ The ZMART Viewer is two things in one repository:
    [neuroglancer](https://github.com/google/neuroglancer) with neuroglancer's own
    controls switched off, and it offers named views of an acquisition: **Slice**
    (one plane at a time), **Top** (the surface seen from above) and
-   **Min/Max/Sum** projections.
+   **Min/Max/Sum** projections. Two JavaScript files in `engine/drawing/` ship
+   with it because other programs read them from the installed package:
+   `embedding.js`, which the engine serves to any interface that shows the named
+   views, and `neuroglancer-growth.mjs`, the neuroglancer patches the ZMART
+   operator window applies when it builds its own page. They stay in the engine
+   for that reason.
 
 2. **A window** (`gui/`). Sliders through depth (Z) and time (T), a panel
    to set each channel's colour and contrast, a load window to choose data, and a
    3-D view. It opens as its own desktop window and never talks to a microscope,
    so it can be used on anybody's data, on any machine, with no possibility of
-   disturbing an experiment.
+   disturbing an experiment. The window's page is written in JavaScript in
+   `gui/source/`, which also holds everything Node needs to build it, and the
+   built page is kept in `gui/build/`, so the top of the repository holds only
+   Python.
 
 Smart-microscopy interfaces use the engine and bring their own window. The ZMART
 operator window in [ZMART Microscopy](https://github.com/thomdehoog/ZMART-microscopy)
@@ -83,6 +91,41 @@ server = make_server(port=0, data_dir="/path/to/run", live=True)
 
 The engine answers over HTTP, so an interface can be written in any language.
 The details are in [Inside your own interface](docs/inside-your-own-interface.md).
+
+## Install
+
+There are two setups, one for using the viewer and one for changing it.
+
+**Production**, to use the viewer. You need Python 3.11 or 3.12, and pip
+installs everything else:
+
+```bash
+pip install "zmart-viewer @ git+https://github.com/thomdehoog/ZMART-viewer"
+```
+
+This installs the Python package and the page already built. It needs no
+Node.js, no tests and no browsers, so it is what goes onto a microscope
+computer.
+
+**Development**, to change the viewer and run its tests. Clone the repository,
+install it in editable mode with its test tools, install the page's
+JavaScript packages, and install the browser the picture tests drive:
+
+```bash
+git clone https://github.com/thomdehoog/ZMART-viewer
+cd ZMART-viewer
+pip install -e ".[dev]"
+cd gui/source && npm ci && cd ../..
+python -m playwright install chromium
+```
+
+Node.js 22.12 or newer is needed for the page. In a conda environment, take it
+from conda-forge (`conda install -c conda-forge nodejs`). Playwright puts its
+browsers inside your user profile unless told otherwise; to keep them
+somewhere else, set `PLAYWRIGHT_BROWSERS_PATH` to that folder before
+installing them and keep it set when running the tests. After changing the
+page, rebuild it with `npm run build` in `gui/source` and commit `gui/build/`
+with your change.
 
 ## Try it yourself
 

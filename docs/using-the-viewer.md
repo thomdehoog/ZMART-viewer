@@ -9,21 +9,26 @@ You need Python 3.11 or 3.12. Then install the viewer straight from
 GitHub with pip:
 
 ```bash
-pip install git+https://github.com/thomdehoog/ZMART-viewer
+pip install "zmart-viewer @ git+https://github.com/thomdehoog/ZMART-viewer"
 ```
 
 That is all. The viewer's page comes already built (it is kept in the
-repository, in `gui/built/`), so you need nothing but pip: no Node.js, npm
-or other web tools.
+repository, in `gui/build/`), so you need nothing but pip: no Node.js, npm,
+tests or browsers.
 
-If you change the window's own JavaScript in `gui/`, the page has to be built
-again, and that does need [Node.js](https://nodejs.org). Run this in the
-repository folder, and commit `gui/built/` along with your change:
+If you change the window's own JavaScript in `gui/source/`, the page has to be
+built again, and that does need [Node.js](https://nodejs.org) 22.12 or newer
+(in a conda environment, from conda-forge). Work in a clone installed with
+`pip install -e ".[dev]"`, run this in `gui/source/`, and commit `gui/build/`
+along with your change:
 
 ```bash
-npm install
+npm ci
 npm run build
 ```
+
+The README describes this development setup in full, including the browser
+the tests use.
 
 Installing gives you one command, `zmart-viewer`.
 

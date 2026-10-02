@@ -17,12 +17,18 @@ important thing in this document.
   smart-microscopy interface needs in order to show images. It reads OME-Zarr,
   places each position where it was taken on the stage, follows a folder while
   a microscope is still writing into it, and serves the pieces of the picture
-  over HTTP. It also holds the JavaScript that drives neuroglancer, in
-  `engine/drawing/`. It has no buttons, panels or sliders of its own.
+  over HTTP. The two pieces of JavaScript other interfaces read from it live in
+  `engine/drawing/`: `embedding.js`, which the server hands to any page that
+  embeds the named views, and `neuroglancer-growth.mjs`, the neuroglancer
+  patches an interface applies when it builds its own page. It has no buttons,
+  panels or sliders of its own.
 - **The GUI** (`gui/`, imported as `zmart_viewer.gui`) is the viewer's own
   window, for people who only want to look at their data: the panels, the
   sliders, the load window, and `window.py`, which opens the window with
-  pywebview and is what the `zmart-viewer` command runs.
+  pywebview and is what the `zmart-viewer` command runs. The page's sources,
+  including the JavaScript that drives neuroglancer (`gui/source/drawing/`),
+  live in `gui/source/` with everything Node needs to build them; the built
+  page lives in `gui/build/`.
 
 A smart-microscopy interface lives in its own repository. It uses the engine
 exactly as the GUI does and replaces the GUI with its own window. So the test
@@ -35,7 +41,7 @@ inside it may move between versions.
 ## 2. Neuroglancer draws; we do the rest
 
 Neuroglancer is the drawing engine, and its own interface is switched off:
-`engine/drawing/viewer.js` creates it with `makeMinimalViewer` and
+`gui/source/drawing/viewer.js` creates it with `makeMinimalViewer` and
 `showUIControls: false`, and `neuroglancer-chrome.css` hides the little that
 remains. Everything a person sees around the picture is ours.
 
@@ -67,7 +73,7 @@ Two places where this is done well, to be copied rather than disturbed:
 - **A channel is one layer with many sources.** Neuroglancer composites the
   positions; we never stitch pixels in the browser.
 - **Contrast travels as control values, not as shader text.** `shaderFor` in
-  `engine/drawing/layers.js` declares the contrast control once, and
+  `gui/source/drawing/layers.js` declares the contrast control once, and
   `shaderControlsFor` sends the numbers separately, so dragging a contrast
   handle does not recompile a program on the graphics card.
 
@@ -126,7 +132,7 @@ the right way.
 ```
         DRAWING                    SERVING                     ON DISK
    neuroglancer, driven       engine/serving/            OME-Zarr images, however
-   by engine/drawing/         server.py                  the microscope wrote them
+   by gui/source/drawing/     server.py                  the microscope wrote them
 
   +------------------+      +-------------------+      +-------------------+
   |  draws 2-D and   |      | answers questions |      | one image, many   |
@@ -219,13 +225,18 @@ to open.
  ═══════════════════════════════════════════════════════════════════════════════
 
      window.py ───────────── opens the window with pywebview; the zmart-viewer command
-     App.jsx ─────────────── the whole window's state, and the load window
-       ├── NeuroglancerView.jsx ── gives the engine an element to draw into
-       ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
-       ├── AxisSlider.jsx ─────── depth up the side, time along the bottom
-       ├── ScaleBar.jsx ───────── how large the specimen really is
-       └── TargetsPanel.jsx ───── places you mark, saved to a file
-     built/ ─────────────── the page, already built; what an installed viewer serves
+     source/ ─────────────── the page's sources, and everything Node needs to build them
+       App.jsx ───────────── the whole window's state, and the load window
+         ├── NeuroglancerView.jsx ── gives the engine an element to draw into
+         ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
+         ├── AxisSlider.jsx ─────── depth up the side, time along the bottom
+         ├── ScaleBar.jsx ───────── how large the specimen really is
+         └── TargetsPanel.jsx ───── places you mark, saved to a file
+       drawing/ viewer.js ─── creates neuroglancer with its own interface off
+                layers.js ─── settings → plain layer descriptions
+                neuroglancer.js  applies them to the viewer without rebuilding
+                live-refresh.js  what changed since the window last looked
+     build/ ──────────────── the page, already built; what an installed viewer serves
 
      A smart-microscopy interface replaces this folder with its own window.
 
@@ -235,11 +246,7 @@ to open.
    THE ENGINE — what answers and draws                      engine/
  ═══════════════════════════════════════════════════════════════════════════════
 
-     drawing/   viewer.js ────────── creates neuroglancer with its own interface off
-                layers.js ────────── settings → plain layer descriptions
-                neuroglancer.js ──── applies them to the viewer without rebuilding
-                live-refresh.js ──── what changed since the window last looked
-                embedding.js ─────── the named views, for windows that draw themselves
+     drawing/   embedding.js ─────── the named views, for windows that draw themselves
                 neuroglancer-growth.mjs  lets an image grow while it is shown
      serving/   server.py ────────── answers every request; guards the opened folder
                 picture_pieces.py ── pieces that are not plain files
@@ -265,9 +272,11 @@ to open.
    THE BUILD — only for changing the GUI's JavaScript
  ═══════════════════════════════════════════════════════════════════════════════
 
-     package.json, vite.config.js ── `npm run build` turns gui/ and engine/drawing/
-     scripts/                         into gui/built/, and stamps what went in
-     build_support.py ─────────────── refuses to package a gui/built/ that no longer
+     gui/source/package.json,
+     gui/source/vite.config.js ────── `npm run build` in gui/source turns the page's
+     gui/source/scripts/              sources and engine/drawing/ into gui/build/,
+                                      and stamps what went in
+     build_support.py ─────────────── refuses to package a gui/build/ that no longer
                                       matches its sources
 
      tests/browsercheck.py ── the safety net: serves the page, opens it in a real

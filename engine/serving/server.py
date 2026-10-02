@@ -61,7 +61,7 @@ _ENGINE = _HERE.parent
 _DRAWING = _ENGINE / "drawing"
 _FRONTEND_DIST = _ENGINE / "_frontend"
 if not _FRONTEND_DIST.is_dir():
-    _FRONTEND_DIST = (_ENGINE.parent / "gui" / "built").resolve()
+    _FRONTEND_DIST = (_ENGINE.parent / "gui" / "build").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 

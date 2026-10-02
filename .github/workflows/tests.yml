@@ -36,7 +36,7 @@ jobs:
       - name: Install the viewer with its test tools, and the page's (some tests run small JavaScript checks against neuroglancer)
         run: |
           python -m pip install -e ".[dev]"
-          npm ci
+          npm ci --prefix gui/source
       - name: Tests (browser tests skip without a browser)
         run: python -m pytest tests -q -p no:cacheprovider --timeout=600
 
@@ -56,7 +56,7 @@ jobs:
       - name: Install the viewer, the page's tools and a Chromium
         run: |
           python -m pip install -e ".[dev]"
-          npm ci
+          npm ci --prefix gui/source
           python -m playwright install --with-deps chromium
       - name: Tests, with a browser required
         env:

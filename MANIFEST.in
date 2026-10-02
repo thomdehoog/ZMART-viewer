@@ -1,4 +1,3 @@
-include build_support.py package.json package-lock.json vite.config.js
+include build_support.py
 recursive-include gui *
-recursive-include scripts *
-prune node_modules
+prune gui/source/node_modules
