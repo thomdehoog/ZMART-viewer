@@ -1,8 +1,8 @@
 """Wheel frontend ownership: validate a completed build, then copy an exact tree.
 
 The wheel may only carry a page that was built from the sources now in the
-checkout. ``scripts/stamp-build.mjs`` writes a manifest of what went in and
-what came out; this checks it before setuptools packages ``gui/built``.
+checkout. ``gui/source/scripts/stamp-build.mjs`` writes a manifest of what went
+in and what came out; this checks it before setuptools packages ``gui/build``.
 """
 
 import hashlib
@@ -27,21 +27,12 @@ def _files(folder, skip=()):
 def validate_frontend(root):
     """Refuse a page that was not built from exactly these sources."""
     root = Path(root)
-    built = root / "gui/built"
+    built = root / "gui/build"
     try:
         manifest = json.loads((built / "build-manifest.json").read_text())
         inputs = [
-            # Python files in gui/ open the window; they are not part of the page.
-            *(
-                p
-                for p in _files(root / "gui", skip=("built", "node_modules", "__pycache__"))
-                if p.suffix != ".py"
-            ),
+            *_files(root / "gui/source", skip=("node_modules",)),
             *_files(root / "engine/drawing", skip=("__pycache__",)),
-            *_files(root / "scripts"),
-            root / "package.json",
-            root / "package-lock.json",
-            root / "vite.config.js",
         ]
         outputs = [p for p in _files(built) if p.name != "build-manifest.json"]
         for paths, expected in ((inputs, manifest["inputs"]), (outputs, manifest["outputs"])):

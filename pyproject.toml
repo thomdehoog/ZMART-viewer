@@ -62,20 +62,25 @@ packages = [
 [tool.setuptools.package-dir]
 "zmart_viewer" = "engine"
 "zmart_viewer.gui" = "gui"
-"zmart_viewer._frontend" = "gui/built"
+"zmart_viewer._frontend" = "gui/build"
 
 [tool.setuptools.cmdclass]
 build_py = "build_support.BuildPy"
 bdist_wheel = "build_support.Wheel"
 
-# The GUI's JavaScript sources are built into gui/built, which ships as
-# zmart_viewer._frontend. The sources themselves stay out of the wheel: an
-# installed viewer needs the built page, never Node, npm or Vite.
+# The page's sources and everything Node needs live in gui/source, and are
+# built into gui/build, which ships as zmart_viewer._frontend. The sources stay
+# out of the wheel: an installed viewer needs the built page, never Node, npm
+# or Vite.
 [tool.setuptools.exclude-package-data]
-"zmart_viewer.gui" = ["*.jsx", "*.js", "*.css", "*.html", "built/**/*", "__pycache__/*"]
+"zmart_viewer.gui" = ["source/*", "build/*", "__pycache__/*"]
 
+# Two drawing files ship as they are, because other programs read them from
+# the installed package: the server hands embedding.js to any page that embeds
+# the viewer, and the operator interface builds its page with the same
+# neuroglancer patches as the viewer by reading neuroglancer-growth.mjs.
 [tool.setuptools.package-data]
-"zmart_viewer.drawing" = ["*.js", "*.mjs", "*.css"]
+"zmart_viewer.drawing" = ["embedding.js", "neuroglancer-growth.mjs"]
 "zmart_viewer._frontend" = ["**/*"]
 
 [tool.ruff]
@@ -88,7 +93,7 @@ extend-exclude = [
     ".eggs",
     "**/__pycache__",
     # Generated, not written.
-    "gui/built",
+    "gui/build",
     "node_modules",
     # Roads explored and not taken. Kept for the reasoning, not held to the
     # standards of code anybody runs.

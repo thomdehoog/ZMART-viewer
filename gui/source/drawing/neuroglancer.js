@@ -507,7 +507,7 @@ function geometryFor(spec) {
   return new Map(sourceList(spec).map((url, i) => [url.split("|")[0], spec.sourceGeometryRevisions?.[i]]));
 }
 
-import { refreshGeometry, geometryRefreshPending } from "./embedding.js";
+import { refreshGeometry, geometryRefreshPending } from "../../../engine/drawing/embedding.js";
 
 // -- bringing the engine into line with the panel -----------------------------
 //
@@ -790,7 +790,7 @@ function applyOrder(manager, names) {
  * again, and its layers are left exactly as they are while that happens. This is the
  * one case where nothing is added to the scene and yet something must still happen.
  */
-import { keepDepthLocal as keepEmbeddedDepthLocal } from "./embedding.js";
+import { keepDepthLocal as keepEmbeddedDepthLocal } from "../../../engine/drawing/embedding.js";
 
 function keepDepthLocal(layer, viewer = null) {
   return keepEmbeddedDepthLocal(layer, viewer, value => new WatchableCoordinateSpaceTransform(value));

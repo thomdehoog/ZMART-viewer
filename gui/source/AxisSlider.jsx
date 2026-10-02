@@ -1,6 +1,6 @@
 import React from "react";
 import FilledRange from "./FilledRange.jsx";
-import { momentsInRanges } from "../engine/drawing/live-refresh.js";
+import { momentsInRanges } from "./drawing/live-refresh.js";
 
 // How long to rest on each plane while playing. Slow enough to see what is there,
 // fast enough to read movement across a stack.

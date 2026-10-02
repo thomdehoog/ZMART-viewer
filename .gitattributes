@@ -1,5 +1,5 @@
 # Keep every text file with LF line endings, on every machine, Windows included.
-# The wheel check compares the committed page in gui/built with the sources it
+# The wheel check compares the committed page in gui/build with the sources it
 # was built from, byte for byte; a checkout that turned LF into CRLF would make
 # them disagree and stop pip from installing the viewer.
 * text=auto eol=lf

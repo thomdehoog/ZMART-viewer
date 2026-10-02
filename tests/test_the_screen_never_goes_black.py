@@ -8,7 +8,7 @@ takes there is nothing left to draw. The operator sees the specimen vanish and
 come back — a black flash, on every commit.
 
 That flash is the reason this repository carries a patch against its pinned
-Neuroglancer (``frontend/scripts/patch_neuroglancer.mjs``), which adds a second,
+Neuroglancer (``gui/source/scripts/patch_neuroglancer.mjs``), which adds a second,
 *named* invalidation that refreshes only the handful of pieces a commit actually
 touched. The patch works, and it is what the viewer uses in normal operation.
 But a local patch is a maintenance burden forever, and the far better outcome

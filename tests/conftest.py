@@ -112,7 +112,7 @@ for source_root in (_REPO_ROOT, _VIZ_ROOT, _TESTS):
 from demo_data import write_demo_zarr  # noqa: E402
 from zmart_viewer.serving.server import make_server  # noqa: E402
 
-_DIST = _VIZ_ROOT / "gui" / "built"
+_DIST = _VIZ_ROOT / "gui" / "build"
 
 
 @pytest.fixture(scope="session")
@@ -124,16 +124,16 @@ def viz_root() -> Path:
 def built_dist() -> Path:
     """The built viewer page, and a check that it was built from these sources.
 
-    Every test that opens a browser reads the *built* page in ``gui/built``, not
+    Every test that opens a browser reads the *built* page in ``gui/build``, not
     the source beside it. So it is entirely possible to edit the viewer, run the
     tests, and be told something confident and completely wrong about code that
     was never running. That once cost this project a session.
 
-    The check is the same one the wheel build makes: ``scripts/stamp-build.mjs``
-    records a fingerprint of every source and every built file, and
-    ``validate_frontend`` compares them with what is on disk now. File dates are
-    not used, because a fresh checkout or a restored file changes a date
-    without changing the content.
+    The check is the same one the wheel build makes:
+    ``gui/source/scripts/stamp-build.mjs`` records a fingerprint of every source
+    and every built file, and ``validate_frontend`` compares them with what is
+    on disk now. File dates are not used, because a fresh checkout or a restored
+    file changes a date without changing the content.
 
     A missing page is a *skip*: that machine has not been set up to draw. A page
     that no longer matches its sources is a **failure**, because that machine is
@@ -146,17 +146,17 @@ def built_dist() -> Path:
     if not (_DIST / "index.html").exists():
         _give_up_on_the_picture(
             "the viewer page has not been built, so there was nothing to open "
-            "(gui/built/index.html is missing). Build it with "
-            "`npm install && npm run build`"
+            "(gui/build/index.html is missing). Build it with "
+            "`cd gui/source && npm ci && npm run build`"
         )
     try:
         validate_frontend(_VIZ_ROOT)
     except SetupError:
         raise AssertionError(
-            "the built viewer page in gui/built does not match the sources it "
+            "the built viewer page in gui/build does not match the sources it "
             "was built from, so these tests would be measuring a program that is "
             "no longer the one in the repository. Rebuild it first:\n\n"
-            "    npm run build\n"
+            "    cd gui/source && npm run build\n"
         ) from None
     return _DIST
 

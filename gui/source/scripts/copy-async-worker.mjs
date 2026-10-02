@@ -19,7 +19,7 @@ import { copyFile, stat } from "node:fs/promises";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, "..", "node_modules", "neuroglancer", "lib", "async_computation.bundle.js");
-const dst = join(here, "..", "gui", "built", "async_computation.bundle.js");
+const dst = join(here, "..", "..", "build", "async_computation.bundle.js");
 
 const { size } = await stat(src);
 if (size < 50 * 1024) {
@@ -29,4 +29,4 @@ if (size < 50 * 1024) {
   );
 }
 await copyFile(src, dst);
-console.log(`placed async_computation worker into gui/built (${Math.round(size / 1024)} KB)`);
+console.log(`placed async_computation worker into gui/build (${Math.round(size / 1024)} KB)`);

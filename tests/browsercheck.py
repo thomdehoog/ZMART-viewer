@@ -130,11 +130,11 @@ def _picture_was_drawn(path: Path) -> tuple[bool, str]:
 
 
 def run_check() -> int:
-    # 1. The page must be built first — a checkout without gui/built has nothing to open.
+    # 1. The page must be built first — a checkout without gui/build has nothing to open.
     if not (_FRONTEND_DIST / "index.html").exists():
         print(
             "The viewer page is not built. Build it first:\n"
-            "    npm install && npm run build"
+            "    cd gui/source && npm ci && npm run build"
         )
         return 2
 

@@ -1,7 +1,7 @@
 import React from "react";
 
 import FilledRange from "./FilledRange.jsx";
-import { restingWindow } from "../engine/drawing/layers.js";
+import { restingWindow } from "./drawing/layers.js";
 
 // A small, deliberately limited palette. Green and magenta lead because that is
 // the pairing that reads best on a dark background and stays legible to a

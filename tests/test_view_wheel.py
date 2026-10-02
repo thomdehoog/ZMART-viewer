@@ -16,7 +16,7 @@ from zmart_viewer.views.slice_top_projection import ViewSet
 
 def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
     repo = Path(__file__).resolve().parents[1]
-    # Build from exactly what the repository tracks, the built page in gui/built
+    # Build from exactly what the repository tracks, the built page in gui/build
     # included, without touching the checkout's own staging. That is what a
     # `pip install git+https://...` sees.
     checkout = tmp_path / "source"
@@ -88,18 +88,25 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
             }
         )
         # The GUI ships only its Python (the window and the command); its
-        # JavaScript arrives already built, in _frontend.
+        # JavaScript arrives already built, in _frontend, and gui/source with
+        # the page's sources stays behind.
         expected_files.update(
             {
                 "gui/" + p.name: p.read_bytes()
                 for p in (repo / "gui").glob("*.py")
             }
         )
-        # The whole of the engine's drawing code ships in the wheel, so that an
-        # interface built elsewhere can import it from the installed package.
-        expected_files.update({f"drawing/{p.name}": p.read_bytes()
-                               for p in (repo / "engine" / "drawing").iterdir()
-                               if p.suffix in (".js", ".mjs", ".css")})
+        # Two drawing files ship as they are, because other programs read them
+        # from the installed package: the server hands out embedding.js, and
+        # the operator interface patches its neuroglancer with
+        # neuroglancer-growth.mjs. The rest of the drawing code is only read by
+        # the page's build, and arrives already built in _frontend.
+        expected_files.update(
+            {
+                f"drawing/{name}": (repo / "engine" / "drawing" / name).read_bytes()
+                for name in ("embedding.js", "neuroglancer-growth.mjs")
+            }
+        )
         assert packaged == expected_files, (
             "Wheel must contain exactly this build, with no retired assets"
         )

@@ -1,10 +1,10 @@
 import React from "react";
-import { createViewer } from "../engine/drawing/viewer.js";
+import { createViewer } from "./drawing/viewer.js";
 
 /**
  * Mounts the engine's neuroglancer viewer in this window and hands the live
  * `viewer` back through `onViewer`. The engine creates and disposes the
- * viewer (see engine/drawing/viewer.js); this component only gives it an
+ * viewer (see drawing/viewer.js); this component only gives it an
  * element to draw into and ties its lifetime to React's.
  *
  * The effect is written to survive React StrictMode's deliberate mount →

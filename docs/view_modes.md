@@ -192,8 +192,10 @@ in `/api/config`. A failing automatic publisher is logged without blocking other
 Build the frontend before making a wheel:
 
 ```sh
+cd gui/source
 npm ci
 npm run build
+cd ../..
 python -m pip wheel . --no-deps --wheel-dir dist
 ```
 
