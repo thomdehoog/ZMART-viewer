@@ -3,6 +3,7 @@
 [![python](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![tests](https://img.shields.io/badge/tests-pytest-blue)](docs/how_it_works/TESTING.md)
+[![status](https://img.shields.io/badge/status-release%20candidate-orange)](#status)
 
 <img src="docs/zmart-viewer-icon.png" align="left" width="150" alt="ZMART Viewer">
 
