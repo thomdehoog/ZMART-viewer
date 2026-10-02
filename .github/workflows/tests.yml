@@ -30,8 +30,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Install the viewer with its test tools
-        run: python -m pip install -e ".[dev]"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the viewer with its test tools, and the page's (some tests run small JavaScript checks against neuroglancer)
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
       - name: Tests (browser tests skip without a browser)
         run: python -m pytest tests -q -p no:cacheprovider --timeout=600
 
