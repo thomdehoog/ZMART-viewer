@@ -13,7 +13,7 @@ the same page appears and works the same.
 
 Smart-microscopy interfaces do not go through here. They start the engine
 directly with :func:`zmart_viewer.make_server` and build their own window
-around it; see ``docs/inside-your-own-interface.md``.
+around it; see ``docs/README.md`` and ``docs/tutorials/``.
 """
 
 from __future__ import annotations

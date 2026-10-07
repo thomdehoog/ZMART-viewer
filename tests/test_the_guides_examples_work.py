@@ -1,4 +1,4 @@
-"""The requests shown in docs/inside-your-own-interface.md work as written.
+"""The requests shown in docs/README.md and the engine tutorial work as written.
 
 Someone building their own interface will copy these examples exactly, so an
 example that the engine refuses is a bug, even when the engine is right. The

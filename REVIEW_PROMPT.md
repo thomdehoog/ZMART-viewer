@@ -69,8 +69,7 @@ be named in the docs.
   and files were renamed to say what they hold (for example `named.py` →
   `slice_top_projection.py`, `coordinator.py` → `publisher.py`).
   `app/page/` became `gui/`; the build files moved to the repository root.
-- **New docs:** `README.md`, `docs/using-the-viewer.md`,
-  `docs/inside-your-own-interface.md`.
+- **New docs:** `README.md`, `docs/README.md`, `docs/tutorials/`.
 - **Version:** `0.5.0rc1` in `pyproject.toml`.
 
 ## What to review

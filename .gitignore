@@ -15,3 +15,7 @@ testdata/
 *.egg-info/
 /build/
 dist/
+
+# What the tutorial notebooks write, and what Jupyter leaves behind.
+docs/tutorials/tutorial-data/
+.ipynb_checkpoints/
