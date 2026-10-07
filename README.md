@@ -104,14 +104,15 @@ server = make_server(port=0, data_dir="/path/to/run", live=True)
 ```
 
 The engine answers over HTTP, so an interface can be written in any language.
-The details are in [Inside your own interface](docs/inside-your-own-interface.md).
+The details are in [the guide](docs/README.md#7-use-the-engine-in-your-own-interface) and in [Tutorial 2](docs/tutorials/02_the_engine_in_your_own_interface.ipynb).
 
 ## Want to give it a try?
 
-1. **[Open your first images](docs/using-the-viewer.md).** Install it, open
-   a folder, and what is on screen, the load window and the options.
-2. **[Use the engine inside your own interface](docs/inside-your-own-interface.md).**
-   Start the engine, tell it what to show, and put the picture on your page.
+1. **[Read the guide](docs/README.md).** Install it, open a folder, what is
+   on screen, the load window, the options, and the engine's public surface.
+2. **Try the tutorials.** [Open your first images](docs/tutorials/01_open_your_first_images.ipynb)
+   and [use the engine in your own interface](docs/tutorials/02_the_engine_in_your_own_interface.ipynb),
+   as Jupyter notebooks.
 3. **[The named views](docs/view_modes.md)** and **[the embedding API](docs/embedding.md)**
    that puts them on your canvas.
 4. **[How it works](docs/how_it_works/ARCHITECTURE.md).** The design and the
