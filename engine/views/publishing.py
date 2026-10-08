@@ -21,21 +21,21 @@ from typing import NamedTuple
 # Imported by name, so that a test can stand in for the write and check that an
 # unchanged announcement writes nothing.
 from zmart_viewer.filesystem import done_despite_brief_holds, put_json_in_place
-from zmart_viewer.opening.open_folders import _description_file, _read_attrs_at, discover
+from zmart_viewer.opening.open_folders import description_file, discover, read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
     Composer,
     Mosaic,
-    _read_one_tile,
-    _refuse_tiles_that_disagree,
+    read_one_tile,
     read_the_mosaic_as_written,
+    refuse_tiles_that_disagree,
     the_frame_room_of,
     the_mosaic_written_down,
     uses_legacy_mean,
 )
 from zmart_viewer.picture.built_picture import (
     ComposedPicture,
-    _holding_the_bake_lock,
+    holding_the_bake_lock,
 )
 
 STORE = ".zmart-viewer/overview.ome.zarr"
@@ -353,7 +353,7 @@ class PublishedFolders:
     @staticmethod
     def _versions_on_disk(folder):
         root, names = discover(folder)
-        return {name: _description_file(root / name).stat().st_mtime_ns for name in names}
+        return {name: description_file(root / name).stat().st_mtime_ns for name in names}
 
     def announce(self, publications):
         if not isinstance(publications, list):
@@ -505,11 +505,11 @@ class PublishedAcquisition:
             if cached and cached[0] == revision:
                 sources[name] = cached
                 continue
-            tile = _read_one_tile(folder / name)
+            tile = read_one_tile(folder / name)
             kind = STORE if tile.copies[0].shape[0] == 1 else STACK_STORE
             if cached and cached[1] != kind:
                 raise ValueError("A published position cannot change between flat and stack")
-            model = _read_attrs_at(tile.store).get("zmart_microscopy", {}).get("z_coordinate", {})
+            model = read_attrs_at(tile.store).get("zmart_microscopy", {}).get("z_coordinate", {})
             reference = None
             if model.get("frame") == "specimen":
                 reference = model.get("acquisition_provenance", {}).get(
@@ -577,7 +577,7 @@ class PublishedTransfer(ComposedPicture):
         pending = store / "pending.json"
         if pending.exists():
             piece = json.loads(pending.read_text(encoding="utf-8")).get("piece", piece)
-        piece = (_read_attrs_at(store).get("zmart") or {}).get("piece", piece)
+        piece = (read_attrs_at(store).get("zmart") or {}).get("piece", piece)
         super().__init__(store, piece)
         self._lock = threading.RLock()
         self._held = None
@@ -607,7 +607,7 @@ class PublishedTransfer(ComposedPicture):
             if (self._shown / "pending.json").exists():
                 if held is not None:
                     return held
-                with _holding_the_bake_lock(self._shown):
+                with holding_the_bake_lock(self._shown):
                     if (self._shown / "pending.json").exists():
                         raise RuntimeError("The coarse overview publication needs recovery")
             return self._read_snapshot()
@@ -733,7 +733,7 @@ class PublishedTransfer(ComposedPicture):
             # when the original position revisions have not changed.
             composition["depth_placement"] = "plane-top-specimen-slice-v1"
         self._shown.mkdir(parents=True, exist_ok=True)
-        with self._lock, _holding_the_bake_lock(self._shown):
+        with self._lock, holding_the_bake_lock(self._shown):
             pending = self._shown / "pending.json"
             recovering = (
                 json.loads(pending.read_text(encoding="utf-8")) if pending.exists() else None
@@ -837,7 +837,7 @@ class PublishedTransfer(ComposedPicture):
                 if name not in changed or (retired and name in kept):
                     tiles.append(kept[name])
                     continue
-                tile = (_tiles or {}).get(name) or _read_one_tile(folder / name)
+                tile = (_tiles or {}).get(name) or read_one_tile(folder / name)
                 if composition is not None:
                     # One nearest-neighbour placement rule for legacy and named views.
                     # Shift every native level equally, by at most half a finest XY voxel;
@@ -860,7 +860,7 @@ class PublishedTransfer(ComposedPicture):
                             for copy in tile.copies
                         ],
                     )
-                if _read_attrs_at(tile.store)["multiscales"][0].get("type") != "mean":
+                if read_attrs_at(tile.store)["multiscales"][0].get("type") != "mean":
                     raise ValueError("Coarse baking requires mean-reduced position pyramids")
                 if name in references and not view:
                     reference = references[name]
@@ -903,7 +903,7 @@ class PublishedTransfer(ComposedPicture):
                             "The published Z domain cannot grow without a geometry refresh"
                         )
                     depth_origin, depth_extent = held.corner_um[0], held.extent_um[0]
-            _refuse_tiles_that_disagree(tiles)
+            refuse_tiles_that_disagree(tiles)
             if view and len({tile.time_calibration for tile in tiles}) != 1:
                 raise ValueError("View contributors must share their time calibration")
             first = tiles[0]
@@ -929,7 +929,7 @@ class PublishedTransfer(ComposedPicture):
                     for copy, base in zip(tile.copies, first.copies, strict=True)
                 ):
                     raise ValueError("Positions in a baked acquisition must share C/Z/T geometry")
-            attrs = _read_attrs_at(first.store)
+            attrs = read_attrs_at(first.store)
             scales = attrs["multiscales"]
             averaged = scales[0].get("type") == "mean"
             base = first.copies[0]

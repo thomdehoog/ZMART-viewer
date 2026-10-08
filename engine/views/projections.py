@@ -11,12 +11,12 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_viewer.opening.open_folders import _read_attrs_at
+from zmart_viewer.opening.open_folders import read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
     MEAN_REDUCTION,
-    _read_one_tile,
     halve_xy,
+    read_one_tile,
     the_frame_room_of,
 )
 
@@ -119,7 +119,7 @@ def write_projection(
     if not destination.name.endswith(".ome.zarr"):
         raise ValueError("Projection output must name an OME-Zarr store, not a run folder")
     if destination.exists():
-        owner = _read_attrs_at(destination).get("zmart_projection", {})
+        owner = read_attrs_at(destination).get("zmart_projection", {})
         if owner.get("source") != str(source) or owner.get("method") != method:
             raise ValueError("Refusing to replace output not owned by this position projection")
         if (
@@ -130,14 +130,14 @@ def write_projection(
             and owner.get("xy_origin", "center") == xy_origin
         ):
             return destination
-    attrs = _read_attrs_at(source)
+    attrs = read_attrs_at(source)
     multiscale = attrs["multiscales"][0]
     source_axes = {axis["name"]: axis for axis in multiscale["axes"]}
     if any(source_axes[a].get("unit", "micrometer") != "micrometer" for a in "zyx"):
         raise ValueError("Projection currently requires spatial coordinates in micrometres")
     if any(t.get("type") != "translation" for t in multiscale.get("coordinateTransformations", [])):
         raise ValueError("Projection does not support shared non-translation transforms")
-    tile = _read_one_tile(source)
+    tile = read_one_tile(source)
     if tile.turned or tile.axes not in (
         ("z", "y", "x"),
         ("c", "z", "y", "x"),

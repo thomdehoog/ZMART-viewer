@@ -35,8 +35,8 @@ from zmart_viewer.picture.arrangement import (
     Copy,
     Mosaic,
     Tile,
-    _read_one_tile,
     halve_xy,
+    read_one_tile,
     read_the_transfer,
     the_mosaic_written_down,
     uses_legacy_mean,
@@ -196,7 +196,7 @@ def declare_a_governed_picture(
         baked: list[int] = []
 
         if bake:
-            with _holding_the_bake_lock(store):
+            with holding_the_bake_lock(store):
                 baked = _bake_the_coarse_ground(store, composer, described, governed_run=run)
 
         described["attributes"][OURS] = {
@@ -416,7 +416,7 @@ def _promising_its_blocks(copy: Copy) -> Copy:
 
 def _a_committed_tile(store) -> Tile:
     """One published position, read as a tile whose ground is promised."""
-    tile = _read_one_tile(store)
+    tile = read_one_tile(store)
 
     for copy in tile.copies:
         _promising_its_blocks(copy)
@@ -425,7 +425,7 @@ def _a_committed_tile(store) -> Tile:
 
 
 @contextmanager
-def _holding_the_bake_lock(store: Path):
+def holding_the_bake_lock(store: Path):
     """The whole-machine lock on one picture's baked files."""
     store.mkdir(parents=True, exist_ok=True)
     holding = open(store / ".bake.lock", "a+b")
@@ -1135,7 +1135,7 @@ class GovernedRun(ComposedPicture):
         watch = time.perf_counter
         marked = watch()
 
-        with self._bake_guard, _holding_the_bake_lock(self._shown):
+        with self._bake_guard, holding_the_bake_lock(self._shown):
             self.accounting["last_bake_arrays_opened"] = 0
             self.accounting["last_bake_stagings_built"] = 0
             self.accounting["last_bake_zarr_ops"] = 0
@@ -1375,7 +1375,7 @@ class GovernedRun(ComposedPicture):
         corner_um: tuple[float, float, float],
     ) -> Tile:
         """Read the one store that stands in for every other, and check it."""
-        pattern = _read_one_tile(self._the_store_of(position_id, generation))
+        pattern = read_one_tile(self._the_store_of(position_id, generation))
 
         for copy in pattern.copies:
             if copy.corner_um != corner_um:
@@ -1466,3 +1466,8 @@ class GovernedRun(ComposedPicture):
             name = f"{position_id}.generation-{generation}"
 
         return self.folder / "data" / "survey.ome.zarr" / name
+
+
+# The old spelling of holding_the_bake_lock, kept for one release so that
+# nothing written against it breaks.
+_holding_the_bake_lock = holding_the_bake_lock

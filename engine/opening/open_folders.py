@@ -88,7 +88,7 @@ def channel_color(name: str) -> tuple[float, float, float] | None:
 
 def is_store(path: Path) -> bool:
     """True if ``path`` is an OME-Zarr image store (has multiscales metadata)."""
-    return bool(_read_attrs_at(path).get("multiscales"))
+    return bool(read_attrs_at(path).get("multiscales"))
 
 
 _UNIT_SPELLINGS = {
@@ -160,7 +160,7 @@ def normalise_units(raw: bytes) -> bytes:
 
 def voxel_size(store: Path) -> tuple[float, ...]:
     """How large one voxel is at full resolution, as the store itself declares it."""
-    described = (_read_attrs_at(store).get("multiscales") or [{}])[0]
+    described = (read_attrs_at(store).get("multiscales") or [{}])[0]
     levels = described.get("datasets") or [{}]
 
     for transform in levels[0].get("coordinateTransformations") or []:
@@ -195,7 +195,7 @@ def declared_channels(store: Path) -> list[str] | None:
 _attrs_cache: dict[str, tuple[int, dict]] = {}
 
 
-def _description_file(path: Path) -> Path | None:
+def description_file(path: Path) -> Path | None:
     """Where this store keeps its description, whichever version wrote it."""
     for name in (".zattrs", "zarr.json"):
         candidate = path / name
@@ -206,10 +206,10 @@ def _description_file(path: Path) -> Path | None:
     return None
 
 
-def _read_attrs_at(path: Path) -> dict:
+def read_attrs_at(path: Path) -> dict:
     """The OME-Zarr description at ``path``, or an empty one if unreadable."""
     key = str(path)
-    described = _description_file(path)
+    described = description_file(path)
 
     if described is None:
         _attrs_cache.pop(key, None)
@@ -253,7 +253,7 @@ def _read_attrs_at(path: Path) -> dict:
 _array_cache: dict[str, tuple[int, dict]] = {}
 
 
-def _read_array_description(level: Path) -> dict:
+def read_array_description(level: Path) -> dict:
     """How the array at ``level`` is laid out on disk, whichever zarr version wrote it."""
     key = str(level)
 
@@ -284,7 +284,7 @@ def _read_array_description(level: Path) -> dict:
 
 
 def _array_layout(described: dict) -> dict:
-    """Read one array description into the shape :func:`_read_array_description` promises."""
+    """Read one array description into the shape :func:`read_array_description` promises."""
     shape = _numbers(described.get("shape"))
 
     if described.get("zarr_format") == 3 or "chunk_grid" in described:
@@ -340,13 +340,13 @@ def zarr_scheme(store: Path) -> str:
 
 def axis_names(store: Path) -> list[str]:
     """The axes this store declares, in order — for example ``[t, c, z, y, x]``."""
-    axes = (_read_attrs_at(store).get("multiscales") or [{}])[0].get("axes") or []
+    axes = (read_attrs_at(store).get("multiscales") or [{}])[0].get("axes") or []
     return [axis.get("name", "") for axis in axes if isinstance(axis, dict)]
 
 
 def channels(store: Path) -> list[dict]:
     """Describe each channel inside this store: its name and its colour."""
-    attrs = _read_attrs_at(store)
+    attrs = read_attrs_at(store)
     names = axis_names(store)
     described = attrs.get("omero", {}).get("channels")
     described = described if isinstance(described, list) else []
@@ -439,12 +439,12 @@ def _channel_count(store: Path, names: list[str], described: int) -> int | None:
     if "c" not in names:
         return None
 
-    datasets = (_read_attrs_at(store).get("multiscales") or [{}])[0].get("datasets") or []
+    datasets = (read_attrs_at(store).get("multiscales") or [{}])[0].get("datasets") or []
 
     if not datasets:
         return described or None
 
-    shape = _read_array_description(store / str(datasets[0].get("path"))).get("shape") or []
+    shape = read_array_description(store / str(datasets[0].get("path"))).get("shape") or []
     index = names.index("c")
     return int(shape[index]) if index < len(shape) else (described or None)
 
@@ -452,7 +452,7 @@ def _channel_count(store: Path, names: list[str], described: int) -> int | None:
 def label_images(store: Path) -> list[str]:
     """The segmentation masks stored alongside this image, if any."""
     folder = store / "labels"
-    listed = _read_attrs_at(folder).get("labels")
+    listed = read_attrs_at(folder).get("labels")
     names = [name for name in listed if isinstance(name, str)] if isinstance(listed, list) else []
 
     if not names:
@@ -499,13 +499,13 @@ def written_timepoints(store: Path) -> int | None:
     if "t" not in names or names.index("t") != 0:
         return None
 
-    datasets = (_read_attrs_at(store).get("multiscales") or [{}])[0].get("datasets") or []
+    datasets = (read_attrs_at(store).get("multiscales") or [{}])[0].get("datasets") or []
 
     if not datasets:
         return None
 
     level = _the_copy_that_holds_the_picture(store, datasets)
-    watched = _moments_folder(level)
+    watched = moments_folder(level)
 
     try:
         stamp = watched.stat().st_mtime_ns
@@ -530,7 +530,7 @@ def _the_copy_that_holds_the_picture(store: Path, datasets: list[dict]) -> Path:
     copies = [store / str(entry.get("path")) for entry in datasets]
 
     for level in copies:
-        holder = _moments_folder(level)
+        holder = moments_folder(level)
 
         try:
             if any(entry.name not in DESCRIPTION_FILES for entry in holder.iterdir()):
@@ -541,9 +541,9 @@ def _the_copy_that_holds_the_picture(store: Path, datasets: list[dict]) -> Path:
     return copies[0]
 
 
-def _moments_folder(level: Path) -> Path:
+def moments_folder(level: Path) -> Path:
     """The folder that gains an entry as each moment of a timelapse is written."""
-    described = _read_array_description(level)
+    described = read_array_description(level)
 
     if described.get("prefix") and described.get("separator") == "/":
         return level / str(described["prefix"])
@@ -553,7 +553,7 @@ def _moments_folder(level: Path) -> Path:
 
 def _count_frames(level: Path) -> int | None | _TooManyToCount:
     """One past the furthest moment that holds an image, found by reading the folder."""
-    described = _read_array_description(level)
+    described = read_array_description(level)
 
     if not described:
         return None
@@ -741,7 +741,7 @@ Acquisition = tuple[tuple[float, ...], tuple[str, ...] | None] | str
 
 def _acquisition_of(root: Path, name: str) -> Acquisition:
     """What kind of acquisition one store says it is, read from the store itself."""
-    view = (_read_attrs_at(root / name).get("zmart") or {}).get("view")
+    view = (read_attrs_at(root / name).get("zmart") or {}).get("view")
     if isinstance(view, dict) and view.get("acquisition"):
         return view["acquisition"]
     declared = declared_channels(root / name)
@@ -843,7 +843,7 @@ def _borrowed_folders(root: Path, names: Iterable[str]) -> list[Path]:
 
 def _one_acquisition_only(root: Path, names: list[str]) -> None:
     """Refuse a load that spans more than one acquisition, saying what it found."""
-    named = [(_read_attrs_at(root / name).get("zmart") or {}).get("view") for name in names]
+    named = [(read_attrs_at(root / name).get("zmart") or {}).get("view") for name in names]
     if named and all(isinstance(view, dict) and view.get("acquisition") for view in named):
         return  # Named acquisitions own their identity, independently of geometry.
     families: dict[tuple, list[str]] = {}
@@ -1186,7 +1186,7 @@ class Library:
 
             for name in names:
                 try:
-                    marks.append(str(_moments_folder(root / name / "0").stat().st_mtime_ns))
+                    marks.append(str(moments_folder(root / name / "0").stat().st_mtime_ns))
                 except OSError:
                     marks.append("?")
 
@@ -1222,3 +1222,12 @@ class Library:
                 return target
 
         return None
+
+
+# These four used to carry a leading underscore while other modules imported
+# them anyway. The plain names above are the real ones now; the old spellings
+# stay for one release so that nothing written against them breaks.
+_description_file = description_file
+_read_attrs_at = read_attrs_at
+_read_array_description = read_array_description
+_moments_folder = moments_folder

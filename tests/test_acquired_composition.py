@@ -10,7 +10,7 @@ from zmart_viewer.picture.arrangement import (
     MEAN_REDUCTION,
     Composer,
     Mosaic,
-    _read_one_tile,
+    read_one_tile,
     read_the_mosaic_as_written,
     the_mosaic_written_down,
 )
@@ -64,7 +64,7 @@ def source(folder, name, value, *, x=0):
             }
         ],
     }
-    return _read_one_tile(folder / name)
+    return read_one_tile(folder / name)
 
 
 def pixels(composer, level, *, t=0, c=0, z=0):

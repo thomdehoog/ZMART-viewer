@@ -13,8 +13,8 @@ from zmart_viewer.picture.arrangement import (
     MEAN_CROP_REDUCTION,
     Composer,
     Mosaic,
-    _read_one_tile,
     halve_xy,
+    read_one_tile,
     read_the_mosaic_as_written,
     the_mosaic_written_down,
 )
@@ -202,7 +202,7 @@ def test_actual_writer_stack_grid_survives_retirement_reopen_and_append(
 
     a = write_stack("a", 0, [60.0, 61.3], [500, 1500])
     b = write_stack("b", 512, [61.3, 62.6], [2500, 3500])
-    assert _read_one_tile(a).copies[0].voxel_um[0] != _read_one_tile(b).copies[0].voxel_um[0]
+    assert read_one_tile(a).copies[0].voxel_um[0] != read_one_tile(b).copies[0].voxel_um[0]
     originals = {p: p.read_bytes() for store in (a, b) for p in store.rglob("*") if p.is_file()}
     names = [a.name, b.name]
     if reverse:

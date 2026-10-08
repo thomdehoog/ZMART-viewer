@@ -231,7 +231,7 @@ def test_mixed_relative_publication(tmp_path, monkeypatch, bake, flat_first):
                     )
         assert all(p.read_bytes() == value for p, value in original.items())
         monkeypatch.setattr(
-            "zmart_viewer.views.publishing._read_one_tile", lambda *_: pytest.fail("idle metadata read")
+            "zmart_viewer.views.publishing.read_one_tile", lambda *_: pytest.fail("idle metadata read")
         )
         before = view.revision
         view.publish(

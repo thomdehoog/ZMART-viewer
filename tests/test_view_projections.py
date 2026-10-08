@@ -3,7 +3,7 @@ import pytest
 import zarr
 from test_view_sampling import write_tile
 from zmart_viewer.opening.contrast import measure
-from zmart_viewer.opening.open_folders import _read_attrs_at
+from zmart_viewer.opening.open_folders import read_attrs_at
 from zmart_viewer.views.projections import projection_dtype, reduce_z, write_projection
 
 
@@ -45,7 +45,7 @@ def test_saved_projection_czt_levels_originals_and_idle(tmp_path, method):
     write_projection(tile.store, output, method, revision=1, piece=4)
     assert stamps == {p: p.stat().st_mtime_ns for p in output.rglob("*") if p.is_file()}
     assert all(p.read_bytes() == value for p, value in original.items())
-    assert _read_attrs_at(output)["multiscales"][0]["axes"][2]["name"] == "z"
+    assert read_attrs_at(output)["multiscales"][0]["axes"][2]["name"] == "z"
 
 
 def test_sum_overflow_is_not_saturated():
@@ -77,7 +77,7 @@ def test_projection_preserves_time_calibration_and_refuses_wrong_units(tmp_path)
         dataset["coordinateTransformations"][1]["translation"][0] = 200
     group.attrs.update(metadata)
     out = write_projection(tile.store, tmp_path / "p_min.ome.zarr", "min")
-    saved = _read_attrs_at(out)["multiscales"][0]
+    saved = read_attrs_at(out)["multiscales"][0]
     assert saved["axes"][0]["unit"] == "millisecond"
     assert saved["datasets"][0]["coordinateTransformations"][0]["scale"][0] == 1500
     assert saved["datasets"][0]["coordinateTransformations"][1]["translation"][0] == 200
