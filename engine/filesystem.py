@@ -41,6 +41,11 @@ from pathlib import Path
 #: is still "not empty" for a moment.
 _BRIEF_HOLDS = (5, 32, 33, 145)
 
+#: The same refusal as Python's own error numbers see it: EIO and EACCES. A
+#: ``PermissionError`` raised by Python itself, rather than by Windows, carries
+#: one of these and no Windows number, and still means a reader's brief hold.
+_BRIEF_HOLDS_AS_ERRNO = (5, 13)
+
 #: How long a hold is waited out before it is treated as a real refusal.
 _PATIENCE_S = 10.0
 
@@ -68,7 +73,13 @@ def done_despite_brief_holds(operation, *arguments):
         try:
             return operation(*arguments)
         except OSError as problem:
-            held = os.name == "nt" and getattr(problem, "winerror", None) in _BRIEF_HOLDS
+            held = os.name == "nt" and (
+                getattr(problem, "winerror", None) in _BRIEF_HOLDS
+                or (
+                    isinstance(problem, PermissionError)
+                    and problem.errno in _BRIEF_HOLDS_AS_ERRNO
+                )
+            )
 
             if not held or time.monotonic() >= deadline:
                 raise
