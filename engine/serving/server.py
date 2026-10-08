@@ -1372,6 +1372,389 @@ def ask_this_machine_for_a_folder() -> str | None:
     return chosen or None
 
 
+class _LayerPanelConfig:
+    """The answer to ``/api/config``: every row the layer panel shows, and its group.
+
+    The page asks for this on every refresh, and building it means reading the
+    description of every open store, so the answer is kept and handed back
+    unchanged until something it depends on moves: the library of open
+    folders, a live run's state, or a publication's revision. :meth:`now`
+    makes that decision; :meth:`build` does the work when it has to.
+    """
+
+    def __init__(
+        self,
+        *,
+        library,
+        published,
+        registry,
+        measurements,
+        window,
+        depth_samples: int,
+        chrome: bool,
+        transparent_background: bool,
+        allow_open: bool,
+        allow_selection: bool,
+        panel_side: str,
+        live: bool,
+    ):
+        self._library = library
+        self._published = published
+        self._registry = registry
+        self._measurements = measurements
+        self._window = window
+        self._depth_samples = depth_samples
+        self._chrome = chrome
+        self._transparent_background = transparent_background
+        self._allow_open = allow_open
+        self._allow_selection = allow_selection
+        self._panel_side = panel_side
+        self._live = live
+        self._last_built: dict = {"revision": None, "config": None}
+        self._building = threading.Lock()
+
+    def now(self) -> dict:
+        """The current answer, built afresh only when something has changed."""
+        published_revision = self._published.revisions()
+        (
+            live_bindings,
+            live_numbers,
+            live_document,
+            live_snapshots,
+            live_etag,
+        ) = self._registry.state()
+        revision = (
+            self._library.revision(excluding=live_numbers),
+            live_etag,
+            published_revision,
+        )
+
+        if self._last_built["revision"] == revision:
+            return self._last_built["config"]
+
+        with self._building:
+            # Asked again with the lock held: while waiting, another thread may have
+            # built exactly what this one was about to build.
+            if self._last_built["revision"] == revision:
+                return self._last_built["config"]
+
+            built = self.build(
+                live_document,
+                live_bindings,
+                live_snapshots,
+                live_numbers,
+            )
+            self._last_built["revision"] = revision
+            self._last_built["config"] = built
+            return built
+
+    def build(
+        self,
+        live_document: dict,
+        live_bindings,
+        live_snapshots,
+        live_numbers: frozenset[int],
+    ) -> dict:
+        """Describe every row the layer panel should show, and its group."""
+        entries = self._published.entries(self._library.entries())
+        present = [name for _, _, name in entries]
+        labels = layer_names(present)
+        groups_named = group_labels(self._library.datasets())
+        merged: dict[tuple, dict] = {}
+        store_paths: dict[str, Path] = {}
+
+        for (root_number, root, name), label in zip(entries, labels, strict=True):
+            if root_number in live_numbers:
+                continue
+            self._describe_one_store(
+                root_number,
+                root,
+                name,
+                label,
+                present=present,
+                group=groups_named[root_number],
+                merged=merged,
+                store_paths=store_paths,
+            )
+
+        rows = [{"kind": "image", **row} for row in merged.values()]
+
+        for binding in live_bindings:
+            rows.extend(
+                live_rows(
+                    binding,
+                    chosen_window=self._window,
+                    group=groups_named[binding.dataset_number],
+                    snapshot=live_snapshots[binding.dataset_number],
+                )
+            )
+        # Group order follows first appearance, which follows the sorted store
+        # names, so the panel does not reshuffle itself between runs.
+        groups = list(dict.fromkeys(row["group"] for row in rows))
+        self._mark_coverage(rows, store_paths)
+        return {
+            "layers": rows,
+            "groups": groups,
+            "depthSamples": self._depth_samples,
+            "chrome": self._chrome,
+            "transparentBackground": self._transparent_background,
+            "canOpen": self._allow_open,
+            # Whether the selection list is offered. See ``allow_selection``.
+            "canSelect": self._allow_selection,
+            # Which edge the bar of controls sits on. See ``panel_side``.
+            "panelSide": "left" if str(self._panel_side).lower() == "left" else "right",
+            # Whether the page should keep asking if anything has changed. See
+            # ``live`` above: on finished data there is nothing to notice.
+            "live": self._live,
+            **({"liveState": live_document} if live_bindings else {}),
+        }
+
+    def _describe_one_store(
+        self, root_number, root, name, label, *, present, group, merged, store_paths
+    ) -> None:
+        """Add one store's channels and label images to the rows being merged.
+
+        A channel that another store of the same acquisition already
+        contributed to is merged into that row as a further source, so one row
+        can span many positions; a new channel starts a row of its own.
+        """
+        store_path = root / name
+        address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
+        store_paths[address] = store_path
+        source_attrs = read_attrs_at(store_path)
+        named_view = (source_attrs.get("zmart") or {}).get("view")
+        found = self._channels_of(store_path, name, label, root_number, present, named_view)
+        frames, revision, depth, geometry_revision = self._frames_and_revisions(
+            store_path, name, root_number, source_attrs, named_view
+        )
+
+        for index, channel_name, color, declared_range, active in found:
+            logical_channel = 0 if depth is not None and index is None else index
+            key = (root_number, logical_channel, channel_name, name if named_view else None)
+            row = merged.get(key)
+
+            if row is None:
+                base = self._measurements.describe(
+                    root_number,
+                    root,
+                    name,
+                    label,
+                    coloured=len(present) > 1,
+                    channel=index,
+                    declared_range=declared_range,
+                )
+                merged[key] = {
+                    **base,
+                    **({"view": named_view} if named_view else {}),
+                    **({"acquiredCoverage": True} if "zmart_projection" in source_attrs else {}),
+                    **(
+                        {"sourceGeometryRevisions": [geometry_revision]}
+                        if geometry_revision is not None
+                        else {}
+                    ),
+                    **({"sourceRevisions": [revision]} if revision is not None else {}),
+                    **({"sourceDepths": [depth]} if depth is not None else {}),
+                    "sources": [address],
+                    "name": channel_name,
+                    "group": group,
+                    "channelIndex": index,
+                    # How many frames exist so far, so the time slider stops
+                    # there rather than running out over frames not yet imaged.
+                    "frames": frames,
+                    "frameCounts": [frames],
+                    "color": list(color) if color else None,
+                    **({} if active else {"active": False}),
+                }
+            else:
+                row["sources"].append(address)
+                row["frameCounts"].append(frames)
+                if revision is not None:
+                    row["sourceRevisions"].append(revision)
+                if depth is not None:
+                    row["sourceDepths"].append(depth)
+
+                if frames and (row.get("frames") or 0) < frames:
+                    row["frames"] = frames
+
+        for mask in label_images(store_path):
+            key = (root_number, "mask", mask)
+            row = merged.get(key)
+            source = f"/data/{root_number}/{name}/labels/{mask}/|{zarr_scheme(store_path / 'labels' / mask)}:"
+
+            if row is None:
+                merged[key] = {
+                    "name": mask,
+                    "group": group,
+                    "kind": "segmentation",
+                    "channelIndex": None,
+                    "color": None,
+                    "window": None,
+                    "volumeWindow": None,
+                    "histogram": None,
+                    "sources": [source],
+                    "frames": frames,
+                    "frameCounts": [frames],
+                }
+            else:
+                row["sources"].append(source)
+                row["frameCounts"].append(frames)
+
+    def _channels_of(self, store_path, name, label, root_number, present, named_view):
+        """The channels one store holds, each as (index, name, colour, range, active).
+
+        A store with a channel axis names its channels inside itself. One
+        without is a single channel: named after the wavelength in its folder
+        name when there is one, otherwise after its label, and coloured only
+        when it sits beside other stores. A published or named view without a
+        channel axis still carries one described channel, which is used.
+        """
+        if "c" in axis_names(store_path):
+            return [
+                (
+                    index,
+                    channel["name"],
+                    channel["color"],
+                    channel.get("range"),
+                    channel.get("active", True),
+                )
+                for index, channel in enumerate(channels(store_path))
+            ]
+        wavelength = channel_of(name)
+        colour = channel_color(name) if len(present) > 1 else None
+        found = [
+            (
+                None,
+                f"Ch{wavelength}" if wavelength else label,
+                colour,
+                None,
+                True,
+            )
+        ]
+        if self._published.source_depth(root_number, name) is not None or named_view:
+            declared = read_attrs_at(store_path).get("omero", {}).get("channels", [])
+            channel = described_channels(declared if isinstance(declared, list) else [], 1)[0]
+            found = [
+                (
+                    None,
+                    channel["name"],
+                    channel["color"],
+                    channel.get("range"),
+                    channel.get("active", True),
+                )
+            ]
+        return found
+
+    def _frames_and_revisions(self, store_path, name, root_number, source_attrs, named_view):
+        """How many frames a store has, and the revisions a reader should hold.
+
+        Returns ``(frames, revision, depth, geometry_revision)``. A view or a
+        projection counts its frames from its own array rather than from the
+        written timepoints, and a named view takes its revision and frame
+        count from its committed snapshot, so a reader never has to take them
+        from arrays that change before the snapshot does.
+        """
+        frames = written_timepoints(store_path)
+        revision = self._published.source_revision(root_number, name)
+        depth = self._published.source_depth(root_number, name)
+        if named_view or "zmart_projection" in source_attrs:
+            multiscale = source_attrs["multiscales"][0]
+            axes = [axis["name"] for axis in multiscale["axes"]]
+            array = read_array_description(store_path / multiscale["datasets"][0]["path"])
+            frames = array["shape"][axes.index("t")] if "t" in axes else 1
+        geometry_revision = None
+        if named_view:
+            snapshot_path = store_path / "publication.json"
+            if snapshot_path.exists():
+                snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                revision = snapshot["revision"]
+                geometry_revision = snapshot.get("geometry_revision", 0)
+                # The length as committed with those revisions. A publication
+                # that changes the view's geometry declares its new arrays
+                # first and commits publication.json last, so the arrays read
+                # in between already count frames the revisions do not yet
+                # promise, and the page re-read the view for that torn answer
+                # and again for the commit. A snapshot written before the
+                # length was recorded is read the old way.
+                frames = snapshot.get("frames", frames)
+        return frames, revision, depth, geometry_revision
+
+    def _mark_coverage(self, rows, store_paths) -> None:
+        """Say for each image row whether it is opaque or needs coverage sources.
+
+        With a transparent background, or whenever a row shows relative depth,
+        a named view or acquired coverage, the page has to know where each row
+        has pixels. Only a fixed, single-source, dense row can be declared
+        opaque and skip that; live rows must keep the same strategy as sources
+        arrive, and covering multi-source rows must not erase lower-channel
+        colour.
+        """
+        if not (
+            self._transparent_background
+            or any(
+                row.get("sourceDepths") or row.get("view") or row.get("acquiredCoverage")
+                for row in rows
+            )
+        ):
+            return
+        for row in rows:
+            if row.get("kind", "image") != "image":
+                continue
+            if (
+                not self._transparent_background
+                and not row.get("sourceDepths")
+                and not row.get("view")
+                and not row.get("acquiredCoverage")
+            ):
+                continue
+            store = store_paths.get(row["sources"][0]) if len(row["sources"]) == 1 else None
+            row["opaque"] = bool(not self._live and store and not coverage.requires_geometry(store))
+            if not row["opaque"]:
+                row["coverageSources"] = [coverage.source_url(url) for url in row["sources"]]
+
+
+class _Server(ThreadingHTTPServer):
+    """The viewer's HTTP server: many requests at once, and a tidy stop.
+
+    Starting it starts watching the disk for a live run; stopping it stops the
+    watch, closes the published views, and removes the scenes this viewer
+    composed for itself in its scratch folder.
+    """
+
+    request_queue_size = 128
+    daemon_threads = True
+
+    allow_reuse_address = sys.platform != "win32"
+
+    def __init__(self, address, handler, *, registry, published, scratch):
+        self._registry = registry
+        self._published = published
+        self._scratch = scratch
+        super().__init__(address, handler)
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+
+        super().server_bind()
+
+    def serve_forever(self, *args, **kwargs):
+        # The disk is watched only while the server is actually running.
+        self._registry.start()
+        super().serve_forever(*args, **kwargs)
+
+    def shutdown(self):
+        self._registry.stop()
+        self._published.close()
+
+        for own in ("scenes",):
+            made = self._scratch.pop(own, None)
+
+            if made is not None:
+                shutil.rmtree(made, ignore_errors=True)
+
+        super().shutdown()
+
+
 def make_server(
     port: int = 8848,
     *,
@@ -1429,291 +1812,27 @@ def make_server(
     )
 
     measurements = Measurements(fixed_window=window)
-
-    last_built: dict = {"revision": None, "config": None}
-    building_config = threading.Lock()
-
-    def config_now() -> dict:
-        published_revision = published.revisions()
-        (
-            live_bindings,
-            live_numbers,
-            live_document,
-            live_snapshots,
-            live_etag,
-        ) = registry.state()
-        revision = (
-            library.revision(excluding=live_numbers),
-            live_etag,
-            published_revision,
-        )
-
-        if last_built["revision"] == revision:
-            return last_built["config"]
-
-        with building_config:
-            # Asked again with the lock held: while waiting, another thread may have
-            # built exactly what this one was about to build.
-            if last_built["revision"] == revision:
-                return last_built["config"]
-
-            built = build_config(
-                live_document,
-                live_bindings,
-                live_snapshots,
-                live_numbers,
-            )
-            last_built["revision"] = revision
-            last_built["config"] = built
-            return built
-
-    def build_config(
-        live_document: dict,
-        live_bindings,
-        live_snapshots,
-        live_numbers: frozenset[int],
-    ) -> dict:
-        """Describe every row the layer panel should show, and its group."""
-        entries = published.entries(library.entries())
-        present = [name for _, _, name in entries]
-        labels = layer_names(present)
-        groups_named = group_labels(library.datasets())
-        merged: dict[tuple, dict] = {}
-        store_paths: dict[str, Path] = {}
-
-        for (root_number, root, name), label in zip(entries, labels, strict=True):
-            if root_number in live_numbers:
-                continue
-
-            group = groups_named[root_number]
-            store_path = root / name
-            address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
-            store_paths[address] = store_path
-            source_attrs = read_attrs_at(store_path)
-            named_view = (source_attrs.get("zmart") or {}).get("view")
-
-            if "c" in axis_names(store_path):
-                found = [
-                    (
-                        index,
-                        channel["name"],
-                        channel["color"],
-                        channel.get("range"),
-                        channel.get("active", True),
-                    )
-                    for index, channel in enumerate(channels(store_path))
-                ]
-            else:
-                wavelength = channel_of(name)
-                colour = channel_color(name) if len(present) > 1 else None
-                found = [
-                    (
-                        None,
-                        f"Ch{wavelength}" if wavelength else label,
-                        colour,
-                        None,
-                        True,
-                    )
-                ]
-                if published.source_depth(root_number, name) is not None or named_view:
-                    declared = read_attrs_at(store_path).get("omero", {}).get("channels", [])
-                    channel = described_channels(declared if isinstance(declared, list) else [], 1)[
-                        0
-                    ]
-                    found = [
-                        (
-                            None,
-                            channel["name"],
-                            channel["color"],
-                            channel.get("range"),
-                            channel.get("active", True),
-                        )
-                    ]
-
-            frames = written_timepoints(store_path)
-            revision = published.source_revision(root_number, name)
-            depth = published.source_depth(root_number, name)
-            if named_view or "zmart_projection" in source_attrs:
-                multiscale = source_attrs["multiscales"][0]
-                axes = [axis["name"] for axis in multiscale["axes"]]
-                array = read_array_description(store_path / multiscale["datasets"][0]["path"])
-                frames = array["shape"][axes.index("t")] if "t" in axes else 1
-            geometry_revision = None
-            if named_view:
-                snapshot_path = store_path / "publication.json"
-                if snapshot_path.exists():
-                    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
-                    revision = snapshot["revision"]
-                    geometry_revision = snapshot.get("geometry_revision", 0)
-                    # The length as committed with those revisions. A publication
-                    # that changes the view's geometry declares its new arrays
-                    # first and commits publication.json last, so the arrays read
-                    # in between already count frames the revisions do not yet
-                    # promise, and the page re-read the view for that torn answer
-                    # and again for the commit. A snapshot written before the
-                    # length was recorded is read the old way.
-                    frames = snapshot.get("frames", frames)
-
-            for index, channel_name, color, declared_range, active in found:
-                logical_channel = 0 if depth is not None and index is None else index
-                key = (root_number, logical_channel, channel_name, name if named_view else None)
-                row = merged.get(key)
-
-                if row is None:
-                    base = measurements.describe(
-                        root_number,
-                        root,
-                        name,
-                        label,
-                        coloured=len(present) > 1,
-                        channel=index,
-                        declared_range=declared_range,
-                    )
-                    merged[key] = {
-                        **base,
-                        **({"view": named_view} if named_view else {}),
-                        **(
-                            {"acquiredCoverage": True} if "zmart_projection" in source_attrs else {}
-                        ),
-                        **(
-                            {"sourceGeometryRevisions": [geometry_revision]}
-                            if geometry_revision is not None
-                            else {}
-                        ),
-                        **({"sourceRevisions": [revision]} if revision is not None else {}),
-                        **({"sourceDepths": [depth]} if depth is not None else {}),
-                        "sources": [address],
-                        "name": channel_name,
-                        "group": group,
-                        "channelIndex": index,
-                        # How many frames exist so far, so the time slider stops
-                        # there rather than running out over frames not yet imaged.
-                        "frames": frames,
-                        "frameCounts": [frames],
-                        "color": list(color) if color else None,
-                        **({} if active else {"active": False}),
-                    }
-                else:
-                    row["sources"].append(address)
-                    row["frameCounts"].append(frames)
-                    if revision is not None:
-                        row["sourceRevisions"].append(revision)
-                    if depth is not None:
-                        row["sourceDepths"].append(depth)
-
-                    if frames and (row.get("frames") or 0) < frames:
-                        row["frames"] = frames
-
-            for mask in label_images(store_path):
-                key = (root_number, "mask", mask)
-                row = merged.get(key)
-                source = f"/data/{root_number}/{name}/labels/{mask}/|{zarr_scheme(store_path / 'labels' / mask)}:"
-
-                if row is None:
-                    merged[key] = {
-                        "name": mask,
-                        "group": group,
-                        "kind": "segmentation",
-                        "channelIndex": None,
-                        "color": None,
-                        "window": None,
-                        "volumeWindow": None,
-                        "histogram": None,
-                        "sources": [source],
-                        "frames": frames,
-                        "frameCounts": [frames],
-                    }
-                else:
-                    row["sources"].append(source)
-                    row["frameCounts"].append(frames)
-
-        rows = [{"kind": "image", **row} for row in merged.values()]
-
-        for binding in live_bindings:
-            rows.extend(
-                live_rows(
-                    binding,
-                    chosen_window=window,
-                    group=groups_named[binding.dataset_number],
-                    snapshot=live_snapshots[binding.dataset_number],
-                )
-            )
-        # Group order follows first appearance, which follows the sorted store
-        # names, so the panel does not reshuffle itself between runs.
-        groups = list(dict.fromkeys(row["group"] for row in rows))
-        if transparent_background or any(
-            row.get("sourceDepths") or row.get("view") or row.get("acquiredCoverage")
-            for row in rows
-        ):
-            for row in rows:
-                if row.get("kind", "image") != "image":
-                    continue
-                if (
-                    not transparent_background
-                    and not row.get("sourceDepths")
-                    and not row.get("view")
-                    and not row.get("acquiredCoverage")
-                ):
-                    continue
-                # Only fixed, single-source dense rows can omit coverage. Live
-                # rows must keep the same strategy as sources arrive; covering
-                # multi-source rows must not erase lower-channel colour.
-                store = store_paths.get(row["sources"][0]) if len(row["sources"]) == 1 else None
-                row["opaque"] = bool(not live and store and not coverage.requires_geometry(store))
-                if not row["opaque"]:
-                    row["coverageSources"] = [coverage.source_url(url) for url in row["sources"]]
-        return {
-            "layers": rows,
-            "groups": groups,
-            "depthSamples": depth_samples,
-            "chrome": chrome,
-            "transparentBackground": transparent_background,
-            "canOpen": allow_open,
-            # Whether the selection list is offered. See ``allow_selection``.
-            "canSelect": allow_selection,
-            # Which edge the bar of controls sits on. See ``panel_side``.
-            "panelSide": "left" if str(panel_side).lower() == "left" else "right",
-            # Whether the page should keep asking if anything has changed. See
-            # ``live`` above: on finished data there is nothing to notice.
-            "live": live,
-            **({"liveState": live_document} if live_bindings else {}),
-        }
-
-    class _Server(ThreadingHTTPServer):
-        request_queue_size = 128
-        daemon_threads = True
-
-        allow_reuse_address = sys.platform != "win32"
-
-        def server_bind(self):
-            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-
-            super().server_bind()
-
-        def serve_forever(self, *args, **kwargs):
-            # The disk is watched only while the server is actually running.
-            registry.start()
-            super().serve_forever(*args, **kwargs)
-
-        def shutdown(self):
-            registry.stop()
-            published.close()
-
-            for own in ("scenes",):
-                made = scratch.pop(own, None)
-
-                if made is not None:
-                    shutil.rmtree(made, ignore_errors=True)
-
-            super().shutdown()
+    config = _LayerPanelConfig(
+        library=library,
+        published=published,
+        registry=registry,
+        measurements=measurements,
+        window=window,
+        depth_samples=depth_samples,
+        chrome=chrome,
+        transparent_background=transparent_background,
+        allow_open=allow_open,
+        allow_selection=allow_selection,
+        panel_side=panel_side,
+        live=live,
+    )
 
     handler = functools.partial(
         _Handler,
         scratch=scratch,
         data_dir=data_dir,
         site_dir=Path(site_dir).resolve(),
-        config=config_now,
+        config=config.now,
         library=library,
         browse=browse,
         bake_job={},
@@ -1727,7 +1846,9 @@ def make_server(
     )
 
     try:
-        return _Server(("127.0.0.1", port), handler)
+        return _Server(
+            ("127.0.0.1", port), handler, registry=registry, published=published, scratch=scratch
+        )
     except OSError as why:
         registry.stop()
         raise OSError(
