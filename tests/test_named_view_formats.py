@@ -241,7 +241,7 @@ def test_named_formats_pixels_coverage_append_rewrite_reopen(
 
             with monkeypatch.context() as patch:
                 patch.setattr(zarr.Array, "__setitem__", no_write)
-                patch.setattr(published, "_atomic_json", no_write)
+                patch.setattr(published, "put_json_in_place", no_write)
                 revision = view.revision
                 assert (
                     view.publish(

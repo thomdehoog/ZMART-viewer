@@ -66,12 +66,18 @@ from __future__ import annotations
 
 import math
 import re
-import shutil
-import time
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
+
+# The patience with a briefly held file used to be defined here. It now lives
+# with the other file-system helpers in :mod:`zmart_viewer.filesystem`, and the
+# two names stay importable from this module so that nothing written against
+# the old home breaks.
+from zmart_viewer.filesystem import (  # noqa: F401
+    rmtree_despite_brief_holds,
+    written_despite_brief_holds,
+)
 
 __all__ = [
     "ANALYSIS_OWNERSHIP_POLICIES",
@@ -1582,78 +1588,6 @@ class CommitEvent:
             timestamp=value.get("timestamp", ""),
             notes=value.get("notes", ""),
         )
-
-
-def written_despite_brief_holds(write) -> None:
-    """Make one write on a machine where something else glances at files.
-
-    The live arrangement is a viewer reading the picture while the acquisition
-    writes it, and the shared zoomed-out copies are where the two meet: every
-    landing tile rewrites them, and a viewer showing the whole picture reads
-    them over and over. The writer replaces each file atomically, so a reader
-    never sees a torn one — but on Windows the reader's open handle makes the
-    replacement itself fail, as ``Access is denied`` on ground that is free a
-    moment later. A virus scanner's glance at a fresh file fails the same way.
-    Measured on a lab PC: a 10,000-position run, watched live, died about
-    twenty tiles in.
-
-    The reader lets go in milliseconds, so the write is retried through the
-    same short patience as :func:`rmtree_despite_brief_holds`: only the
-    Windows spellings of "briefly held" are waited out, and anything else —
-    or a hold still there after ten seconds — raises as it always did.
-    """
-    deadline = time.monotonic() + 10.0
-    pause = 0.05
-    while True:
-        try:
-            write()
-            return
-        except PermissionError as why:
-            if getattr(why, "winerror", None) not in (5, 32):
-                raise
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(pause)
-            pause = min(pause * 2, 1.0)
-
-
-def rmtree_despite_brief_holds(tree: str | Path) -> None:
-    """Remove a folder tree on a machine where something else glances at files.
-
-    Machines that image for a living run software that opens files the moment
-    they change — a virus scanner reading what was just written, a search
-    indexer cataloguing it. On Windows a file being deleted only truly goes
-    when the last open handle on it closes, so a tree being removed under such
-    a glance refuses to come down: the hold makes one delete pend, the parent
-    is then "not empty", and ``shutil.rmtree`` raises over ground that will be
-    clear a moment later. The holds last milliseconds and the watcher always
-    lets go, so the answer is a short patience — certainly not weakening the
-    watcher, which is doing its own job.
-
-    Only the three Windows spellings of "something is briefly holding this" are
-    waited out; every other failure, and any of these still standing after ten
-    seconds, is a real one and raises as it always did. Elsewhere this is one
-    plain ``rmtree``, because nothing on a POSIX filesystem stops a delete for
-    having the file open.
-    """
-    deadline = time.monotonic() + 10.0
-    pause = 0.05
-    while True:
-        try:
-            shutil.rmtree(tree)
-            return
-        except FileNotFoundError:
-            return
-        except OSError as why:
-            # ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION, ERROR_DIR_NOT_EMPTY:
-            # the shapes a transient hold arrives in, depending on which moment
-            # of the removal it interrupts.
-            if getattr(why, "winerror", None) not in (5, 32, 145):
-                raise
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(pause)
-            pause = min(pause * 2, 1.0)
 
 
 #: The tints a run's usual laser lines first appear in, by wavelength name.

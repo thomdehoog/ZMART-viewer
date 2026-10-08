@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from zmart_viewer.filesystem import done_despite_brief_holds
 from zmart_viewer.live.record.live_serving import _LiveRun
 from zmart_viewer.live.record.shard_lookup import how_the_array_is_stored
 from zmart_viewer.live.record.vocabulary import rounded_up
@@ -462,24 +463,9 @@ def _holding_the_bake_lock(store: Path):
         holding.close()
 
 
-def _after_a_windows_reader(operation, *paths):
-    """Perform one file swap/removal after a brief Windows sharing lock."""
-    deadline = time.monotonic() + 5.0
-    pause = 0.002
-
-    while True:
-        try:
-            return operation(*paths)
-        except PermissionError as problem:
-            sharing = getattr(problem, "winerror", None) in (5, 32, 33) or getattr(
-                problem, "errno", None
-            ) in (5, 13)
-
-            if os.name != "nt" or not sharing or time.monotonic() >= deadline:
-                raise
-
-            time.sleep(pause)
-            pause = min(pause * 2, 0.05)
+#: The old name of :func:`zmart_viewer.filesystem.done_despite_brief_holds`,
+#: kept for one release so that code written against it keeps importing.
+_after_a_windows_reader = done_despite_brief_holds
 
 
 def _a_tile_stamped(
@@ -656,14 +642,14 @@ class ComposedPicture:
 
         if body is None:
             if baked.is_file():
-                _after_a_windows_reader(os.unlink, baked)
+                done_despite_brief_holds(os.unlink, baked)
 
             return
 
         inside.mkdir(parents=True, exist_ok=True)
         arriving = baked.with_name(f"{baked.name}.baking")
         arriving.write_bytes(body)
-        _after_a_windows_reader(os.replace, arriving, baked)
+        done_despite_brief_holds(os.replace, arriving, baked)
 
     def _rehalve_one_level(
         self, level: int, pieces: list[tuple[int, int]], frames: list[tuple[int, ...]]
@@ -734,9 +720,9 @@ class ComposedPicture:
 
                     if staged.is_file():
                         real.parent.mkdir(parents=True, exist_ok=True)
-                        _after_a_windows_reader(os.replace, staged, real)
+                        done_despite_brief_holds(os.replace, staged, real)
                     elif real.is_file():
-                        _after_a_windows_reader(os.unlink, real)
+                        done_despite_brief_holds(os.unlink, real)
 
     def _the_baked_recipe(self, level: int) -> dict | None:
         """How one baked level's chunk files are encoded, or None to go general."""
@@ -1114,7 +1100,7 @@ class GovernedRun(ComposedPicture):
             json.dumps({"events": events, "tail": tail, "layout": layout}),
             encoding="utf-8",
         )
-        _after_a_windows_reader(os.replace, arriving, stamp)
+        done_despite_brief_holds(os.replace, arriving, stamp)
 
     def _the_stamp(self) -> dict | None:
         """The stamp's identity, or ``None`` when nothing can be trusted."""

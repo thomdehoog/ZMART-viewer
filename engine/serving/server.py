@@ -25,6 +25,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from zmart_viewer.filesystem import put_text_in_place
 from zmart_viewer.live import following as live
 from zmart_viewer.live.following import SourceRegistry, live_rows
 from zmart_viewer.live.record.live_serving import answer_from_a_live_run, live_run_holding
@@ -1299,29 +1300,13 @@ class _Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        temporary = None
-
+        # Written beside the data and renamed into place, pushed to the disk
+        # first, so a crash mid-save leaves the old file whole; a failed save
+        # clears its half-written file away rather than leaving litter beside
+        # the operator's data.
         try:
-            fd, temporary = tempfile.mkstemp(
-                prefix=f".{_ANNOTATIONS_FILE}.", suffix=".tmp", dir=self._data_dir
-            )
-
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(document, stream, indent=2)
-                stream.write("\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-
-            os.replace(temporary, path)
+            put_text_in_place(path, json.dumps(document, indent=2) + "\n", pushed_to_disk=True)
         except OSError as why:
-            # The half-written file is cleared away so a failed save does not
-            # leave litter beside the operator's data.
-            if temporary is not None:
-                try:
-                    os.unlink(temporary)
-                except OSError:
-                    pass
-
             self._send_json(
                 {
                     "error": (

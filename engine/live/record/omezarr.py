@@ -93,18 +93,17 @@ size and the corner back, and a colleague can drag the position into napari.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
 import zarr
+from zmart_viewer.filesystem import put_text_in_place, written_despite_brief_holds
 from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
     Channel,
     LevelGeometry,
     ZmartLiveError,
-    written_despite_brief_holds,
 )
 
 __all__ = [
@@ -497,26 +496,6 @@ def the_image_description(
     return described
 
 
-def _write_over_carefully(target: Path, text: str) -> None:
-    """Replace a file's contents in a way an interruption cannot leave half-done.
-
-    The new text is written to a temporary file beside the old one and then
-    renamed over it. Renaming a file into place is a single step as far as the
-    filesystem is concerned, so a reader looking at the same moment sees either
-    the whole old description or the whole new one, never a truncated mixture.
-    That matters here because the file being replaced is what tells zarr the
-    folder holds a picture at all: half of it is not a slightly wrong image, it
-    is no image.
-    """
-    beside = target.with_name(target.name + ".writing")
-    beside.write_text(text, encoding="utf-8")
-    # The rename is retried through a short patience, because on Windows a
-    # viewer's open handle on the old description makes it fail as ``Access is
-    # denied`` for a few milliseconds — and these descriptions are rewritten on
-    # every commit while a live viewer reads them over and over.
-    written_despite_brief_holds(lambda: os.replace(beside, target))
-
-
 def _name_the_dimensions_of(level_folder: Path, axes: Sequence[dict]) -> None:
     """Write the axis names into one zoomed-out copy's own description.
 
@@ -553,7 +532,13 @@ def _name_the_dimensions_of(level_folder: Path, axes: Sequence[dict]) -> None:
             f"which, and the image will not open."
         )
     held["dimension_names"] = names
-    _write_over_carefully(description_file, json.dumps(held, indent=2))
+    # Put in place in one step, so a reader looking at the same moment sees the
+    # whole old description or the whole new one, never a truncated mixture. That
+    # matters here because this file is what tells zarr the folder holds a
+    # picture at all: half of it is not a slightly wrong image, it is no image.
+    # The rename inside waits out a reader's brief hold on Windows, because these
+    # descriptions are rewritten on every commit while a live viewer reads them.
+    put_text_in_place(description_file, json.dumps(held, indent=2))
 
 
 def describe_the_position(
