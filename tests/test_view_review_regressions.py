@@ -46,7 +46,7 @@ def test_equivalent_region_order_is_no_write(tmp_path, monkeypatch, direct):
             pytest.fail("An equivalent announcement must not write arrays or publication metadata")
 
         monkeypatch.setattr(zarr.Array, "__setitem__", unexpected_write)
-        monkeypatch.setattr(published, "_atomic_json", unexpected_write)
+        monkeypatch.setattr(published, "put_json_in_place", unexpected_write)
         composition["regions"]["p.ome.zarr"] = [*reversed(regions), regions[0]]
         assert (
             view.publish(positions, {"p.ome.zarr": 1}, canvas, composition=composition) == revision

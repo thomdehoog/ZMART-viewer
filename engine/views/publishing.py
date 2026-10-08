@@ -18,6 +18,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import NamedTuple
 
+# Imported by name, so that a test can stand in for the write and check that an
+# unchanged announcement writes nothing.
+from zmart_viewer.filesystem import done_despite_brief_holds, put_json_in_place
 from zmart_viewer.opening.open_folders import _description_file, _read_attrs_at, discover
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
@@ -32,7 +35,6 @@ from zmart_viewer.picture.arrangement import (
 )
 from zmart_viewer.picture.built_picture import (
     ComposedPicture,
-    _after_a_windows_reader,
     _holding_the_bake_lock,
 )
 
@@ -444,12 +446,6 @@ class PublishedFolders:
             for view, _, _, _number in self.views.values():
                 view.close()
             self.views.clear()
-
-
-def _atomic_json(path: Path, value: dict) -> None:
-    arriving = path.with_name(path.name + ".publishing")
-    arriving.write_text(json.dumps(value), encoding="utf-8")
-    _after_a_windows_reader(os.replace, arriving, path)
 
 
 class PublishedAcquisition:
@@ -1081,7 +1077,7 @@ class PublishedTransfer(ComposedPicture):
                     made.inherit_the_unchanged(previous, dirty, stale=stale)
                 self._shown.mkdir(parents=True, exist_ok=True)
                 description = json.loads(made.group_json())
-                _atomic_json(
+                put_json_in_place(
                     pending,
                     {
                         "versions": versions,
@@ -1166,8 +1162,8 @@ class PublishedTransfer(ComposedPicture):
                         "baked": baked,
                         **({"view": view} if view else {}),
                     }
-                    _atomic_json(self._shown / "zarr.json", description)
-                _atomic_json(self._shown / "publication.json", state)
+                    put_json_in_place(self._shown / "zarr.json", description)
+                put_json_in_place(self._shown / "publication.json", state)
                 (self._shown / "pending.json").unlink()
                 self._state = state
                 self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
@@ -1208,7 +1204,7 @@ class PublishedTransfer(ComposedPicture):
                                 str(level), "c", *outer, str(plane), str(row), str(col)
                             )
                             if chunk.is_file():
-                                _after_a_windows_reader(os.unlink, chunk)
+                                done_despite_brief_holds(os.unlink, chunk)
 
     def _declare_levels(
         self, made: Composer, description: dict, *, bake=True, redeclare=False
@@ -1230,7 +1226,7 @@ class PublishedTransfer(ComposedPicture):
                         chunks = path / "c"
                         if chunks.exists():
                             shutil.rmtree(chunks)
-                _atomic_json(path / "zarr.json", metadata)
+                put_json_in_place(path / "zarr.json", metadata)
         baked = sorted(level for level in made.pinned_levels if level > 0)
         if not bake:
             return []
@@ -1260,6 +1256,6 @@ class PublishedTransfer(ComposedPicture):
             path = self._shown / str(level)
             path.mkdir(exist_ok=True)
             if not (path / "zarr.json").exists():
-                _atomic_json(path / "zarr.json", metadata)
+                put_json_in_place(path / "zarr.json", metadata)
             baked.append(level)
         return baked

@@ -40,6 +40,7 @@ from pathlib import Path
 import numpy as np
 import zarr
 from zarr.codecs import ZstdCodec
+from zmart_viewer.filesystem import put_text_in_place
 from zmart_viewer.live.record.identity import (
     latest_layout_revision,
     record_the_layout,
@@ -47,7 +48,7 @@ from zmart_viewer.live.record.identity import (
     store_the_profile,
     the_records_folder,
 )
-from zmart_viewer.live.record.manifest import RunManifest, _write_and_replace, now_in_words
+from zmart_viewer.live.record.manifest import RunManifest, now_in_words
 from zmart_viewer.live.record.omezarr import describe_the_position
 from zmart_viewer.live.record.ownership import (
     check_the_grid_holds_together,
@@ -539,9 +540,10 @@ class LivePublisher:
                 }
             },
         }
-        _write_and_replace(
+        put_text_in_place(
             self.collection / "zarr.json",
             json.dumps(described, indent=2, sort_keys=True) + "\n",
+            pushed_to_disk=True,
         )
 
     def _declare_the_current_members(self) -> None:
@@ -1026,7 +1028,7 @@ class LivePublisher:
             "levels": levels,
         }
         payload = json.dumps(described, indent=2)
-        _write_and_replace(target, payload)
+        put_text_in_place(target, payload, pushed_to_disk=True)
         # The stored-map consumers -- the pointer follow and the view check --
         # used to re-read this file and re-route the whole survey, twice each
         # per publish, to rebuild value-identical routes: two of a publish's
@@ -1884,7 +1886,7 @@ def _the_same_picture(lifted: bytes, array, corner: tuple[int, ...]) -> bool:
     import tempfile
 
     from zarr.codecs import ZstdCodec
-    from zmart_viewer.live.record.vocabulary import rmtree_despite_brief_holds
+    from zmart_viewer.filesystem import rmtree_despite_brief_holds
 
     # A piece at the edge of a level is stored full-sized and padded, while the
     # image itself stops where the specimen does. So the comparison is made over

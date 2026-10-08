@@ -62,7 +62,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -70,6 +69,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
+# The record is written with ``pushed_to_disk=True`` throughout: these are the
+# small files that say what a run has published, and a power cut must not leave
+# one pointing at data that never reached the disk.
+from zmart_viewer.filesystem import push_directory_to_disk, put_text_in_place
 from zmart_viewer.live.record.vocabulary import CommitEvent, FrozenMap, ZmartLiveError
 
 __all__ = [
@@ -211,71 +214,6 @@ class CommittedState:
         )
 
 
-def _push_directory_to_disk(folder: Path) -> None:
-    """Make a renamed directory entry durable where the platform permits it.
-
-    Flushing the temporary file protects its contents. On POSIX filesystems the
-    containing directory must be flushed as well, or a power cut can forget the
-    rename even though the file itself was safe. Windows does not offer Python an
-    equivalent operation on a directory handle; ``os.replace`` is still atomic
-    there, but power-loss durability remains a property to measure on the target
-    filesystem rather than a promise made by this helper.
-    """
-    if os.name == "nt":  # pragma: no cover - exercised on the Windows target
-        return
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    descriptor = os.open(folder, flags)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _write_and_replace(destination: Path, text: str) -> None:
-    """Put new contents in place in one indivisible step.
-
-    Writing straight over a file leaves a window in which a reader sees half of
-    the old contents and half of the new. Instead the new contents are written
-    beside it under a temporary name, pushed all the way to the disk, and then
-    renamed over the top. Renaming is the one filesystem operation that is
-    genuinely all-or-nothing, on Windows as well as elsewhere.
-
-    Pushing to the disk first matters more than it looks. Without it the
-    operating system may hold the contents in memory while the rename has already
-    happened, so a power cut could leave a record that points confidently at data
-    which never reached the platter.
-
-    The rename itself is made with a short patience for a reader's hold. These
-    small files are replaced on every commit and read constantly by the live
-    viewer, and on Windows the reader's open handle makes the replacement fail
-    as ``Access is denied`` on ground that is free a moment later — a governed
-    run watched live died of exactly this. The pixel path was cured first, in
-    :func:`~zmart_viewer.live.record.vocabulary.written_despite_brief_holds`, and this is the
-    same cure in the same place for the metadata.
-    """
-    from zmart_viewer.live.record.vocabulary import written_despite_brief_holds
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    handle = tempfile.NamedTemporaryFile(
-        mode="w",
-        dir=destination.parent,
-        prefix=destination.name + ".",
-        suffix=".tmp",
-        delete=False,
-        encoding="utf-8",
-    )
-    try:
-        with handle as writing:
-            writing.write(text)
-            writing.flush()
-            os.fsync(writing.fileno())
-        written_despite_brief_holds(lambda: os.replace(handle.name, destination))
-        _push_directory_to_disk(destination.parent)
-    except BaseException:
-        Path(handle.name).unlink(missing_ok=True)
-        raise
-
-
 @contextmanager
 def _one_writer_at_a_time(path: Path) -> Iterator[None]:
     """Reserve one run's publication record for a single writer.
@@ -294,7 +232,7 @@ def _one_writer_at_a_time(path: Path) -> Iterator[None]:
             handle.write(b"\0")
             os.fsync(handle.fileno())
             if first_creation:
-                _push_directory_to_disk(path.parent)
+                push_directory_to_disk(path.parent)
         handle.seek(0)
         try:
             if os.name == "nt":  # pragma: no cover - exercised on the Windows target
@@ -372,7 +310,7 @@ class RunManifest:
                 with manifest.history.open("xb") as history:
                     history.flush()
                     os.fsync(history.fileno())
-                _push_directory_to_disk(manifest.bookkeeping)
+                push_directory_to_disk(manifest.bookkeeping)
             if manifest.truth.exists():
                 state = manifest._committed_for_writing(check_identity=False)
                 if state.run_id != run_id:
@@ -389,7 +327,7 @@ class RunManifest:
                         "would hide or overwrite an earlier run; restore the small "
                         "committed file before continuing."
                     )
-                _write_and_replace(
+                put_text_in_place(
                     manifest.truth,
                     json.dumps(
                         CommittedState(
@@ -399,6 +337,7 @@ class RunManifest:
                         ).to_json(),
                         indent=2,
                     ),
+                    pushed_to_disk=True,
                 )
         return manifest
 
@@ -881,7 +820,9 @@ class RunManifest:
             )
 
             # And now the moment of publication itself: one rename, indivisible.
-            _write_and_replace(self.truth, json.dumps(published.to_json(), indent=2))
+            put_text_in_place(
+                self.truth, json.dumps(published.to_json(), indent=2), pushed_to_disk=True
+            )
             return published
 
     def next_revision(self) -> int:
@@ -946,7 +887,7 @@ class RunManifest:
             partial = self._partial_history
             if unannounced or partial:
                 note = self.bookkeeping / "interrupted.json"
-                _write_and_replace(
+                put_text_in_place(
                     note,
                     json.dumps(
                         {
@@ -970,6 +911,7 @@ class RunManifest:
                         },
                         indent=2,
                     ),
+                    pushed_to_disk=True,
                 )
             if unannounced or partial:
                 published_ends = [

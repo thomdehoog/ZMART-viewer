@@ -96,11 +96,11 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-# The durable write already exists once, in the module that publishes commit
-# records, and getting the write-then-rename dance right matters far too much to
-# have two versions of it drifting apart. It is reused here rather than copied,
-# which is why this reaches for a name the manifest keeps to itself.
-from zmart_viewer.live.record.manifest import _write_and_replace as _put_in_place_in_one_step
+# The durable write exists once, with the other file-system helpers, and getting
+# the write-then-rename dance right matters far too much to have two versions of
+# it drifting apart. Every record here is written with ``pushed_to_disk=True``:
+# a power cut must not leave a profile or a layout pointing at nothing.
+from zmart_viewer.filesystem import put_text_in_place
 from zmart_viewer.live.record.manifest import now_in_words
 from zmart_viewer.live.record.vocabulary import (
     AcquisitionProfile,
@@ -258,7 +258,7 @@ def store_the_profile(run_folder: Path | str, profile: AcquisitionProfile) -> Pa
             f"this point sharing one. Rather than overwrite a description that "
             f"published positions may already point at, this refuses."
         )
-    _put_in_place_in_one_step(where, text)
+    put_text_in_place(where, text, pushed_to_disk=True)
     return where
 
 
@@ -407,7 +407,7 @@ def store_a_layout_revision(run_folder: Path | str, layout: SceneLayoutRevision)
             f"that has genuinely changed becomes snapshot "
             f"{layout.revision + 1} instead."
         )
-    _put_in_place_in_one_step(where, text)
+    put_text_in_place(where, text, pushed_to_disk=True)
     return where
 
 
@@ -448,8 +448,9 @@ def record_the_layout(run_folder: Path | str, layout: SceneLayoutRevision) -> Sc
         )
         store_a_layout_revision(run_folder, recorded)
 
-    _put_in_place_in_one_step(
+    put_text_in_place(
         the_records_folder(run_folder) / _LAYOUT_POINTER,
         json.dumps(recorded.to_json(), indent=2, sort_keys=True) + "\n",
+        pushed_to_disk=True,
     )
     return recorded
