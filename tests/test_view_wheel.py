@@ -5,11 +5,11 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 import zipfile
 from pathlib import Path
 
 import numpy as np
-import tomllib
 from test_view_sampling import write_tile
 from zmart_viewer.views.slice_top_projection import ViewSet
 
