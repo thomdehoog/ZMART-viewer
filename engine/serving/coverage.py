@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 from zmart_viewer.live.record.live_serving import live_run_holding
-from zmart_viewer.opening.open_folders import _read_array_description, _read_attrs_at
+from zmart_viewer.opening.open_folders import read_array_description, read_attrs_at
 from zmart_viewer.picture.built_picture import ComposedPicture
 from zmart_viewer.serving import picture_pieces as pieces
 from zmart_viewer.views.publishing import PublishedTransfer
@@ -31,7 +31,7 @@ def requires_geometry(store: Path) -> bool:
         pieces.the_map_inside(store) is not None
         or live_run_holding(store) is not None
         or pieces._composer_for(store) is not None
-        or "zmart_projection" in _read_attrs_at(store)
+        or "zmart_projection" in read_attrs_at(store)
     )
 
 
@@ -43,7 +43,7 @@ def answer(store: Path, inside: str) -> bytes | None:
         raise ValueError("coverage unavailable for a refused or legacy linked image")
     if composer is None and live_run_holding(store) is not None:
         raise ValueError("live coverage requires the governed composed view")
-    attrs = _read_attrs_at(store)
+    attrs = read_attrs_at(store)
     multiscales = attrs.get("multiscales") or []
     if not multiscales:
         return None
@@ -68,7 +68,7 @@ def answer(store: Path, inside: str) -> bytes | None:
         array_path = (store / dataset["path"]).resolve()
         if not array_path.is_relative_to(store.resolve()):
             raise ValueError("coverage dataset escapes its image store")
-        metadata = _read_array_description(array_path)
+        metadata = read_array_description(array_path)
         shape = metadata.get("shape", [])
         if len(shape) < 2:
             return None

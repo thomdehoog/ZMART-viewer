@@ -12,10 +12,10 @@ from pathlib import Path
 
 from zmart_viewer.opening.open_folders import (
     DESCRIPTION_FILES,
-    _moments_folder,
-    _read_attrs_at,
     channel_color,
     channels,
+    moments_folder,
+    read_attrs_at,
     zarr_scheme,
 )
 
@@ -63,7 +63,7 @@ def _coarsest_level_path(attrs: dict) -> str | None:
 
 def _level_holds_pixels(level: Path) -> bool:
     """Has anything actually been written into this copy of the image yet?"""
-    holder = _moments_folder(level)
+    holder = moments_folder(level)
 
     try:
         return any(entry.name not in DESCRIPTION_FILES for entry in holder.iterdir())
@@ -155,7 +155,7 @@ def _samples(store: Path, *, channel: int | None = None):
     import zarr
 
     try:
-        attrs = _read_attrs_at(store)
+        attrs = read_attrs_at(store)
         levels = _level_paths(attrs)
 
         if not levels:
@@ -254,7 +254,7 @@ def camera_range(store: str | Path, declared: dict | None = None) -> tuple[float
     store = Path(store)
 
     try:
-        level = _coarsest_level_path(_read_attrs_at(store))
+        level = _coarsest_level_path(read_attrs_at(store))
     except (OSError, KeyError, ValueError):
         return None
 
@@ -295,7 +295,7 @@ def coarsest_level_is_written(store: str | Path) -> bool:
     store = Path(store)
 
     try:
-        level = _coarsest_level_path(_read_attrs_at(store))
+        level = _coarsest_level_path(read_attrs_at(store))
     except (OSError, KeyError, ValueError):
         return False
 
@@ -431,7 +431,7 @@ def _values_here(store: Path, *, channel, box):
     import zarr
 
     store = Path(store)
-    attrs = _read_attrs_at(store)
+    attrs = read_attrs_at(store)
     levels = _level_paths(attrs)
 
     if not levels:
@@ -558,7 +558,7 @@ def display_window(
     store = Path(store)
 
     if not volumetric:
-        declared = _omero_window(_read_attrs_at(store), channel)
+        declared = _omero_window(read_attrs_at(store), channel)
 
         if declared is not None:
             return declared

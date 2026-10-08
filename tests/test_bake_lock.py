@@ -5,13 +5,13 @@ import multiprocessing
 import os
 
 import pytest
-from zmart_viewer.picture.built_picture import _holding_the_bake_lock
+from zmart_viewer.picture.built_picture import holding_the_bake_lock
 
 
 def _wait_for_lock(store, attempting, finished, outcome):
     attempting.set()
     try:
-        with _holding_the_bake_lock(store):
+        with holding_the_bake_lock(store):
             outcome.put("acquired")
     except OSError as error:
         outcome.put((error.errno, str(error)))
@@ -25,7 +25,7 @@ def test_a_long_bake_does_not_expire_the_waiting_reader(tmp_path):
     outcome = context.Queue()
     reader = context.Process(target=_wait_for_lock, args=(tmp_path, attempting, finished, outcome))
     try:
-        with _holding_the_bake_lock(tmp_path):
+        with holding_the_bake_lock(tmp_path):
             reader.start()
             assert attempting.wait(10), "reader process did not start"
             # Windows LK_LOCK gives up after ten one-second attempts. Hold the
@@ -56,7 +56,7 @@ def test_non_contention_lock_errors_propagate(tmp_path, monkeypatch):
 
     monkeypatch.setattr(msvcrt, "locking", invalid_descriptor)
     with pytest.raises(OSError) as caught:
-        with _holding_the_bake_lock(tmp_path):
+        with holding_the_bake_lock(tmp_path):
             pytest.fail("entered without acquiring the lock")
     assert caught.value.errno == errno.EBADF
     assert calls == [msvcrt.LK_LOCK]
@@ -64,7 +64,7 @@ def test_non_contention_lock_errors_propagate(tmp_path, monkeypatch):
 
 def test_an_exception_in_the_owner_releases_the_lock(tmp_path):
     with pytest.raises(ValueError, match="failed publication"):
-        with _holding_the_bake_lock(tmp_path):
+        with holding_the_bake_lock(tmp_path):
             raise ValueError("failed publication")
-    with _holding_the_bake_lock(tmp_path):
+    with holding_the_bake_lock(tmp_path):
         pass

@@ -400,7 +400,7 @@ def _how_a_resolution_is_stored(
     )
 
 
-def _read_one_tile(store: Path) -> Tile:
+def read_one_tile(store: Path) -> Tile:
     """Every resolution a tile keeps, each with its own voxel size and corner."""
     described, _ = _the_description_of(store)
     multiscale = (described.get("multiscales") or [{}])[0]
@@ -485,7 +485,7 @@ def _read_one_tile(store: Path) -> Tile:
     )
 
 
-def _refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
+def refuse_tiles_that_disagree(tiles: list[Tile]) -> str:
     """Stop a transfer whose tiles are not all the same kind of picture."""
     first = tiles[0]
     kind = first.copies[0].dtype
@@ -609,7 +609,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
 
         described, _ = _the_description_of(store / path)
         images = (described.get("well") or {}).get("images") or []
-        fields = [_read_one_tile(store / path / image["path"]) for image in images]
+        fields = [read_one_tile(store / path / image["path"]) for image in images]
         read.append((row, column, path.replace("/", ""), fields))
 
     sample = read[0][3][0].copies[0]
@@ -689,7 +689,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
             )
 
         with ThreadPoolExecutor(max_workers=min(32, (len(stores) + 3) // 4 or 1)) as pool:
-            tiles = list(pool.map(_read_one_tile, stores))
+            tiles = list(pool.map(read_one_tile, stores))
 
     keeps = {tile.keeps for tile in tiles}
 
@@ -735,7 +735,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
             "them. This is refused rather than drawn half-true."
         )
 
-    kind = _refuse_tiles_that_disagree(tiles)
+    kind = refuse_tiles_that_disagree(tiles)
 
     corner = tuple(min(tile.copies[0].corner_um[axis] for tile in tiles) for axis in range(3))
     said = None
@@ -2011,3 +2011,10 @@ def _stop_every_warmer() -> None:
         composer.stop_warming()
     for composer in composers:
         composer._wait_for_the_warmer(timeout=10.0)
+
+
+# These two used to carry a leading underscore while other modules imported
+# them anyway. The plain names above are the real ones now; the old spellings
+# stay for one release so that nothing written against them breaks.
+_read_one_tile = read_one_tile
+_refuse_tiles_that_disagree = refuse_tiles_that_disagree

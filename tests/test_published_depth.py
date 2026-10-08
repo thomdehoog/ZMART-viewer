@@ -8,7 +8,7 @@ import pytest
 import zarr
 from test_published_transfer import write_position
 from zmart_viewer.picture.acquired_regions import AcquiredRegion
-from zmart_viewer.picture.arrangement import _read_one_tile
+from zmart_viewer.picture.arrangement import read_one_tile
 from zmart_viewer.views.publishing import STORE, PublishedTransfer, _place_depth
 
 CANVAS = {"x_um": [0, 2048], "y_um": [0, 128]}
@@ -39,7 +39,7 @@ def composition(names):
     [(1e-14, 1000, True), (1e-9, 2, True), (1e-9, 1000, False), (0.01, 2, False)],
 )
 def test_spacing_tolerance_bounds_total_stack_drift(tmp_path, delta, depth, accepted):
-    tile = _read_one_tile(at_depth(tmp_path, "a.ome.zarr", 0, 60, depth=2))
+    tile = read_one_tile(at_depth(tmp_path, "a.ome.zarr", 0, 60, depth=2))
     tile = replace(
         tile,
         copies=[

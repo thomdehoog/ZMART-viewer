@@ -10,8 +10,8 @@ from zmart_viewer.picture.arrangement import (
     MEAN_REDUCTION,
     Composer,
     Mosaic,
-    _read_one_tile,
     halve_xy,
+    read_one_tile,
     read_the_mosaic_as_written,
     the_mosaic_written_down,
 )
@@ -70,7 +70,7 @@ def write_tile(root, name, data, *, x=0, z=0, z_chunk=3, input_format="v3"):
         group.attrs["multiscales"] = metadata["multiscales"]
     else:
         group.attrs["ome"] = metadata
-    return _read_one_tile(root / name)
+    return read_one_tile(root / name)
 
 
 def fixture(root, reverse=False):

@@ -11,16 +11,16 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from zmart_viewer.opening.open_folders import _read_attrs_at
+from zmart_viewer.opening.open_folders import read_attrs_at
 from zmart_viewer.picture.acquired_regions import canonical_regions
-from zmart_viewer.picture.arrangement import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, _read_one_tile
-from zmart_viewer.picture.built_picture import _holding_the_bake_lock
+from zmart_viewer.picture.arrangement import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, read_one_tile
+from zmart_viewer.picture.built_picture import holding_the_bake_lock
 from zmart_viewer.views.projections import METHODS, PROJECTION_RECIPE, write_projection
 from zmart_viewer.views.publishing import PublishedTransfer, validate_canvas
 
 
 def view_metadata(store):
-    return (_read_attrs_at(Path(store)).get("zmart") or {}).get("view")
+    return (read_attrs_at(Path(store)).get("zmart") or {}).get("view")
 
 
 def view_key(metadata):
@@ -118,8 +118,8 @@ class ViewSet:
         source_key = sha256(os.path.normcase(str(folder)).encode()).hexdigest()
         with (
             self._lock,
-            _holding_the_bake_lock(self.folder / ".publication-locks" / "sources" / source_key),
-            _holding_the_bake_lock(self.folder / ".publication-locks" / self.acquisition),
+            holding_the_bake_lock(self.folder / ".publication-locks" / "sources" / source_key),
+            holding_the_bake_lock(self.folder / ".publication-locks" / self.acquisition),
             ExitStack() as staging,
         ):
             self._check_source_owner(folder)
@@ -254,8 +254,8 @@ class ViewSet:
                         xy_origin=snapshot.get("xy_origin", "center"),
                     )
                     if destination != source / derived:
-                        candidates[derived] = _read_one_tile(store)
-                    coverage[derived] = _read_attrs_at(store)["zmart_projection"]["regions"]
+                        candidates[derived] = read_one_tile(store)
+                    coverage[derived] = read_attrs_at(store)["zmart_projection"]["regions"]
                     projected_versions[derived] = revision
                 snapshot["regions"] = coverage
                 snapshot["order"] = [names[name] for name in composition["order"]]
@@ -279,13 +279,13 @@ class ViewSet:
             for temporary_store, destination in arrivals:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 # Independent view folders may share immutable projection products.
-                with _holding_the_bake_lock(
+                with holding_the_bake_lock(
                     destination.parent / ".publication-locks" / destination.name
                 ):
                     if destination.exists():
                         if (
-                            _read_attrs_at(destination).get("zmart_projection")
-                            != _read_attrs_at(temporary_store)["zmart_projection"]
+                            read_attrs_at(destination).get("zmart_projection")
+                            != read_attrs_at(temporary_store)["zmart_projection"]
                         ):
                             raise ValueError(f"Projection product has another owner: {destination}")
                     else:

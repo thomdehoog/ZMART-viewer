@@ -37,8 +37,6 @@ from zmart_viewer.opening.contrast import (
 from zmart_viewer.opening.open_folders import (
     DESCRIPTION_FILES,
     Library,
-    _read_array_description,
-    _read_attrs_at,
     axis_names,
     channel_color,
     channel_of,
@@ -48,6 +46,8 @@ from zmart_viewer.opening.open_folders import (
     label_images,
     layer_names,
     normalise_units,
+    read_array_description,
+    read_attrs_at,
     written_timepoints,
     zarr_scheme,
 )
@@ -374,8 +374,8 @@ class _Handler(SimpleHTTPRequestHandler):
             store = self._library.resolve(store_rel)
             if store is None or not (
                 self._transparent_background
-                or (_read_attrs_at(store).get("zmart") or {}).get("view")
-                or _read_attrs_at(store).get("zmart_projection")
+                or (read_attrs_at(store).get("zmart") or {}).get("view")
+                or read_attrs_at(store).get("zmart_projection")
             ):
                 self._send_empty(HTTPStatus.FORBIDDEN)
                 return
@@ -1009,7 +1009,7 @@ class _Handler(SimpleHTTPRequestHandler):
             def kind_of(folder: Path) -> str | None:
                 try:
                     inside = [child.name for child in folder.iterdir()]
-                    told = _read_attrs_at(folder)
+                    told = read_attrs_at(folder)
 
                     if any(name in described for name in inside):
                         if folder.name.endswith(".zmartview.zarr"):
@@ -1036,7 +1036,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
                 if kind == "view":
                     told_of["baked"] = bool(
-                        (_read_attrs_at(folder).get("zmart") or {}).get("baked")
+                        (read_attrs_at(folder).get("zmart") or {}).get("baked")
                     )
 
                 return told_of
@@ -1489,7 +1489,7 @@ def make_server(
             store_path = root / name
             address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
             store_paths[address] = store_path
-            source_attrs = _read_attrs_at(store_path)
+            source_attrs = read_attrs_at(store_path)
             named_view = (source_attrs.get("zmart") or {}).get("view")
 
             if "c" in axis_names(store_path):
@@ -1516,7 +1516,7 @@ def make_server(
                     )
                 ]
                 if published.source_depth(root_number, name) is not None or named_view:
-                    declared = _read_attrs_at(store_path).get("omero", {}).get("channels", [])
+                    declared = read_attrs_at(store_path).get("omero", {}).get("channels", [])
                     channel = described_channels(declared if isinstance(declared, list) else [], 1)[
                         0
                     ]
@@ -1536,7 +1536,7 @@ def make_server(
             if named_view or "zmart_projection" in source_attrs:
                 multiscale = source_attrs["multiscales"][0]
                 axes = [axis["name"] for axis in multiscale["axes"]]
-                array = _read_array_description(store_path / multiscale["datasets"][0]["path"])
+                array = read_array_description(store_path / multiscale["datasets"][0]["path"])
                 frames = array["shape"][axes.index("t")] if "t" in axes else 1
             geometry_revision = None
             if named_view:
