@@ -108,16 +108,15 @@ def write_projection(
 
     The caller supplies a completed revision and the output location. No folder
     scanning, workflow inference, notification or projection of a stitched volume.
+
+    The projection is built in a staging folder beside the destination and
+    renamed into place in one step, so a reader never sees a half-written
+    product; the previous product, if any, is kept until the swap has succeeded.
     """
     source, destination = Path(source).resolve(), Path(destination).resolve()
     if regions != "complete":
         regions = canonical_regions(regions)
-    if source == destination or source in destination.parents or destination in source.parents:
-        raise ValueError("Projection output must be separate from the source store")
-    if xy_origin not in ("center", "corner"):
-        raise ValueError("Projection XY origin must be center or corner")
-    if not destination.name.endswith(".ome.zarr"):
-        raise ValueError("Projection output must name an OME-Zarr store, not a run folder")
+    _refuse_a_bad_destination(source, destination, xy_origin)
     if destination.exists():
         owner = read_attrs_at(destination).get("zmart_projection", {})
         if owner.get("source") != str(source) or owner.get("method") != method:
@@ -165,134 +164,20 @@ def write_projection(
         "source_z_um": [base.corner_um[0], base.voxel_um[0], base.shape[0]],
     }
     frames, channels = the_frame_room_of(base.outer_shape)
-    depth, height, width = base.shape
-    # Bound Z-window allocation too, not only output XY size.
-    side = max(
-        1,
-        min(
-            piece, int((32 * 1024**2 / max(1, depth * (np.dtype(base.dtype).itemsize + 1))) ** 0.5)
-        ),
-    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".projection-", dir=destination.parent))
     retired = None
     try:
         group = zarr.open_group(str(staging), mode="w", zarr_format=3)
-        output = group.create_array(
-            "0",
-            shape=(frames, channels, 1, height, width),
-            dtype=dtype,
-            chunks=(1, 1, 1, piece, piece),
-            dimension_names=list("tczyx"),
+        output = _project_the_finest_level(
+            group, base, acquired, method, dtype, frames=frames, channels=channels, piece=piece
         )
-        for t in range(frames):
-            for c in range(channels):
-                relevant = [r for r in acquired if (r.frame, r.channel) == (t, c)]
-                for y in range(0, height, side):
-                    for x in range(0, width, side):
-                        h, w = min(side, height - y), min(side, width - x)
-                        mask = np.zeros((depth, h, w), dtype=bool)
-                        for r in relevant:
-                            low, high = r.bounds()
-                            y0, y1 = max(y, low[1]), min(y + h, high[1])
-                            x0, x1 = max(x, low[2]), min(x + w, high[2])
-                            if y0 < y1 and x0 < x1:
-                                mask[low[0] : high[0], y0 - y : y1 - y, x0 - x : x1 - x] = True
-                        if not mask.any():
-                            continue
-                        values = _source_window(base, t, c, y, x, h, w)
-                        image, _ = reduce_z(values, mask, method, output_dtype=dtype)
-                        output[t, c, 0, y : y + h, x : x + w] = image
-        arrays = [output]
-        for level in range(1, max(1, tile.keeps)):
-            previous = arrays[-1]
-            h, w = previous.shape[-2:]
-            following = group.create_array(
-                str(level),
-                shape=(frames, channels, 1, (h + 1) // 2, (w + 1) // 2),
-                dtype=dtype,
-                chunks=(1, 1, 1, piece, piece),
-                dimension_names=list("tczyx"),
-            )
-            for t in range(frames):
-                for c in range(channels):
-                    for y in range(0, following.shape[-2], piece):
-                        for x in range(0, following.shape[-1], piece):
-                            block = np.asarray(
-                                previous[
-                                    t,
-                                    c,
-                                    0,
-                                    2 * y : min(2 * (y + piece), h),
-                                    2 * x : min(2 * (x + piece), w),
-                                ]
-                            )
-                            reduced = halve_xy(block)
-                            following[
-                                t, c, 0, y : y + reduced.shape[0], x : x + reduced.shape[1]
-                            ] = reduced
-            arrays.append(following)
-        outer_scale, outer_offset = [1, 1], [0, 0]
-        for transform in multiscale["datasets"][0].get(
-            "coordinateTransformations", []
-        ) + multiscale.get("coordinateTransformations", []):
-            for i, axis in enumerate("tc"):
-                if axis not in tile.axes:
-                    continue
-                at = tile.axes.index(axis)
-                if transform["type"] == "scale":
-                    outer_scale[i] = transform["scale"][at]
-                elif transform["type"] == "translation":
-                    outer_offset[i] += transform["translation"][at]
-        datasets = []
-        for level in range(len(arrays)):
-            factor = 2**level
-            center_shift = (factor - 1) / 2 if xy_origin == "center" else 0
-            datasets.append(
-                {
-                    "path": str(level),
-                    "coordinateTransformations": [
-                        {
-                            "type": "scale",
-                            "scale": [
-                                *outer_scale,
-                                1,
-                                base.voxel_um[1] * factor,
-                                base.voxel_um[2] * factor,
-                            ],
-                        },
-                        {
-                            "type": "translation",
-                            "translation": [
-                                *outer_offset,
-                                0,
-                                base.corner_um[1] + base.voxel_um[1] * center_shift,
-                                base.corner_um[2] + base.voxel_um[2] * center_shift,
-                            ],
-                        },
-                    ],
-                }
-            )
-        axes = [
-            {
-                "name": a,
-                "type": "time" if a == "t" else "channel" if a == "c" else "space",
-                **({"unit": "micrometer"} if a in "zyx" else {}),
-            }
-            for a in "tczyx"
-        ]
-        if "t" in source_axes:
-            axes[0] = deepcopy(source_axes["t"])
-        omero = attrs.get("omero")
-        if omero and method == "sum":
-            omero = deepcopy(omero)
-            for channel in omero.get("channels", []):
-                channel.pop("window", None)
-        group.attrs["ome"] = {
-            "version": "0.5",
-            "multiscales": [{"type": "mean", "axes": axes, "datasets": datasets}],
-            **({"omero": omero} if omero else {}),
-        }
+        arrays = _halve_down_the_levels(
+            group, output, tile.keeps, dtype, frames=frames, channels=channels, piece=piece
+        )
+        group.attrs["ome"] = _the_description_of(
+            arrays, tile, multiscale, source_axes, attrs, method=method, xy_origin=xy_origin
+        )
         group.attrs["zmart_projection"] = recipe
         if destination.exists():
             retired = staging.with_name(staging.name + ".previous")
@@ -310,3 +195,167 @@ def write_projection(
         if retired is not None:
             shutil.rmtree(retired)
     return destination
+
+
+def _refuse_a_bad_destination(source, destination, xy_origin) -> None:
+    """The output must be a separate OME-Zarr store, with a known XY convention."""
+    if source == destination or source in destination.parents or destination in source.parents:
+        raise ValueError("Projection output must be separate from the source store")
+    if xy_origin not in ("center", "corner"):
+        raise ValueError("Projection XY origin must be center or corner")
+    if not destination.name.endswith(".ome.zarr"):
+        raise ValueError("Projection output must name an OME-Zarr store, not a run folder")
+
+
+def _project_the_finest_level(group, base, acquired, method, dtype, *, frames, channels, piece):
+    """Reduce the source along Z into the projection's full-resolution array.
+
+    The work goes window by window across XY, so that a deep stack never has
+    to be in memory whole, and each window only reduces the pixels that an
+    acquired region covers. A window nothing was acquired in is left as it
+    is, which is how absence stays visible rather than becoming black.
+    """
+    depth, height, width = base.shape
+    # Bound Z-window allocation too, not only output XY size.
+    side = max(
+        1,
+        min(
+            piece, int((32 * 1024**2 / max(1, depth * (np.dtype(base.dtype).itemsize + 1))) ** 0.5)
+        ),
+    )
+    output = group.create_array(
+        "0",
+        shape=(frames, channels, 1, height, width),
+        dtype=dtype,
+        chunks=(1, 1, 1, piece, piece),
+        dimension_names=list("tczyx"),
+    )
+    for t in range(frames):
+        for c in range(channels):
+            relevant = [r for r in acquired if (r.frame, r.channel) == (t, c)]
+            for y in range(0, height, side):
+                for x in range(0, width, side):
+                    h, w = min(side, height - y), min(side, width - x)
+                    mask = np.zeros((depth, h, w), dtype=bool)
+                    for r in relevant:
+                        low, high = r.bounds()
+                        y0, y1 = max(y, low[1]), min(y + h, high[1])
+                        x0, x1 = max(x, low[2]), min(x + w, high[2])
+                        if y0 < y1 and x0 < x1:
+                            mask[low[0] : high[0], y0 - y : y1 - y, x0 - x : x1 - x] = True
+                    if not mask.any():
+                        continue
+                    values = _source_window(base, t, c, y, x, h, w)
+                    image, _ = reduce_z(values, mask, method, output_dtype=dtype)
+                    output[t, c, 0, y : y + h, x : x + w] = image
+    return output
+
+
+def _halve_down_the_levels(group, output, keeps, dtype, *, frames, channels, piece):
+    """Make the zoomed-out copies, each half the size of the one before.
+
+    One copy per level the source keeps, so the projection can be looked at
+    from as far away as the source can. Returns every array, finest first.
+    """
+    arrays = [output]
+    for level in range(1, max(1, keeps)):
+        previous = arrays[-1]
+        h, w = previous.shape[-2:]
+        following = group.create_array(
+            str(level),
+            shape=(frames, channels, 1, (h + 1) // 2, (w + 1) // 2),
+            dtype=dtype,
+            chunks=(1, 1, 1, piece, piece),
+            dimension_names=list("tczyx"),
+        )
+        for t in range(frames):
+            for c in range(channels):
+                for y in range(0, following.shape[-2], piece):
+                    for x in range(0, following.shape[-1], piece):
+                        block = np.asarray(
+                            previous[
+                                t,
+                                c,
+                                0,
+                                2 * y : min(2 * (y + piece), h),
+                                2 * x : min(2 * (x + piece), w),
+                            ]
+                        )
+                        reduced = halve_xy(block)
+                        following[t, c, 0, y : y + reduced.shape[0], x : x + reduced.shape[1]] = (
+                            reduced
+                        )
+        arrays.append(following)
+    return arrays
+
+
+def _the_description_of(arrays, tile, multiscale, source_axes, attrs, *, method, xy_origin):
+    """The OME-Zarr description of the projection: axes, scales and colours.
+
+    The time and channel scales and offsets are carried over from the source,
+    the spatial ones are the source's at each level's zoom, and the colour
+    description comes along too, except that a sum has no sensible display
+    window to inherit, so those are dropped.
+    """
+    base = tile.copies[0]
+    outer_scale, outer_offset = [1, 1], [0, 0]
+    for transform in multiscale["datasets"][0].get(
+        "coordinateTransformations", []
+    ) + multiscale.get("coordinateTransformations", []):
+        for i, axis in enumerate("tc"):
+            if axis not in tile.axes:
+                continue
+            at = tile.axes.index(axis)
+            if transform["type"] == "scale":
+                outer_scale[i] = transform["scale"][at]
+            elif transform["type"] == "translation":
+                outer_offset[i] += transform["translation"][at]
+    datasets = []
+    for level in range(len(arrays)):
+        factor = 2**level
+        center_shift = (factor - 1) / 2 if xy_origin == "center" else 0
+        datasets.append(
+            {
+                "path": str(level),
+                "coordinateTransformations": [
+                    {
+                        "type": "scale",
+                        "scale": [
+                            *outer_scale,
+                            1,
+                            base.voxel_um[1] * factor,
+                            base.voxel_um[2] * factor,
+                        ],
+                    },
+                    {
+                        "type": "translation",
+                        "translation": [
+                            *outer_offset,
+                            0,
+                            base.corner_um[1] + base.voxel_um[1] * center_shift,
+                            base.corner_um[2] + base.voxel_um[2] * center_shift,
+                        ],
+                    },
+                ],
+            }
+        )
+    axes = [
+        {
+            "name": a,
+            "type": "time" if a == "t" else "channel" if a == "c" else "space",
+            **({"unit": "micrometer"} if a in "zyx" else {}),
+        }
+        for a in "tczyx"
+    ]
+    if "t" in source_axes:
+        axes[0] = deepcopy(source_axes["t"])
+    omero = attrs.get("omero")
+    if omero and method == "sum":
+        omero = deepcopy(omero)
+        for channel in omero.get("channels", []):
+            channel.pop("window", None)
+    return {
+        "version": "0.5",
+        "multiscales": [{"type": "mean", "axes": axes, "datasets": datasets}],
+        **({"omero": omero} if omero else {}),
+    }

@@ -255,6 +255,29 @@ class LivePublisher:
         if not (self.collection / "zarr.json").exists():
             self._declare_the_members(())
 
+        # The checks below run in this order on purpose: each one assumes the
+        # ones before it held, and each raises a ZmartLiveError that says what
+        # was expected, what arrived, and what to do about it.
+        self._check_the_profile_fits_this_writer()
+        component = self._the_one_component_of_this_run()
+        self._check_the_places_land_on_whole_chunks()
+        candidate_layout = self._the_layout_this_run_would_have(component)
+        self.manifest = RunManifest.start(self.folder, run_id=self.run_id)
+        self._check_the_layout_matches_what_is_recorded(candidate_layout)
+
+        store_the_profile(self.folder, self.profile)
+        self.layout = record_the_layout(self.folder, candidate_layout)
+        self._restore_generations_from_the_manifest()
+        self._check_existing_position_shapes_match_the_plan()
+
+    def _check_the_profile_fits_this_writer(self) -> None:
+        """The profile must declare channels and axes this writer can honour.
+
+        The channels and the time room are part of the sealed profile, so a
+        writer given different ones is refused rather than quietly reconciled;
+        and the linked view is written either per publish or at the run's end,
+        nothing in between.
+        """
         profile_channels = tuple(self.profile.channels)
         if not profile_channels:
             raise ZmartLiveError(
@@ -309,6 +332,13 @@ class LivePublisher:
                 "disk is current."
             )
 
+    def _the_one_component_of_this_run(self) -> MosaicComponent:
+        """The component the run's positions form, and their places on the slide.
+
+        A run is given either grid squares (``cells``), from which the grid
+        chooses the places and whose footprint must be complete, or places
+        (``positions``) outright; one of the two, not both and not neither.
+        """
         if (self.cells is None) == (self.positions is None):
             raise ZmartLiveError(
                 "A run is a set of positions with places. Say where they are "
@@ -334,17 +364,26 @@ class LivePublisher:
                     "publisher."
                 )
             object.__setattr__(self, "positions", places_on_a_grid(self.profile, self.cells))
-        else:
-            # A run given its places was not laid out on a grid, so it has no
-            # squares to record and no planned rectangle to be missing any
-            # from. It is one component all the same: these positions were
-            # imaged together and belong to one another, which is what a
-            # component says.
-            component = MosaicComponent(
-                component_id="component-0",
-                profile_id=self.profile.profile_id,
-                complete=True,
-            )
+            return component
+        # A run given its places was not laid out on a grid, so it has no
+        # squares to record and no planned rectangle to be missing any
+        # from. It is one component all the same: these positions were
+        # imaged together and belong to one another, which is what a
+        # component says.
+        return MosaicComponent(
+            component_id="component-0",
+            profile_id=self.profile.profile_id,
+            complete=True,
+        )
+
+    def _check_the_places_land_on_whole_chunks(self) -> None:
+        """Say now, before the first pixel, whether the pointer-linked view can exist.
+
+        The linked view points at whole chunks of each position, so a place
+        that does not land on a chunk boundary can never be linked. That is
+        recorded in ``pointer_linkable``, and refused outright when the run
+        asked for the view to be written per publish.
+        """
         chunk = self.profile.levels[0].inner_chunk
         off_chunk = sorted(
             name
@@ -363,6 +402,8 @@ class LivePublisher:
                 "way, and the run then finishes without the linked plain-file view."
             )
 
+    def _the_layout_this_run_would_have(self, component: MosaicComponent) -> SceneLayoutRevision:
+        """The layout snapshot this run's plan describes, as revision one."""
         placements = place_the_positions(
             self.profile,
             self.positions,
@@ -372,7 +413,7 @@ class LivePublisher:
                 else None
             ),
         )
-        candidate_layout = SceneLayoutRevision(
+        return SceneLayoutRevision(
             revision=1,
             schema_version="zmart-live-layout/2",
             run_id=self.run_id,
@@ -383,8 +424,14 @@ class LivePublisher:
             analysis_ownership=self.profile.analysis_ownership,
             created_at=now_in_words(),
         )
-        self.manifest = RunManifest.start(self.folder, run_id=self.run_id)
 
+    def _check_the_layout_matches_what_is_recorded(self, candidate_layout) -> None:
+        """A run reopened later must be reopened with the same plan.
+
+        Its existing pixels already mean something under the layout on disk;
+        a different profile, grid or ownership policy would change that
+        meaning, so the changed acquisition belongs in a new run folder.
+        """
         newest = latest_layout_revision(self.folder)
         if newest is not None and spatial_fingerprint_of_a_layout(
             newest
@@ -396,11 +443,6 @@ class LivePublisher:
                 "pixels a different meaning. Resume it with exactly the same "
                 "plan, or start the changed acquisition in a new run folder."
             )
-
-        store_the_profile(self.folder, self.profile)
-        self.layout = record_the_layout(self.folder, candidate_layout)
-        self._restore_generations_from_the_manifest()
-        self._check_existing_position_shapes_match_the_plan()
 
     def _restore_generations_from_the_manifest(self) -> None:
         """Recover which immutable position generation every commit refers to.
