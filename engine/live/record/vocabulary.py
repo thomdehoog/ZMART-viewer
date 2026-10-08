@@ -753,6 +753,22 @@ class AcquisitionProfile:
     sealed: bool = True
 
     def __post_init__(self) -> None:
+        # Frozen first, then checked, in an order where each check may assume
+        # the ones before it held. Every refusal says what was expected and
+        # what arrived instead.
+        self._freeze_the_fields()
+        self._check_the_names_and_kinds()
+        self._check_the_frame_and_voxels()
+        self._check_the_overlap()
+        self._check_the_levels()
+
+    def _freeze_the_fields(self) -> None:
+        """Turn every list and map given into a tuple or FrozenMap.
+
+        The profile is frozen, so what it holds must be too; otherwise a list
+        handed in could still be changed from outside after the profile was
+        sealed and named after its contents.
+        """
         object.__setattr__(self, "axes", tuple(self.axes))
         object.__setattr__(self, "frame_shape", _frozen_axis_map(self.frame_shape))
         object.__setattr__(
@@ -766,6 +782,8 @@ class AcquisitionProfile:
         object.__setattr__(self, "codecs", tuple(self.codecs))
         object.__setattr__(self, "channels", tuple(self.channels))
 
+    def _check_the_names_and_kinds(self) -> None:
+        """The profile must be named safely and describe a known kind of run."""
         if not self.profile_id or not self.acquisition_type:
             raise ZmartLiveError(
                 "An acquisition profile has to name both its identity and its type."
@@ -804,6 +822,9 @@ class AcquisitionProfile:
                 f"tile's measurements count. Use one of "
                 f"{', '.join(ANALYSIS_OWNERSHIP_POLICIES)}."
             )
+
+    def _check_the_frame_and_voxels(self) -> None:
+        """Frame sizes, voxel sizes and halos must name declared axes and make sense."""
         for axis in self.frame_shape:
             if axis not in self.axes:
                 raise ZmartLiveError(
@@ -830,6 +851,9 @@ class AcquisitionProfile:
                     f"The analysis halo on axis '{axis}' is {halo}. It has to be "
                     "non-negative and belong to the declared axis order."
                 )
+
+    def _check_the_overlap(self) -> None:
+        """Each overlap must fit inside its frame and within the permitted band."""
         for axis, overlap in self.overlap_pixels.items():
             frame = self.frame_shape.get(axis)
             if frame is None:
@@ -855,6 +879,15 @@ class AcquisitionProfile:
                     f"{frame}-pixel frame ({overlap / frame:.1%}), outside the "
                     "permitted overlap band recorded by this same profile."
                 )
+
+    def _check_the_levels(self) -> None:
+        """The zoomed-out levels must be listed in order, and the linkable ones must tile exactly.
+
+        A linked view points at whole chunks of the positions, so on every
+        linkable level the frame, the overlap and the grid step must divide
+        exactly by the downsampling and then contain whole chunks; otherwise
+        the view would need a partial source chunk at a seam or camera edge.
+        """
         seen_levels = [level.level for level in self.levels]
         if seen_levels != list(range(len(seen_levels))):
             raise ZmartLiveError(
