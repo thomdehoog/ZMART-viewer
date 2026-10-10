@@ -91,7 +91,7 @@ def is_store(path: Path) -> bool:
     return bool(read_attrs_at(path).get("multiscales"))
 
 
-_UNIT_SPELLINGS = {
+UNIT_SPELLINGS = {
     "um": "micrometer",
     "µm": "micrometer",  # the micro sign, U+00B5
     "μm": "micrometer",  # greek small letter mu, U+03BC -- identical to look at
@@ -146,7 +146,7 @@ def normalise_units(raw: bytes) -> bytes:
                     continue
 
                 spelled = axis.get("unit")
-                correct = _UNIT_SPELLINGS.get(spelled) if isinstance(spelled, str) else None
+                correct = UNIT_SPELLINGS.get(spelled) if isinstance(spelled, str) else None
 
                 if correct is not None and correct != spelled:
                     axis["unit"] = correct
