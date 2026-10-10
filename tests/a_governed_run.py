@@ -52,7 +52,9 @@ import argparse
 import base64
 import io
 import json
+import os
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -86,8 +88,7 @@ def fast_publish(run: LivePublisher, position_id: str) -> None:
     positions — its own super-linearity, measured and owned separately —
     which prices a 6,400-position fixture at hours of wall clock for work
     the serving measurements do not need. This appends the commit event
-    directly, the pattern the browser fixture `growing_run.py` sanctions:
-    the readiness flags are claimed rather than earned, which is honest
+    directly: the readiness flags are claimed rather than earned, which is honest
     exactly here, because the fixture wrote every pixel and record itself a
     moment ago and there is nothing else to check. The WATCHED churn never
     uses this — its writer column measures the real thing.
@@ -115,10 +116,12 @@ def fast_publish(run: LivePublisher, position_id: str) -> None:
 FRAME = 384
 BRIGHT = (46000, 62000)
 
-# Where the fixtures live between runs. Deliberately durable: the writer's
-# work is minutes per thousand positions and the measurements must be
-# repeatable without paying it again.
-FIXTURES = Path(r"D:\zmart-scale-runs")
+# Where the fixtures live between runs when this file is run by hand. Kept
+# between runs on purpose: the writer's work is minutes per thousand positions
+# and the measurements must be repeatable without paying it again. Choose a
+# disk with room with --fixtures or ZMART_FIXTURES; the tests always use their
+# own temporary folder.
+FIXTURES = Path(os.environ.get("ZMART_FIXTURES") or Path(tempfile.gettempdir()) / "zmart-scale-runs")
 
 DIP = 45
 ENOUGH = 200
@@ -256,10 +259,9 @@ def main() -> int:
     parsing.add_argument(
         "--fixtures",
         default=None,
-        help="where the durable fixtures live; defaults to "
-        "the microscope machine's folder above, so on "
-        "any other machine pass a folder with room "
-        "for the survey being measured",
+        help="where the fixtures are kept between runs; defaults to "
+        "ZMART_FIXTURES, or else a folder in the system's temporary "
+        "folder. Pass a folder with room for the survey being measured",
     )
     asked = parsing.parse_args()
     if asked.fixtures:

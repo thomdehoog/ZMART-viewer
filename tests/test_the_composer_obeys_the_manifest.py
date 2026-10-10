@@ -12,10 +12,8 @@ writing machinery — the same ``LivePublisher`` the gateway tests use — becau
 a mock manifest would let the composer agree with a simplification instead of
 with the thing that rules the microscope.
 
-The review that ordered this work is
-an earlier note (kept in the repository's git history); findings one, two,
-three and five are the contracts below. The independent review of the *plan*
-is an earlier note (kept in the repository's git history).
+The contracts below come from a review of the composer, findings one, two,
+three and five; an independent review of the plan agreed with them.
 """
 
 from __future__ import annotations

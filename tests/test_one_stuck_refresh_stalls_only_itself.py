@@ -2,8 +2,7 @@
 
 The refresh pump deliberately has no deadline: a slow answer is usually the
 server doing useful composition, and abandoning it only makes the server do
-the same expensive work again. The measured history behind that decision is in
-an earlier note (kept in the repository's git history). But "no
+the same expensive work again, which was measured. But "no
 deadline" must not mean "no liveness": a request that will genuinely never
 finish — a stalled socket, a server thread wedged behind a lock — is rare and
 real, and an earlier pump serialized whole batches of refreshes, so one such
