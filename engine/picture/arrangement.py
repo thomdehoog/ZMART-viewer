@@ -349,7 +349,7 @@ class Mosaic:
         ]
 
 
-def _the_description_of(store: Path) -> tuple[dict, str]:
+def the_description_of(store: Path) -> tuple[dict, str]:
     """What a store says about itself, and which generation of OME-Zarr wrote it."""
     newer = store / "zarr.json"
 
@@ -402,7 +402,7 @@ def _how_a_resolution_is_stored(
 
 def read_one_tile(store: Path) -> Tile:
     """Every resolution a tile keeps, each with its own voxel size and corner."""
-    described, _ = _the_description_of(store)
+    described, _ = the_description_of(store)
     multiscale = (described.get("multiscales") or [{}])[0]
     datasets = multiscale.get("datasets") or []
     axes = tuple(str(axis.get("name", "")) for axis in multiscale.get("axes") or ())
@@ -536,7 +536,7 @@ PLATE_WELL_GAP = 1.08
 def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
     """The one plate this folder holds, or None; ambiguity is refused."""
     try:
-        described, _ = _the_description_of(folder)
+        described, _ = the_description_of(folder)
     except ValueError:
         described = {}
 
@@ -548,7 +548,7 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
 
     for store in stores:
         try:
-            described, _ = _the_description_of(store)
+            described, _ = the_description_of(store)
         except ValueError:
             continue
 
@@ -607,7 +607,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
                     "way to know where it belongs."
                 ) from None
 
-        described, _ = _the_description_of(store / path)
+        described, _ = the_description_of(store / path)
         images = (described.get("well") or {}).get("images") or []
         fields = [read_one_tile(store / path / image["path"]) for image in images]
         read.append((row, column, path.replace("/", ""), fields))
@@ -742,7 +742,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
 
     for tile in tiles:
         try:
-            described, _ = _the_description_of(tile.store)
+            described, _ = the_description_of(tile.store)
         except ValueError:
             continue
 

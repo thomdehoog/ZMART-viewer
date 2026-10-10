@@ -113,7 +113,7 @@ def _inside(path: Path, parent: Path) -> bool:
     return resolved == root or root in resolved.parents
 
 
-class _LiveRun:
+class LiveRun:
     """The cached, fail-closed interpretation of one run folder."""
 
     def __init__(self, folder: Path) -> None:
@@ -150,7 +150,7 @@ class _LiveRun:
         self._moments_by_position: dict[str, set[int]] = {}
         self._replacements_seen: dict[str, int] = {}
 
-    def _published_units(self) -> frozenset[tuple[str, int, int]]:
+    def published_units(self) -> frozenset[tuple[str, int, int]]:
         mark = self.manifest.fingerprint()
         with self._lock:
             if mark != self._publication_mark:
@@ -197,16 +197,25 @@ class _LiveRun:
                 self._publication_mark = mark
             return self._published
 
-    def _positions_in_commit_order(self) -> tuple[str, ...]:
+    def positions_in_commit_order(self) -> tuple[str, ...]:
         """Every published position in first-arrival order — the draw order."""
-        self._published_units()
+        self.published_units()
         with self._lock:
             return self._commit_order
 
-    def published(self, position_id: str, moment: int, generation: int) -> bool:
-        return (position_id, moment, generation) in self._published_units()
+    def how_far_folded(self) -> tuple[int, int]:
+        """How many events the running total has taken in, and the last one's revision.
 
-    def _geometry(self) -> tuple[SceneLayoutRevision, AcquisitionProfile]:
+        A baked picture stamps itself with this pair, so that it can later tell
+        a history that merely grew from one that was rewritten under it.
+        """
+        with self._lock:
+            return self._folded, self._last_folded_revision
+
+    def published(self, position_id: str, moment: int, generation: int) -> bool:
+        return (position_id, moment, generation) in self.published_units()
+
+    def geometry(self) -> tuple[SceneLayoutRevision, AcquisitionProfile]:
         pointer = self.folder / _BOOKKEEPING / "locations.json"
         stamp = pointer.stat()
         mark = (
@@ -250,7 +259,7 @@ class _LiveRun:
             held = json.loads(link_file.read_text(encoding="utf-8"))
             if held.get("schema") != _LINKS_SCHEMA:
                 raise ValueError("the live view link map has an unknown schema")
-            layout, profile = self._geometry()
+            layout, profile = self.geometry()
             position_ids = tuple(placement.position_id for placement in layout.positions)
             for key, expected in (
                 ("run_id", layout.run_id),
@@ -291,7 +300,7 @@ class _LiveRun:
                     declared_order = tuple(position_ids)
                     committed_order = [
                         position_id
-                        for position_id in self._positions_in_commit_order()
+                        for position_id in self.positions_in_commit_order()
                         if position_id in set(position_ids)
                     ]
                     already_committed = set(committed_order)
@@ -413,7 +422,7 @@ class _LiveRun:
         because a published position was read back complete and a gap in it is
         damage to fail closed on.
         """
-        layout, _profile = self._geometry()
+        layout, _profile = self.geometry()
         position_ids = tuple(placement.position_id for placement in layout.positions)
         moment = piece[0]
         for claim in route.claims_on(piece):
@@ -456,7 +465,7 @@ class _LiveRun:
 
         parts = relative.parts
         if len(parts) >= 4 and parts[:2] == _DATA:
-            layout, _profile = self._geometry()
+            layout, _profile = self.geometry()
             named = _generation_named(
                 parts[2],
                 tuple(placement.position_id for placement in layout.positions),
@@ -469,7 +478,7 @@ class _LiveRun:
         return self._view_route(relative, piece)
 
 
-_known: dict[Path, _LiveRun] = {}
+_known: dict[Path, LiveRun] = {}
 _known_lock = threading.Lock()
 
 
@@ -503,7 +512,7 @@ def answer_from_a_live_run(target: str | Path) -> LiveResponse | None:
         with _known_lock:
             run = _known.get(run_folder)
             if run is None:
-                run = _known[run_folder] = _LiveRun(run_folder)
+                run = _known[run_folder] = LiveRun(run_folder)
         return run.answer(target)
     except (
         OSError,
