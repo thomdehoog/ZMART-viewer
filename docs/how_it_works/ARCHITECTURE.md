@@ -168,7 +168,9 @@ built when asked for.
 images in it. What the engine may write is its own, and kept apart: a built
 picture's description, and, when an interface asks for a baked overview, the
 coarse zoomed-out copies under `.zmart-viewer/` beside the data
-(`engine/views/publishing.py`).
+(`engine/views/publishing.py`). A picture made only for one session, such as
+raw positions opened from the load window, is described in a scratch folder
+of the session, not beside the data.
 
 ### The named views
 
@@ -225,13 +227,16 @@ to open.
  ═══════════════════════════════════════════════════════════════════════════════
 
      window.py ───────────── opens the window with pywebview; the zmart-viewer command
+     __main__.py ─────────── lets `python -m zmart_viewer.gui` do the same
      source/ ─────────────── the page's sources, and everything Node needs to build them
-       App.jsx ───────────── the whole window's state, and the load window
+       App.jsx ───────────── the whole window's state
+         ├── LoadWindow.jsx ─────── LOAD DATA: walking folders and opening one
          ├── NeuroglancerView.jsx ── gives the engine an element to draw into
          ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
          ├── AxisSlider.jsx ─────── depth up the side, time along the bottom
          ├── ScaleBar.jsx ───────── how large the specimen really is
-         └── TargetsPanel.jsx ───── places you mark, saved to a file
+         ├── TargetsPanel.jsx ───── places you mark, saved to a file
+         └── the small pieces they are made of (ChannelControls.jsx, Histogram.jsx, …)
        drawing/ viewer.js ─── creates neuroglancer with its own interface off
                 layers.js ─── settings → plain layer descriptions
                 neuroglancer.js  applies them to the viewer without rebuilding
@@ -246,6 +251,7 @@ to open.
    THE ENGINE — what answers and draws                      engine/
  ═══════════════════════════════════════════════════════════════════════════════
 
+     filesystem.py ──────────────── writing files in one step, patient with a brief hold
      drawing/   embedding.js ─────── the named views, for windows that draw themselves
                 neuroglancer-growth.mjs  lets an image grow while it is shown
      serving/   server.py ────────── answers every request; guards the opened folder
@@ -265,7 +271,14 @@ to open.
                   publisher.py ───── writes positions and pyramids, one commit each
                   manifest.py ────── the record of what is finished
                   live_serving.py ── which bytes may answer for a published piece
+                  live_state.py ──── the small state an open window follows
                   storage_plans.py ─ how one kind of acquisition is written
+                  omezarr.py ─────── makes a written position readable by other software
+                  shard_lookup.py ── finds one chunk inside a bundled file
+                  view_routes.py ─── serves a piece of the linked view from a bundle
+                  scene.py ───────── a run's images described as one scene
+                  ownership.py ───── which tile's measurements count in an overlap
+                  identity.py ────── names a run's descriptions can be trusted by
                   vocabulary.py ──── the words the rest of record/ speaks in
 
  ═══════════════════════════════════════════════════════════════════════════════
