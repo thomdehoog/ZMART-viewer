@@ -190,6 +190,80 @@ class TestTheGuard:
         library.open(monday)
         assert library.resolve(nonsense) is None
 
+    @pytest.mark.parametrize(
+        "network_path",
+        [
+            "0///192.0.2.31/share/x",
+            "0/\\\\192.0.2.32\\share\\x",
+            "0/overview.ome.zarr\\..\\..\\secret.txt",
+            "0/C:/Windows/win.ini",
+            "0/overview.ome.zarr/.zattrs:hidden",
+            "0/overview.ome.zarr//.zattrs",
+            "0/./overview.ome.zarr/.zattrs",
+        ],
+    )
+    def test_a_path_that_could_reach_elsewhere_is_refused_before_the_disk_is_asked(
+        self, two_runs, network_path, monkeypatch
+    ):
+        """Review M5: on Windows, a path that begins with two slashes is a network share.
+
+        Joining one to the open folder throws the folder away, and asking the
+        disk where it leads makes Windows try to reach that share -- 21 seconds
+        of a server thread, and the user's network credentials offered to a
+        computer a web page chose. The guard decides from the words alone, so
+        the disk is never asked about such a path at all.
+        """
+        monday, _, _ = two_runs
+        library = Library()
+        library.open(monday)
+        from pathlib import Path
+
+        def never(*_args, **_kwargs):
+            raise AssertionError("the disk was asked about a path that is refused by its words")
+
+        monkeypatch.setattr(Path, "resolve", never)
+        assert library.resolve(network_path) is None
+
+
+class TestOneImageOpenedByName:
+    """Review S1: opening one image serves that image, not the folder it stands in."""
+
+    def test_a_file_beside_the_image_is_not_served(self, tmp_path):
+        image = tmp_path / "home" / "only.ome.zarr"
+        _tiny_store(image)
+        (tmp_path / "home" / "secret.txt").write_text("private", encoding="utf-8")
+        library = Library()
+        number = library.open(image)
+        assert library.resolve(f"{number}/only.ome.zarr/.zattrs") is not None
+        assert library.resolve(f"{number}/secret.txt") is None
+
+    def test_another_image_beside_it_is_not_served(self, tmp_path):
+        image = tmp_path / "home" / "only.ome.zarr"
+        _tiny_store(image)
+        _tiny_store(tmp_path / "home" / "other.ome.zarr")
+        library = Library()
+        number = library.open(image)
+        assert library.resolve(f"{number}/other.ome.zarr/.zattrs") is None
+
+    def test_what_the_viewer_publishes_beside_the_image_is_served(self, tmp_path):
+        """The viewer's own folder beside the image holds the views it publishes of it."""
+        image = tmp_path / "home" / "only.ome.zarr"
+        _tiny_store(image)
+        published = tmp_path / "home" / ".zmart-viewer" / "overview.ome.zarr"
+        published.mkdir(parents=True)
+        (published / "zarr.json").write_text("{}", encoding="utf-8")
+        library = Library()
+        number = library.open(image)
+        assert library.resolve(f"{number}/.zmart-viewer/overview.ome.zarr/zarr.json") is not None
+
+    def test_a_folder_opened_whole_still_serves_all_of_it(self, two_runs):
+        """A run's root is opened whole: its views and data sit side by side in it."""
+        monday, _, _ = two_runs
+        (monday / "notes.txt").write_text("x", encoding="utf-8")
+        library = Library()
+        number = library.open(monday)
+        assert library.resolve(f"{number}/notes.txt") is not None
+
 
 # --- the endpoints the interface uses ---------------------------------------
 
