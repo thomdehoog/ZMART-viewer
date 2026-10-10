@@ -28,10 +28,9 @@ whether or not anything of it is on screen. That cost is paid forever, sixty
 times a second, for as long as the viewer is open. It was measured on this
 project's own harness: a thousand positions handed over separately drew
 twenty-four frames in five seconds, where one linked image over the same files
-managed 255. The like-for-like table in
-``docs/design/zmart-ome-zarr-recipe.md`` shows the same thing from the other
-side — at six hundred positions, 1,547 metadata requests before the first pixel
-against 120, and a worst frame of 733 milliseconds against 17.
+managed 255. Measured from the other side, at six hundred positions: 1,547
+metadata requests before the first pixel against 120, and a worst frame of 733
+milliseconds against 17.
 
 So the scene may hold five thousand position images, because that is the truth
 about the experiment. What it compiles to is **one source per view** — one for
