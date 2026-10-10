@@ -91,7 +91,7 @@ def test_the_command_offers_a_port_and_passes_it_on() -> None:
     try:
         # The command needs the built page to exist; where it does not, it
         # stops before opening anything and there is nothing to check.
-        if not (command._FRONTEND_DIST / "index.html").exists():
+        if not (command.THE_BUILT_PAGE / "index.html").exists():
             pytest.skip("the viewer page has not been built, so the command stops early")
         assert command.main(["--port", "8899"]) == 0
     finally:
