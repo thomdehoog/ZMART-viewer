@@ -276,7 +276,7 @@ class TestTheSpiralWithColoursAndMoments:
         assert set(np.unique(source[1, 1])) == {3001}
 
     def test_the_record_and_the_walk_agree_moment_by_moment(self, tmp_path):
-        from zmart_viewer.live.record.live_serving import _LiveRun
+        from zmart_viewer.live.record.live_serving import LiveRun
 
         run, width = self.a_two_colour_timelapse(tmp_path)
         spiral = [f"p{row:0{width}d}{column:0{width}d}" for row, column in the_spiral(self.ACROSS)]
@@ -290,8 +290,8 @@ class TestTheSpiralWithColoursAndMoments:
         assert committed == ([(one, 0) for one in spiral] + [(one, 1) for one in spiral]), (
             "the manifest's commit order is not the spiral walk repeated per moment"
         )
-        reader = _LiveRun(run.folder)
-        published = reader._published_units()
+        reader = LiveRun(run.folder)
+        published = reader.published_units()
         for position_id in spiral:
             assert (position_id, 0, 0) in published
             assert (position_id, 1, 0) in published

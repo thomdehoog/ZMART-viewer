@@ -22,6 +22,8 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from zmart_viewer.live.record.vocabulary import the_position_of
+from zmart_viewer.opening.open_folders import UNIT_SPELLINGS
 from zmart_viewer.picture.acquired_regions import AcquiredRegion
 
 IMAGE_SUFFIX = ".ome.zarr"
@@ -349,7 +351,7 @@ class Mosaic:
         ]
 
 
-def _the_description_of(store: Path) -> tuple[dict, str]:
+def the_description_of(store: Path) -> tuple[dict, str]:
     """What a store says about itself, and which generation of OME-Zarr wrote it."""
     newer = store / "zarr.json"
 
@@ -400,9 +402,60 @@ def _how_a_resolution_is_stored(
     )
 
 
+#: How many micrometres one of each length unit OME-Zarr names is. A built
+#: picture is always written in micrometres, so a tile declared in any of these
+#: is converted as it is read.
+MICROMETRES_IN = {
+    "angstrom": 1e-4,
+    "nanometer": 1e-3,
+    "micrometer": 1.0,
+    "millimeter": 1e3,
+    "centimeter": 1e4,
+    "meter": 1e6,
+}
+
+
+def micrometres_per_step(store: Path, multiscale: dict) -> tuple[float, float, float]:
+    """For the z, y and x axes, how many micrometres one unit of the description is.
+
+    The description gives voxel sizes and positions as bare numbers and says
+    their unit once, beside each axis. Reading the numbers without the unit
+    drew a tile declared in nanometres a thousand times too large (review
+    finding S9). An axis that names no unit is taken as micrometres, which is
+    what every writer in this project and most microscopes mean. A unit this
+    list does not know is refused, because guessing would put the tile in the
+    wrong place without anyone noticing.
+    """
+    axes = list(multiscale.get("axes") or ())[-3:]
+    factors = []
+
+    for axis in axes:
+        spelled = axis.get("unit") if isinstance(axis, dict) else None
+
+        if spelled is None:
+            factors.append(1.0)
+            continue
+
+        named = UNIT_SPELLINGS.get(spelled, spelled) if isinstance(spelled, str) else spelled
+
+        if named not in MICROMETRES_IN:
+            raise ValueError(
+                f"{store} gives its {axis.get('name', 'spatial')!r} axis in {spelled!r}, "
+                "which is not a length unit the viewer knows. It knows "
+                f"{', '.join(MICROMETRES_IN)}. Correct the unit in the image's "
+                "description so the tile can be placed to scale."
+            )
+        factors.append(MICROMETRES_IN[named])
+
+    while len(factors) < 3:
+        factors.insert(0, 1.0)
+
+    return factors[0], factors[1], factors[2]
+
+
 def read_one_tile(store: Path) -> Tile:
     """Every resolution a tile keeps, each with its own voxel size and corner."""
-    described, _ = _the_description_of(store)
+    described, _ = the_description_of(store)
     multiscale = (described.get("multiscales") or [{}])[0]
     datasets = multiscale.get("datasets") or []
     axes = tuple(str(axis.get("name", "")) for axis in multiscale.get("axes") or ())
@@ -414,12 +467,13 @@ def read_one_tile(store: Path) -> Tile:
             "finished being written."
         )
 
+    unit = micrometres_per_step(store, multiscale)
     shared = [0.0, 0.0, 0.0]
 
     for transform in multiscale.get("coordinateTransformations") or []:
         if transform.get("type") == "translation":
             moved = [float(n) for n in transform["translation"]]
-            shared = [shared[axis] + moved[-3 + axis] for axis in range(3)]
+            shared = [shared[axis] + moved[-3 + axis] * unit[axis] for axis in range(3)]
 
     copies = []
 
@@ -436,11 +490,11 @@ def read_one_tile(store: Path) -> Tile:
                         "three-axis pictures (z, y, x, with z of one for a single "
                         "plane); open a flat store on its own instead."
                     )
-                voxel = (scale[-3], scale[-2], scale[-1])
+                voxel = (scale[-3] * unit[0], scale[-2] * unit[1], scale[-1] * unit[2])
 
             if transform.get("type") == "translation":
                 moved = [float(n) for n in transform["translation"]]
-                corner = [corner[axis] + moved[-3 + axis] for axis in range(3)]
+                corner = [corner[axis] + moved[-3 + axis] * unit[axis] for axis in range(3)]
 
         if voxel is None:
             raise ValueError(
@@ -536,7 +590,7 @@ PLATE_WELL_GAP = 1.08
 def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
     """The one plate this folder holds, or None; ambiguity is refused."""
     try:
-        described, _ = _the_description_of(folder)
+        described, _ = the_description_of(folder)
     except ValueError:
         described = {}
 
@@ -548,7 +602,7 @@ def _the_plate_in(folder: Path) -> tuple[Path, dict] | None:
 
     for store in stores:
         try:
-            described, _ = _the_description_of(store)
+            described, _ = the_description_of(store)
         except ValueError:
             continue
 
@@ -607,7 +661,7 @@ def _read_the_plate(store: Path, plate: dict) -> list[Tile]:
                     "way to know where it belongs."
                 ) from None
 
-        described, _ = _the_description_of(store / path)
+        described, _ = the_description_of(store / path)
         images = (described.get("well") or {}).get("images") or []
         fields = [read_one_tile(store / path / image["path"]) for image in images]
         read.append((row, column, path.replace("/", ""), fields))
@@ -742,7 +796,7 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
 
     for tile in tiles:
         try:
-            described, _ = _the_description_of(tile.store)
+            described, _ = the_description_of(tile.store)
         except ValueError:
             continue
 
@@ -1126,7 +1180,7 @@ class Composer:
                 swapped: set[str] = set()
 
                 for tile, at in index.get(target, ()):
-                    name = tile.name.split(".")[0]
+                    name = the_position_of(tile.name)
 
                     if name not in changed:
                         rebuilt.append((tile, at))

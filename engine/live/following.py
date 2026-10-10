@@ -249,7 +249,13 @@ class ManifestWatcher:
 
     def _watch(self) -> None:
         while not self._stop.is_set():
-            self.check_once()
+            try:
+                self.check_once()
+            except Exception:
+                # A share that hiccups makes listing the runs raise for a
+                # moment. That is not a reason to stop watching for the rest
+                # of the session, as FolderWatcher already knows.
+                logging.getLogger(__name__).exception("Cannot check the live runs' markers")
             self._stop.wait(self._every)
 
 
@@ -286,9 +292,9 @@ def the_live_picture_declared(run_root: Path, *, bake: bool = False) -> Path:
 
 def _the_run_is_grown(run_root: Path) -> bool:
     """Whether this run's picture carries the (t, c) axes."""
-    from zmart_viewer.live.record.live_serving import _LiveRun
+    from zmart_viewer.live.record.live_serving import LiveRun
 
-    profile = _LiveRun(run_root)._geometry()[1]
+    profile = LiveRun(run_root).geometry()[1]
 
     if profile.timepoints > 1 or len(profile.channels) > 1:
         return True
@@ -542,9 +548,9 @@ def live_state_document(
 
 def the_runs_channels(run_root: Path) -> list[dict]:
     """What this run says about its colours: their names, tints and windows."""
-    from zmart_viewer.live.record.live_serving import _LiveRun
+    from zmart_viewer.live.record.live_serving import LiveRun
 
-    profile = _LiveRun(run_root)._geometry()[1]
+    profile = LiveRun(run_root).geometry()[1]
     return described_channels(
         the_channels_described(profile.channels, profile.dtype),
         len(profile.channels),

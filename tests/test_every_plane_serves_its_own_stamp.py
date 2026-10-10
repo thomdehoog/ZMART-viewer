@@ -161,7 +161,7 @@ def test_the_built_door_serves_the_stamp_several_planes_per_block(tmp_path):
     )
 
     declared = declare_a_built_picture(tmp_path / "shown", tmp_path / "stores", name="stamped")
-    composer = served._composer_for(declared)
+    composer = served.composer_for(declared)
     assert composer is not None, "the declared picture would not open"
     try:
         every_plane_matches(composer, depth=DEPTH)
@@ -271,7 +271,7 @@ def test_the_built_door_serves_every_frame_through_the_real_address(tmp_path):
         "a picture whose tiles keep (t, c) room must declare five axes"
     )
 
-    composer = served._composer_for(declared)
+    composer = served.composer_for(declared)
     assert composer is not None
     try:
         piece = composer.piece

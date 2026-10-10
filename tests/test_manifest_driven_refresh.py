@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import json
 import threading
+import time
 
 from record_fixtures import a_live_run, prepare_without_publishing, some_specimen  # noqa: E402
 from zmart_viewer.live import following as live_config
@@ -108,6 +109,39 @@ def test_manifest_watcher_still_nudges_if_an_api_request_observed_first(tmp_path
     assert watcher.check_once() == 1
     assert heard.get_nowait() is not None
     assert watcher.check_once() == 0
+
+
+def test_manifest_watcher_keeps_watching_after_a_share_hiccups(tmp_path):
+    """One error from a network share must not end the watching for the session.
+
+    Listing the runs reaches ``Path.resolve()`` and ``is_dir()``, which raise
+    when a share is briefly gone. The thread used to die on the first such
+    error, after which commits reached pages only through the slower
+    ``/api/live-state`` check (review finding S8).
+    """
+    run = a_live_run(tmp_path)
+    tracker = LiveStateTracker(run.folder)
+    announcements = Announcements()
+    heard = announcements.listen()
+    asked = []
+
+    def the_runs():
+        asked.append(len(asked))
+        if len(asked) == 2:
+            raise OSError(64, "The specified network name is no longer available")
+        return (tracker,)
+
+    watcher = ManifestWatcher(the_runs, announcements, every=0.02)
+    watcher.start()
+    try:
+        deadline = time.monotonic() + 5
+        while len(asked) < 4 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert len(asked) >= 4, "the watching stopped at the share's error"
+        run.write_and_publish("posA", some_specimen(700))
+        assert heard.get(timeout=5) is not None, "a commit after the error was not announced"
+    finally:
+        watcher.stop()
 
 
 def test_live_state_and_config_advance_only_after_commit_with_stable_urls(tmp_path):
