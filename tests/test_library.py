@@ -272,7 +272,12 @@ def _post(port, route, body):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
     try:
         raw = json.dumps(body).encode()
-        conn.request("POST", route, body=raw, headers={"Content-Length": str(len(raw))})
+        conn.request(
+            "POST",
+            route,
+            body=raw,
+            headers={"Content-Length": str(len(raw)), "Content-Type": "application/json"},
+        )
         response = conn.getresponse()
         return response.status, json.loads(response.read() or b"{}")
     finally:

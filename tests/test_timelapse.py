@@ -419,7 +419,12 @@ def test_a_store_that_lengthens_its_own_array_is_read_again(browser, built_dist,
         # The run goes on, and the store grows to hold three moments.
         _write_a_growing_timelapse(store, frames=3)
         connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
-        connection.request("POST", "/api/announce", body=b"{}", headers={"Content-Length": "2"})
+        connection.request(
+            "POST",
+            "/api/announce",
+            body=b"{}",
+            headers={"Content-Length": "2", "Content-Type": "application/json"},
+        )
         assert json.loads(connection.getresponse().read())["told"] >= 1
         connection.close()
 

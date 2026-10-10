@@ -70,7 +70,11 @@ def request(
 ):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
-        headers = {"Content-Length": str(len(body))} if body is not None else {}
+        headers = (
+            {"Content-Length": str(len(body)), "Content-Type": "application/json"}
+            if body is not None
+            else {}
+        )
         headers.update(extra or {})
         conn.request(method, path, body=body, headers=headers)
         response = conn.getresponse()
@@ -747,3 +751,117 @@ def test_a_request_still_unread_is_not_mistaken_for_a_hang_up():
     finally:
         ours.close()
         theirs.close()
+
+
+# --- requests that are not what they say (review N1) ---------------------------
+
+
+def raw(port: int, text: bytes, *, wait: float = 5.0) -> bytes:
+    """Send bytes exactly as given and return whatever comes back within ``wait`` seconds."""
+    import socket
+
+    with socket.create_connection(("127.0.0.1", port), timeout=wait) as connection:
+        connection.sendall(text)
+        received = b""
+        try:
+            while chunk := connection.recv(65536):
+                received += chunk
+                head, gap, rest = received.partition(b"\r\n\r\n")
+                if gap:
+                    lengths = [
+                        int(line.split(b":", 1)[1])
+                        for line in head.split(b"\r\n")
+                        if line.lower().startswith(b"content-length:")
+                    ]
+                    if lengths and len(rest) >= lengths[0]:
+                        break
+        except TimeoutError:
+            pass
+        return received
+
+
+@pytest.mark.parametrize("length", [b"abc", b"-1", b"1e9"])
+def test_a_length_that_is_not_a_length_is_answered(serving, length):
+    """A broken ``Content-Length`` gets a plain refusal, not a dropped or hung connection."""
+    answer = raw(
+        serving,
+        b"POST /api/annotations HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+        b"Content-Type: application/json\r\nContent-Length: " + length + b"\r\n\r\n{}",
+    )
+    assert answer.startswith(b"HTTP/1.1 400"), answer[:80]
+
+
+def test_a_body_that_is_not_text_is_answered(serving):
+    body = b'{"version": 1, "annotations": "\xff\xfe"}'
+    status, _, answer = request(serving, "/api/annotations", method="POST", body=body)
+    assert status == 400
+    assert "JSON" in json.loads(answer)["error"]
+
+
+def test_head_asks_for_the_embedding_module_too(serving):
+    status, headers, body = request(serving, "/embedding.js", method="HEAD")
+    assert status == 200
+    assert int(headers["Content-Length"]) > 0
+    assert body == b""
+
+
+def test_head_on_the_change_stream_does_not_open_it(serving):
+    """A HEAD is answered with headers and ended; it never becomes an endless stream."""
+    import time
+
+    started = time.perf_counter()
+    got = raw(serving, b"HEAD /api/events HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", wait=5)
+    head, _, rest = got.partition(b"\r\n\r\n")
+    assert head.startswith(b"HTTP/1.1 200")
+    assert b"text/event-stream" in head
+    assert rest == b""
+    assert time.perf_counter() - started < 3, "the stream was opened and held"
+
+
+def test_head_on_a_built_answer_sends_no_body(tmp_path):
+    """Pieces built on request (here: coverage) answer HEAD with headers alone."""
+    from test_open_and_close import _store
+
+    data = tmp_path / "data"
+    _store(data / "one.ome.zarr", channels=1)
+    server = make_server(
+        port=0, data_dir=data, store="one.ome.zarr", transparent_background=True, live=True
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        config = json.loads(request(port, "/api/config")[2])
+        coverage = config["layers"][0]["coverageSources"][0].split("|", 1)[0] + "zarr.json"
+        got = raw(port, f"HEAD {coverage} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".encode(), wait=2)
+        head, _, rest = got.partition(b"\r\n\r\n")
+        assert head.startswith(b"HTTP/1.1 200"), head
+        assert rest == b"", "a HEAD answer carried a body, which the next answer would be read as"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_a_publication_that_cannot_be_made_now_is_answered(tmp_path, monkeypatch):
+    """A publisher that has been closed says so rather than dropping the connection."""
+    from zmart_viewer.views.publishing import PublishedFolders
+
+    def closed(self, publications):
+        raise RuntimeError("the publisher has been closed")
+
+    monkeypatch.setattr(PublishedFolders, "announce", closed)
+    server = make_server(port=0, data_dir=tmp_path)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, _, body = request(
+            server.server_address[1],
+            "/api/announce",
+            method="POST",
+            body=json.dumps({"publications": []}).encode(),
+        )
+        assert status == 503
+        assert "closed" in json.loads(body)["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)

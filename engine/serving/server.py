@@ -21,6 +21,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -176,6 +177,61 @@ def _validate_annotations(payload: object) -> dict:
     return {"version": 1, "annotations": clean}
 
 
+# -- who may ask ------------------------------------------------------------------
+
+#: The names this computer answers to. The server listens on 127.0.0.1 only.
+THIS_COMPUTER = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def on_this_computer(address: str) -> bool:
+    """Whether ``address`` (``host:port``, or a page's origin) names this computer."""
+    if "//" not in address:
+        address = f"//{address}"
+
+    try:
+        return (urllib.parse.urlsplit(address).hostname or "") in THIS_COMPUTER
+    except ValueError:
+        return False
+
+
+def the_origin_of(address: str) -> str:
+    """A page's origin written one way only: ``scheme://host[:port]``, in lower case."""
+    return address.strip().rstrip("/").lower()
+
+
+def refusal_for(headers, allowed_origins: frozenset[str] = frozenset()) -> str | None:
+    """Why a request must not be answered, or None when a page may ask it.
+
+    The server listens on 127.0.0.1, so other computers cannot reach it. A web
+    page open in a browser on this computer can, though, and a browser sends
+    such a page's request without asking first when it is dressed as plain
+    text. Three things the browser always says tell such a request apart: the
+    name it was sent to (``Host``, which a page that renamed itself to reach
+    127.0.0.1 cannot hide), the page it came from (``Origin``), and, for a
+    plain read such as a picture, whether it crossed from another site
+    (``Sec-Fetch-Site``). The viewer's own page, and an interface's page on
+    another port of this computer, are on this computer by all three; a
+    script run here sends no ``Origin`` and is let through. ``Origin: null``,
+    which a sandboxed frame or a local file sends, names no page at all.
+    """
+    host = headers.get("Host") or ""
+
+    if not on_this_computer(host):
+        return f"the viewer only answers requests addressed to this computer, not to {host!r}"
+
+    origin = headers.get("Origin")
+
+    if origin is None:
+        if headers.get("Sec-Fetch-Site") == "cross-site":
+            return "the viewer only answers pages served on this computer, not from another site"
+        return None
+
+    if origin != "null" and (on_this_computer(origin) or the_origin_of(origin) in allowed_origins):
+        return None
+
+    return f"the viewer only answers pages served on this computer, not one from {origin!r}"
+
+
 # -- what the panel calls each open acquisition ---------------------------------
 
 
@@ -234,6 +290,7 @@ class _Handler(SimpleHTTPRequestHandler):
         live_state=None,
         forget_measurements=None,
         open_from=None,
+        allowed_origins: frozenset[str] = frozenset(),
         **kwargs,
     ):
         self._data_dir = data_dir  # where drawn targets are saved
@@ -259,6 +316,8 @@ class _Handler(SimpleHTTPRequestHandler):
         # answer, so a store written after the viewer opened can still appear.
         self._config = config
         self._forget_measurements = forget_measurements or (lambda closed: None)
+        # Pages away from this computer that may ask all the same. See refusal_for.
+        self._allowed_origins = allowed_origins
         super().__init__(*args, directory=str(site_dir), **kwargs)
 
     def handle_one_request(self) -> None:
@@ -286,19 +345,78 @@ class _Handler(SimpleHTTPRequestHandler):
                 "no-store" if page else "public, max-age=31536000, immutable",
             )
 
+    def end_headers(self) -> None:
+        """Every reply, readable by the page that asked when that page may ask at all."""
+        origin = self.headers.get("Origin")
+
+        if origin is not None and self.path != "/embedding.js":
+            # Named, never everyone (``*``): a page that may not ask was
+            # refused before anything was answered.
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+        super().end_headers()
+
     # -- routing ---------------------------------------------------------
 
+    def refused(self) -> bool:
+        """Answer 403 to a request no page on this computer sent, and say why."""
+        why = refusal_for(self.headers, self._allowed_origins)
+
+        if why is None:
+            return False
+
+        # A body left unread on a connection closed on Windows resets it, and
+        # the refusal never arrives; and the next request on a kept-alive
+        # connection would start inside this one's body. So it is read away.
+        length = self.the_body_length()
+
+        if length:
+            self.rfile.read(length)
+        elif length is None:
+            self.close_connection = True
+
+        body = json.dumps({"error": why}).encode("utf-8")
+        self.send_response(HTTPStatus.FORBIDDEN)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        # Straight to the base class: the page that may not ask is not named
+        # in the answer, so it cannot read it.
+        super().end_headers()
+
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+        return True
+
+    def the_body_length(self) -> int | None:
+        """How many bytes of body the request says follow, or None when it says nonsense."""
+        declared = (self.headers.get("Content-Length") or "0").strip()
+        return int(declared) if declared.isdigit() else None
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        """Tell a page on this computer that it may send JSON here.
+
+        A browser asks this first before a page on another port sends a POST
+        with a JSON body, which is exactly what an interface's page does.
+        """
+        if self.refused():
+            return
+
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802 (name fixed by base class)
+        if self.refused():
+            return
 
         if self.path == "/embedding.js":
-            data = (_DRAWING / "embedding.js").read_bytes()
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/javascript; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(data)
+            self._serve_embedding()
             return
 
         if self.path.startswith("/data/"):
@@ -312,6 +430,8 @@ class _Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.refused():
+            return
 
         if self.path.startswith("/api/"):
             self._serve_api_post()
@@ -321,11 +441,35 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def do_HEAD(self) -> None:  # noqa: N802
         """Answer "does this exist, and how big is it?" — headers only, no body."""
-        if self.path.startswith("/data/") or self.path.startswith("/api/"):
-            self.do_GET()
+        if self.refused():
+            return
+
+        if self.path == "/embedding.js":
+            self._serve_embedding()
+            return
+
+        if self.path.startswith("/data/"):
+            self._serve_from_data()
+            return
+
+        if self.path.startswith("/api/"):
+            self._serve_api_get()
             return
 
         super().do_HEAD()
+
+    def _serve_embedding(self) -> None:
+        """The module an interface imports to drive the viewer's drawing, from any page."""
+        data = (_DRAWING / "embedding.js").read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        if self.command != "HEAD":
+            self.wfile.write(data)
 
     def _wanted_range(self, total: int) -> tuple[int, int] | None:
         """The byte range asked for as ``(start, length)``, or ``None`` for all of it."""
@@ -563,7 +707,9 @@ class _Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
 
         self.end_headers()
-        self.wfile.write(body)
+
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def _send_empty(self, status: HTTPStatus) -> None:
         """Answer with a bare status, keeping the connection open for the next ask."""
@@ -748,6 +894,10 @@ class _Handler(SimpleHTTPRequestHandler):
         self.close_connection = True
         self.end_headers()
 
+        if self.command == "HEAD":
+            # Headers only: a HEAD that became a stream would never end.
+            return
+
         waiting = self._announcements.listen()
 
         try:
@@ -832,14 +982,16 @@ class _Handler(SimpleHTTPRequestHandler):
             before = publisher.revisions()
             try:
                 publisher.announce(payload["publications"])
-            except (ValueError, KeyError, TypeError, OverflowError, OSError) as why:
+            except (ValueError, KeyError, TypeError, OverflowError, OSError, RuntimeError) as why:
                 # Each named view commits atomically. A later view can fail after
                 # an earlier one succeeded; those committed pixels still need notice.
                 if publisher.revisions() != before:
                     self._announcements.say_something_changed()
+                # A disk that held a file for a moment, or a publisher that
+                # was closed under it, may answer next time; a bad request never.
                 status = (
                     HTTPStatus.SERVICE_UNAVAILABLE
-                    if isinstance(why, OSError)
+                    if isinstance(why, (OSError, RuntimeError))
                     else HTTPStatus.BAD_REQUEST
                 )
                 self._send_json({"error": str(why)}, status)
@@ -897,6 +1049,18 @@ class _Handler(SimpleHTTPRequestHandler):
         """Handle the things the viewer asks Python to do."""
         route = self.path.rstrip("/")
 
+        length = self.the_body_length()
+
+        if length is None:
+            self.close_connection = True
+            self._send_json(
+                {"error": "the request's Content-Length is not a number of bytes"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        raw = self.rfile.read(length) if length else b""
+
         if route not in {
             "/api/browse",
             "/api/stores/open",
@@ -925,11 +1089,21 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json({"error": "opening by hand is switched off here"}, HTTPStatus.NOT_FOUND)
             return
 
-        length = int(self.headers.get("Content-Length", 0))
+        declared = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+
+        if raw and declared != "application/json":
+            # A page from elsewhere dresses its body as plain text so that the
+            # browser sends it without asking first (review M3); a body sent
+            # here says what it is.
+            self._send_json(
+                {"error": "send the body as JSON, with Content-Type: application/json"},
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return
 
         try:
-            payload = json.loads(self.rfile.read(length) or b"{}")
-        except json.JSONDecodeError:
+            payload = json.loads(raw or b"{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
             self._send_json({"error": "that was not readable JSON"}, HTTPStatus.BAD_REQUEST)
             return
 
@@ -1773,12 +1947,18 @@ def make_server(
     open_from: Path | None = None,
     bake: bool = False,
     canvas: dict | None = None,
+    allowed_origins: list[str] | tuple[str, ...] = (),
 ) -> ThreadingHTTPServer:
     """Create (but do not start) the viewer's web server.
 
     Given nothing to open, it serves an empty studio: no store, no demo,
     just the open door. ``data_dir`` then only says where the open dialog
     starts and where drawn targets are saved.
+
+    Only pages served on this computer may ask the server anything, on any
+    port: the viewer's own page, and an interface's page served beside it.
+    ``allowed_origins`` names further pages that may, each as the origin a
+    browser reports (``"http://lab-pc:8000"``). See :func:`refusal_for`.
     """
     data_dir = Path(data_dir).resolve() if data_dir is not None else Path.cwd()
     names = [store] if isinstance(store, str) else list(store or [])
@@ -1842,6 +2022,7 @@ def make_server(
         announcements=registry.announcements,
         live_state=registry.state_document,
         forget_measurements=measurements.forget,
+        allowed_origins=frozenset(the_origin_of(origin) for origin in allowed_origins),
     )
 
     try:
