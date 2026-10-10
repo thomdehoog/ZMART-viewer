@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from zmart_viewer.live.record.vocabulary import the_position_of
 from zmart_viewer.picture.acquired_regions import AcquiredRegion
 
 IMAGE_SUFFIX = ".ome.zarr"
@@ -1126,7 +1127,7 @@ class Composer:
                 swapped: set[str] = set()
 
                 for tile, at in index.get(target, ()):
-                    name = tile.name.split(".")[0]
+                    name = the_position_of(tile.name)
 
                     if name not in changed:
                         rebuilt.append((tile, at))
