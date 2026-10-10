@@ -753,6 +753,47 @@ def test_a_request_still_unread_is_not_mistaken_for_a_hang_up():
         theirs.close()
 
 
+# --- names that have to be spelled for the address bar (review M4) ------------
+
+
+@pytest.mark.parametrize("name", ["my image.zarr", "Überblick.zarr", "a#b.zarr", "50%.zarr"])
+def test_an_image_whose_name_needs_spelling_out_is_drawn(tmp_path, name):
+    """A space, an umlaut, a ``#`` or a ``%`` in a name must not cost the picture.
+
+    The address the page is handed spells such a name out (``my%20image``), the
+    browser asks for exactly that, and the server reads it back as the name.
+    Before, the addresses were handed out raw -- a browser cut ``a#b`` at the
+    ``#`` -- and the server never read a spelled-out name back, so each of
+    these answered 404.
+    """
+    from test_open_and_close import _store
+
+    data = tmp_path / "data"
+    _store(data / name, channels=1)
+    server = make_server(port=0, data_dir=data, store=name, live=False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        config = json.loads(request(port, "/api/config")[2])
+        address = config["layers"][0]["sources"][0].split("|", 1)[0]
+        assert "#" not in address and " " not in address
+        status, _, body = request(port, f"{address}.zattrs")
+        assert status == 200
+        assert json.loads(body)["multiscales"][0]["datasets"][0]["path"] == "0"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_a_spelled_out_way_out_of_the_folder_is_still_refused(serving):
+    """Reading a spelled-out name back must not reopen the way out of the folder."""
+    for sneaky in ("/data/0/%2e%2e/outside.txt", "/data/0/demo.zarr/%2e%2e%5c..%5coutside.txt"):
+        status, _, body = request(serving, sneaky)
+        assert status in (403, 404), sneaky
+        assert body != b"secret"
+
+
 # --- requests that are not what they say (review N1) ---------------------------
 
 

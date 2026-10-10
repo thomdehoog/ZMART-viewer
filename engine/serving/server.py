@@ -49,8 +49,8 @@ from zmart_viewer.opening.open_folders import (
     normalise_units,
     read_array_description,
     read_attrs_at,
+    the_address_of,
     written_timepoints,
-    zarr_scheme,
 )
 
 # The other way a picture can exist without being written: built when asked
@@ -510,7 +510,9 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def _serve_from_data(self) -> None:
         """Serve one file from an open OME-Zarr store under ``/data``."""
-        rel = self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0]
+        # The address spells names out (see the_address_of); read it back to
+        # the names themselves before the library decides what it may reach.
+        rel = urllib.parse.unquote(self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0])
         number, _, rest = rel.partition("/")
         marker = f"/{coverage.MARKER}/"
         if marker in rel:
@@ -936,7 +938,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         stores = []
         for source in dict.fromkeys(sources):
-            rel = source.split("/data/", 1)[-1].split("|", 1)[0].strip("/")
+            rel = urllib.parse.unquote(source.split("/data/", 1)[-1].split("|", 1)[0].strip("/"))
             store = self._library.resolve(rel)
             if store is None or not store.is_dir():
                 self._send_json({"error": "that picture is not open here"}, HTTPStatus.NOT_FOUND)
@@ -1692,7 +1694,7 @@ class _LayerPanelConfig:
         can span many positions; a new channel starts a row of its own.
         """
         store_path = root / name
-        address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
+        address = the_address_of(root_number, name, store_path)
         store_paths[address] = store_path
         source_attrs = read_attrs_at(store_path)
         named_view = (source_attrs.get("zmart") or {}).get("view")
@@ -1752,7 +1754,9 @@ class _LayerPanelConfig:
         for mask in label_images(store_path):
             key = (root_number, "mask", mask)
             row = merged.get(key)
-            source = f"/data/{root_number}/{name}/labels/{mask}/|{zarr_scheme(store_path / 'labels' / mask)}:"
+            source = the_address_of(
+                root_number, f"{name}/labels/{mask}", store_path / "labels" / mask
+            )
 
             if row is None:
                 merged[key] = {

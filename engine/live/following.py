@@ -26,7 +26,7 @@ from zmart_viewer.live.record.live_state import LiveStateSnapshot, LiveStateTrac
 from zmart_viewer.live.record.omezarr import the_channels_described
 from zmart_viewer.live.record.vocabulary import ZmartLiveError
 from zmart_viewer.opening.contrast import intensity_histogram
-from zmart_viewer.opening.open_folders import described_channels, zarr_scheme
+from zmart_viewer.opening.open_folders import described_channels, the_address_of
 from zmart_viewer.picture.built_picture import declare_a_governed_picture, the_scene_folder_name
 from zmart_viewer.serving.picture_pieces import catch_up_governed_runs
 
@@ -364,7 +364,7 @@ class LiveBinding:
                 f"{self.dataset_root}. Open the run root or its views folder."
             ) from why
 
-        return f"/data/{self.dataset_number}/{inside.as_posix()}/|{zarr_scheme(store)}:"
+        return the_address_of(self.dataset_number, inside.as_posix(), store)
 
     def state_json(self, snapshot: LiveStateSnapshot | None = None) -> dict:
         """The run's frontend state, naming the source actually served."""
