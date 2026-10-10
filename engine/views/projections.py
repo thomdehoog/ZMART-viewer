@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import tempfile
 from copy import deepcopy
 from dataclasses import replace
@@ -11,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from zmart_viewer.filesystem import rmtree_despite_brief_holds
 from zmart_viewer.opening.open_folders import read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
@@ -110,8 +110,13 @@ def write_projection(
     scanning, workflow inference, notification or projection of a stitched volume.
 
     The projection is built in a staging folder beside the destination and
-    renamed into place in one step, so a reader never sees a half-written
-    product; the previous product, if any, is kept until the swap has succeeded.
+    renamed into place, so a reader never sees a half-written product. A
+    product that already exists is replaced in two renames, because a folder
+    cannot be renamed over another one: the old product steps aside first and
+    the new one takes its place, so for that moment there is no product at
+    the destination. A reader that asks then finds nothing rather than a
+    mixture. The old product is kept until the swap has succeeded, and is
+    removed with the patience a virus scanner's glance needs.
     """
     source, destination = Path(source).resolve(), Path(destination).resolve()
     if regions != "complete":
@@ -190,10 +195,9 @@ def write_projection(
                 retired = None
             raise
     finally:
-        if staging.exists():
-            shutil.rmtree(staging)
+        rmtree_despite_brief_holds(staging)
         if retired is not None:
-            shutil.rmtree(retired)
+            rmtree_despite_brief_holds(retired)
     return destination
 
 

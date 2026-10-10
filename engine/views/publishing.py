@@ -10,7 +10,6 @@ import json
 import logging
 import math
 import os
-import shutil
 import threading
 from contextlib import ExitStack, contextmanager
 from copy import deepcopy
@@ -20,7 +19,11 @@ from typing import NamedTuple
 
 # Imported by name, so that a test can stand in for the write and check that an
 # unchanged announcement writes nothing.
-from zmart_viewer.filesystem import done_despite_brief_holds, put_json_in_place
+from zmart_viewer.filesystem import (
+    done_despite_brief_holds,
+    put_json_in_place,
+    rmtree_despite_brief_holds,
+)
 from zmart_viewer.opening.open_folders import description_file, discover, read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
@@ -1273,12 +1276,17 @@ class PublishedTransfer(ComposedPicture):
             }
             put_json_in_place(self._shown / "zarr.json", description)
         put_json_in_place(self._shown / "publication.json", state)
-        (self._shown / "pending.json").unlink()
+        # The record in memory moves on first: publication.json is already in
+        # place, so this generation is the truth whatever happens next. The
+        # note of pieces under way then goes with the patience a scanner's
+        # glance needs; one bare refusal here used to leave the server a
+        # revision behind the disk and those pieces withheld (review S3).
         self._state = state
         self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
         self._held = made
         if previous is not None:
             previous.stop_warming()
+        done_despite_brief_holds((self._shown / "pending.json").unlink)
         return self.revision
 
     def _dirty_pieces(self, plan: _Prepared, made: Composer):
@@ -1426,9 +1434,7 @@ class PublishedTransfer(ComposedPicture):
                         old["shape"] != metadata["shape"]
                         or old["chunk_grid"] != metadata["chunk_grid"]
                     ):
-                        chunks = path / "c"
-                        if chunks.exists():
-                            shutil.rmtree(chunks)
+                        rmtree_despite_brief_holds(path / "c")
                 put_json_in_place(path / "zarr.json", metadata)
         baked = sorted(level for level in made.pinned_levels if level > 0)
         if not bake:
