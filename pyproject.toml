@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zmart-viewer"
-version = "0.5.0rc1"
+version = "0.5.0rc2"
 description = "A viewer for large, growing, multi-channel microscopy images: point it at a folder and it draws what is there, and follows it while a microscope writes."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
