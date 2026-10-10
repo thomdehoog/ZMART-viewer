@@ -159,6 +159,37 @@ class TestStoppingABuild:
             time.sleep(0.05)
         return told
 
+    def test_the_half_made_build_is_gone_before_the_stop_is_reported(self, viewer, tmp_path, monkeypatch):
+        """The page lists the folder as soon as it hears "cancelled", so the tidying comes first.
+
+        Removing a folder takes a moment, and longer on Windows while a scanner
+        still holds a file in it; it is slowed down here so that a state
+        reported before the half-made build is gone is always seen.
+        """
+        import shutil
+
+        removing = shutil.rmtree
+
+        def slow_removal(tree, *arguments, **options):
+            if str(tree).endswith(".building"):
+                time.sleep(0.3)
+            return removing(tree, *arguments, **options)
+
+        monkeypatch.setattr(shutil, "rmtree", slow_removal)
+        address, _ = viewer
+        scan = _a_grid_scan(tmp_path / "big", across=8)
+        scenes = tmp_path / "scenes"
+        status, _ = _post(
+            address,
+            "/api/stores/construct",
+            {"path": str(scan), "viewer_folder": str(scenes), "bake": True},
+        )
+        assert status == 200
+        assert self.stop_the_build(address)["state"] == "cancelled"
+        assert sorted(one.name for one in scenes.iterdir()) == [], (
+            "the stop was reported while the half-made build was still there"
+        )
+
     def test_a_scene_that_stood_before_the_build_is_kept(self, viewer, tmp_path):
         address, _ = viewer
         scan = _a_grid_scan(tmp_path / "big", across=8)
