@@ -65,7 +65,11 @@ def write_store(path: Path, *, shape, chunks, axes, nested=False, fill=None, ome
 def request(port, path, method="GET", body=None, timeout=PATIENCE):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
     try:
-        headers = {"Content-Length": str(len(body))} if body is not None else {}
+        headers = (
+            {"Content-Length": str(len(body)), "Content-Type": "application/json"}
+            if body is not None
+            else {}
+        )
         conn.request(method, path, body=body, headers=headers)
         response = conn.getresponse()
         return response.status, response.read()
