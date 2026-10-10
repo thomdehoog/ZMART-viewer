@@ -70,7 +70,11 @@ def request(
 ):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
-        headers = {"Content-Length": str(len(body))} if body is not None else {}
+        headers = (
+            {"Content-Length": str(len(body)), "Content-Type": "application/json"}
+            if body is not None
+            else {}
+        )
         headers.update(extra or {})
         conn.request(method, path, body=body, headers=headers)
         response = conn.getresponse()
@@ -747,3 +751,295 @@ def test_a_request_still_unread_is_not_mistaken_for_a_hang_up():
     finally:
         ours.close()
         theirs.close()
+
+
+# --- names that have to be spelled for the address bar (review M4) ------------
+
+
+@pytest.mark.parametrize("name", ["my image.zarr", "Überblick.zarr", "a#b.zarr", "50%.zarr"])
+def test_an_image_whose_name_needs_spelling_out_is_drawn(tmp_path, name):
+    """A space, an umlaut, a ``#`` or a ``%`` in a name must not cost the picture.
+
+    The address the page is handed spells such a name out (``my%20image``), the
+    browser asks for exactly that, and the server reads it back as the name.
+    Before, the addresses were handed out raw -- a browser cut ``a#b`` at the
+    ``#`` -- and the server never read a spelled-out name back, so each of
+    these answered 404.
+    """
+    from test_open_and_close import _store
+
+    data = tmp_path / "data"
+    _store(data / name, channels=1)
+    server = make_server(port=0, data_dir=data, store=name, live=False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        config = json.loads(request(port, "/api/config")[2])
+        address = config["layers"][0]["sources"][0].split("|", 1)[0]
+        assert "#" not in address and " " not in address
+        status, _, body = request(port, f"{address}.zattrs")
+        assert status == 200
+        assert json.loads(body)["multiscales"][0]["datasets"][0]["path"] == "0"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_a_spelled_out_way_out_of_the_folder_is_still_refused(serving):
+    """Reading a spelled-out name back must not reopen the way out of the folder."""
+    for sneaky in ("/data/0/%2e%2e/outside.txt", "/data/0/demo.zarr/%2e%2e%5c..%5coutside.txt"):
+        status, _, body = request(serving, sneaky)
+        assert status in (403, 404), sneaky
+        assert body != b"secret"
+
+
+# --- what the browser may keep (review S6) -------------------------------------
+
+
+@pytest.fixture
+def a_built_site(tmp_path):
+    """A site with a hashed bundle, a worker with a fixed name, and the page."""
+    site = tmp_path / "site"
+    (site / "assets").mkdir(parents=True)
+    (site / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (site / "assets" / "index-abc.js").write_text("1", encoding="utf-8")
+    (site / "async_computation.bundle.js").write_text("2", encoding="utf-8")
+    (site / "build-manifest.json").write_text("{}", encoding="utf-8")
+    server = make_server(port=0, site_dir=site)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize(
+    "path, kept",
+    [
+        ("/assets/index-abc.js", "public, max-age=31536000, immutable"),
+        ("/async_computation.bundle.js", "no-cache"),
+        ("/build-manifest.json", "no-cache"),
+        ("/no-such-file.js", "no-cache"),
+        ("/assets/no-such-file.js", "no-cache"),
+        ("/", "no-store"),
+        ("/?v=2", "no-store"),
+        ("/index.html?v=2", "no-store"),
+    ],
+)
+def test_only_files_named_by_their_content_are_kept_for_good(a_built_site, path, kept):
+    """A file kept "for good" must change its name when it changes.
+
+    Vite names everything under ``assets/`` by its content, so those may be
+    kept for a year. A worker with a fixed name, the build manifest, or a
+    404 kept that long outlives an upgrade: the browser goes on running the
+    old worker beside the new page.
+    """
+    assert request(a_built_site, path)[1]["Cache-Control"] == kept
+
+
+# --- requests that are not what they say (review N1) ---------------------------
+
+
+def raw(port: int, text: bytes, *, wait: float = 5.0) -> bytes:
+    """Send bytes exactly as given and return whatever comes back within ``wait`` seconds."""
+    import socket
+
+    with socket.create_connection(("127.0.0.1", port), timeout=wait) as connection:
+        connection.sendall(text)
+        received = b""
+        try:
+            while chunk := connection.recv(65536):
+                received += chunk
+                head, gap, rest = received.partition(b"\r\n\r\n")
+                if gap:
+                    lengths = [
+                        int(line.split(b":", 1)[1])
+                        for line in head.split(b"\r\n")
+                        if line.lower().startswith(b"content-length:")
+                    ]
+                    if lengths and len(rest) >= lengths[0]:
+                        break
+        except TimeoutError:
+            pass
+        return received
+
+
+@pytest.mark.parametrize("length", [b"abc", b"-1", b"1e9"])
+def test_a_length_that_is_not_a_length_is_answered(serving, length):
+    """A broken ``Content-Length`` gets a plain refusal, not a dropped or hung connection."""
+    answer = raw(
+        serving,
+        b"POST /api/annotations HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+        b"Content-Type: application/json\r\nContent-Length: " + length + b"\r\n\r\n{}",
+    )
+    assert answer.startswith(b"HTTP/1.1 400"), answer[:80]
+
+
+def test_a_body_that_is_not_text_is_answered(serving):
+    body = b'{"version": 1, "annotations": "\xff\xfe"}'
+    status, _, answer = request(serving, "/api/annotations", method="POST", body=body)
+    assert status == 400
+    assert "JSON" in json.loads(answer)["error"]
+
+
+def test_head_asks_for_the_embedding_module_too(serving):
+    status, headers, body = request(serving, "/embedding.js", method="HEAD")
+    assert status == 200
+    assert int(headers["Content-Length"]) > 0
+    assert body == b""
+
+
+def test_head_on_the_change_stream_does_not_open_it(serving):
+    """A HEAD is answered with headers and ended; it never becomes an endless stream."""
+    import time
+
+    started = time.perf_counter()
+    got = raw(serving, b"HEAD /api/events HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", wait=5)
+    head, _, rest = got.partition(b"\r\n\r\n")
+    assert head.startswith(b"HTTP/1.1 200")
+    assert b"text/event-stream" in head
+    assert rest == b""
+    assert time.perf_counter() - started < 3, "the stream was opened and held"
+
+
+def test_head_on_a_built_answer_sends_no_body(tmp_path):
+    """Pieces built on request (here: coverage) answer HEAD with headers alone."""
+    from test_open_and_close import _store
+
+    data = tmp_path / "data"
+    _store(data / "one.ome.zarr", channels=1)
+    server = make_server(
+        port=0, data_dir=data, store="one.ome.zarr", transparent_background=True, live=True
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        config = json.loads(request(port, "/api/config")[2])
+        coverage = config["layers"][0]["coverageSources"][0].split("|", 1)[0] + "zarr.json"
+        got = raw(port, f"HEAD {coverage} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".encode(), wait=2)
+        head, _, rest = got.partition(b"\r\n\r\n")
+        assert head.startswith(b"HTTP/1.1 200"), head
+        assert rest == b"", "a HEAD answer carried a body, which the next answer would be read as"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_a_publication_that_cannot_be_made_now_is_answered(tmp_path, monkeypatch):
+    """A publisher that has been closed says so rather than dropping the connection."""
+    from zmart_viewer.views.publishing import PublishedFolders
+
+    def closed(self, publications):
+        raise RuntimeError("the publisher has been closed")
+
+    monkeypatch.setattr(PublishedFolders, "announce", closed)
+    server = make_server(port=0, data_dir=tmp_path)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, _, body = request(
+            server.server_address[1],
+            "/api/announce",
+            method="POST",
+            body=json.dumps({"publications": []}).encode(),
+        )
+        assert status == 503
+        assert "closed" in json.loads(body)["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+# --- the coverage the page is told about is served (review S5) -----------------
+
+
+def test_every_coverage_address_handed_out_is_served(tmp_path):
+    """A published acquisition without a named view, on an opaque background.
+
+    ``/api/config`` hands out coverage for it, so the server must serve it;
+    before, it answered 403 unless the background was transparent.
+    """
+    from test_published_depth import CANVAS, composition
+    from test_published_transfer import write_position
+
+    names = ["flat.ome.zarr", "stack.ome.zarr"]
+    for name, depth in zip(names, (1, 3)):
+        write_position(tmp_path, name, 0 if depth == 1 else 256, 1000, depth=depth, frames=1)
+    server = make_server(port=0, data_dir=tmp_path, live=True, transparent_background=False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        payload = {
+            "path": str(tmp_path),
+            "source_revisions": dict.fromkeys(names, 1),
+            "composition": composition(names),
+            "canvas": CANVAS,
+        }
+        status, _, body = request(port, "/api/stores/open", "POST", json.dumps(payload).encode())
+        assert status == 200, body
+        config = json.loads(request(port, "/api/config")[2])
+        handed_out = [
+            source.split("|", 1)[0] + "zarr.json"
+            for row in config["layers"]
+            for source in row.get("coverageSources", [])
+        ]
+        assert handed_out, "this setup is meant to hand out coverage"
+        assert [request(port, address)[0] for address in handed_out] == [200] * len(handed_out)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_coverage_nobody_was_told_about_is_not_served(serving):
+    """The other half: a plain store on an opaque background has no coverage to serve."""
+    assert request(serving, "/data/0/demo.zarr/__zmart_coverage__/zarr.json")[0] == 403
+
+
+# --- the viewer's own folders in the home folder (review N3) -------------------
+
+
+def test_folders_left_by_a_viewer_that_was_killed_are_cleared_at_start(tmp_path, monkeypatch):
+    """A viewer that was killed never ran its shutdown, so its folder stayed for good."""
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    left = tmp_path / ".zmart-viewer" / "scenes" / "session-killed"
+    (left / "a.zmartview.zarr").mkdir(parents=True)
+    server = make_server(port=0, data_dir=tmp_path)
+    server.server_close()
+    assert not left.exists()
+
+
+def test_the_folder_of_a_viewer_still_running_is_left_alone(tmp_path, monkeypatch):
+    """Two viewers may run at once; the second must not clear the first one's scenes."""
+    from pathlib import Path
+
+    from test_open_and_close import _store
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    data = tmp_path / "run"
+    for name in ("pos1.ome.zarr", "pos2.ome.zarr"):
+        _store(data / name, channels=1)
+    first = make_server(port=0, data_dir=tmp_path)
+    thread = threading.Thread(target=first.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = first.server_address[1]
+        opening = json.dumps({"path": str(data)}).encode()
+        status, _, body = request(port, "/api/stores/open", "POST", opening)
+        assert status == 200, body
+        sessions = list((tmp_path / ".zmart-viewer" / "scenes").glob("session-*"))
+        assert len(sessions) == 1
+        second = make_server(port=0, data_dir=tmp_path)
+        second.server_close()
+        assert sessions[0].is_dir(), "a running viewer's scenes were cleared by another"
+        assert any(sessions[0].iterdir())
+    finally:
+        first.shutdown()
+        thread.join(timeout=5)
+    assert not sessions[0].exists(), "a viewer that stops tidies its own folder away"

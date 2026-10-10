@@ -15,6 +15,7 @@ import os
 import re
 import threading
 import time
+import urllib.parse
 from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -350,6 +351,18 @@ def _numbers(value: object) -> list[int]:
 def zarr_scheme(store: Path) -> str:
     """Which of the engine's zarr readers should be asked for this store."""
     return "zarr3" if (store / "zarr.json").exists() else "zarr2"
+
+
+def the_address_of(number: int, inside: str, store: Path) -> str:
+    """The address the page reads a store by: ``/data/<number>/<inside>/|<reader>:``.
+
+    ``inside`` is the store's path within its open folder, and a name in it
+    may hold anything a folder name can -- a space, an umlaut, a ``#`` or a
+    ``%``. The address spells each such character out (``my%20image``), so a
+    browser neither cuts it short at ``#`` nor guesses at the rest, and the
+    server reads it back to the name it stands for.
+    """
+    return f"/data/{number}/{urllib.parse.quote(inside, safe='/')}/|{zarr_scheme(store)}:"
 
 
 def axis_names(store: Path) -> list[str]:
@@ -709,6 +722,29 @@ def _filter_of(name: str) -> str:
     return ""
 
 
+#: The folder the viewer writes its own published views into, beside the data.
+THE_VIEWERS_OWN_FOLDER = ".zmart-viewer"
+
+
+def could_lead_elsewhere(inside: str) -> bool:
+    """Whether a requested path could lead outside its folder, judged by its words alone.
+
+    The words are enough, and the disk must not be asked first: on Windows a
+    path that begins with two slashes (or backslashes) names a network share,
+    joining it to a folder throws the folder away, and asking where it leads
+    makes Windows try to reach that share -- seconds of a server thread, and
+    the user's network credentials offered to a computer a web page chose
+    (review M5). Every path the viewer serves is plain steps between single
+    slashes, so a backslash, a drive or stream colon, an empty step or a
+    ``.``/``..`` step is never a real request.
+    """
+    return (
+        "\\" in inside
+        or ":" in inside
+        or any(step in ("", ".", "..") for step in inside.split("/"))
+    )
+
+
 def discover(path: str | Path) -> tuple[Path, list[str]]:
     """Return ``(parent_directory, store_names)`` for whatever ``path`` names."""
     path = Path(path).resolve()
@@ -816,6 +852,12 @@ class Dataset:
     # The folders outside this one that its own stores link into, found when each
     # store is placed. See :func:`_borrowed_folders`.
     borrows: list[Path] = field(default_factory=list)
+    # Whether everything in ``root`` may be read. A run's folder is opened whole,
+    # because its views and its data sit side by side in it. One image opened by
+    # naming it is not: ``root`` is then merely the folder the image stands in,
+    # which may be someone's home folder, so only the image itself and the
+    # viewer's own folder beside it are served (review S1).
+    whole_folder: bool = field(default=True)
 
 
 def _is_a_pyramid_level(folder: Path) -> bool:
@@ -950,6 +992,7 @@ class Library:
 
         parent, found = discover(path)
         chosen = names if names is not None else found
+        whole_folder = parent == path.resolve()
 
         if not chosen:
             raise ValueError(
@@ -983,6 +1026,7 @@ class Library:
                         watch=bool(watched),
                         acquisition=kind,
                         borrows=_borrowed_folders(root, stores),
+                        whole_folder=whole_folder,
                     )
                 return first
 
@@ -1000,6 +1044,7 @@ class Library:
                 watch=bool(watched),
                 acquisition=_kind_of_acquisition(root, list(chosen)),
                 borrows=_borrowed_folders(root, chosen),
+                whole_folder=whole_folder,
             )
 
         return number
@@ -1216,11 +1261,18 @@ class Library:
         with self._lock:
             return not any(dataset.stores for dataset in self._datasets.values())
 
+    def root_of(self, number: int) -> Path | None:
+        """The folder an open dataset is read from, or ``None`` once it is closed."""
+        with self._lock:
+            found = self._datasets.get(number)
+
+        return found.root.resolve() if found is not None else None
+
     def resolve(self, relative: str) -> Path | None:
         """Turn ``<number>/<store>/<chunk…>`` into a file, or ``None`` if not allowed."""
         number, _, rest = relative.partition("/")
 
-        if not number.isdigit() or not rest:
+        if not number.isdigit() or not rest or could_lead_elsewhere(rest):
             return None
 
         with self._lock:
@@ -1228,6 +1280,12 @@ class Library:
             borrows = list(found.borrows) if found else []
 
         if found is None:
+            return None
+
+        if not found.whole_folder and rest.split("/", 1)[0] not in (
+            *found.stores,
+            THE_VIEWERS_OWN_FOLDER,
+        ):
             return None
 
         target = (found.root / rest).resolve()

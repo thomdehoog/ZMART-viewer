@@ -22,7 +22,7 @@ import sys
 import threading
 from pathlib import Path
 
-from zmart_viewer.serving.server import _FRONTEND_DIST, make_server
+from zmart_viewer.serving.server import THE_BUILT_PAGE, make_server
 
 
 def _webview2_present() -> bool:
@@ -351,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not (_FRONTEND_DIST / "index.html").exists():
+    if not (THE_BUILT_PAGE / "index.html").exists():
         print(
             "The viewer's page (gui/build) is missing, so there is nothing to show.\n"
             "It normally comes with the viewer. Reinstall it with:\n"

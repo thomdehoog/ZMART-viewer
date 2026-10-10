@@ -116,6 +116,9 @@ def declare_a_built_picture(
     (store / "baked.json").unlink(missing_ok=True)
 
     for kept in sorted(store.glob("[0-9]*")):
+        # Only a folder named by a number is a level; "1a" merely looks like one.
+        if not kept.name.isdigit():
+            continue
         if kept.is_dir() and (int(kept.name) >= mosaic.levels or (kept / "c").exists()):
             shutil.rmtree(kept)
 

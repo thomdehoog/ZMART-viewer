@@ -21,6 +21,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -48,8 +49,8 @@ from zmart_viewer.opening.open_folders import (
     normalise_units,
     read_array_description,
     read_attrs_at,
+    the_address_of,
     written_timepoints,
-    zarr_scheme,
 )
 
 # The other way a picture can exist without being written: built when asked
@@ -60,9 +61,12 @@ from zmart_viewer.serving import picture_pieces as pieces
 _HERE = Path(__file__).resolve().parent
 _ENGINE = _HERE.parent
 _DRAWING = _ENGINE / "drawing"
-_FRONTEND_DIST = _ENGINE / "_frontend"
-if not _FRONTEND_DIST.is_dir():
-    _FRONTEND_DIST = (_ENGINE.parent / "gui" / "build").resolve()
+# The built page the server serves by default: inside the installed package,
+# or the committed build beside the sources in a checkout. Public because the
+# window and the tests check it is there before they start.
+THE_BUILT_PAGE = _ENGINE / "_frontend"
+if not THE_BUILT_PAGE.is_dir():
+    THE_BUILT_PAGE = (_ENGINE.parent / "gui" / "build").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 
@@ -176,6 +180,61 @@ def _validate_annotations(payload: object) -> dict:
     return {"version": 1, "annotations": clean}
 
 
+# -- who may ask ------------------------------------------------------------------
+
+#: The names this computer answers to. The server listens on 127.0.0.1 only.
+THIS_COMPUTER = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def on_this_computer(address: str) -> bool:
+    """Whether ``address`` (``host:port``, or a page's origin) names this computer."""
+    if "//" not in address:
+        address = f"//{address}"
+
+    try:
+        return (urllib.parse.urlsplit(address).hostname or "") in THIS_COMPUTER
+    except ValueError:
+        return False
+
+
+def the_origin_of(address: str) -> str:
+    """A page's origin written one way only: ``scheme://host[:port]``, in lower case."""
+    return address.strip().rstrip("/").lower()
+
+
+def refusal_for(headers, allowed_origins: frozenset[str] = frozenset()) -> str | None:
+    """Why a request must not be answered, or None when a page may ask it.
+
+    The server listens on 127.0.0.1, so other computers cannot reach it. A web
+    page open in a browser on this computer can, though, and a browser sends
+    such a page's request without asking first when it is dressed as plain
+    text. Three things the browser always says tell such a request apart: the
+    name it was sent to (``Host``, which a page that renamed itself to reach
+    127.0.0.1 cannot hide), the page it came from (``Origin``), and, for a
+    plain read such as a picture, whether it crossed from another site
+    (``Sec-Fetch-Site``). The viewer's own page, and an interface's page on
+    another port of this computer, are on this computer by all three; a
+    script run here sends no ``Origin`` and is let through. ``Origin: null``,
+    which a sandboxed frame or a local file sends, names no page at all.
+    """
+    host = headers.get("Host") or ""
+
+    if not on_this_computer(host):
+        return f"the viewer only answers requests addressed to this computer, not to {host!r}"
+
+    origin = headers.get("Origin")
+
+    if origin is None:
+        if headers.get("Sec-Fetch-Site") == "cross-site":
+            return "the viewer only answers pages served on this computer, not from another site"
+        return None
+
+    if origin != "null" and (on_this_computer(origin) or the_origin_of(origin) in allowed_origins):
+        return None
+
+    return f"the viewer only answers pages served on this computer, not one from {origin!r}"
+
+
 # -- what the panel calls each open acquisition ---------------------------------
 
 
@@ -207,6 +266,25 @@ class _StoppedByTheOperator(Exception):
     """Raised inside a build loop when the operator asked to stop."""
 
 
+def put_a_folder_in_place(made: Path, where: Path, *, spare: Path) -> None:
+    """Move a finished folder to ``where``, replacing any folder already there.
+
+    A folder cannot be renamed over another, so one standing at ``where`` is
+    first moved to ``spare`` (and removed by whoever owns ``spare``). If the
+    new one then cannot be moved in, the old one is put back.
+    """
+    if where.exists():
+        where.rename(spare)
+
+        try:
+            made.rename(where)
+        except OSError:
+            spare.rename(where)
+            raise
+    else:
+        made.rename(where)
+
+
 class _Handler(SimpleHTTPRequestHandler):
     """Serve the built page, the image data, and the small JSON endpoints."""
 
@@ -234,6 +312,8 @@ class _Handler(SimpleHTTPRequestHandler):
         live_state=None,
         forget_measurements=None,
         open_from=None,
+        allowed_origins: frozenset[str] = frozenset(),
+        coverage_handed_out=None,
         **kwargs,
     ):
         self._data_dir = data_dir  # where drawn targets are saved
@@ -250,7 +330,7 @@ class _Handler(SimpleHTTPRequestHandler):
         self._scratch = scratch if scratch is not None else {}
         self._site_dir = site_dir  # the built page, served as the base directory
         self._live = live  # is the data still being written? decides what may be kept
-        # How open pages are told that something has changed. See announcements.py.
+        # How open pages are told that something has changed. See live/following.py.
         self._announcements = announcements or live.Announcements()
         # A cheap authoritative answer used for conditional catch-up after a
         # missed SSE hint.  It returns ``(document, etag)`` and touches no image.
@@ -259,6 +339,11 @@ class _Handler(SimpleHTTPRequestHandler):
         # answer, so a store written after the viewer opened can still appear.
         self._config = config
         self._forget_measurements = forget_measurements or (lambda closed: None)
+        # Pages away from this computer that may ask all the same. See refusal_for.
+        self._allowed_origins = allowed_origins
+        # Whether /api/config told the page about a store's coverage. Only
+        # what it was told about is served. See _LayerPanelConfig.hands_out_coverage.
+        self._coverage_handed_out = coverage_handed_out or (lambda store: False)
         super().__init__(*args, directory=str(site_dir), **kwargs)
 
     def handle_one_request(self) -> None:
@@ -276,29 +361,104 @@ class _Handler(SimpleHTTPRequestHandler):
             pass
 
     def send_response(self, code, message=None):
-        """Every reply, with what the browser may keep of it."""
-        super().send_response(code, message)
+        """Every reply, with what the browser may keep of it.
 
-        if self.path != "/embedding.js" and not self.path.startswith(("/data/", "/api/")):
-            page = self.path in ("/", "/index.html") or self.path.endswith("/")
+        Only what the build names by its content -- everything under
+        ``assets/`` -- may be kept for good, because it changes its name
+        when it changes. The page itself is never kept, so a reload always
+        names today's bundle. Anything else (a worker with a fixed name, the
+        build manifest, a 404) is checked again each time; kept for good, it
+        would outlive an upgrade beside the new page.
+        """
+        super().send_response(code, message)
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+
+        if path != "/embedding.js" and not path.startswith(("/data/", "/api/")):
+            page = path in ("/", "/index.html") or path.endswith("/")
+            named_by_content = code in (HTTPStatus.OK, HTTPStatus.NOT_MODIFIED) and path.startswith(
+                "/assets/"
+            )
             self.send_header(
                 "Cache-Control",
-                "no-store" if page else "public, max-age=31536000, immutable",
+                "no-store"
+                if page
+                else "public, max-age=31536000, immutable"
+                if named_by_content
+                else "no-cache",
             )
+
+    def end_headers(self) -> None:
+        """Every reply, readable by the page that asked when that page may ask at all."""
+        origin = self.headers.get("Origin")
+
+        if origin is not None and self.path != "/embedding.js":
+            # Named, never everyone (``*``): a page that may not ask was
+            # refused before anything was answered.
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+        super().end_headers()
 
     # -- routing ---------------------------------------------------------
 
+    def refused(self) -> bool:
+        """Answer 403 to a request no page on this computer sent, and say why."""
+        why = refusal_for(self.headers, self._allowed_origins)
+
+        if why is None:
+            return False
+
+        # A body left unread on a connection closed on Windows resets it, and
+        # the refusal never arrives; and the next request on a kept-alive
+        # connection would start inside this one's body. So it is read away.
+        length = self.the_body_length()
+
+        if length:
+            self.rfile.read(length)
+        elif length is None:
+            self.close_connection = True
+
+        body = json.dumps({"error": why}).encode("utf-8")
+        self.send_response(HTTPStatus.FORBIDDEN)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        # Straight to the base class: the page that may not ask is not named
+        # in the answer, so it cannot read it.
+        super().end_headers()
+
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+        return True
+
+    def the_body_length(self) -> int | None:
+        """How many bytes of body the request says follow, or None when it says nonsense."""
+        declared = (self.headers.get("Content-Length") or "0").strip()
+        return int(declared) if declared.isdigit() else None
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        """Tell a page on this computer that it may send JSON here.
+
+        A browser asks this first before a page on another port sends a POST
+        with a JSON body, which is exactly what an interface's page does.
+        """
+        if self.refused():
+            return
+
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802 (name fixed by base class)
+        if self.refused():
+            return
 
         if self.path == "/embedding.js":
-            data = (_DRAWING / "embedding.js").read_bytes()
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/javascript; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(data)
+            self._serve_embedding()
             return
 
         if self.path.startswith("/data/"):
@@ -312,6 +472,8 @@ class _Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.refused():
+            return
 
         if self.path.startswith("/api/"):
             self._serve_api_post()
@@ -321,11 +483,35 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def do_HEAD(self) -> None:  # noqa: N802
         """Answer "does this exist, and how big is it?" — headers only, no body."""
-        if self.path.startswith("/data/") or self.path.startswith("/api/"):
-            self.do_GET()
+        if self.refused():
+            return
+
+        if self.path == "/embedding.js":
+            self._serve_embedding()
+            return
+
+        if self.path.startswith("/data/"):
+            self._serve_from_data()
+            return
+
+        if self.path.startswith("/api/"):
+            self._serve_api_get()
             return
 
         super().do_HEAD()
+
+    def _serve_embedding(self) -> None:
+        """The module an interface imports to drive the viewer's drawing, from any page."""
+        data = (_DRAWING / "embedding.js").read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        if self.command != "HEAD":
+            self.wfile.write(data)
 
     def _wanted_range(self, total: int) -> tuple[int, int] | None:
         """The byte range asked for as ``(start, length)``, or ``None`` for all of it."""
@@ -366,17 +552,18 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def _serve_from_data(self) -> None:
         """Serve one file from an open OME-Zarr store under ``/data``."""
-        rel = self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0]
+        # The address spells names out (see the_address_of); read it back to
+        # the names themselves before the library decides what it may reach.
+        rel = urllib.parse.unquote(self.path[len("/data/") :].split("?", 1)[0].split("#", 1)[0])
         number, _, rest = rel.partition("/")
         marker = f"/{coverage.MARKER}/"
         if marker in rel:
             store_rel, inside = rel.split(marker, 1)
             store = self._library.resolve(store_rel)
-            if store is None or not (
-                self._transparent_background
-                or (read_attrs_at(store).get("zmart") or {}).get("view")
-                or read_attrs_at(store).get("zmart_projection")
-            ):
+            # The page asks for coverage exactly where /api/config handed it
+            # out, so that is the one condition: a second, separate rule here
+            # drifted from it once and refused coverage the page was told of.
+            if store is None or not self._coverage_handed_out(store_rel):
                 self._send_empty(HTTPStatus.FORBIDDEN)
                 return
             try:
@@ -410,8 +597,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 return
 
             if live.serving is not None:
-                number = rel.partition("/")[0]
-                root = self._library.resolve(f"{number}/.")
+                root = self._library.root_of(int(number))
                 source = live.serving.path.resolve()
 
                 if root is None or (source != root and root not in source.parents):
@@ -564,7 +750,9 @@ class _Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
 
         self.end_headers()
-        self.wfile.write(body)
+
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def _send_empty(self, status: HTTPStatus) -> None:
         """Answer with a bare status, keeping the connection open for the next ask."""
@@ -749,6 +937,10 @@ class _Handler(SimpleHTTPRequestHandler):
         self.close_connection = True
         self.end_headers()
 
+        if self.command == "HEAD":
+            # Headers only: a HEAD that became a stream would never end.
+            return
+
         waiting = self._announcements.listen()
 
         try:
@@ -787,7 +979,7 @@ class _Handler(SimpleHTTPRequestHandler):
 
         stores = []
         for source in dict.fromkeys(sources):
-            rel = source.split("/data/", 1)[-1].split("|", 1)[0].strip("/")
+            rel = urllib.parse.unquote(source.split("/data/", 1)[-1].split("|", 1)[0].strip("/"))
             store = self._library.resolve(rel)
             if store is None or not store.is_dir():
                 self._send_json({"error": "that picture is not open here"}, HTTPStatus.NOT_FOUND)
@@ -833,14 +1025,16 @@ class _Handler(SimpleHTTPRequestHandler):
             before = publisher.revisions()
             try:
                 publisher.announce(payload["publications"])
-            except (ValueError, KeyError, TypeError, OverflowError, OSError) as why:
+            except (ValueError, KeyError, TypeError, OverflowError, OSError, RuntimeError) as why:
                 # Each named view commits atomically. A later view can fail after
                 # an earlier one succeeded; those committed pixels still need notice.
                 if publisher.revisions() != before:
                     self._announcements.say_something_changed()
+                # A disk that held a file for a moment, or a publisher that
+                # was closed under it, may answer next time; a bad request never.
                 status = (
                     HTTPStatus.SERVICE_UNAVAILABLE
-                    if isinstance(why, OSError)
+                    if isinstance(why, (OSError, RuntimeError))
                     else HTTPStatus.BAD_REQUEST
                 )
                 self._send_json({"error": str(why)}, status)
@@ -898,6 +1092,18 @@ class _Handler(SimpleHTTPRequestHandler):
         """Handle the things the viewer asks Python to do."""
         route = self.path.rstrip("/")
 
+        length = self.the_body_length()
+
+        if length is None:
+            self.close_connection = True
+            self._send_json(
+                {"error": "the request's Content-Length is not a number of bytes"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        raw = self.rfile.read(length) if length else b""
+
         if route not in {
             "/api/browse",
             "/api/stores/open",
@@ -926,11 +1132,21 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json({"error": "opening by hand is switched off here"}, HTTPStatus.NOT_FOUND)
             return
 
-        length = int(self.headers.get("Content-Length", 0))
+        declared = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+
+        if raw and declared != "application/json":
+            # A page from elsewhere dresses its body as plain text so that the
+            # browser sends it without asking first (review M3); a body sent
+            # here says what it is.
+            self._send_json(
+                {"error": "send the body as JSON, with Content-Type: application/json"},
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return
 
         try:
-            payload = json.loads(self.rfile.read(length) or b"{}")
-        except json.JSONDecodeError:
+            payload = json.loads(raw or b"{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
             self._send_json({"error": "that was not readable JSON"}, HTTPStatus.BAD_REQUEST)
             return
 
@@ -1118,6 +1334,12 @@ class _Handler(SimpleHTTPRequestHandler):
         job.clear()
         job.update({"state": "running", "fraction": 0.0, "bake": bake})
         viewer_path = Path(viewer.strip()).expanduser()
+        scene = viewer_path / the_scene_folder_name(name or data_path.name)
+        # Built aside and put in place only when whole, so that a build that
+        # is stopped or fails takes away what it made and nothing else -- not
+        # a scene that stood there before it began (review N2). The leading
+        # dot keeps the half-made build out of the load window's list.
+        aside = viewer_path / f".{scene.name}.building"
 
         def told(done, total):
             if job.get("stop"):
@@ -1127,22 +1349,22 @@ class _Handler(SimpleHTTPRequestHandler):
 
         def work():
             try:
-                store = declare_a_built_picture(
-                    viewer_path,
+                shutil.rmtree(aside, ignore_errors=True)
+                built = declare_a_built_picture(
+                    aside,
                     data_path,
                     name=name or data_path.name,
                     bake=bake,
                     told=told,
                 )
-                job.update({"state": "done", "fraction": 1.0, "store": str(store)})
+                put_a_folder_in_place(built, scene, spare=aside / "replaced")
+                job.update({"state": "done", "fraction": 1.0, "store": str(scene)})
             except _StoppedByTheOperator:
-                shutil.rmtree(
-                    viewer_path / the_scene_folder_name(name or data_path.name),
-                    ignore_errors=True,
-                )
                 job.update({"state": "cancelled"})
             except Exception as why:  # noqa: BLE001 -- shown to the operator whole
                 job.update({"state": "error", "error": str(why)})
+            finally:
+                shutil.rmtree(aside, ignore_errors=True)
 
         threading.Thread(target=work, daemon=True).start()
         self._send_json({"started": True})
@@ -1153,13 +1375,13 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def _a_session_folder(self, kind: str) -> Path:
         """A folder of the viewer's own for this session, made when wanted."""
-        folder = self._scratch.get(kind)
+        with self._scratch["making"]:
+            folder = self._scratch.get(kind)
 
-        if folder is None:
-            home = Path.home() / ".zmart-viewer" / kind
-            home.mkdir(parents=True, exist_ok=True)
-            folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
-            self._scratch[kind] = folder
+            if folder is None:
+                folder, held = a_held_session_folder(the_viewers_home() / kind)
+                self._scratch[kind] = folder
+                self._scratch[f"{kind}-held"] = held
 
         return folder
 
@@ -1212,6 +1434,21 @@ class _Handler(SimpleHTTPRequestHandler):
             status = HTTPStatus.CONFLICT if "relink" in why.detail else HTTPStatus.BAD_REQUEST
             self._send_json(refused, status)
             return
+        except OSError as why:
+            # Said plainly: a dropped connection left the load window waiting
+            # for an answer that never came (review S2).
+            self._send_json(
+                {
+                    "error": (
+                        f"the viewer could not write the picture it shows for {target} "
+                        f"into its own folder ({why.strerror or why}). Nothing was "
+                        "written beside your data. This is usually a home folder that "
+                        "cannot be written to, or a drive that has filled up."
+                    )
+                },
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return
 
         try:
             # A folder is watched for new images only while the data is still
@@ -1228,6 +1465,11 @@ class _Handler(SimpleHTTPRequestHandler):
         except (ValueError, OSError) as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+
+        if opened.composed_from is not None and self._live:
+            # A folder of positions opened while it may still be written: the
+            # picture composed over it keeps up with it. See ScenesKeptUp.
+            self._scratch["kept up"].follow(opened.target, opened.composed_from)
 
         self._send_json(self._config())
 
@@ -1268,6 +1510,7 @@ class _Handler(SimpleHTTPRequestHandler):
             forget(root / name)
             pieces.forget(root / name)
             self.forget_described(root / name)
+            self._scratch["kept up"].forget(root / name)
 
         self._forget_measurements(closed)
         self._send_json(self._config())
@@ -1348,6 +1591,85 @@ class _Handler(SimpleHTTPRequestHandler):
         pass
 
 
+# -- the viewer's own folders in the home folder ---------------------------------
+
+
+def the_viewers_home() -> Path:
+    """Where the viewer keeps what it makes for itself: ``~/.zmart-viewer``."""
+    return Path.home() / ".zmart-viewer"
+
+
+#: The file inside a session folder its viewer holds locked while it runs.
+HELD = "held-by-a-running-viewer"
+
+#: A session folder without that file is cleared only once it is this old, so a
+#: viewer that has just made its folder, and not yet locked it, keeps it.
+UNHELD_GRACE_S = 60
+
+
+def a_held_session_folder(home: Path):
+    """A new ``session-*`` folder in ``home``, and the open file that holds it.
+
+    The file stays open and locked for as long as this viewer runs, which is
+    how another viewer starting later tells a folder in use from one left
+    behind by a viewer that was killed and never tidied up.
+    """
+    home.mkdir(parents=True, exist_ok=True)
+    folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
+    held = open(folder / HELD, "a+b")  # noqa: SIM115 -- held for the session's life
+    held.write(b"x")
+    held.flush()
+    lock_one_byte(held)
+    return folder, held
+
+
+def lock_one_byte(handle) -> None:
+    """Lock the first byte of an open file, or raise OSError when another holds it."""
+    handle.seek(0)
+
+    if sys.platform == "win32":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def held_by_a_running_viewer(folder: Path) -> bool:
+    """Whether a viewer that is still running holds this session folder."""
+    try:
+        with open(folder / HELD, "a+b") as handle:
+            lock_one_byte(handle)
+    except FileNotFoundError:
+        try:
+            return time.time() - folder.stat().st_mtime < UNHELD_GRACE_S
+        except OSError:
+            return False
+    except OSError:
+        return True
+
+    # Locked and let go again by closing: nobody held it.
+    return False
+
+
+def clear_what_stopped_viewers_left(home: Path) -> None:
+    """Remove the session folders in ``home`` that no running viewer holds.
+
+    A viewer removes its own folder when it stops; one that was killed never
+    gets to, and its folder stayed in the home folder for good (review N3).
+    """
+    try:
+        found = [one for one in home.glob("session-*") if one.is_dir()]
+    except OSError:
+        return
+
+    for folder in found:
+        if not held_by_a_running_viewer(folder):
+            shutil.rmtree(folder, ignore_errors=True)
+
+
 _ONE_DIALOG_AT_A_TIME = threading.Lock()
 
 
@@ -1370,6 +1692,16 @@ def ask_this_machine_for_a_folder() -> str | None:
             root.destroy()
 
     return chosen or None
+
+
+def the_coverage_handed_out(config: dict) -> frozenset[str]:
+    """The stores an answer to /api/config hands out coverage for, as ``<number>/<store>``."""
+    return frozenset(
+        urllib.parse.unquote(source.split("|", 1)[0].rstrip("/").removeprefix("/data/"))
+        .rsplit(f"/{coverage.MARKER}", 1)[0]
+        for row in config.get("layers", ())
+        for source in row.get("coverageSources", ())
+    )
 
 
 class _LayerPanelConfig:
@@ -1410,7 +1742,11 @@ class _LayerPanelConfig:
         self._allow_selection = allow_selection
         self._panel_side = panel_side
         self._live = live
-        self._last_built: dict = {"revision": None, "config": None}
+        # What was last built, as one value: (revision, answer, stores whose
+        # coverage the answer hands out). Replaced whole, never field by
+        # field, so a request reading it without the lock can never see a new
+        # revision beside an old answer (review S10).
+        self._last_built: tuple = (None, None, frozenset())
         self._building = threading.Lock()
 
     def now(self) -> dict:
@@ -1429,14 +1765,18 @@ class _LayerPanelConfig:
             published_revision,
         )
 
-        if self._last_built["revision"] == revision:
-            return self._last_built["config"]
+        built_for, built, _ = self._last_built
+
+        if built_for == revision:
+            return built
 
         with self._building:
             # Asked again with the lock held: while waiting, another thread may have
             # built exactly what this one was about to build.
-            if self._last_built["revision"] == revision:
-                return self._last_built["config"]
+            built_for, built, _ = self._last_built
+
+            if built_for == revision:
+                return built
 
             built = self.build(
                 live_document,
@@ -1444,9 +1784,16 @@ class _LayerPanelConfig:
                 live_snapshots,
                 live_numbers,
             )
-            self._last_built["revision"] = revision
-            self._last_built["config"] = built
+            self._last_built = (revision, built, the_coverage_handed_out(built))
             return built
+
+    def hands_out_coverage(self, store: str) -> bool:
+        """Whether the last answer told the page about this store's coverage.
+
+        ``store`` is the store's place as a request names it, read back to
+        plain names: ``<number>/<store>``.
+        """
+        return store in self._last_built[2]
 
     def build(
         self,
@@ -1519,7 +1866,7 @@ class _LayerPanelConfig:
         can span many positions; a new channel starts a row of its own.
         """
         store_path = root / name
-        address = f"/data/{root_number}/{name}/|{zarr_scheme(store_path)}:"
+        address = the_address_of(root_number, name, store_path)
         store_paths[address] = store_path
         source_attrs = read_attrs_at(store_path)
         named_view = (source_attrs.get("zmart") or {}).get("view")
@@ -1579,7 +1926,9 @@ class _LayerPanelConfig:
         for mask in label_images(store_path):
             key = (root_number, "mask", mask)
             row = merged.get(key)
-            source = f"/data/{root_number}/{name}/labels/{mask}/|{zarr_scheme(store_path / 'labels' / mask)}:"
+            source = the_address_of(
+                root_number, f"{name}/labels/{mask}", store_path / "labels" / mask
+            )
 
             if row is None:
                 merged[key] = {
@@ -1712,6 +2061,10 @@ class _LayerPanelConfig:
                 row["coverageSources"] = [coverage.source_url(url) for url in row["sources"]]
 
 
+#: How often the scenes composed over folders still being written are checked.
+KEEP_UP_EVERY_S = 1.0
+
+
 class _Server(ThreadingHTTPServer):
     """The viewer's HTTP server: many requests at once, and a tidy stop.
 
@@ -1729,6 +2082,7 @@ class _Server(ThreadingHTTPServer):
         self._registry = registry
         self._published = published
         self._scratch = scratch
+        self._stopping = threading.Event()
         super().__init__(address, handler)
 
     def server_bind(self):
@@ -1740,14 +2094,43 @@ class _Server(ThreadingHTTPServer):
     def serve_forever(self, *args, **kwargs):
         # The disk is watched only while the server is actually running.
         self._registry.start()
+        threading.Thread(
+            target=self.keep_the_scenes_up, name="zmart-scenes-kept-up", daemon=True
+        ).start()
         super().serve_forever(*args, **kwargs)
 
+    def keep_the_scenes_up(self) -> None:
+        """Once a second, compose again the scenes whose folders changed, and tell the pages."""
+        kept_up = self._scratch["kept up"]
+
+        while not self._stopping.wait(KEEP_UP_EVERY_S):
+            try:
+                changed = kept_up.catch_up()
+            except Exception:  # noqa: BLE001 -- one bad pass must not end the watch
+                logging.getLogger(__name__).exception("keeping the composed scenes up failed")
+                continue
+
+            for scene in changed:
+                forget(scene)
+                pieces.forget(scene)
+                _Handler.forget_described(scene)
+
+            if changed:
+                # The scene's pieces are rewritten where the page already
+                # holds them, which is what this word tells it to let go of.
+                self._registry.announcements.say_something_changed(image_written_in_place=True)
+
     def shutdown(self):
+        self._stopping.set()
         self._registry.stop()
         self._published.close()
 
         for own in ("scenes",):
             made = self._scratch.pop(own, None)
+            held = self._scratch.pop(f"{own}-held", None)
+
+            if held is not None:
+                held.close()
 
             if made is not None:
                 shutil.rmtree(made, ignore_errors=True)
@@ -1759,7 +2142,7 @@ def make_server(
     port: int = 8848,
     *,
     data_dir: Path | None = None,
-    site_dir: Path = _FRONTEND_DIST,
+    site_dir: Path = THE_BUILT_PAGE,
     store: str | list[str] | None = None,
     loads: list[dict] | None = None,
     window: tuple[float, float] | None = None,
@@ -1774,12 +2157,18 @@ def make_server(
     open_from: Path | None = None,
     bake: bool = False,
     canvas: dict | None = None,
+    allowed_origins: list[str] | tuple[str, ...] = (),
 ) -> ThreadingHTTPServer:
     """Create (but do not start) the viewer's web server.
 
     Given nothing to open, it serves an empty studio: no store, no demo,
     just the open door. ``data_dir`` then only says where the open dialog
     starts and where drawn targets are saved.
+
+    Only pages served on this computer may ask the server anything, on any
+    port: the viewer's own page, and an interface's page served beside it.
+    ``allowed_origins`` names further pages that may, each as the origin a
+    browser reports (``"http://lab-pc:8000"``). See :func:`refusal_for`.
     """
     data_dir = Path(data_dir).resolve() if data_dir is not None else Path.cwd()
     names = [store] if isinstance(store, str) else list(store or [])
@@ -1797,7 +2186,12 @@ def make_server(
     from zmart_viewer.views.publishing import PublishedFolders
 
     published = PublishedFolders(library, bake=bake, canvas=canvas)
-    scratch: dict = {"published": published}
+    clear_what_stopped_viewers_left(the_viewers_home() / "scenes")
+    scratch: dict = {
+        "published": published,
+        "making": threading.Lock(),
+        "kept up": loading.ScenesKeptUp(),
+    }
     if bake:
         for dataset in library.datasets():
             if live_run_holding(dataset.root) is None:
@@ -1833,6 +2227,7 @@ def make_server(
         data_dir=data_dir,
         site_dir=Path(site_dir).resolve(),
         config=config.now,
+        coverage_handed_out=config.hands_out_coverage,
         library=library,
         browse=browse,
         bake_job={},
@@ -1843,6 +2238,7 @@ def make_server(
         announcements=registry.announcements,
         live_state=registry.state_document,
         forget_measurements=measurements.forget,
+        allowed_origins=frozenset(the_origin_of(origin) for origin in allowed_origins),
     )
 
     try:

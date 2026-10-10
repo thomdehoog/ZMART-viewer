@@ -316,7 +316,11 @@ def serving(tmp_path):
 def request(port, path, method="GET", body=None):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
-        headers = {"Content-Length": str(len(body))} if body is not None else {}
+        headers = (
+            {"Content-Length": str(len(body)), "Content-Type": "application/json"}
+            if body is not None
+            else {}
+        )
         conn.request(method, path, body=body, headers=headers)
         r = conn.getresponse()
         return r.status, r.read()
