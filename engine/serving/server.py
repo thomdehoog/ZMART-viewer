@@ -410,8 +410,7 @@ class _Handler(SimpleHTTPRequestHandler):
                 return
 
             if live.serving is not None:
-                number = rel.partition("/")[0]
-                root = self._library.resolve(f"{number}/.")
+                root = self._library.root_of(int(number))
                 source = live.serving.path.resolve()
 
                 if root is None or (source != root and root not in source.parents):
