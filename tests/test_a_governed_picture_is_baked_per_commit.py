@@ -237,6 +237,7 @@ def test_the_http_route_consults_the_manifest_before_any_baked_file(tmp_path):
     or no file.
     """
     import threading
+    import urllib.error
     import urllib.request
 
     backend = str(Path(__file__).resolve().parent.parent)
@@ -658,9 +659,11 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
     The route check parsed the raw address while the file lookup resolved
     it, so `0/c//0/0/0` reached the real baked chunk file and was served
     statically — no derive, no patch, stale-past-manifest bytes for any
-    client that asks crookedly. The check now derives the piece address
-    from the resolved target itself, so every spelling of a governed piece
-    goes through the gate.
+    client that asks crookedly. The check derives the piece address from
+    the resolved target itself, so every spelling of a governed piece goes
+    through the gate; and since review M5 an empty step in an address is
+    refused at the door, before the disk is asked, so a crooked spelling
+    is not served at all.
     """
     import threading
     import urllib.request
@@ -692,12 +695,10 @@ def test_an_aliased_piece_path_cannot_walk_past_the_gate(tmp_path):
                 return answer.read()
 
         run.replace_a_position("posA", some_specimen(2200))
-        askew = over_http(crooked)
-        canonical = over_http(straight)
-        assert askew == canonical, (
-            "the aliased spelling was served from the stale file while the "
-            "canonical one went through the gate"
-        )
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            over_http(crooked)
+        assert refused.value.code == 403, "the aliased spelling must be refused, not served"
+        assert over_http(straight), "the canonical spelling goes through the gate"
     finally:
         served.forget(store)
         server.shutdown()

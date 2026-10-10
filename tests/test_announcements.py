@@ -253,7 +253,10 @@ class TestTheConnectionAPageHolds:
             for _ in range(100):
                 telling = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
                 telling.request(
-                    "POST", "/api/announce", body=b"{}", headers={"Content-Length": "2"}
+                    "POST",
+                    "/api/announce",
+                    body=b"{}",
+                    headers={"Content-Length": "2", "Content-Type": "application/json"},
                 )
                 told = json.loads(telling.getresponse().read())["told"]
                 telling.close()
@@ -282,7 +285,12 @@ class TestTheConnectionAPageHolds:
         server, thread = _serving(tmp_path)
         try:
             conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
-            conn.request("POST", "/api/announce", body=b"{}", headers={"Content-Length": "2"})
+            conn.request(
+                "POST",
+                "/api/announce",
+                body=b"{}",
+                headers={"Content-Length": "2", "Content-Type": "application/json"},
+            )
             response = conn.getresponse()
             assert response.status == 200
             assert json.loads(response.read()) == {"told": 0}
@@ -372,7 +380,12 @@ class TestTheConnectionAPageHolds:
             # Nothing announced, so the connection has nothing on it beyond what a
             # quiet connection sends, which is nothing at all this soon.
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-            conn.request("POST", "/api/announce", body=b"{}", headers={"Content-Length": "2"})
+            conn.request(
+                "POST",
+                "/api/announce",
+                body=b"{}",
+                headers={"Content-Length": "2", "Content-Type": "application/json"},
+            )
             assert json.loads(conn.getresponse().read())["told"] == 1
             conn.close()
         finally:
@@ -386,7 +399,12 @@ def test_a_badly_formed_announcement_is_refused_plainly(tmp_path, route):
     server, thread = _serving(tmp_path)
     try:
         conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
-        conn.request("POST", route, body=b"not json", headers={"Content-Length": "8"})
+        conn.request(
+            "POST",
+            route,
+            body=b"not json",
+            headers={"Content-Length": "8", "Content-Type": "application/json"},
+        )
         response = conn.getresponse()
         assert response.status == 400
         assert "readable JSON" in json.loads(response.read())["error"]

@@ -16,7 +16,7 @@ from zmart_viewer.opening.open_folders import (
     channels,
     moments_folder,
     read_attrs_at,
-    zarr_scheme,
+    the_address_of,
 )
 
 LOW_PERCENTILE = 1.0
@@ -680,7 +680,7 @@ class Measurements:
 
         color = channel_color(name) if coloured else None
         described = {
-            "sources": [f"/data/{root_number}/{name}/|{zarr_scheme(root / name)}:"],
+            "sources": [the_address_of(root_number, name, root / name)],
             "window": {"low": flat[0], "high": flat[1]},
             "volumeWindow": {"low": volume[0], "high": volume[1]},
             "color": list(color) if color else None,

@@ -140,11 +140,11 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
             """
 import importlib.metadata, pathlib, re, tempfile, threading, urllib.request, os, json
 import zmart_viewer
-from zmart_viewer.serving.server import make_server, _FRONTEND_DIST
+from zmart_viewer.serving.server import make_server, THE_BUILT_PAGE
 from zmart_viewer.views.slice_top_projection import ViewSet
 assert 'installed' in pathlib.Path(zmart_viewer.__file__).parts
 assert importlib.metadata.version('zmart-viewer') == os.environ['ZMART_TEST_VERSION']
-assert _FRONTEND_DIST.name == '_frontend'
+assert THE_BUILT_PAGE.name == '_frontend'
 with tempfile.TemporaryDirectory() as data:
     saved = pathlib.Path(os.environ['ZMART_TEST_SAVED_VIEW'])
     server = make_server(port=0,data_dir=pathlib.Path(data),live=False,loads=[{'path':str(saved)}])
@@ -160,10 +160,10 @@ with tempfile.TemporaryDirectory() as data:
         assert assets
         for asset in assets:
             assert len(urllib.request.urlopen(address+asset).read()) > 1000
-        workers = list(_FRONTEND_DIST.rglob('*worker*.js'))
+        workers = list(THE_BUILT_PAGE.rglob('*worker*.js'))
         assert workers, 'Wheel has no Neuroglancer workers'
         for file in workers:
-            body=urllib.request.urlopen(address+'/'+file.relative_to(_FRONTEND_DIST).as_posix()).read()
+            body=urllib.request.urlopen(address+'/'+file.relative_to(THE_BUILT_PAGE).as_posix()).read()
             assert len(body)>100000
         config = json.load(urllib.request.urlopen(address+'/api/config'))
         assert len(config['layers']) == 5
