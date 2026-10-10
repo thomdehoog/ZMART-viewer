@@ -651,12 +651,12 @@ class LivePublisher:
         superseded, and reshuffling the draw order underneath an unchanged
         picture would make published ground change hands with nothing recording
         why.
+
+        A dictionary keeps first-arrival order and answers "seen already?" at
+        once; checking a growing list made every publish cost the square of
+        the number of positions (review N5).
         """
-        ordered: list[str] = []
-        for event in self.manifest.events():
-            if event.position_id not in ordered:
-                ordered.append(event.position_id)
-        return ordered
+        return list(dict.fromkeys(event.position_id for event in self.manifest.events()))
 
     def _mosaic_extent(self) -> tuple[int, int]:
         """How far the whole mosaic reaches in y and x, in full-resolution pixels."""
