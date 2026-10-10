@@ -501,9 +501,12 @@ def forget(store: Path) -> None:
     under = str(store)
     inside = under + os.sep
 
+    # Other requests add to these while this one lets go, so each is walked
+    # through a copy of its keys taken in one step, and a key another request
+    # removed first is simply already gone (review N4).
     for remembered in (_attrs_cache, _array_cache, _frame_counts):
-        for key in [key for key in remembered if key == under or key.startswith(inside)]:
-            del remembered[key]
+        for key in [key for key in list(remembered) if key == under or key.startswith(inside)]:
+            remembered.pop(key, None)
 
 
 def written_timepoints(store: Path) -> int | None:

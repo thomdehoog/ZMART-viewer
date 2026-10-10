@@ -665,6 +665,13 @@ _refused: dict[Path, float] = {}
 
 _being_made: dict[Path, threading.Lock] = {}
 
+#: How often each picture has been forgotten. A build that started before the
+#: latest forgetting must not be kept: its picture was closed while it was
+#: being built (review N4). The build's lock, by contrast, is never dropped,
+#: so a request after the forgetting waits for the build under way instead of
+#: starting a second one beside it.
+times_forgotten: dict[Path, int] = {}
+
 
 def _what_it_was_built_from(store: Path) -> dict | None:
     """What a store records about being built, or ``None`` for an ordinary image."""
@@ -753,6 +760,8 @@ def composer_for(store: Path) -> Composer | ComposedPicture | None:
             if store in _composers and _composers[store][0] == mark:
                 return _composers[store][1]
 
+            forgotten_before = times_forgotten.get(store, 0)
+
         made = None
 
         try:
@@ -771,8 +780,14 @@ def composer_for(store: Path) -> Composer | ComposedPicture | None:
             return None
 
         with _guard:
-            _composers[store] = (mark, made)
-            return made
+            if times_forgotten.get(store, 0) == forgotten_before:
+                _composers[store] = (mark, made)
+                return made
+
+        if made is not None:
+            made.close()
+
+        return None
 
 
 def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPicture | None:
@@ -1036,7 +1051,7 @@ def forget_composer(store: Path) -> None:
     with _guard:
         where = Path(store).resolve()
         remembered = _composers.pop(where, None)
-        _being_made.pop(where, None)
+        times_forgotten[where] = times_forgotten.get(where, 0) + 1
         _refused.pop(where, None)
 
     held = remembered[1] if remembered is not None else None
