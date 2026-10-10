@@ -151,10 +151,23 @@ class LiveRun:
         self._replacements_seen: dict[str, int] = {}
 
     def published_units(self) -> frozenset[tuple[str, int, int]]:
+        """Every published (position, moment, generation), as the marker last proved it.
+
+        The history is read through one strict snapshot of ``signed.json``.
+        The forgiving read turns a marker it cannot read into "nothing
+        published", which a running total would take to heart: it emptied the
+        picture and deleted its baked overview until the next commit (review
+        finding M1). A marker that cannot be read for a moment, held by the
+        writer's rename or by a virus scanner, leaves the last proven state in
+        place instead, and the next ask reads again.
+        """
         mark = self.manifest.fingerprint()
         with self._lock:
             if mark != self._publication_mark:
-                events = self.manifest.events()
+                try:
+                    events = self.manifest.events_through(self.manifest.committed_strict())
+                except ZmartLiveError:
+                    return self._published
                 if len(events) < self._folded:
                     self._folded = 0
                     self._last_folded_revision = 0

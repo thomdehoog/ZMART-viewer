@@ -1226,8 +1226,15 @@ class GovernedRun(ComposedPicture):
         made: Composer,
         current: dict,
     ) -> tuple[dict[int, set[tuple[int, int]]] | None, frozenset[int] | None]:
-        """The footprints of every event the stamp cannot prove it absorbed."""
-        events = self.run.manifest.events()
+        """The footprints of every event the stamp cannot prove it absorbed.
+
+        The history is read through one strict snapshot of the marker. The
+        forgiving read would answer an unreadable marker with an empty
+        history, which looks like a rollback and re-bakes the whole picture;
+        a strict read that fails is asked again with the next derive.
+        """
+        manifest = self.run.manifest
+        events = manifest.events_through(manifest.committed_strict())
         stamped = self._the_stamp()
         everything = {
             level: {
