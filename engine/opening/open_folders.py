@@ -15,6 +15,7 @@ import os
 import re
 import threading
 import time
+import urllib.parse
 from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -336,6 +337,18 @@ def _numbers(value: object) -> list[int]:
 def zarr_scheme(store: Path) -> str:
     """Which of the engine's zarr readers should be asked for this store."""
     return "zarr3" if (store / "zarr.json").exists() else "zarr2"
+
+
+def the_address_of(number: int, inside: str, store: Path) -> str:
+    """The address the page reads a store by: ``/data/<number>/<inside>/|<reader>:``.
+
+    ``inside`` is the store's path within its open folder, and a name in it
+    may hold anything a folder name can -- a space, an umlaut, a ``#`` or a
+    ``%``. The address spells each such character out (``my%20image``), so a
+    browser neither cuts it short at ``#`` nor guesses at the rest, and the
+    server reads it back to the name it stands for.
+    """
+    return f"/data/{number}/{urllib.parse.quote(inside, safe='/')}/|{zarr_scheme(store)}:"
 
 
 def axis_names(store: Path) -> list[str]:
