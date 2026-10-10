@@ -38,7 +38,7 @@ sys.path.insert(0, str(_VIZ / "tests"))
 
 import engine_on_path  # noqa: E402, F401
 from demo_data import write_demo_zarr  # noqa: E402
-from zmart_viewer.serving.server import _FRONTEND_DIST, make_server  # noqa: E402
+from zmart_viewer.serving.server import THE_BUILT_PAGE, make_server  # noqa: E402
 
 # Where the screenshot lands, and how long we allow for a cold start (the engine
 # must boot, spawn its workers, fetch the chunks, and decode them).
@@ -131,7 +131,7 @@ def _picture_was_drawn(path: Path) -> tuple[bool, str]:
 
 def run_check() -> int:
     # 1. The page must be built first — a checkout without gui/build has nothing to open.
-    if not (_FRONTEND_DIST / "index.html").exists():
+    if not (THE_BUILT_PAGE / "index.html").exists():
         print(
             "The viewer page is not built. Build it first:\n"
             "    cd gui/source && npm ci && npm run build"

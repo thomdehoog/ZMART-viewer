@@ -61,9 +61,12 @@ from zmart_viewer.serving import picture_pieces as pieces
 _HERE = Path(__file__).resolve().parent
 _ENGINE = _HERE.parent
 _DRAWING = _ENGINE / "drawing"
-_FRONTEND_DIST = _ENGINE / "_frontend"
-if not _FRONTEND_DIST.is_dir():
-    _FRONTEND_DIST = (_ENGINE.parent / "gui" / "build").resolve()
+# The built page the server serves by default: inside the installed package,
+# or the committed build beside the sources in a checkout. Public because the
+# window and the tests check it is there before they start.
+THE_BUILT_PAGE = _ENGINE / "_frontend"
+if not THE_BUILT_PAGE.is_dir():
+    THE_BUILT_PAGE = (_ENGINE.parent / "gui" / "build").resolve()
 _ANNOTATIONS_FILE = "zmart-annotations.json"
 _EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 
@@ -2139,7 +2142,7 @@ def make_server(
     port: int = 8848,
     *,
     data_dir: Path | None = None,
-    site_dir: Path = _FRONTEND_DIST,
+    site_dir: Path = THE_BUILT_PAGE,
     store: str | list[str] | None = None,
     loads: list[dict] | None = None,
     window: tuple[float, float] | None = None,
