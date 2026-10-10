@@ -43,14 +43,36 @@ def validate_frontend(root):
                 for p in paths
             }
             if actual != expected:
-                raise ValueError("frontend inputs or outputs changed after the build")
-        if (
-            not (built / "index.html").is_file()
-            or not (built / "async_computation.bundle.js").is_file()
-        ):
-            raise ValueError("frontend entry point or worker missing")
+                raise ValueError(what_differs(actual, expected))
+        for needed in ("index.html", "async_computation.bundle.js"):
+            if not (built / needed).is_file():
+                raise ValueError(f"gui/build/{needed} is missing")
     except (OSError, ValueError, KeyError) as error:
-        raise SetupError("Run npm run build successfully before building the wheel") from error
+        raise SetupError(
+            f"{error}. Run npm run build successfully before building the wheel"
+        ) from error
+
+
+def what_differs(actual, expected):
+    """Name the files that differ from the build's record, a few at most.
+
+    A developer told only that "something changed" has to hunt for it; a file
+    left behind by a file browser (``.DS_Store``, ``Thumbs.db``) is the usual
+    culprit and is easy to remove once it is named.
+    """
+    reasons = [
+        *(f"{name} is not part of the build" for name in sorted(actual.keys() - expected.keys())),
+        *(f"{name} is missing" for name in sorted(expected.keys() - actual.keys())),
+        *(
+            f"{name} changed after the build"
+            for name in sorted(actual.keys() & expected.keys())
+            if actual[name] != expected[name]
+        ),
+    ]
+    shown = "; ".join(reasons[:5])
+    if len(reasons) > 5:
+        shown += f"; and {len(reasons) - 5} more"
+    return shown
 
 
 class BuildPy(build_py):

@@ -284,8 +284,8 @@ def test_time_is_never_offered_on_a_single_moment_run(browser, built_dist, tmp_p
     test_manifest_driven_refresh.test_a_timelapse_run_is_refused_loudly_not_silently_truncated).
     The moment-by-moment promises this test once carried — uncommitted time
     never offered, committed reach reported, a landing in a time gap never
-    flushing the decoded cache — are ordered work of the c-and-t chapter
-    (an earlier note (kept in the repository's git history)) and return with the served axis.
+    flushing the decoded cache — are work still to do for channels and
+    time, and they return with the served time axis.
     """
     run = a_live_run(tmp_path)
     run.write_and_publish("posA", some_specimen(1500))
@@ -483,5 +483,5 @@ def test_suppressed_sse_hint_is_recovered_by_conditional_check(
 # decoded-cache flush (zmartLetGo.times unchanged) — needs a timelapse run
 # on screen, and a timelapse run is now refused at the declare door until
 # the served picture grows a time axis. The claim is recorded as ordered
-# work in an earlier note (kept in the repository's git history) (the slider section) and the
+# work still to do, and the
 # gate returns with the axis, asserting pixels as well as ranges.

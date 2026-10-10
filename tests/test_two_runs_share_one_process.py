@@ -7,8 +7,7 @@ remembered geometry used to key on exactly that triple -- (run_id, layout
 revision, profile) -- so the second run read the FIRST run's origin and
 extent: a 64-position survey served inside a 16-position frame, its outer
 tiles composing negative windows, its pieces answering 503 for ever and
-the warm thread dead (an earlier note (kept in the repository's git history)
-records the night this was run to ground). The run's folder is the
+the warm thread dead. The run's folder is the
 identity that actually distinguishes them, so it is part of the key now.
 """
 

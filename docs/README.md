@@ -30,6 +30,17 @@ This installs one command, `zmart-viewer`, and the Python package `zmart_viewer`
 
 To change the viewer itself, use the development setup in the [main README](../README.md#install-it).
 
+**On a microscope computer.** Many institutes run security software that
+watches what programs do, not only what files they contain. While a run is
+followed live, the viewer may write many small files in quick succession, for
+example when it keeps a coarse overview up to date as positions land. Some
+security software takes that pattern for an attack and stops the program, and
+the viewer then disappears without an error message. If that happens, ask
+your IT department to mark the Python program that runs the viewer as trusted,
+including its *behaviour*, not only its files. That is the `python.exe` (or
+`python`) inside the environment you installed the viewer into. Excluding the
+file from scanning alone is not enough.
+
 ## 2. Open your images
 
 ```bash
@@ -159,6 +170,9 @@ A small HTTP server on the local machine. It reads OME-Zarr images, places each 
 | `make_server(...)` | `zmart_viewer` | Starting the engine on a port |
 | `POST /api/stores/open` | HTTP | Telling the engine what to show |
 | `POST /api/announce` | HTTP | Telling it a position was written |
+| `GET /api/config` | HTTP | Learning what is open; its `layers` list feeds the embedding script |
+| `GET /api/events` | HTTP | Hearing that something changed, so you fetch `/api/config` again |
+| `GET /data/…` | HTTP | The pixels, at the addresses `/api/config` gives |
 | `GET /embedding.js` | HTTP | Putting the named views on your own canvas |
 | `PublishedAcquisition`, `STORE` | `zmart_viewer` | Reading what the engine has published |
 | `write_projection(...)` | `zmart_viewer` | Writing a Top, Min, Max or Sum view beside an image |
