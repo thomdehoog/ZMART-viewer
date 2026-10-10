@@ -1,8 +1,7 @@
 # What we learned putting OME-Zarr into Neuroglancer
 
-Written 5 August 2026. A short list of the things that cost us time, so they cost
-somebody else less. Each one is a mistake that was actually made here, not a general
-warning.
+A short list of the things that cost this project time, so they cost somebody else
+less. Each one is a mistake that was actually made here, not a general warning.
 
 ---
 

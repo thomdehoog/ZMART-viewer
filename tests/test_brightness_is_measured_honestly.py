@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from zmart_viewer.opening import contrast  # noqa: E402
 
-# The two channels are deliberately far apart, in the way a real Stellaris
+# The two channels are deliberately far apart, in the way a real confocal
 # acquisition is: a bright structural marker and a faint one that matters just as
 # much. Sharing one window between them is invisible while both draw saturated
 # and obvious the moment the shader is correct.
