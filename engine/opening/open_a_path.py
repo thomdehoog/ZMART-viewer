@@ -72,11 +72,11 @@ def scene_behind_a_plate(target: Path) -> Path | None:
         return None
 
     from zmart_viewer.picture.arrangement import (
-        _the_description_of,  # deferred: pulls numpy and zarr
+        the_description_of,  # deferred: pulls numpy and zarr
     )
 
     try:
-        described, _ = _the_description_of(target)
+        described, _ = the_description_of(target)
     except ValueError:
         return None
 

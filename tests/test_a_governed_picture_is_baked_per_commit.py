@@ -457,7 +457,7 @@ def test_background_catch_up_waits_for_the_announcement_storm_to_quiet(tmp_path,
     def record_one_catch_up():
         called.append(time.monotonic())
         with governed._guard:
-            governed._mark = governed._run.manifest.fingerprint()
+            governed._mark = governed.run.manifest.fingerprint()
         caught_up.set()
 
     monkeypatch.setattr(governed, "composer", record_one_catch_up)

@@ -488,9 +488,9 @@ def link_a_finished_run(run_root: str | Path, *, name: str = "linked") -> Path:
     governed = GovernedRun(run_root)
 
     try:
-        layout, profile = governed._run._geometry()
-        published = governed._run._published_units()
-        order = governed._run._positions_in_commit_order()
+        layout, profile = governed.run.geometry()
+        published = governed.run.published_units()
+        order = governed.run.positions_in_commit_order()
     finally:
         governed.close()
     inner = dict(profile.levels[0].inner_chunk)
@@ -665,6 +665,13 @@ _refused: dict[Path, float] = {}
 
 _being_made: dict[Path, threading.Lock] = {}
 
+#: How often each picture has been forgotten. A build that started before the
+#: latest forgetting must not be kept: its picture was closed while it was
+#: being built (review N4). The build's lock, by contrast, is never dropped,
+#: so a request after the forgetting waits for the build under way instead of
+#: starting a second one beside it.
+times_forgotten: dict[Path, int] = {}
+
 
 def _what_it_was_built_from(store: Path) -> dict | None:
     """What a store records about being built, or ``None`` for an ordinary image."""
@@ -710,7 +717,7 @@ def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
     return read_the_transfer(Path(ours["built_from"]))
 
 
-def _composer_for(store: Path) -> Composer | ComposedPicture | None:
+def composer_for(store: Path) -> Composer | ComposedPicture | None:
     """The composer for this picture, opened once and kept."""
     store = store.resolve()
     mark = _the_pictures_mark(store)
@@ -753,6 +760,8 @@ def _composer_for(store: Path) -> Composer | ComposedPicture | None:
             if store in _composers and _composers[store][0] == mark:
                 return _composers[store][1]
 
+            forgotten_before = times_forgotten.get(store, 0)
+
         made = None
 
         try:
@@ -771,8 +780,14 @@ def _composer_for(store: Path) -> Composer | ComposedPicture | None:
             return None
 
         with _guard:
-            _composers[store] = (mark, made)
-            return made
+            if times_forgotten.get(store, 0) == forgotten_before:
+                _composers[store] = (mark, made)
+                return made
+
+        if made is not None:
+            made.close()
+
+        return None
 
 
 def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPicture | None:
@@ -818,7 +833,7 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPi
 def a_manifest_governs(store: Path) -> bool:
     """Whether this picture's pieces may only be answered through its run."""
     where = Path(store).resolve()
-    held = _composer_for(where)
+    held = composer_for(where)
 
     if isinstance(held, ComposedPicture):
         return True
@@ -833,7 +848,7 @@ def a_manifest_governs(store: Path) -> bool:
 def built_bytes_behind(store: Path, inside: str) -> bytes | None:
     """The piece of a built picture the browser asked for, made now."""
     where = Path(store)
-    held = _composer_for(where)
+    held = composer_for(where)
 
     if held is None:
         with _guard:
@@ -933,7 +948,7 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
 
 def a_sample_behind(store: Path, channel: int = 0):
     """A built picture's pixels for measuring: the composer's own coarsest ground."""
-    held = _composer_for(Path(store))
+    held = composer_for(Path(store))
 
     if held is None:
         return None
@@ -971,7 +986,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
     """A built picture's pixels inside a share of itself, for measuring."""
     import numpy as np
 
-    held = _composer_for(Path(store))
+    held = composer_for(Path(store))
 
     if held is None:
         return None
@@ -1036,7 +1051,7 @@ def forget_composer(store: Path) -> None:
     with _guard:
         where = Path(store).resolve()
         remembered = _composers.pop(where, None)
-        _being_made.pop(where, None)
+        times_forgotten[where] = times_forgotten.get(where, 0) + 1
         _refused.pop(where, None)
 
     held = remembered[1] if remembered is not None else None

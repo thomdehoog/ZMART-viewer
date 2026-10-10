@@ -30,14 +30,14 @@ def requires_geometry(store: Path) -> bool:
     return (
         pieces.the_map_inside(store) is not None
         or live_run_holding(store) is not None
-        or pieces._composer_for(store) is not None
+        or pieces.composer_for(store) is not None
         or "zmart_projection" in read_attrs_at(store)
     )
 
 
 def answer(store: Path, inside: str) -> bytes | None:
     """Serve a Zarr 3 coverage group using the source's own axes and transforms."""
-    held = pieces._composer_for(store)
+    held = pieces.composer_for(store)
     composer = held.composer() if isinstance(held, ComposedPicture) else held
     if composer is None and pieces.the_map_inside(store) is not None:
         raise ValueError("coverage unavailable for a refused or legacy linked image")

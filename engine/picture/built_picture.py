@@ -25,9 +25,9 @@ from pathlib import Path
 import numpy as np
 import zarr
 from zmart_viewer.filesystem import done_despite_brief_holds
-from zmart_viewer.live.record.live_serving import _LiveRun
+from zmart_viewer.live.record.live_serving import LiveRun
 from zmart_viewer.live.record.shard_lookup import how_the_array_is_stored
-from zmart_viewer.live.record.vocabulary import rounded_up
+from zmart_viewer.live.record.vocabulary import rounded_up, the_position_of
 from zmart_viewer.picture.arrangement import (
     OURS,
     PIECE,
@@ -170,9 +170,8 @@ def declare_a_governed_picture(
 
     try:
         composer = governed.composer()
-        folded = governed._run._folded
-        tail = governed._run._last_folded_revision
-        revision = governed._run._geometry()[0].revision
+        folded, tail = governed.run.how_far_folded()
+        revision = governed.run.geometry()[0].revision
 
         store = where / the_scene_folder_name(name)
         store.mkdir(parents=True, exist_ok=True)
@@ -837,7 +836,7 @@ class GovernedRun(ComposedPicture):
 
     def __init__(self, folder: str | Path, piece: int = PIECE, store: str | Path | None = None):
         self.folder = Path(folder).resolve()
-        self._run = _LiveRun(self.folder)
+        self.run = LiveRun(self.folder)
         super().__init__(store, piece)
         self._baked: tuple[int, ...] | None = None
         self._bake_guard = threading.Lock()
@@ -923,7 +922,7 @@ class GovernedRun(ComposedPicture):
                 self.composer()
 
                 with self._derive_guard:
-                    current = self._run.manifest.fingerprint()
+                    current = self.run.manifest.fingerprint()
 
                     with self._guard:
                         settled = current == self._mark
@@ -954,7 +953,7 @@ class GovernedRun(ComposedPicture):
 
     def _derive_and_install_the_composer(self) -> Composer:
         """Derive, patch and install one manifest state without overtaking."""
-        mark = self._run.manifest.fingerprint()
+        mark = self.run.manifest.fingerprint()
 
         with self._guard:
             if mark == self._mark and self._held is not None:
@@ -966,12 +965,12 @@ class GovernedRun(ComposedPicture):
         phases: dict[str, float] = {}
         watch = time.perf_counter
         marked = watch()
-        self._run.manifest.committed_strict()
+        self.run.manifest.committed_strict()
         phases["strict_read"] = (watch() - marked) * 1000
         baked_picture = self._shown is not None and bool(self._the_baked_levels())
         began = time.perf_counter()
         marked = watch()
-        layout, profile = self._run._geometry()
+        layout, profile = self.run.geometry()
         framed = (layout.revision, profile.profile_id)
         moved_frame = previous is not None and framed != self._frame_installed
         made, drawing, tiles = self._compose_the_snapshot(before, kept)
@@ -1017,13 +1016,13 @@ class GovernedRun(ComposedPicture):
                 [(one, tiles[one]) for one in drawing if one in changed_names],
             )
 
-        folded = self._run._folded
+        folded, tail = self.run.how_far_folded()
         phases["inherit"] = (watch() - marked) * 1000
 
         if baked_picture:
             current = {
                 "events": folded,
-                "tail": self._run._last_folded_revision,
+                "tail": tail,
                 "layout": layout.revision,
             }
             self._keep_the_bake_true(
@@ -1041,7 +1040,7 @@ class GovernedRun(ComposedPicture):
 
         with self._guard:
             if (mark != self._mark or self._held is None) and (
-                folded >= self._folded_installed or mark == self._run.manifest.fingerprint()
+                folded >= self._folded_installed or mark == self.run.manifest.fingerprint()
             ):
                 stood_down = self._held
                 self._mark, self._held = mark, made
@@ -1227,8 +1226,15 @@ class GovernedRun(ComposedPicture):
         made: Composer,
         current: dict,
     ) -> tuple[dict[int, set[tuple[int, int]]] | None, frozenset[int] | None]:
-        """The footprints of every event the stamp cannot prove it absorbed."""
-        events = self._run.manifest.events()
+        """The footprints of every event the stamp cannot prove it absorbed.
+
+        The history is read through one strict snapshot of the marker. The
+        forgiving read would answer an unreadable marker with an empty
+        history, which looks like a rollback and re-bakes the whole picture;
+        a strict read that fails is asked again with the next derive.
+        """
+        manifest = self.run.manifest
+        events = manifest.events_through(manifest.committed_strict())
         stamped = self._the_stamp()
         everything = {
             level: {
@@ -1265,9 +1271,9 @@ class GovernedRun(ComposedPicture):
         missed = {event.position_id for event in events[absorbed:]}
         dirty: dict[int, set[tuple[int, int]]] = {}
         named = {
-            tile.name.split(".")[0]: tile
+            the_position_of(tile.name): tile
             for tile in made.mosaic.tiles
-            if tile.name.split(".")[0] in missed
+            if the_position_of(tile.name) in missed
         }
 
         for tile in named.values():
@@ -1290,9 +1296,9 @@ class GovernedRun(ComposedPicture):
         kept: dict[str, Tile],
     ) -> tuple[Composer, dict[str, int], dict[str, Tile]]:
         """Derive tiles, frame and composer from the manifest's current truth."""
-        published = self._run._published_units()
-        order = self._run._positions_in_commit_order()
-        layout, profile = self._run._geometry()
+        published = self.run.published_units()
+        order = self.run.positions_in_commit_order()
+        layout, profile = self.run.geometry()
 
         current: dict[str, int] = {}
 

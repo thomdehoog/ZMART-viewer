@@ -88,7 +88,7 @@ def test_dense_yx_black_extent_and_compressed_padding(tmp_path):
 
 
 def test_refused_composer_never_becomes_dense(monkeypatch, tmp_path):
-    monkeypatch.setattr(coverage.pieces, "_composer_for", lambda _: None)
+    monkeypatch.setattr(coverage.pieces, "composer_for", lambda _: None)
     monkeypatch.setattr(coverage.pieces, "the_map_inside", lambda _: {"built_from": "missing"})
     with pytest.raises(ValueError, match="refused"):
         coverage.answer(tmp_path, "zarr.json")
@@ -109,7 +109,7 @@ def test_baked_overview_serves_coverage_at_extended_levels(monkeypatch, tmp_path
     composer = Composer(
         Mosaic([Tile("a", tmp_path, [copy])], 1, ("z", "y", "x"), "uint16"), piece=128
     )
-    monkeypatch.setattr(coverage.pieces, "_composer_for", lambda _: composer)
+    monkeypatch.setattr(coverage.pieces, "composer_for", lambda _: composer)
     try:
         root = json.loads(coverage.answer(tmp_path, "zarr.json"))
         assert root["attributes"]["ome"]["multiscales"][0]["datasets"] == [{"path": "0"}, {"path": "1"}]
@@ -131,7 +131,7 @@ def test_dataset_cannot_escape_image_store(tmp_path):
 
 
 def test_direct_position_cannot_bypass_live_publication(monkeypatch, tmp_path):
-    monkeypatch.setattr(coverage.pieces, "_composer_for", lambda _: None)
+    monkeypatch.setattr(coverage.pieces, "composer_for", lambda _: None)
     monkeypatch.setattr(coverage, "live_run_holding", lambda _: tmp_path)
     with pytest.raises(ValueError, match="governed composed view"):
         coverage.answer(tmp_path / "unpublished.ome.zarr", "zarr.json")

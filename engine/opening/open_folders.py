@@ -91,7 +91,7 @@ def is_store(path: Path) -> bool:
     return bool(read_attrs_at(path).get("multiscales"))
 
 
-_UNIT_SPELLINGS = {
+UNIT_SPELLINGS = {
     "um": "micrometer",
     "µm": "micrometer",  # the micro sign, U+00B5
     "μm": "micrometer",  # greek small letter mu, U+03BC -- identical to look at
@@ -146,7 +146,7 @@ def normalise_units(raw: bytes) -> bytes:
                     continue
 
                 spelled = axis.get("unit")
-                correct = _UNIT_SPELLINGS.get(spelled) if isinstance(spelled, str) else None
+                correct = UNIT_SPELLINGS.get(spelled) if isinstance(spelled, str) else None
 
                 if correct is not None and correct != spelled:
                     axis["unit"] = correct
@@ -192,7 +192,7 @@ def declared_channels(store: Path) -> list[str] | None:
     return [str(channel["name"]) for channel in channels(store)]
 
 
-_attrs_cache: dict[str, tuple[int, dict]] = {}
+_attrs_cache: dict[str, tuple[tuple[int, int], dict]] = {}
 
 
 def description_file(path: Path) -> Path | None:
@@ -206,6 +206,18 @@ def description_file(path: Path) -> Path | None:
     return None
 
 
+def the_stamp_of(described: Path) -> tuple[int, int]:
+    """What a remembered description is checked against: its timestamp and size.
+
+    The timestamp alone is not enough. A description caught half-written and
+    finished within the same timestamp, which file systems with coarse
+    timestamps make likely, would otherwise stay remembered as half-written
+    for good (review finding S4). The two versions differ in size.
+    """
+    stamp = described.stat()
+    return stamp.st_mtime_ns, stamp.st_size
+
+
 def read_attrs_at(path: Path) -> dict:
     """The OME-Zarr description at ``path``, or an empty one if unreadable."""
     key = str(path)
@@ -216,7 +228,7 @@ def read_attrs_at(path: Path) -> dict:
         return {}
 
     try:
-        stamp = described.stat().st_mtime_ns
+        stamp = the_stamp_of(described)
     except OSError:
         _attrs_cache.pop(key, None)
         return {}
@@ -229,7 +241,8 @@ def read_attrs_at(path: Path) -> dict:
     try:
         attrs = json.loads(described.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        attrs = {}
+        _attrs_cache.pop(key, None)
+        return {}
 
     if not isinstance(attrs, dict):
         attrs = {}
@@ -250,7 +263,7 @@ def read_attrs_at(path: Path) -> dict:
     return attrs
 
 
-_array_cache: dict[str, tuple[int, dict]] = {}
+_array_cache: dict[str, tuple[tuple[int, int], dict]] = {}
 
 
 def read_array_description(level: Path) -> dict:
@@ -261,7 +274,7 @@ def read_array_description(level: Path) -> dict:
         found = level / name
 
         try:
-            stamp = found.stat().st_mtime_ns
+            stamp = the_stamp_of(found)
         except OSError:
             continue
 
@@ -273,7 +286,8 @@ def read_array_description(level: Path) -> dict:
         try:
             described = json.loads(found.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            described = None
+            _array_cache.pop(key, None)
+            return {}
 
         answer = _array_layout(described) if isinstance(described, dict) else {}
         _array_cache[key] = (stamp, answer)
@@ -487,9 +501,12 @@ def forget(store: Path) -> None:
     under = str(store)
     inside = under + os.sep
 
+    # Other requests add to these while this one lets go, so each is walked
+    # through a copy of its keys taken in one step, and a key another request
+    # removed first is simply already gone (review N4).
     for remembered in (_attrs_cache, _array_cache, _frame_counts):
-        for key in [key for key in remembered if key == under or key.startswith(inside)]:
-            del remembered[key]
+        for key in [key for key in list(remembered) if key == under or key.startswith(inside)]:
+            remembered.pop(key, None)
 
 
 def written_timepoints(store: Path) -> int | None:

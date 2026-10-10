@@ -98,6 +98,7 @@ __all__ = [
     "ZmartLiveError",
     "check_the_name_is_safe",
     "is_a_safe_name",
+    "the_position_of",
 ]
 
 
@@ -142,6 +143,17 @@ _ALLOWED_IN_A_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 # variants collide too, so the internal namespace is reserved without regard to
 # case.
 _GENERATION_SUFFIX = re.compile(r"\.generation-\d+$", re.IGNORECASE)
+
+
+def the_position_of(folder_name: str) -> str:
+    """The position a store folder belongs to: its name without a generation ending.
+
+    A replacement lives beside the original as ``<position>.generation-N``;
+    everything before that ending is the position's own name, dots included.
+    Cutting at the first dot instead read ``pos.B`` as ``pos``, so a bake that
+    looked for what it had missed never found it (review finding M2).
+    """
+    return _GENERATION_SUFFIX.sub("", folder_name)
 
 
 def is_a_safe_name(name: object) -> bool:
