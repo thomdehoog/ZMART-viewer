@@ -96,15 +96,19 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
                 for p in (repo / "gui").glob("*.py")
             }
         )
-        # Two drawing files ship as they are, because other programs read them
+        # Four drawing files ship as they are, because other programs read them
         # from the installed package: the server hands out embedding.js, and
-        # the operator interface patches its neuroglancer with
+        # the operator interface's page build takes the shader programs and the
+        # neuroglancer edits from programs.js, neuroglancer-patches.mjs and
         # neuroglancer-growth.mjs. The rest of the drawing code is only read by
         # the page's build, and arrives already built in _frontend.
         expected_files.update(
             {
                 f"drawing/{name}": (repo / "engine" / "drawing" / name).read_bytes()
-                for name in ("embedding.js", "neuroglancer-growth.mjs")
+                for name in (
+                    "embedding.js", "programs.js",
+                    "neuroglancer-growth.mjs", "neuroglancer-patches.mjs",
+                )
             }
         )
         assert packaged == expected_files, (
