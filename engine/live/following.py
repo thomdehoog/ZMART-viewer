@@ -249,7 +249,13 @@ class ManifestWatcher:
 
     def _watch(self) -> None:
         while not self._stop.is_set():
-            self.check_once()
+            try:
+                self.check_once()
+            except Exception:
+                # A share that hiccups makes listing the runs raise for a
+                # moment. That is not a reason to stop watching for the rest
+                # of the session, as FolderWatcher already knows.
+                logging.getLogger(__name__).exception("Cannot check the live runs' markers")
             self._stop.wait(self._every)
 
 
