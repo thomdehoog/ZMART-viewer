@@ -330,7 +330,7 @@ class _Handler(SimpleHTTPRequestHandler):
         self._scratch = scratch if scratch is not None else {}
         self._site_dir = site_dir  # the built page, served as the base directory
         self._live = live  # is the data still being written? decides what may be kept
-        # How open pages are told that something has changed. See announcements.py.
+        # How open pages are told that something has changed. See live/following.py.
         self._announcements = announcements or live.Announcements()
         # A cheap authoritative answer used for conditional catch-up after a
         # missed SSE hint.  It returns ``(document, etag)`` and touches no image.

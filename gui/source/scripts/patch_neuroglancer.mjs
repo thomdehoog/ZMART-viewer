@@ -4,9 +4,10 @@
  * The transparency edits preserve binary image coverage only when the host sets
  * display.transparentBackground. The host must also supply geometry-based
  * coverage for sparse mosaics; intensity zero cannot distinguish their gaps
- * from acquired black pixels. See docs/TRANSPARENT_2D.md.
- * Keep the alpha edits aligned with ZMART-microscopy's
- * application/patches/neuroglancer+2.41.2.patch (patch-package form).
+ * from acquired black pixels. The engine serves that coverage beside each image
+ * (engine/serving/coverage.py).
+ * Keep the alpha edits aligned with ZMART-interface's
+ * patches/neuroglancer+2.41.2.patch (patch-package form).
  *
  * The refresh pair says: **a refresh should replace pixels, not remove them.**
  *
