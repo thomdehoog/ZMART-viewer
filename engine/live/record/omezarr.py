@@ -66,8 +66,8 @@ OME-Zarr also allows one statement for the image as a whole, and saying it in
 both places moves the picture twice as far out as it really is. And the number
 is the **corner** of the first voxel rather than its middle, so that the copies
 nest exactly — a coarse voxel covers precisely the fine voxels it was built
-from. the voxel-placement note (formerly ``zmart_storage/VOXEL_PLACEMENT.md``) sets out the arithmetic behind that
-choice, and ``docs/design/zmart-ome-zarr-recipe.md`` records both decisions.
+from. Halving a copy therefore keeps its corner where it was, and the
+position written beside each resolution is that shared corner.
 
 Using it
 --------
