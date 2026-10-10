@@ -29,8 +29,9 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
-import tempfile
+import stat
 import time
 from pathlib import Path
 
@@ -153,26 +154,52 @@ def put_text_in_place(destination: Path, text: str, *, pushed_to_disk: bool = Fa
     """
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    handle = tempfile.NamedTemporaryFile(
-        mode="w",
-        dir=destination.parent,
-        prefix=destination.name + ".",
-        suffix=".tmp",
-        delete=False,
-        encoding="utf-8",
-    )
+    temporary, descriptor = open_a_temporary_file_beside(destination)
     try:
-        with handle as writing:
+        with open(descriptor, "w", encoding="utf-8") as writing:
             writing.write(text)
             if pushed_to_disk:
                 writing.flush()
                 os.fsync(writing.fileno())
-        done_despite_brief_holds(os.replace, handle.name, destination)
+        keep_the_permissions_of(destination, temporary)
+        done_despite_brief_holds(os.replace, temporary, destination)
         if pushed_to_disk:
             push_directory_to_disk(destination.parent)
     except BaseException:
-        Path(handle.name).unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
         raise
+
+
+def open_a_temporary_file_beside(destination: Path) -> tuple[Path, int]:
+    """Create a new, empty temporary file next to ``destination``.
+
+    The file is opened with the permissions an ordinary new file gets
+    (``0o666``, narrowed by the computer's usual setting, the umask). Python's
+    own temporary files are private to their owner instead, and the rename
+    would carry that over, so on a shared Linux or macOS computer another
+    account could not read a run. Windows has no such permissions, and there
+    both kinds of file are the same.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    while True:
+        temporary = destination.with_name(f"{destination.name}.{secrets.token_hex(4)}.tmp")
+        try:
+            return temporary, os.open(temporary, flags, 0o666)
+        except FileExistsError:
+            continue
+
+
+def keep_the_permissions_of(destination: Path, temporary: Path) -> None:
+    """Give the replacement the permissions the file it replaces already had.
+
+    Someone may have opened a run to other readers on purpose; replacing a
+    description must not quietly close it again.
+    """
+    try:
+        permissions = stat.S_IMODE(os.stat(destination).st_mode)
+    except FileNotFoundError:
+        return
+    os.chmod(temporary, permissions)
 
 
 def put_json_in_place(
