@@ -549,6 +549,25 @@ class TestTheLoadWindow:
         )
         assert page.get_by_label("open overview_pos001.ome.zarr", exact=True).count() == 1
 
+    def test_an_open_that_gets_no_answer_frees_the_window(self, no_chooser):
+        """A dropped answer says so, and the Open button works again (review S2).
+
+        The server used to drop the connection when it could not write its
+        own folder, and the page waited for an answer that never came: the
+        button stayed at "…" for good and the window could only be closed.
+        """
+        page, first, _ = no_chooser
+        page.route("**/api/stores/open", lambda route: route.abort("connectionreset"))
+        page.get_by_label("open images").click()
+        window = page.get_by_role("dialog", name="load data")
+        window.wait_for(timeout=10_000)
+        window.get_by_label("overview_pos001.ome.zarr", exact=True).click()
+        opening = page.get_by_label("open overview_pos001.ome.zarr", exact=True)
+        opening.click()
+        window.get_by_text("could not open").wait_for(timeout=10_000)
+        assert opening.inner_text() == "Open"
+        assert opening.is_enabled()
+
     def test_raw_data_opens_through_the_default_door_leaving_no_trace(self, no_chooser):
         """A raw run opens with one plain press, and nothing lands on disk.
 

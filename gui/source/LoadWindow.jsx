@@ -64,8 +64,13 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
   // answers with a relink ask, which becomes the pane below, prefilled.
   const openStore = async (path) => {
     setBusy(true);
-    const result = await openPath(path);
-    setBusy(false);
+    let result;
+    try {
+      result = await openPath(path);
+    } finally {
+      // Whatever happened, the Open button is free again.
+      setBusy(false);
+    }
     if (result.config) {
       onOpened(result.config);
     } else if (result.relink) {
@@ -73,7 +78,9 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         relink: true,
         name: result.relink.name,
         data: result.relink.was,
-        destination: path.slice(0, path.lastIndexOf("/")),
+        // Where the view stands is the server's word: cutting at "/" here
+        // dropped the last letter of every Windows path.
+        destination: result.relink.parent,
         bake: result.relink.baked,
       });
     } else {
@@ -180,8 +187,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
           the zoomed-out overview -- the low-resolution top of the scene's
           pyramid -- is kept now as a hard copy on disk, or composed from
           the raw data when someone looks. The recommendation is measured,
-          not guessed: on the lab workstation
-          (an earlier note (kept in the repository's git history), the on-the-card table) the
+          not guessed: on the lab workstation, rendering on the card, the
           bake costs 5.7 s at 1,024 positions of 384-pixel test tiles where
           the unbaked first look costs 7.7 s -- the crossover, at roughly
           150 megapixels of survey, a few dozen full camera frames. At
