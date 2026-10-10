@@ -335,14 +335,30 @@ class _Handler(SimpleHTTPRequestHandler):
             pass
 
     def send_response(self, code, message=None):
-        """Every reply, with what the browser may keep of it."""
-        super().send_response(code, message)
+        """Every reply, with what the browser may keep of it.
 
-        if self.path != "/embedding.js" and not self.path.startswith(("/data/", "/api/")):
-            page = self.path in ("/", "/index.html") or self.path.endswith("/")
+        Only what the build names by its content -- everything under
+        ``assets/`` -- may be kept for good, because it changes its name
+        when it changes. The page itself is never kept, so a reload always
+        names today's bundle. Anything else (a worker with a fixed name, the
+        build manifest, a 404) is checked again each time; kept for good, it
+        would outlive an upgrade beside the new page.
+        """
+        super().send_response(code, message)
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+
+        if path != "/embedding.js" and not path.startswith(("/data/", "/api/")):
+            page = path in ("/", "/index.html") or path.endswith("/")
+            named_by_content = code in (HTTPStatus.OK, HTTPStatus.NOT_MODIFIED) and path.startswith(
+                "/assets/"
+            )
             self.send_header(
                 "Cache-Control",
-                "no-store" if page else "public, max-age=31536000, immutable",
+                "no-store"
+                if page
+                else "public, max-age=31536000, immutable"
+                if named_by_content
+                else "no-cache",
             )
 
     def end_headers(self) -> None:

@@ -794,6 +794,52 @@ def test_a_spelled_out_way_out_of_the_folder_is_still_refused(serving):
         assert body != b"secret"
 
 
+# --- what the browser may keep (review S6) -------------------------------------
+
+
+@pytest.fixture
+def a_built_site(tmp_path):
+    """A site with a hashed bundle, a worker with a fixed name, and the page."""
+    site = tmp_path / "site"
+    (site / "assets").mkdir(parents=True)
+    (site / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (site / "assets" / "index-abc.js").write_text("1", encoding="utf-8")
+    (site / "async_computation.bundle.js").write_text("2", encoding="utf-8")
+    (site / "build-manifest.json").write_text("{}", encoding="utf-8")
+    server = make_server(port=0, site_dir=site)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize(
+    "path, kept",
+    [
+        ("/assets/index-abc.js", "public, max-age=31536000, immutable"),
+        ("/async_computation.bundle.js", "no-cache"),
+        ("/build-manifest.json", "no-cache"),
+        ("/no-such-file.js", "no-cache"),
+        ("/assets/no-such-file.js", "no-cache"),
+        ("/", "no-store"),
+        ("/?v=2", "no-store"),
+        ("/index.html?v=2", "no-store"),
+    ],
+)
+def test_only_files_named_by_their_content_are_kept_for_good(a_built_site, path, kept):
+    """A file kept "for good" must change its name when it changes.
+
+    Vite names everything under ``assets/`` by its content, so those may be
+    kept for a year. A worker with a fixed name, the build manifest, or a
+    404 kept that long outlives an upgrade: the browser goes on running the
+    old worker beside the new page.
+    """
+    assert request(a_built_site, path)[1]["Cache-Control"] == kept
+
+
 # --- requests that are not what they say (review N1) ---------------------------
 
 
