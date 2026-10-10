@@ -119,3 +119,28 @@ the growth patch in `neuroglancer-growth.mjs`. That file exports
 The wheel's build check covers `embedding.js` and `neuroglancer-growth.mjs`,
 so an installed viewer always serves the `embedding.js` its page was built
 with.
+
+### The look, and the other edits, are shared too
+
+Two more files in the installed package's `drawing` folder are for a page
+build to read, so that a page draws exactly as the viewer's own window does
+instead of keeping a copy that drifts:
+
+- `programs.js` holds the little shader programs that turn a stored value
+  into a colour on screen, and their controls: `shaderFor(volumetric, lut,
+  opaque, { gamma })`, `shaderControlsFor(window, volumetric, weight, colour,
+  lut, attenuation, gamma)`, `hexColour(rgb)`, `lutShader(stops)`,
+  `LOOKUP_TABLES` and `LOOKUP_TABLE_NAMES`. It imports nothing and touches no
+  browser, so any build can take it as it is. Gamma is added only when asked
+  for; without it the program is exactly the one the viewer's window uses.
+- `neuroglancer-patches.mjs` holds the remaining edits to neuroglancer as
+  tables: `transparencyPatches(lib)`, which keep an image see-through only
+  where nothing was imaged, for a host that asks for a transparent background,
+  and `refreshPatches(lib)`, which make a refresh replace pixels instead of
+  removing them. `applyPatches(patches, { modulesOnly, say })` applies a list
+  of them, each once, and returns what went wrong instead of guessing at a
+  neuroglancer that has changed.
+
+ZMART-interface's page build reads all three files (with
+`neuroglancer-growth.mjs`) from the viewer installed in the Python it runs
+with, and the viewer's own page imports them from the same place.

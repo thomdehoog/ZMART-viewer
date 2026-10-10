@@ -75,12 +75,13 @@ bdist_wheel = "build_support.Wheel"
 [tool.setuptools.exclude-package-data]
 "zmart_viewer.gui" = ["source/*", "build/*", "__pycache__/*"]
 
-# Two drawing files ship as they are, because other programs read them from
+# Four drawing files ship as they are, because other programs read them from
 # the installed package: the server hands embedding.js to any page that embeds
-# the viewer, and the operator interface builds its page with the same
-# neuroglancer patches as the viewer by reading neuroglancer-growth.mjs.
+# the viewer, and the operator interface builds its page with the viewer's own
+# shader programs (programs.js) and neuroglancer edits (neuroglancer-growth.mjs,
+# neuroglancer-patches.mjs).
 [tool.setuptools.package-data]
-"zmart_viewer.drawing" = ["embedding.js", "neuroglancer-growth.mjs"]
+"zmart_viewer.drawing" = ["embedding.js", "programs.js", "neuroglancer-growth.mjs", "neuroglancer-patches.mjs"]
 "zmart_viewer._frontend" = ["**/*"]
 
 [tool.ruff]

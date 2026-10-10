@@ -6,8 +6,11 @@
  * coverage for sparse mosaics; intensity zero cannot distinguish their gaps
  * from acquired black pixels. The engine serves that coverage beside each image
  * (engine/serving/coverage.py).
- * Keep the alpha edits aligned with ZMART-interface's
- * patches/neuroglancer+2.41.2.patch (patch-package form).
+ *
+ * The edits themselves are tables in engine/drawing/neuroglancer-patches.mjs,
+ * which ZMART-interface's page build applies from the installed viewer, so the
+ * two pages cannot drift apart. This script applies them to the viewer's own
+ * copy of neuroglancer.
  *
  * The refresh pair says: **a refresh should replace pixels, not remove them.**
  *
@@ -47,14 +50,16 @@
  * postinstall patches the modules, the first precompile carries them into the
  * bundle, and the bundle entries here find their markers already present.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyGrowthPatches } from "../../../engine/drawing/neuroglancer-growth.mjs";
+import {
+  applyPatches, refreshPatches, transparencyPatches,
+} from "../../../engine/drawing/neuroglancer-patches.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lib = join(here, "..", "node_modules", "neuroglancer", "lib");
-const workerBundle = join(lib, "chunk_worker.bundle.js");
 
 // On a fresh install the worker bundle is still Neuroglancer's un-flattened
 // import stub: the compiled bundle only comes into being when the build's
@@ -66,150 +71,10 @@ const workerBundle = join(lib, "chunk_worker.bundle.js");
 // bundle really exists and a missing anchor really is a version change.
 const modulesOnly = process.argv.includes("--modules-only");
 
-// An older generation of this patch added parallel refresh machinery beside
-// the stock function instead of correcting it: a named-chunk RPC, a per-key
-// pump, a probe, and an override that took the whole-source refresh away from
-// `invalidateSourceCache` altogether. A tree still carrying that would end up
-// with both, and the override would win, so this refuses rather than pretends.
-const SUPERSEDED = "zmartPumpRefreshesWithoutDeadline";
-
-const PATCHES = [
-  // Keep an opaque image opaque under translucent annotations and scale bars.
-  ...[
-    { indent: "      ", drawing: "annotations" },
-    { indent: "        ", drawing: "scale bars" },
-  ].map(({ indent, drawing }) => {
-    const anchor = `${indent}gl.blendFunc(\n${indent}  WebGL2RenderingContext.SRC_ALPHA,\n${indent}  WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA\n${indent});`;
-    const marker = `${indent}// Preserve image alpha under ${drawing}.`;
-    return {
-      file: join(lib, "sliceview", "panel.js"), marker, anchor,
-      replacement: `${anchor}\n${marker}\n${indent}if (this.context.transparentBackground) gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);`,
-    };
-  }),
-  {
-    file: join(lib, "display_context.js"),
-    marker: "if (!this.transparentBackground)",
-    anchor: `    this.gl.clearColor(1, 1, 1, 1);
-    this.gl.colorMask(false, false, false, true);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    this.gl.colorMask(true, true, true, true);`,
-    replacement: `    if (!this.transparentBackground) {
-      this.gl.clearColor(1, 1, 1, 1);
-      this.gl.colorMask(false, false, false, true);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      this.gl.colorMask(true, true, true, true);
-    }`,
-  },
-  {
-    file: join(lib, "sliceview", "panel.js"),
-    marker: "if (this.context.transparentBackground) backgroundColor.fill(0)",
-    anchor: `    backgroundColor[3] = 1;`,
-    replacement: `    backgroundColor[3] = 1;
-    if (this.context.transparentBackground) backgroundColor.fill(0);`,
-  },
-  {
-    file: join(lib, "sliceview", "frontend.js"),
-    marker: "sampledColor.a = float(sampledColor.a > 0.0)",
-    anchor: `  sampledColor = uBackgroundColor;
-}
-emit(sampledColor * uColorFactor, 0u);`,
-    replacement: `  sampledColor = uBackgroundColor;
-}
-// The embedding surface uses binary coverage, independently of channel weights.
-if (uBackgroundColor.a == 0.0) sampledColor.a = float(sampledColor.a > 0.0);
-emit(sampledColor * uColorFactor, 0u);`,
-  },
-  {
-    file: join(lib, "chunk_manager", "backend.js"),
-    also: workerBundle,
-    // This edit REMOVES a line, so there is nothing new to look for -- and a
-    // comment could not do the job anyway: esbuild strips comments when it
-    // flattens the worker bundle, so a comment marker is present in the module
-    // and absent in the bundle built from it. The line's absence is the mark.
-    gone: `this.rpc.invoke("Chunk.update", { source: source.rpcId });`,
-    // The line is unique in both the module and the compiled worker bundle,
-    // so it is its own anchor. Anchoring on the whole function instead made
-    // the patch look far larger than it is, and would drift the day anything
-    // unrelated inside that function changed.
-    anchor: `    this.rpc.invoke("Chunk.update", { source: source.rpcId });
-`,
-    replacement: `    // A refresh replaces pixels; it must not remove them.
-    //
-    // Removed here: a key-less Chunk.update naming only the source, which
-    // told the page to drop its whole copy. The page dropped it at once and
-    // the fresh bytes arrived milliseconds later, so between the two there
-    // was nothing to draw and the picture flashed -- on a static dataset
-    // never, on a live acquisition once per commit. Each chunk's own update
-    // still arrives as it downloads, which is what makes the page's copy
-    // fresh; the whole-copy drop only ever made it briefly absent.
-`,
-  },
-  {
-    file: join(lib, "chunk_manager", "frontend.js"),
-    marker: "Object.assign(chunk, source.getChunk(update))",
-    anchor: `        if (update.new) {
-          chunk = source.getChunk(update);
-          source.addChunk(key, chunk);
-        } else {`,
-    replacement: `        if (update.new) {
-          // Fresh bytes for a chunk this page already holds are written INTO
-          // the held object rather than replacing it, so the render layer's
-          // reference stays valid and the ordinary state transition uploads
-          // the new texture. Replacing the object instead passed the short
-          // no-blink gate and still left a 20-per-second commit storm drawing
-          // 72% of what a reload drew: the layers went on pointing at objects
-          // the source had already forgotten.
-          chunk = source.chunks.get(key);
-          if (chunk !== void 0) {
-            if (chunk.state === ChunkState.GPU_MEMORY) {
-              chunk.freeGPUMemory(this.gl);
-            }
-            Object.assign(chunk, source.getChunk(update));
-          } else {
-            chunk = source.getChunk(update);
-            source.addChunk(key, chunk);
-          }
-        } else {`,
-  },
-];
-
 applyGrowthPatches(lib);
-let failed = false;
-for (const patch of PATCHES) {
-  const targets = modulesOnly ? [patch.file] : [patch.file, patch.also];
-  for (const file of targets.filter(Boolean)) {
-    const held = readFileSync(file, "utf8");
-    const done = patch.gone
-      ? !held.includes(patch.gone)
-      : held.includes(patch.marker);
-    if (done) {
-      console.log(`already patched: ${file}`);
-      continue;
-    }
-    if (held.includes(SUPERSEDED)) {
-      console.error(
-        `${file} still carries the superseded patch generation. Reinstall the `
-        + "package so this one applies to stock sources:\\n\\n"
-        + "    rm -rf node_modules/neuroglancer && npm install\\n",
-      );
-      failed = true;
-      continue;
-    }
-    if (!held.includes(patch.anchor)) {
-      console.error(
-        `the anchor no longer matches in ${file} -- the pinned `
-        + "neuroglancer version has changed. Re-verify the patch against the "
-        + "new source before building.",
-      );
-      failed = true;
-      continue;
-    }
-    writeFileSync(file, held.replace(patch.anchor, patch.replacement));
-    console.log(`patched: ${file}`);
-  }
+const problems = applyPatches([...transparencyPatches(lib), ...refreshPatches(lib)], { modulesOnly });
+if (!modulesOnly && !readFileSync(join(lib, "chunk_worker.bundle.js"), "utf8").includes('"zarr/extendBounds"')) {
+  problems.push("The precompiled Neuroglancer worker lacks bounds refresh. Run npm ci, then npm run build.");
 }
-if (!modulesOnly && !readFileSync(workerBundle, "utf8").includes('"zarr/extendBounds"')) {
-  console.error("The precompiled Neuroglancer worker lacks bounds refresh. Run npm ci, then npm run build.");
-  failed = true;
-}
-if (failed) process.exit(1);
+for (const problem of problems) console.error(problem);
+if (problems.length) process.exit(1);
