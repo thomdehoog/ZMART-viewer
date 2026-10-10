@@ -8,8 +8,7 @@ answer must be indistinguishable at every moment an operator can observe,
 whatever has landed, been replaced, or been withdrawn — and a picture declared
 without the bake behaves exactly as before, because live runs keep BOTH modes.
 
-The design under test is an earlier note (kept in the repository's git history); the
-operator's requirements are quoted there. The central rule, stated once: the
+The central rule, stated once: the
 bake is patched per commit, never rebuilt — and byte-equality with a
 from-scratch bake of the same manifest state is what "patched correctly"
 means, because the from-scratch bake is trivially true.

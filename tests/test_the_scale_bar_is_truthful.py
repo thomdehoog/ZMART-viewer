@@ -21,7 +21,7 @@ amount that changed with the height of the window, and not moving at all when th
 volume was magnified. The two views count their zoom differently, and the bar read
 the flat view's in both. It was pinned by a test that was expected to fail, that
 test began passing the moment the fix landed, and the marker came off; the test is
-now the last one in this file. an earlier note (kept in the repository's git history), section I, has the measurement.
+now the last one in this file.
 
 Everything before it is about the single-plane view.
 

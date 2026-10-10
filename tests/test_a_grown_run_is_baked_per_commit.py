@@ -140,8 +140,8 @@ def test_a_moment_landing_composes_only_the_frames_it_touched(tmp_path):
     """A landing at one moment must not recompose the whole timelapse.
 
     The stage-0 instruments projected ~165-190 seconds of frozen picture
-    for a synchronous whole-room patch at a 500-moment retake
-    (an earlier note (kept in the repository's git history)), and the c-and-t plan made a
+    for a synchronous whole-room patch at a 500-moment retake,
+    and the plan for channels and time made a
     per-moment bound the build gate. The commit names the moment it
     touched, so the patch composes that moment's frames of the footprint
     -- every channel, since a publication writes all channels -- and
