@@ -458,6 +458,10 @@ class PublishedAcquisition:
         self.folder, self.piece = folder, piece
         self.outputs = {}
         self._sources = {}
+        # One publication at a time. Two at once each started from the same
+        # outputs, could each make a writer for the same picture, and the one
+        # assigned last silently replaced the other (review N4).
+        self.publishing = threading.RLock()
         for name in (STORE, STACK_STORE):
             if (folder / name / "publication.json").exists():
                 output = PublishedTransfer(folder / name, piece)
@@ -477,102 +481,115 @@ class PublishedAcquisition:
         return next(iter(self.outputs.values())).bake if self.outputs else True
 
     def close(self):
-        for output in self.outputs.values():
-            output.close()
+        with self.publishing:
+            for output in self.outputs.values():
+                output.close()
 
     def publish(self, folder, versions, canvas, *, composition=None, bake=True):
-        if not isinstance(versions, dict) or (not versions and not self.outputs):
-            raise ValueError("An acquisition needs completed source revisions")
-        if not isinstance(composition, dict) or not {"regions", "order"} <= composition.keys():
-            raise ValueError("An acquisition needs explicit acquired coverage and order")
-        regions, order = composition["regions"], composition["order"]
-        if (
-            not isinstance(order, list)
-            or any(not isinstance(n, str) for n in order)
-            or len(order) != len(versions)
-            or set(order) != set(versions)
-            or (
-                regions != "complete"
-                and (not isinstance(regions, dict) or set(regions) != set(versions))
-            )
-        ):
-            raise ValueError("Coverage and order must name every source exactly once")
-        explicit = composition.get("z_references", {})
-        if not isinstance(explicit, dict) or explicit.keys() - versions.keys():
-            raise ValueError("Z references must name completed sources")
-        sources = {}
-        for name, revision in versions.items():
-            if Path(name).name != name or not name.endswith(".ome.zarr"):
-                raise ValueError("Position names must name OME-Zarr stores directly in the folder")
-            cached = self._sources.get(name)
-            if cached and cached[0] == revision:
-                sources[name] = cached
-                continue
-            tile = read_one_tile(folder / name)
-            kind = STORE if tile.copies[0].shape[0] == 1 else STACK_STORE
-            if cached and cached[1] != kind:
-                raise ValueError("A published position cannot change between flat and stack")
-            model = read_attrs_at(tile.store).get("zmart_microscopy", {}).get("z_coordinate", {})
-            reference = None
-            if model.get("frame") == "specimen":
-                reference = model.get("acquisition_provenance", {}).get(
-                    "requested_stage_focus_z_um"
+        with self.publishing:
+            if not isinstance(versions, dict) or (not versions and not self.outputs):
+                raise ValueError("An acquisition needs completed source revisions")
+            if not isinstance(composition, dict) or not {"regions", "order"} <= composition.keys():
+                raise ValueError("An acquisition needs explicit acquired coverage and order")
+            regions, order = composition["regions"], composition["order"]
+            if (
+                not isinstance(order, list)
+                or any(not isinstance(n, str) for n in order)
+                or len(order) != len(versions)
+                or set(order) != set(versions)
+                or (
+                    regions != "complete"
+                    and (not isinstance(regions, dict) or set(regions) != set(versions))
                 )
-            if reference is None:
-                reference = tile.copies[0].corner_um[0]
-            sources[name] = (revision, kind, tile, reference)
-        channel_counts = {
-            the_frame_room_of(tile.copies[0].outer_shape)[1] for _, _, tile, _ in sources.values()
-        }
-        channel_counts.update(output._held.mosaic.frame_room[1] for output in self.outputs.values())
-        if len(channel_counts) > 1:
-            raise ValueError("Flat and stack sources in an acquisition must share a channel count")
-        outputs = dict(self.outputs)
-        try:
-            with ExitStack() as prepared:
-                commits = []
-                for kind in (STORE, STACK_STORE):
-                    names = [name for name in order if sources[name][1] == kind]
-                    if not names and kind not in outputs:
-                        continue
-                    if kind not in outputs:
-                        outputs[kind] = PublishedTransfer(folder / kind, self.piece)
-                    output = outputs[kind]
-                    part = deepcopy(composition)
-                    if names:
-                        part["order"] = names
-                        part["regions"] = (
-                            regions if regions == "complete" else {n: regions[n] for n in names}
-                        )
-                        part["z_references"] = {n: explicit.get(n, sources[n][3]) for n in names}
-                        revisions = {n: versions[n] for n in names}
-                        tiles = {n: sources[n][2] for n in names}
-                    else:
-                        # Keep the published geometry/address, but remove every acquired region.
-                        part = deepcopy(output._state["composition"])
-                        revisions = output._state["versions"]
-                        part["regions"] = {n: [] for n in revisions}
-                        tiles = {}
-                    commits.append(
-                        prepared.enter_context(
-                            output.prepare(
-                                folder,
-                                revisions,
-                                canvas,
-                                composition=part,
-                                bake=bake,
-                                _tiles=tiles,
+            ):
+                raise ValueError("Coverage and order must name every source exactly once")
+            explicit = composition.get("z_references", {})
+            if not isinstance(explicit, dict) or explicit.keys() - versions.keys():
+                raise ValueError("Z references must name completed sources")
+            sources = {}
+            for name, revision in versions.items():
+                if Path(name).name != name or not name.endswith(".ome.zarr"):
+                    raise ValueError(
+                        "Position names must name OME-Zarr stores directly in the folder"
+                    )
+                cached = self._sources.get(name)
+                if cached and cached[0] == revision:
+                    sources[name] = cached
+                    continue
+                tile = read_one_tile(folder / name)
+                kind = STORE if tile.copies[0].shape[0] == 1 else STACK_STORE
+                if cached and cached[1] != kind:
+                    raise ValueError("A published position cannot change between flat and stack")
+                model = (
+                    read_attrs_at(tile.store).get("zmart_microscopy", {}).get("z_coordinate", {})
+                )
+                reference = None
+                if model.get("frame") == "specimen":
+                    reference = model.get("acquisition_provenance", {}).get(
+                        "requested_stage_focus_z_um"
+                    )
+                if reference is None:
+                    reference = tile.copies[0].corner_um[0]
+                sources[name] = (revision, kind, tile, reference)
+            channel_counts = {
+                the_frame_room_of(tile.copies[0].outer_shape)[1]
+                for _, _, tile, _ in sources.values()
+            }
+            channel_counts.update(
+                output._held.mosaic.frame_room[1] for output in self.outputs.values()
+            )
+            if len(channel_counts) > 1:
+                raise ValueError(
+                    "Flat and stack sources in an acquisition must share a channel count"
+                )
+            outputs = dict(self.outputs)
+            try:
+                with ExitStack() as prepared:
+                    commits = []
+                    for kind in (STORE, STACK_STORE):
+                        names = [name for name in order if sources[name][1] == kind]
+                        if not names and kind not in outputs:
+                            continue
+                        if kind not in outputs:
+                            outputs[kind] = PublishedTransfer(folder / kind, self.piece)
+                        output = outputs[kind]
+                        part = deepcopy(composition)
+                        if names:
+                            part["order"] = names
+                            part["regions"] = (
+                                regions if regions == "complete" else {n: regions[n] for n in names}
+                            )
+                            part["z_references"] = {
+                                n: explicit.get(n, sources[n][3]) for n in names
+                            }
+                            revisions = {n: versions[n] for n in names}
+                            tiles = {n: sources[n][2] for n in names}
+                        else:
+                            # Keep the published geometry/address, but remove every acquired region.
+                            part = deepcopy(output._state["composition"])
+                            revisions = output._state["versions"]
+                            part["regions"] = {n: [] for n in revisions}
+                            tiles = {}
+                        commits.append(
+                            prepared.enter_context(
+                                output.prepare(
+                                    folder,
+                                    revisions,
+                                    canvas,
+                                    composition=part,
+                                    bake=bake,
+                                    _tiles=tiles,
+                                )
                             )
                         )
-                    )
-                for commit in commits:
-                    commit()
-        except Exception:
-            for name in outputs.keys() - self.outputs.keys():
-                outputs[name].close()
-            raise
-        self.outputs, self._sources = outputs, sources
-        return self.revision
+                    for commit in commits:
+                        commit()
+            except Exception:
+                for name in outputs.keys() - self.outputs.keys():
+                    outputs[name].close()
+                raise
+            self.outputs, self._sources = outputs, sources
+            return self.revision
 
 
 #: Everything a composition may say. Anything else is a typo or a newer
@@ -1032,7 +1049,9 @@ class PublishedTransfer(ComposedPicture):
             if (regions != "complete" and not isinstance(regions, dict)) or not isinstance(
                 order, list
             ):
-                raise ValueError("Composition regions must be 'complete' or a map, and order a list")
+                raise ValueError(
+                    "Composition regions must be 'complete' or a map, and order a list"
+                )
             if any(not isinstance(name, str) for name in order):
                 raise ValueError("Composition order must contain source names")
             if isinstance(regions, dict) and isinstance(old_regions, dict):
@@ -1108,7 +1127,9 @@ class PublishedTransfer(ComposedPicture):
                     copies=[
                         replace(
                             copy,
-                            corner_um=tuple(a + b for a, b in zip(copy.corner_um, shift, strict=True)),
+                            corner_um=tuple(
+                                a + b for a, b in zip(copy.corner_um, shift, strict=True)
+                            ),
                         )
                         for copy in tile.copies
                     ],
@@ -1122,7 +1143,9 @@ class PublishedTransfer(ComposedPicture):
                 tile = replace(
                     tile,
                     copies=[
-                        replace(copy, corner_um=(copy.corner_um[0] - reference, *copy.corner_um[1:]))
+                        replace(
+                            copy, corner_um=(copy.corner_um[0] - reference, *copy.corner_um[1:])
+                        )
                         for copy in tile.copies
                     ],
                 )
