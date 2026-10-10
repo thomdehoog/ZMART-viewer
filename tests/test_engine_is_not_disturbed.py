@@ -30,7 +30,7 @@ import numpy as np
 import pytest
 import zarr
 from driving import open_through_the_window, pick_colormap  # noqa: E402
-from zmart_viewer.serving.server import make_server
+from zmart_viewer.gui.window_server import make_window_server
 
 CHANNELS, DEPTH, SIDE, CHUNK, LEVELS = 2, 16, 1024, 256, 3
 
@@ -113,7 +113,7 @@ def _counting_server(**kwargs):
     what genuinely came back over the wire. So it counts here instead.
     """
     served: list[str] = []
-    server = make_server(**kwargs)
+    server = make_window_server(**kwargs)
     built = server.RequestHandlerClass  # functools.partial(_Handler, ...)
 
     class Counting(built.func):
@@ -475,7 +475,7 @@ class TestOpeningSomethingElse:
         second.mkdir()
         _store(second / "targetscan_cell007.ome.zarr", seed=40)
 
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,
@@ -532,7 +532,7 @@ class TestDataArrivingWhileYouWatch:
         for i in range(existing):
             _store(tmp_path / f"overview_pos{i:03d}.ome.zarr", seed=i, channels=1, side=CHUNK)
 
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,
@@ -634,7 +634,7 @@ class TestDataArrivingWhileYouWatch:
             encoding="utf-8",
         )
 
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,

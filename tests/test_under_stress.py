@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 import zarr
+from zmart_viewer.gui.window_server import make_window_server
 from zmart_viewer.opening import open_folders as stores
 from zmart_viewer.opening.open_folders import (
     Library,
@@ -32,7 +33,6 @@ from zmart_viewer.opening.open_folders import (
     is_store,
     written_timepoints,
 )
-from zmart_viewer.serving.server import make_server
 
 # Nothing here may take longer than this. The point of these tests is to catch
 # something that stalls, so a generous ceiling is still a ceiling.
@@ -86,7 +86,7 @@ def serving(tmp_path):
         site = tmp_path / "site"
         site.mkdir(exist_ok=True)
         (site / "index.html").write_text("x", encoding="utf-8")
-        server = make_server(port=0, data_dir=tmp_path, site_dir=site, store=store, **kwargs)
+        server = make_window_server(port=0, data_dir=tmp_path, site_dir=site, store=store, **kwargs)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         running.append((server, thread))

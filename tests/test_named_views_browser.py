@@ -7,8 +7,8 @@ from pixels import image_middle
 from test_manifest_refresh_browser import _wait_for_picture
 from test_transparent_2d_browser import READ_ALPHA
 from test_view_sampling import write_tile
+from zmart_viewer.gui.window_server import make_window_server
 from zmart_viewer.picture.arrangement import MEAN_REDUCTION
-from zmart_viewer.serving.server import make_server
 from zmart_viewer.views.slice_top_projection import ViewSet
 
 
@@ -47,7 +47,7 @@ def test_same_folder_acquisitions_cover_instead_of_add(browser, built_dist, tmp_
             composition={"regions": regions, "order": ["p.ome.zarr"]},
             bake=bake,
         )
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,
@@ -111,7 +111,7 @@ def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path
         scale = level["coordinateTransformations"][0]["scale"]
         scale[2:] = [value * legacy_spacing for value in scale[2:]]
     group.attrs.update(metadata)
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,
@@ -177,7 +177,7 @@ def test_legacy_3d_and_named_2d_can_share_the_page(browser, built_dist, tmp_path
 def test_top_holds_each_acquisition_with_shared_folder_and_slider(
     browser, built_dist, tmp_path, bake, long_spacing
 ):
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,
@@ -304,7 +304,7 @@ def test_named_view_switching_pixels_requests_and_reopen(
             "projection_path": str(tmp_path / "projections"),
         },
     }
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,
@@ -492,7 +492,7 @@ def test_geometry_refreshes_pixels_and_final_failure_retries(
         },
         "views": {"path": str(tmp_path / "view"), "acquisition": "shift", "modes": ["top"]},
     }
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,
@@ -625,7 +625,7 @@ def test_live_flat_stack_arrival_refreshes_geometry_once(browser, built_dist, tm
         },
         "views": {"path": str(tmp_path / "view"), "acquisition": "live"},
     }
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=tmp_path,
         site_dir=built_dist,

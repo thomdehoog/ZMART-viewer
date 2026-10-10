@@ -23,7 +23,7 @@ import json
 import threading
 
 import pytest
-from zmart_viewer.serving.server import make_server
+from zmart_viewer.gui.window_server import make_window_server
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def served(tmp_path):
     (data / "demo.zarr").mkdir()
     (data / "demo.zarr" / ".zattrs").write_text('{"multiscales": []}', encoding="utf-8")
     (data / "demo.zarr" / "chunk").write_bytes(b"\x01\x02\x03\x04")
-    server = make_server(port=0, data_dir=data, site_dir=site, store="demo.zarr")
+    server = make_window_server(port=0, data_dir=data, site_dir=site, store="demo.zarr")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -211,7 +211,7 @@ def test_a_named_origin_elsewhere_may_ask(tmp_path):
     site = tmp_path / "site"
     site.mkdir()
     (site / "index.html").write_text("page", encoding="utf-8")
-    server = make_server(port=0, site_dir=site, allowed_origins=["http://lab-pc:8000"])
+    server = make_window_server(port=0, site_dir=site, allowed_origins=["http://lab-pc:8000"])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

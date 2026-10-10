@@ -58,7 +58,7 @@ def _reach_the_listing(page, folder) -> None:
     """Get the window looking at the folder holding what is to be opened.
 
     Two ways in, because the window offers two: the native chooser, which the
-    tests stand in for with the server's ``browse=``, and the path box, for a
+    tests stand in for with the window server's ``browse=``, and the path box, for a
     test that knows exactly where it is pointing.
     """
     if folder is None:

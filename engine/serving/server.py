@@ -11,7 +11,6 @@ from __future__ import annotations
 import functools
 import json
 import logging
-import math
 import os
 import queue
 import re
@@ -26,7 +25,6 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from zmart_viewer.filesystem import put_text_in_place, rmtree_despite_brief_holds
 from zmart_viewer.live import following as live
 from zmart_viewer.live.following import SourceRegistry, live_rows
 from zmart_viewer.live.record.live_serving import answer_from_a_live_run, live_run_holding
@@ -67,8 +65,6 @@ _DRAWING = _ENGINE / "drawing"
 THE_BUILT_PAGE = _ENGINE / "_frontend"
 if not THE_BUILT_PAGE.is_dir():
     THE_BUILT_PAGE = (_ENGINE.parent / "gui" / "build").resolve()
-_ANNOTATIONS_FILE = "zmart-annotations.json"
-_EMPTY_ANNOTATIONS = {"version": 1, "annotations": []}
 
 # How many pieces are built at the same time. Building one reads the source
 # images and encodes the result; with no limit, a burst of zooming started a
@@ -104,80 +100,9 @@ def _peer_has_gone(connection: socket.socket) -> bool:
             pass
 
 
-# What can go wrong reading the targets file, short of it being absent: a file
-# locked by another program for a moment, or one that is not (or no longer)
-# what the viewer writes.
-_UNREADABLE = (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError)
-
-
-def _saved_annotations(path: Path) -> dict:
-    """The targets saved in ``path``; an absent file is an empty list.
-
-    Raises one of :data:`_UNREADABLE` when the file is there but cannot be read.
-    """
-    try:
-        return _validate_annotations(json.loads(path.read_text("utf-8")))
-    except FileNotFoundError:
-        return _EMPTY_ANNOTATIONS
 # "bytes=0-99", "bytes=500-" or "bytes=-64": a start and end, an open end, or a
 # suffix. Only single ranges are honoured, which is all the engine ever asks for.
 _RANGE_HEADER = re.compile(r"^bytes=(\d*)-(\d*)$")
-
-
-def _validate_annotations(payload: object) -> dict:
-    """Return a small, safe annotation document or raise ValueError."""
-    if not isinstance(payload, dict) or payload.get("version") != 1:
-        raise ValueError("expected annotation document version 1")
-
-    items = payload.get("annotations")
-
-    if not isinstance(items, list) or len(items) > 10_000:
-        raise ValueError("annotations must be a list of at most 10000 items")
-
-    clean = []
-    seen = set()
-
-    for item in items:
-        if not isinstance(item, dict):
-            raise ValueError("each annotation must be an object")
-
-        annotation_id = item.get("id")
-        kind = item.get("type")
-
-        if not isinstance(annotation_id, str) or not annotation_id or annotation_id in seen:
-            raise ValueError("annotation ids must be unique non-empty strings")
-
-        if kind not in {"point", "axis_aligned_bounding_box"}:
-            raise ValueError("unsupported annotation type")
-
-        coordinate_keys = ("point",) if kind == "point" else ("pointA", "pointB")
-        result = {"id": annotation_id, "type": kind}
-
-        for key in coordinate_keys:
-            value = item.get(key)
-
-            if (
-                not isinstance(value, list)
-                or not 1 <= len(value) <= 8
-                or any(
-                    isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x)
-                    for x in value
-                )
-            ):
-                raise ValueError(f"{key} must contain finite coordinates")
-
-            result[key] = [float(x) for x in value]
-
-        description = item.get("description", "")
-
-        if not isinstance(description, str) or len(description) > 1000:
-            raise ValueError("description must be a string of at most 1000 characters")
-
-        result["description"] = description
-        clean.append(result)
-        seen.add(annotation_id)
-
-    return {"version": 1, "annotations": clean}
 
 
 # -- who may ask ------------------------------------------------------------------
@@ -262,27 +187,61 @@ def group_labels(datasets) -> dict[int, str]:
     return labels
 
 
-class _StoppedByTheOperator(Exception):
-    """Raised inside a build loop when the operator asked to stop."""
+#: The engine's own routes. A caller's ``routes`` may add others beside them,
+#: never replace one of these.
+ENGINE_GET_ROUTES = frozenset({"/api/health", "/api/events", "/api/config", "/api/live-state"})
+ENGINE_POST_ROUTES = frozenset(
+    {"/api/stores/open", "/api/stores/close", "/api/measure", "/api/announce"}
+)
+
+#: What the engine itself reports in ``/api/config``. ``page_settings`` add to
+#: these and may not overwrite one.
+ENGINE_CONFIG_KEYS = frozenset(
+    {"layers", "groups", "transparentBackground", "canOpen", "live", "liveState"}
+)
 
 
-def put_a_folder_in_place(made: Path, where: Path, *, spare: Path) -> None:
-    """Move a finished folder to ``where``, replacing any folder already there.
+def checked_routes(routes) -> dict:
+    """A caller's routes, refused unless each is ``GET`` or ``POST`` of a new ``/api/`` path.
 
-    A folder cannot be renamed over another, so one standing at ``where`` is
-    first moved to ``spare`` (and removed by whoever owns ``spare``). If the
-    new one then cannot be moved in, the old one is put back.
+    The engine checks who is asking, and that a body is JSON, before any of
+    them runs; that is only true of paths under ``/api/`` that the engine
+    dispatches, and a route that replaced one of the engine's own would
+    change what every page is told.
     """
-    if where.exists():
-        where.rename(spare)
+    checked = {}
 
-        try:
-            made.rename(where)
-        except OSError:
-            spare.rename(where)
-            raise
-    else:
-        made.rename(where)
+    for key, answer in dict(routes or {}).items():
+        method, _, path = str(key).partition(" ")
+
+        if method not in ("GET", "POST") or not path.startswith("/api/") or path != path.rstrip("/"):
+            raise ValueError(
+                f"a route is named 'GET /api/...' or 'POST /api/...', not {key!r}"
+            )
+
+        if path in ENGINE_GET_ROUTES | ENGINE_POST_ROUTES:
+            raise ValueError(f"{path} is one of the engine's own routes and cannot be replaced")
+
+        if not callable(answer):
+            raise ValueError(f"the route {key!r} needs a function that answers it")
+
+        checked[key] = answer
+
+    return checked
+
+
+def checked_page_settings(page_settings) -> dict:
+    """Settings for the page, refused if one would overwrite what the engine reports."""
+    settings = dict(page_settings or {})
+    clashing = sorted(ENGINE_CONFIG_KEYS & set(settings))
+
+    if clashing:
+        raise ValueError(
+            "page_settings may not overwrite what the engine reports: " + ", ".join(clashing)
+        )
+
+    json.dumps(settings)
+    return settings
 
 
 class _Handler(SimpleHTTPRequestHandler):
@@ -298,12 +257,10 @@ class _Handler(SimpleHTTPRequestHandler):
     def __init__(
         self,
         *args,
-        data_dir: Path,
         site_dir: Path,
         config: dict,
         library=None,
-        browse=None,
-        bake_job=None,
+        routes=None,
         scratch=None,
         allow_open: bool = True,
         transparent_background: bool = False,
@@ -311,20 +268,16 @@ class _Handler(SimpleHTTPRequestHandler):
         announcements=None,
         live_state=None,
         forget_measurements=None,
-        open_from=None,
         allowed_origins: frozenset[str] = frozenset(),
         coverage_handed_out=None,
         **kwargs,
     ):
-        self._data_dir = data_dir  # where drawn targets are saved
-        self._open_from = open_from or data_dir
         self._library = library  # which folders may be read from, and what is in them
-        self._browse = browse  # opens a native folder chooser, when one is available
         self._allow_open = allow_open  # may the operator change what is open?
         self._transparent_background = transparent_background
-        # One prebake at a time, shared by every request this server answers.
-        # See _serve_bake for the shape of what it holds.
-        self._bake_job = bake_job if bake_job is not None else {}
+        # Routes of the caller's own, as "METHOD /api/path" -> answer(payload).
+        # See make_server's ``routes``.
+        self._routes = routes or {}
         # Where this viewer puts the pictures it composes for itself, shared
         # by every request it answers. See loading.scene_behind_a_run.
         self._scratch = scratch if scratch is not None else {}
@@ -900,28 +853,10 @@ class _Handler(SimpleHTTPRequestHandler):
             self._serve_live_state()
             return
 
-        if self.path.rstrip("/") == "/api/annotations":
-            path = self._data_dir / _ANNOTATIONS_FILE
+        own = self._routes.get(f"GET {self.path.split('?', 1)[0].rstrip('/')}")
 
-            try:
-                payload = _saved_annotations(path)
-            except _UNREADABLE:
-                # Named plainly rather than as "the sidecar", which is our word for
-                # it and means nothing to somebody reading it for the first time.
-                self._send_json(
-                    {
-                        "error": (
-                            "the file of marked places beside the images "
-                            f"({_ANNOTATIONS_FILE}) could not be read, so none of "
-                            "them are shown. It is still there and has not been "
-                            "changed."
-                        )
-                    },
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                )
-                return
-
-            self._send_json(payload)
+        if own is not None:
+            self._send_json(*own(None))
             return
 
         self._send_empty(HTTPStatus.NOT_FOUND)
@@ -1104,32 +1039,10 @@ class _Handler(SimpleHTTPRequestHandler):
 
         raw = self.rfile.read(length) if length else b""
 
-        if route not in {
-            "/api/browse",
-            "/api/stores/open",
-            "/api/stores/close",
-            "/api/stores/list",
-            "/api/stores/construct",
-            "/api/stores/construct-status",
-            "/api/stores/construct-cancel",
-            "/api/measure",
-            "/api/annotations",
-            "/api/announce",
-        }:
-            self._send_empty(HTTPStatus.NOT_FOUND)
-            return
+        own = self._routes.get(f"POST {route}")
 
-        if (
-            route
-            in (
-                "/api/stores/list",
-                "/api/stores/construct",
-                "/api/stores/construct-status",
-                "/api/stores/construct-cancel",
-            )
-            and not self._allow_open
-        ):
-            self._send_json({"error": "opening by hand is switched off here"}, HTTPStatus.NOT_FOUND)
+        if route not in ENGINE_POST_ROUTES and own is None:
+            self._send_empty(HTTPStatus.NOT_FOUND)
             return
 
         declared = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
@@ -1150,237 +1063,16 @@ class _Handler(SimpleHTTPRequestHandler):
             self._send_json({"error": "that was not readable JSON"}, HTTPStatus.BAD_REQUEST)
             return
 
-        if route == "/api/browse":
-            self._serve_browse()
+        if own is not None:
+            self._send_json(*own(payload))
         elif route == "/api/stores/open":
             self._serve_open(payload)
         elif route == "/api/stores/close":
             self._serve_close(payload)
-        elif route == "/api/stores/list":
-            self._serve_list_folders(payload)
-        elif route == "/api/stores/construct":
-            self._serve_construct(payload)
-        elif route == "/api/stores/construct-status":
-            self._send_json(dict(self._bake_job) or {"state": "idle"})
-        elif route == "/api/stores/construct-cancel":
-            self._serve_cancel(self._bake_job)
         elif route == "/api/measure":
             self._serve_measurement(payload)
-        elif route == "/api/announce":
-            self._serve_announcement(payload)
         else:
-            self._save_annotations(payload)
-
-    def _serve_browse(self) -> None:
-        """Ask the operating system to show a folder chooser, and say what was picked."""
-        if self._browse is None:
-            self._send_json(
-                {
-                    "error": "no folder chooser is available here",
-                    "reason": "The chooser is opened by the desktop window. In a "
-                    "browser tab, type or paste the folder's path instead.",
-                },
-                HTTPStatus.NOT_IMPLEMENTED,
-            )
-            return
-
-        try:
-            chosen = self._browse()
-        except Exception as exc:  # noqa: BLE001 -- reported, never swallowed
-            self._send_json(
-                {
-                    "error": f"the folder chooser could not be opened: {exc}",
-                    "reason": (
-                        f"The window for choosing a folder could not be opened ({exc}). "
-                        "Nothing has changed and whatever was already on screen is "
-                        "still there. Type or paste the folder's path instead."
-                    ),
-                },
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
-            return
-
-        self._send_json(
-            {"path": chosen, "parent": str(Path(chosen).parent)} if chosen else {"cancelled": True}
-        )
-
-    def _serve_list_folders(self, payload: object) -> None:
-        """List the folders at a path, for the in-page load window."""
-        asked = payload.get("path") if isinstance(payload, dict) else None
-        path = (
-            Path(asked).expanduser()
-            if isinstance(asked, str) and asked.strip()
-            else self._open_from
-        )
-
-        try:
-            path = path.resolve()
-
-            if not path.is_dir():
-                self._send_json({"error": f"there is no folder at {path}"}, HTTPStatus.NOT_FOUND)
-                return
-
-            described = set(DESCRIPTION_FILES)
-
-            def kind_of(folder: Path) -> str | None:
-                try:
-                    inside = [child.name for child in folder.iterdir()]
-                    told = read_attrs_at(folder)
-
-                    if any(name in described for name in inside):
-                        if folder.name.endswith(".zmartview.zarr"):
-                            return "view"
-
-                        if told.get("plate"):
-                            return "plate"
-
-                        if told.get("multiscales"):
-                            return "image"
-
-                    if any(
-                        (folder / name / stamp).exists() for name in inside for stamp in described
-                    ):
-                        return "run"
-                except OSError:
-                    pass
-
-                return None
-
-            def describe(folder: Path) -> dict:
-                kind = kind_of(folder)
-                told_of = {"name": folder.name, "kind": kind}
-
-                if kind == "view":
-                    told_of["baked"] = bool(
-                        (read_attrs_at(folder).get("zmart") or {}).get("baked")
-                    )
-
-                return told_of
-
-            folders = [
-                describe(entry)
-                for entry in sorted(path.iterdir(), key=lambda one: one.name.lower())
-                if entry.is_dir() and not entry.name.startswith(".")
-            ]
-            here = kind_of(path)
-        except OSError as why:
-            self._send_json({"error": str(why)}, HTTPStatus.BAD_REQUEST)
-            return
-
-        self._send_json(
-            {
-                "path": str(path),
-                "kind": here,
-                "parent": str(path.parent) if path.parent != path else None,
-                "folders": folders,
-            }
-        )
-
-    def _serve_cancel(self, job: dict) -> None:
-        """Ask the running build to stop at its next step."""
-        running = job.get("state") == "running"
-
-        if running:
-            job["stop"] = True
-
-        self._send_json({"stopping": running})
-
-    def _serve_construct(self, payload: object) -> None:
-        """Construct a viewer over raw data, in the background, then open it."""
-        asked = payload if isinstance(payload, dict) else {}
-        data = asked.get("path")
-        viewer = asked.get("viewer_folder")
-
-        if not isinstance(data, str) or not data.strip():
-            self._send_json(
-                {"error": "the folder holding the images is needed"},
-                HTTPStatus.BAD_REQUEST,
-            )
-            return
-
-        if not isinstance(viewer, str) or not viewer.strip():
-            self._send_json(
-                {"error": "the folder for the viewer's files is needed"},
-                HTTPStatus.BAD_REQUEST,
-            )
-            return
-
-        if self._bake_job.get("state") == "running":
-            self._send_json({"error": "a bake is already running"}, HTTPStatus.CONFLICT)
-            return
-
-        data_path = Path(data.strip()).expanduser()
-
-        if not data_path.is_dir():
-            self._send_json({"error": f"there is no folder at {data_path}"}, HTTPStatus.NOT_FOUND)
-            return
-
-        from zmart_viewer.picture.built_picture import (
-            declare_a_built_picture,
-            the_scene_folder_name,
-        )
-
-        bake = bool(asked.get("bake"))
-        name = asked.get("name") if isinstance(asked.get("name"), str) else None
-
-        if name is not None and (not name.strip() or "/" in name or "\\" in name or ".." in name):
-            self._send_json(
-                {"error": "the scene's name cannot contain path steps -- give it a plain name"},
-                HTTPStatus.BAD_REQUEST,
-            )
-            return
-
-        job = self._bake_job
-        job.clear()
-        job.update({"state": "running", "fraction": 0.0, "bake": bake})
-        viewer_path = Path(viewer.strip()).expanduser()
-        scene = viewer_path / the_scene_folder_name(name or data_path.name)
-        # Built aside and put in place only when whole, so that a build that
-        # is stopped or fails takes away what it made and nothing else -- not
-        # a scene that stood there before it began (review N2). The leading
-        # dot keeps the half-made build out of the load window's list.
-        aside = viewer_path / f".{scene.name}.building"
-
-        def told(done, total):
-            if job.get("stop"):
-                raise _StoppedByTheOperator()
-
-            job["fraction"] = round(done / max(total, 1), 4)
-
-        def work():
-            """Build aside, then tidy up, and only then say how it ended.
-
-            The load window lists the scenes folder as soon as it hears the
-            build is over, so the half-made build must be gone by then.
-            """
-            try:
-                rmtree_despite_brief_holds(aside)
-                built = declare_a_built_picture(
-                    aside,
-                    data_path,
-                    name=name or data_path.name,
-                    bake=bake,
-                    told=told,
-                )
-                put_a_folder_in_place(built, scene, spare=aside / "replaced")
-                ending = {"state": "done", "fraction": 1.0, "store": str(scene)}
-            except _StoppedByTheOperator:
-                ending = {"state": "cancelled"}
-            except Exception as why:  # noqa: BLE001 -- shown to the operator whole
-                ending = {"state": "error", "error": str(why)}
-
-            try:
-                rmtree_despite_brief_holds(aside)
-            except OSError as why:
-                ending = {
-                    "state": "error",
-                    "error": f"the half-made build in {aside} could not be removed: {why}",
-                }
-
-            job.update(ending)
-
-        threading.Thread(target=work, daemon=True).start()
-        self._send_json({"started": True})
+            self._serve_announcement(payload)
 
     def _scenes_of_this_session(self) -> Path:
         """The folder this viewer composes into, made the first time it is wanted."""
@@ -1528,56 +1220,6 @@ class _Handler(SimpleHTTPRequestHandler):
         self._forget_measurements(closed)
         self._send_json(self._config())
 
-    def _save_annotations(self, payload: object) -> None:
-        """Save the targets the operator has drawn."""
-        try:
-            document = _validate_annotations(payload)
-        except ValueError as exc:
-            self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return
-
-        path = self._data_dir / _ANNOTATIONS_FILE
-
-        # Replacing a file that cannot be read would throw away whatever is in
-        # it, which the page was never able to show. It is left alone instead.
-        try:
-            _saved_annotations(path)
-        except _UNREADABLE:
-            self._send_json(
-                {
-                    "error": (
-                        f"the file of marked places beside the images ({_ANNOTATIONS_FILE}) "
-                        "could not be read, so it was not replaced: saving now would lose "
-                        "what is in it. Close any program that has it open, or move it "
-                        "aside, then reopen the viewer."
-                    )
-                },
-                HTTPStatus.CONFLICT,
-            )
-            return
-
-        # Written beside the data and renamed into place, pushed to the disk
-        # first, so a crash mid-save leaves the old file whole; a failed save
-        # clears its half-written file away rather than leaving litter beside
-        # the operator's data.
-        try:
-            put_text_in_place(path, json.dumps(document, indent=2) + "\n", pushed_to_disk=True)
-        except OSError as why:
-            self._send_json(
-                {
-                    "error": (
-                        f"could not write {path} ({why.strerror or why}). The places "
-                        "you have marked are still on screen and whatever was saved "
-                        "before is untouched, but nothing new has reached the disk. "
-                        "This is usually a folder that cannot be written to, or a "
-                        "drive that has filled up or gone away."
-                    )
-                },
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
-            return
-
-        self._send_json(document)
 
     def _send_json(
         self,
@@ -1683,30 +1325,6 @@ def clear_what_stopped_viewers_left(home: Path) -> None:
             shutil.rmtree(folder, ignore_errors=True)
 
 
-_ONE_DIALOG_AT_A_TIME = threading.Lock()
-
-
-def ask_this_machine_for_a_folder() -> str | None:
-    """Open this machine's own folder chooser, for a page in a plain browser."""
-    import tkinter
-    from tkinter import filedialog
-
-    with _ONE_DIALOG_AT_A_TIME:
-        root = tkinter.Tk()
-        root.withdraw()
-        # In front of the browser, or the operator sees nothing happen.
-        root.attributes("-topmost", True)
-
-        try:
-            chosen = filedialog.askdirectory(
-                parent=root, title="Choose the folder holding the images"
-            )
-        finally:
-            root.destroy()
-
-    return chosen or None
-
-
 def the_coverage_handed_out(config: dict) -> frozenset[str]:
     """The stores an answer to /api/config hands out coverage for, as ``<number>/<store>``."""
     return frozenset(
@@ -1735,26 +1353,20 @@ class _LayerPanelConfig:
         registry,
         measurements,
         window,
-        depth_samples: int,
-        chrome: bool,
         transparent_background: bool,
         allow_open: bool,
-        allow_selection: bool,
-        panel_side: str,
         live: bool,
+        page_settings: dict,
     ):
         self._library = library
         self._published = published
         self._registry = registry
         self._measurements = measurements
         self._window = window
-        self._depth_samples = depth_samples
-        self._chrome = chrome
         self._transparent_background = transparent_background
         self._allow_open = allow_open
-        self._allow_selection = allow_selection
-        self._panel_side = panel_side
         self._live = live
+        self._page_settings = page_settings
         # What was last built, as one value: (revision, answer, stores whose
         # coverage the answer hands out). Replaced whole, never field by
         # field, so a request reading it without the lock can never see a new
@@ -1853,16 +1465,13 @@ class _LayerPanelConfig:
         groups = list(dict.fromkeys(row["group"] for row in rows))
         self._mark_coverage(rows, store_paths)
         return {
+            # What the page that is served was given to know, as it was given.
+            # See ``page_settings``.
+            **self._page_settings,
             "layers": rows,
             "groups": groups,
-            "depthSamples": self._depth_samples,
-            "chrome": self._chrome,
             "transparentBackground": self._transparent_background,
             "canOpen": self._allow_open,
-            # Whether the selection list is offered. See ``allow_selection``.
-            "canSelect": self._allow_selection,
-            # Which edge the bar of controls sits on. See ``panel_side``.
-            "panelSide": "left" if str(self._panel_side).lower() == "left" else "right",
             # Whether the page should keep asking if anything has changed. See
             # ``live`` above: on finished data there is nothing to notice.
             "live": self._live,
@@ -2159,30 +1768,37 @@ def make_server(
     store: str | list[str] | None = None,
     loads: list[dict] | None = None,
     window: tuple[float, float] | None = None,
-    depth_samples: int = 256,
-    chrome: bool = False,
-    browse=None,
     live: bool = True,
     allow_open: bool = True,
-    allow_selection: bool = False,
-    panel_side: str = "right",
     transparent_background: bool = False,
-    open_from: Path | None = None,
     bake: bool = False,
     canvas: dict | None = None,
     allowed_origins: list[str] | tuple[str, ...] = (),
+    page_settings: dict | None = None,
+    routes: dict | None = None,
 ) -> ThreadingHTTPServer:
     """Create (but do not start) the viewer's web server.
 
-    Given nothing to open, it serves an empty studio: no store, no demo,
-    just the open door. ``data_dir`` then only says where the open dialog
-    starts and where drawn targets are saved.
+    Given nothing to open, it serves an empty viewer: no store, just the
+    open door. ``data_dir`` is the folder ``store`` names are found in.
+
+    The engine knows nothing of the page it serves beyond the pictures. A
+    page that wants to be told more passes it as ``page_settings``, which
+    ``/api/config`` hands on as they are; and a page that needs doors of its
+    own passes them as ``routes``, ``{"POST /api/name": answer}``, where
+    ``answer(payload)`` returns ``(document, status)`` and ``payload`` is the
+    request's JSON (``None`` for a ``GET``). The engine checks who is asking
+    and that a body is JSON before any of them runs. The viewer's own window
+    uses both (see :func:`zmart_viewer.gui.window_server.make_window_server`);
+    an interface that brings its own page needs neither.
 
     Only pages served on this computer may ask the server anything, on any
     port: the viewer's own page, and an interface's page served beside it.
     ``allowed_origins`` names further pages that may, each as the origin a
     browser reports (``"http://lab-pc:8000"``). See :func:`refusal_for`.
     """
+    routes = checked_routes(routes)
+    page_settings = checked_page_settings(page_settings)
     data_dir = Path(data_dir).resolve() if data_dir is not None else Path.cwd()
     names = [store] if isinstance(store, str) else list(store or [])
     library = Library()
@@ -2225,26 +1841,20 @@ def make_server(
         registry=registry,
         measurements=measurements,
         window=window,
-        depth_samples=depth_samples,
-        chrome=chrome,
         transparent_background=transparent_background,
         allow_open=allow_open,
-        allow_selection=allow_selection,
-        panel_side=panel_side,
         live=live,
+        page_settings=page_settings,
     )
 
     handler = functools.partial(
         _Handler,
         scratch=scratch,
-        data_dir=data_dir,
         site_dir=Path(site_dir).resolve(),
         config=config.now,
         coverage_handed_out=config.hands_out_coverage,
         library=library,
-        browse=browse,
-        bake_job={},
-        open_from=Path(open_from).resolve() if open_from else None,
+        routes=routes,
         allow_open=allow_open,
         transparent_background=transparent_background,
         live=live,
@@ -2272,26 +1882,3 @@ def make_server(
         ) from why
 
 
-# -- running it -----------------------------------------------------------------
-
-
-def serve(port: int = 8848) -> None:
-    """Run the server until interrupted. The viewer page will be at ``/``."""
-    server = make_server(port)
-    print(f"ZMART Viewer serving on http://127.0.0.1:{server.server_address[1]}")
-
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.shutdown()
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Serve the ZMART Viewer engine without opening a window.")
-    parser.add_argument("--port", type=int, default=8848)
-    args = parser.parse_args()
-    serve(args.port)

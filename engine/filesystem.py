@@ -212,3 +212,22 @@ def put_json_in_place(
     so ``None`` writes the compact form and ``2`` the readable one.
     """
     put_text_in_place(destination, json.dumps(value, indent=indent), pushed_to_disk=pushed_to_disk)
+
+
+def put_a_folder_in_place(made: Path, where: Path, *, spare: Path) -> None:
+    """Move a finished folder to ``where``, replacing any folder already there.
+
+    A folder cannot be renamed over another, so one standing at ``where`` is
+    first moved to ``spare`` (and removed by whoever owns ``spare``). If the
+    new one then cannot be moved in, the old one is put back.
+    """
+    if where.exists():
+        where.rename(spare)
+
+        try:
+            made.rename(where)
+        except OSError:
+            spare.rename(where)
+            raise
+    else:
+        made.rename(where)

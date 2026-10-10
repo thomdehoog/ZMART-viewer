@@ -12,7 +12,7 @@ import json
 import threading
 
 import pytest
-from zmart_viewer.serving.server import make_server
+from zmart_viewer.gui.window_server import make_window_server
 
 
 def add_box(page, annotation_id="detail-box"):
@@ -56,7 +56,7 @@ def details_page(browser, built_dist, tmp_path_factory):
 
     root = tmp_path_factory.mktemp("details")
     write_demo_zarr(root / "demo.zarr")
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=root,
         site_dir=built_dist,
@@ -158,7 +158,7 @@ def unsavable_page(browser, built_dist, tmp_path_factory):
     write_demo_zarr(root / "demo.zarr")
     (root / "zmart-annotations.json").mkdir()
 
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=root,
         site_dir=built_dist,

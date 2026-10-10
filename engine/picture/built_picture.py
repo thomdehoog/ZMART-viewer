@@ -358,45 +358,6 @@ def _bake_the_coarse_ground(
     return pinned + list(range(coarsest + 1, level + 1))
 
 
-def main() -> None:
-    import argparse
-
-    parsed = argparse.ArgumentParser(description=__doc__)
-    parsed.add_argument("transfer", type=Path)
-    parsed.add_argument("where", type=Path)
-    parsed.add_argument("--name", default="built")
-    parsed.add_argument("--piece", type=int, default=PIECE)
-    parsed.add_argument(
-        "--bake",
-        action="store_true",
-        help="also build the coarse ground now, once, into "
-        "real files, so opening never builds it again. "
-        "Declaring without this removes any earlier bake.",
-    )
-    parsed.add_argument(
-        "--workers",
-        type=int,
-        default=1,
-        help="how many processes build while baking; one builds in place",
-    )
-    given = parsed.parse_args()
-
-    store = declare_a_built_picture(
-        given.where,
-        given.transfer,
-        name=given.name,
-        piece=given.piece,
-        bake=given.bake,
-        workers=given.workers,
-    )
-    print(f"\n  declared {store}")
-    print("  it holds no pixels; open the folder above it in the viewer.\n")
-
-
-if __name__ == "__main__":
-    main()
-
-
 log = logging.getLogger("zmart-viewer.governed")
 
 _BAKE_CATCH_UP_QUIET_S = 0.25

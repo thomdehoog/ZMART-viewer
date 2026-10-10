@@ -18,7 +18,7 @@ import time
 import numpy as np
 import pytest
 import zarr
-from zmart_viewer.serving.server import make_server
+from zmart_viewer.gui.window_server import make_window_server
 
 
 def _serve_tree(tmp_path, *, live: bool = True):
@@ -40,7 +40,7 @@ def _serve_tree(tmp_path, *, live: bool = True):
     (data / "demo.zarr" / "chunk").write_bytes(b"\x01\x02\x03\x04")
     (tmp_path / "outside.txt").write_text("secret", encoding="utf-8")
 
-    server = make_server(port=0, data_dir=data, site_dir=site, store="demo.zarr", live=live)
+    server = make_window_server(port=0, data_dir=data, site_dir=site, store="demo.zarr", live=live)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
@@ -116,7 +116,7 @@ def test_health_endpoint(serving):
 
 def config_from(**kwargs) -> dict:
     """The /api/config a server built with ``kwargs`` answers."""
-    server = make_server(port=0, **kwargs)
+    server = make_window_server(port=0, **kwargs)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -330,7 +330,7 @@ def test_serves_data_from_an_unresolved_directory(tmp_path):
     (data / "chunk").write_bytes(b"\xaa\xbb")
     unresolved = tmp_path / "data" / ".." / "data"
 
-    server = make_server(port=0, data_dir=unresolved, site_dir=tmp_path, store="chunk")
+    server = make_window_server(port=0, data_dir=unresolved, site_dir=tmp_path, store="chunk")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -347,7 +347,7 @@ def test_server_binds_localhost_only(tmp_path):
     site = tmp_path / "site"
     site.mkdir()
     (site / "index.html").write_text("x", encoding="utf-8")
-    server = make_server(port=0, data_dir=tmp_path, site_dir=site)
+    server = make_window_server(port=0, data_dir=tmp_path, site_dir=site)
     try:
         assert server.server_address[0] == "127.0.0.1"
     finally:
@@ -368,7 +368,7 @@ def test_config_is_worked_out_fresh_on_every_request(tmp_path):
     data.mkdir()
     (site / "index.html").write_text("x", encoding="utf-8")
 
-    server = make_server(port=0, data_dir=data, site_dir=site, store="one.zarr")
+    server = make_window_server(port=0, data_dir=data, site_dir=site, store="one.zarr")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -575,7 +575,7 @@ class TestClosingGivesTheMemoryBack:
         site, data = self._two_acquisitions(tmp_path)
         # Two acquisitions means two loads: one load is one dataset, so opening
         # both together would make them a single thing with nothing to close.
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=data,
             site_dir=site,
@@ -685,7 +685,7 @@ def test_the_page_itself_is_never_taken_from_the_cache(tmp_path):
     (data / "demo.zarr").mkdir(parents=True)
     (data / "demo.zarr" / ".zattrs").write_text('{"multiscales": []}', encoding="utf-8")
 
-    server = make_server(port=0, data_dir=data, site_dir=site, store="demo.zarr")
+    server = make_window_server(port=0, data_dir=data, site_dir=site, store="demo.zarr")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
@@ -770,7 +770,7 @@ def test_an_image_whose_name_needs_spelling_out_is_drawn(tmp_path, name):
 
     data = tmp_path / "data"
     _store(data / name, channels=1)
-    server = make_server(port=0, data_dir=data, store=name, live=False)
+    server = make_window_server(port=0, data_dir=data, store=name, live=False)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -806,7 +806,7 @@ def a_built_site(tmp_path):
     (site / "assets" / "index-abc.js").write_text("1", encoding="utf-8")
     (site / "async_computation.bundle.js").write_text("2", encoding="utf-8")
     (site / "build-manifest.json").write_text("{}", encoding="utf-8")
-    server = make_server(port=0, site_dir=site)
+    server = make_window_server(port=0, site_dir=site)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -911,7 +911,7 @@ def test_head_on_a_built_answer_sends_no_body(tmp_path):
 
     data = tmp_path / "data"
     _store(data / "one.ome.zarr", channels=1)
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=data, store="one.ome.zarr", transparent_background=True, live=True
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -937,7 +937,7 @@ def test_a_publication_that_cannot_be_made_now_is_answered(tmp_path, monkeypatch
         raise RuntimeError("the publisher has been closed")
 
     monkeypatch.setattr(PublishedFolders, "announce", closed)
-    server = make_server(port=0, data_dir=tmp_path)
+    server = make_window_server(port=0, data_dir=tmp_path)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -969,7 +969,7 @@ def test_every_coverage_address_handed_out_is_served(tmp_path):
     names = ["flat.ome.zarr", "stack.ome.zarr"]
     for name, depth in zip(names, (1, 3)):
         write_position(tmp_path, name, 0 if depth == 1 else 256, 1000, depth=depth, frames=1)
-    server = make_server(port=0, data_dir=tmp_path, live=True, transparent_background=False)
+    server = make_window_server(port=0, data_dir=tmp_path, live=True, transparent_background=False)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -1010,7 +1010,7 @@ def test_folders_left_by_a_viewer_that_was_killed_are_cleared_at_start(tmp_path,
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     left = tmp_path / ".zmart-viewer" / "scenes" / "session-killed"
     (left / "a.zmartview.zarr").mkdir(parents=True)
-    server = make_server(port=0, data_dir=tmp_path)
+    server = make_window_server(port=0, data_dir=tmp_path)
     server.server_close()
     assert not left.exists()
 
@@ -1025,7 +1025,7 @@ def test_the_folder_of_a_viewer_still_running_is_left_alone(tmp_path, monkeypatc
     data = tmp_path / "run"
     for name in ("pos1.ome.zarr", "pos2.ome.zarr"):
         _store(data / name, channels=1)
-    first = make_server(port=0, data_dir=tmp_path)
+    first = make_window_server(port=0, data_dir=tmp_path)
     thread = threading.Thread(target=first.serve_forever, daemon=True)
     thread.start()
     try:
@@ -1035,7 +1035,7 @@ def test_the_folder_of_a_viewer_still_running_is_left_alone(tmp_path, monkeypatc
         assert status == 200, body
         sessions = list((tmp_path / ".zmart-viewer" / "scenes").glob("session-*"))
         assert len(sessions) == 1
-        second = make_server(port=0, data_dir=tmp_path)
+        second = make_window_server(port=0, data_dir=tmp_path)
         second.server_close()
         assert sessions[0].is_dir(), "a running viewer's scenes were cleared by another"
         assert any(sessions[0].iterdir())

@@ -17,8 +17,8 @@ import threading
 import numpy as np
 import pytest
 import zarr
+from zmart_viewer.gui.window_server import make_window_server
 from zmart_viewer.opening.open_folders import Library
-from zmart_viewer.serving.server import make_server
 
 
 def _tiny_store(path):
@@ -290,7 +290,7 @@ def serving_two_runs(two_runs):
     site = parent / "site"
     site.mkdir()
     (site / "index.html").write_text("x", encoding="utf-8")
-    server = make_server(port=0, data_dir=monday, site_dir=site, store="overview.ome.zarr")
+    server = make_window_server(port=0, data_dir=monday, site_dir=site, store="overview.ome.zarr")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -378,7 +378,7 @@ class TestChoosingAFolder:
         site = parent / "site"
         site.mkdir()
         (site / "index.html").write_text("x", encoding="utf-8")
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=monday,
             site_dir=site,
@@ -407,7 +407,7 @@ class TestChoosingAFolder:
         site = parent / "site"
         site.mkdir()
         (site / "index.html").write_text("x", encoding="utf-8")
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=monday,
             site_dir=site,

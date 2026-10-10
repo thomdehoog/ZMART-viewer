@@ -19,11 +19,11 @@ from record_fixtures import (  # noqa: E402
     prepare_without_publishing,
     some_specimen,
 )
+from zmart_viewer.gui.window_server import make_window_server
 from zmart_viewer.live import following as live_config
 from zmart_viewer.live.record.publisher import LivePublisher
 from zmart_viewer.live.record.storage_plans import plan_the_writing
 from zmart_viewer.live.record.vocabulary import GridCell
-from zmart_viewer.serving.server import make_server
 
 _SETTLED = """() => {
   const v = window.zmartViewer;
@@ -52,7 +52,7 @@ def _run(folder, run_id, *, timepoints=1):
 
 @contextmanager
 def _serving(built_dist, run=None, *, loads=None, transparent_background=False, live=True, bake=False, canvas=None):
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=run.folder if run is not None else loads[0]["path"],
         site_dir=built_dist,

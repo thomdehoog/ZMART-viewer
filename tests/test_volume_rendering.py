@@ -10,7 +10,7 @@ than trusting the click.
 from __future__ import annotations
 
 import pytest
-from zmart_viewer.serving.server import make_server
+from zmart_viewer.gui.window_server import make_window_server
 
 _STATE = """() => {
   const v = window.zmartViewer;
@@ -147,7 +147,7 @@ def test_depth_samples_reach_the_engine(browser, built_dist, demo_store):
     """What actually sets 3-D resolution; the default of 64 stays coarse."""
     import threading
 
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, depth_samples=512
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
