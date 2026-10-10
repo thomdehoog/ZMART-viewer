@@ -27,7 +27,7 @@ import zarr
 from zmart_viewer.filesystem import done_despite_brief_holds
 from zmart_viewer.live.record.live_serving import LiveRun
 from zmart_viewer.live.record.shard_lookup import how_the_array_is_stored
-from zmart_viewer.live.record.vocabulary import rounded_up
+from zmart_viewer.live.record.vocabulary import rounded_up, the_position_of
 from zmart_viewer.picture.arrangement import (
     OURS,
     PIECE,
@@ -1271,9 +1271,9 @@ class GovernedRun(ComposedPicture):
         missed = {event.position_id for event in events[absorbed:]}
         dirty: dict[int, set[tuple[int, int]]] = {}
         named = {
-            tile.name.split(".")[0]: tile
+            the_position_of(tile.name): tile
             for tile in made.mosaic.tiles
-            if tile.name.split(".")[0] in missed
+            if the_position_of(tile.name) in missed
         }
 
         for tile in named.values():

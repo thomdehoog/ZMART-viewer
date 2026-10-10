@@ -42,9 +42,7 @@ def the_marker_is_touched(run) -> None:
 
 def the_forgiving_read_fails(monkeypatch) -> None:
     """Make the forgiving read answer as it does when the file is held."""
-    monkeypatch.setattr(
-        RunManifest, "committed", lambda self: CommittedState(run_id=self.run_id)
-    )
+    monkeypatch.setattr(RunManifest, "committed", lambda self: CommittedState(run_id=self.run_id))
 
 
 def test_the_published_state_survives_one_unreadable_marker(tmp_path, monkeypatch):
