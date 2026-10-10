@@ -952,3 +952,49 @@ def test_a_publication_that_cannot_be_made_now_is_answered(tmp_path, monkeypatch
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+# --- the coverage the page is told about is served (review S5) -----------------
+
+
+def test_every_coverage_address_handed_out_is_served(tmp_path):
+    """A published acquisition without a named view, on an opaque background.
+
+    ``/api/config`` hands out coverage for it, so the server must serve it;
+    before, it answered 403 unless the background was transparent.
+    """
+    from test_published_depth import CANVAS, composition
+    from test_published_transfer import write_position
+
+    names = ["flat.ome.zarr", "stack.ome.zarr"]
+    for name, depth in zip(names, (1, 3)):
+        write_position(tmp_path, name, 0 if depth == 1 else 256, 1000, depth=depth, frames=1)
+    server = make_server(port=0, data_dir=tmp_path, live=True, transparent_background=False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        payload = {
+            "path": str(tmp_path),
+            "source_revisions": dict.fromkeys(names, 1),
+            "composition": composition(names),
+            "canvas": CANVAS,
+        }
+        status, _, body = request(port, "/api/stores/open", "POST", json.dumps(payload).encode())
+        assert status == 200, body
+        config = json.loads(request(port, "/api/config")[2])
+        handed_out = [
+            source.split("|", 1)[0] + "zarr.json"
+            for row in config["layers"]
+            for source in row.get("coverageSources", [])
+        ]
+        assert handed_out, "this setup is meant to hand out coverage"
+        assert [request(port, address)[0] for address in handed_out] == [200] * len(handed_out)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_coverage_nobody_was_told_about_is_not_served(serving):
+    """The other half: a plain store on an opaque background has no coverage to serve."""
+    assert request(serving, "/data/0/demo.zarr/__zmart_coverage__/zarr.json")[0] == 403

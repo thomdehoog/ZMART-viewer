@@ -291,6 +291,7 @@ class _Handler(SimpleHTTPRequestHandler):
         forget_measurements=None,
         open_from=None,
         allowed_origins: frozenset[str] = frozenset(),
+        coverage_handed_out=None,
         **kwargs,
     ):
         self._data_dir = data_dir  # where drawn targets are saved
@@ -318,6 +319,9 @@ class _Handler(SimpleHTTPRequestHandler):
         self._forget_measurements = forget_measurements or (lambda closed: None)
         # Pages away from this computer that may ask all the same. See refusal_for.
         self._allowed_origins = allowed_origins
+        # Whether /api/config told the page about a store's coverage. Only
+        # what it was told about is served. See _LayerPanelConfig.hands_out_coverage.
+        self._coverage_handed_out = coverage_handed_out or (lambda store: False)
         super().__init__(*args, directory=str(site_dir), **kwargs)
 
     def handle_one_request(self) -> None:
@@ -534,11 +538,10 @@ class _Handler(SimpleHTTPRequestHandler):
         if marker in rel:
             store_rel, inside = rel.split(marker, 1)
             store = self._library.resolve(store_rel)
-            if store is None or not (
-                self._transparent_background
-                or (read_attrs_at(store).get("zmart") or {}).get("view")
-                or read_attrs_at(store).get("zmart_projection")
-            ):
+            # The page asks for coverage exactly where /api/config handed it
+            # out, so that is the one condition: a second, separate rule here
+            # drifted from it once and refused coverage the page was told of.
+            if store is None or not self._coverage_handed_out(store_rel):
                 self._send_empty(HTTPStatus.FORBIDDEN)
                 return
             try:
@@ -1563,6 +1566,16 @@ def ask_this_machine_for_a_folder() -> str | None:
     return chosen or None
 
 
+def the_coverage_handed_out(config: dict) -> frozenset[str]:
+    """The stores an answer to /api/config hands out coverage for, as ``<number>/<store>``."""
+    return frozenset(
+        urllib.parse.unquote(source.split("|", 1)[0].rstrip("/").removeprefix("/data/"))
+        .rsplit(f"/{coverage.MARKER}", 1)[0]
+        for row in config.get("layers", ())
+        for source in row.get("coverageSources", ())
+    )
+
+
 class _LayerPanelConfig:
     """The answer to ``/api/config``: every row the layer panel shows, and its group.
 
@@ -1601,7 +1614,11 @@ class _LayerPanelConfig:
         self._allow_selection = allow_selection
         self._panel_side = panel_side
         self._live = live
-        self._last_built: dict = {"revision": None, "config": None}
+        # What was last built, as one value: (revision, answer, stores whose
+        # coverage the answer hands out). Replaced whole, never field by
+        # field, so a request reading it without the lock can never see a new
+        # revision beside an old answer (review S10).
+        self._last_built: tuple = (None, None, frozenset())
         self._building = threading.Lock()
 
     def now(self) -> dict:
@@ -1620,14 +1637,18 @@ class _LayerPanelConfig:
             published_revision,
         )
 
-        if self._last_built["revision"] == revision:
-            return self._last_built["config"]
+        built_for, built, _ = self._last_built
+
+        if built_for == revision:
+            return built
 
         with self._building:
             # Asked again with the lock held: while waiting, another thread may have
             # built exactly what this one was about to build.
-            if self._last_built["revision"] == revision:
-                return self._last_built["config"]
+            built_for, built, _ = self._last_built
+
+            if built_for == revision:
+                return built
 
             built = self.build(
                 live_document,
@@ -1635,9 +1656,16 @@ class _LayerPanelConfig:
                 live_snapshots,
                 live_numbers,
             )
-            self._last_built["revision"] = revision
-            self._last_built["config"] = built
+            self._last_built = (revision, built, the_coverage_handed_out(built))
             return built
+
+    def hands_out_coverage(self, store: str) -> bool:
+        """Whether the last answer told the page about this store's coverage.
+
+        ``store`` is the store's place as a request names it, read back to
+        plain names: ``<number>/<store>``.
+        """
+        return store in self._last_built[2]
 
     def build(
         self,
@@ -2032,6 +2060,7 @@ def make_server(
         data_dir=data_dir,
         site_dir=Path(site_dir).resolve(),
         config=config.now,
+        coverage_handed_out=config.hands_out_coverage,
         library=library,
         browse=browse,
         bake_job={},
