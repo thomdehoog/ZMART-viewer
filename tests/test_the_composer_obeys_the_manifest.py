@@ -657,7 +657,7 @@ def test_a_commit_arriving_between_the_snapshots_two_reads_is_left_to_the_next(t
     run.write_and_publish("posA", some_specimen(700))
 
     governed = GovernedRun(run.folder, piece=PIECE)
-    real = governed._run
+    real = governed.run
 
     class TornBetweenTheReads:
         """The gateway as the race sees it: order ahead of published."""
@@ -665,10 +665,10 @@ def test_a_commit_arriving_between_the_snapshots_two_reads_is_left_to_the_next(t
         def __getattr__(self, name):
             return getattr(real, name)
 
-        def _positions_in_commit_order(self):
-            return tuple(real._positions_in_commit_order()) + ("posB",)
+        def positions_in_commit_order(self):
+            return tuple(real.positions_in_commit_order()) + ("posB",)
 
-    governed._run = TornBetweenTheReads()
+    governed.run = TornBetweenTheReads()
     composer = governed.composer()
     a_only, _, b_only = the_columns_of(run)
     assert 700 in pixels_of(composer, 0, 0, 0, a_only), (

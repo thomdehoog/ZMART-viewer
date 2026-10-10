@@ -488,9 +488,9 @@ def link_a_finished_run(run_root: str | Path, *, name: str = "linked") -> Path:
     governed = GovernedRun(run_root)
 
     try:
-        layout, profile = governed._run._geometry()
-        published = governed._run._published_units()
-        order = governed._run._positions_in_commit_order()
+        layout, profile = governed.run.geometry()
+        published = governed.run.published_units()
+        order = governed.run.positions_in_commit_order()
     finally:
         governed.close()
     inner = dict(profile.levels[0].inner_chunk)
@@ -710,7 +710,7 @@ def _the_mosaic_behind(store: Path, ours: dict) -> Mosaic:
     return read_the_transfer(Path(ours["built_from"]))
 
 
-def _composer_for(store: Path) -> Composer | ComposedPicture | None:
+def composer_for(store: Path) -> Composer | ComposedPicture | None:
     """The composer for this picture, opened once and kept."""
     store = store.resolve()
     mark = _the_pictures_mark(store)
@@ -818,7 +818,7 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPi
 def a_manifest_governs(store: Path) -> bool:
     """Whether this picture's pieces may only be answered through its run."""
     where = Path(store).resolve()
-    held = _composer_for(where)
+    held = composer_for(where)
 
     if isinstance(held, ComposedPicture):
         return True
@@ -833,7 +833,7 @@ def a_manifest_governs(store: Path) -> bool:
 def built_bytes_behind(store: Path, inside: str) -> bytes | None:
     """The piece of a built picture the browser asked for, made now."""
     where = Path(store)
-    held = _composer_for(where)
+    held = composer_for(where)
 
     if held is None:
         with _guard:
@@ -933,7 +933,7 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
 
 def a_sample_behind(store: Path, channel: int = 0):
     """A built picture's pixels for measuring: the composer's own coarsest ground."""
-    held = _composer_for(Path(store))
+    held = composer_for(Path(store))
 
     if held is None:
         return None
@@ -971,7 +971,7 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
     """A built picture's pixels inside a share of itself, for measuring."""
     import numpy as np
 
-    held = _composer_for(Path(store))
+    held = composer_for(Path(store))
 
     if held is None:
         return None
