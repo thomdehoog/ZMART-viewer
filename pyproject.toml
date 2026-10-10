@@ -15,7 +15,7 @@ keywords = ["microscopy", "ome-zarr", "viewer", "neuroglancer", "smart microscop
 
 # What the viewer needs to run, and nothing else. The record machinery --
 # how an acquisition writes itself and what that means -- lives inside this
-# package (``zmart_viewer.record``), so a viewer install is self-contained:
+# package (``zmart_viewer.live.record``), so a viewer install is self-contained:
 # it opens anything, follows live runs, and its tests exercise the same
 # writer a microscope controller drives.
 dependencies = [
@@ -95,9 +95,6 @@ extend-exclude = [
     # Generated, not written.
     "gui/build",
     "node_modules",
-    # Roads explored and not taken. Kept for the reasoning, not held to the
-    # standards of code anybody runs.
-    "parked",
 ]
 
 [tool.ruff.lint]

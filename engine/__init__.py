@@ -15,9 +15,11 @@ Inside it:
 - ``views``: the named views, Slice, Top and Min/Max/Sum.
 - ``live``: following a run while it is written, and the record of how a
   run writes itself.
-- ``drawing``: the JavaScript that creates and drives neuroglancer, with its
-  own controls switched off, and ``embedding.js`` for the named views. Any
-  interface, this package's own window included, draws through it.
+- ``drawing``: the JavaScript an interface shares with the viewer's own
+  window: ``embedding.js``, which chooses the named views and keeps a growing
+  picture drawn correctly, and ``neuroglancer-growth.mjs``, the patch that
+  lets neuroglancer show a picture that grows. The code that creates and
+  drives neuroglancer for the viewer's own window is in ``gui/source/drawing``.
 
 The names below are what other software may rely on. They stay stable
 between versions; everything deeper inside may move.
