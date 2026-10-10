@@ -26,7 +26,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from zmart_viewer.filesystem import put_text_in_place
+from zmart_viewer.filesystem import put_text_in_place, rmtree_despite_brief_holds
 from zmart_viewer.live import following as live
 from zmart_viewer.live.following import SourceRegistry, live_rows
 from zmart_viewer.live.record.live_serving import answer_from_a_live_run, live_run_holding
@@ -1348,8 +1348,13 @@ class _Handler(SimpleHTTPRequestHandler):
             job["fraction"] = round(done / max(total, 1), 4)
 
         def work():
+            """Build aside, then tidy up, and only then say how it ended.
+
+            The load window lists the scenes folder as soon as it hears the
+            build is over, so the half-made build must be gone by then.
+            """
             try:
-                shutil.rmtree(aside, ignore_errors=True)
+                rmtree_despite_brief_holds(aside)
                 built = declare_a_built_picture(
                     aside,
                     data_path,
@@ -1358,13 +1363,21 @@ class _Handler(SimpleHTTPRequestHandler):
                     told=told,
                 )
                 put_a_folder_in_place(built, scene, spare=aside / "replaced")
-                job.update({"state": "done", "fraction": 1.0, "store": str(scene)})
+                ending = {"state": "done", "fraction": 1.0, "store": str(scene)}
             except _StoppedByTheOperator:
-                job.update({"state": "cancelled"})
+                ending = {"state": "cancelled"}
             except Exception as why:  # noqa: BLE001 -- shown to the operator whole
-                job.update({"state": "error", "error": str(why)})
-            finally:
-                shutil.rmtree(aside, ignore_errors=True)
+                ending = {"state": "error", "error": str(why)}
+
+            try:
+                rmtree_despite_brief_holds(aside)
+            except OSError as why:
+                ending = {
+                    "state": "error",
+                    "error": f"the half-made build in {aside} could not be removed: {why}",
+                }
+
+            job.update(ending)
 
         threading.Thread(target=work, daemon=True).start()
         self._send_json({"started": True})
