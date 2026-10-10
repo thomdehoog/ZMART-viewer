@@ -77,11 +77,18 @@ export async function measureHere(asked) {
 }
 
 export async function openPath(path) {
-  const response = await fetch("/api/stores/open", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
-  });
+  let response;
+  try {
+    response = await fetch("/api/stores/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+  } catch {
+    // No answer at all -- the server dropped the connection, or is gone. Said
+    // as plainly as a refusal, so the window never waits for ever.
+    return { error: `could not open ${path}: the viewer's server did not answer` };
+  }
   const answer = await response.json().catch(() => null);
   if (!response.ok) {
     return {
