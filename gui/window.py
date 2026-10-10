@@ -22,7 +22,9 @@ import sys
 import threading
 from pathlib import Path
 
-from zmart_viewer.serving.server import THE_BUILT_PAGE, make_server
+from zmart_viewer.gui.window_routes import ask_this_machine_for_a_folder
+from zmart_viewer.gui.window_server import make_window_server
+from zmart_viewer.serving.server import THE_BUILT_PAGE
 
 
 def _webview2_present() -> bool:
@@ -96,8 +98,6 @@ def open_window(
         if show:
             return show()
 
-        from zmart_viewer.serving.server import ask_this_machine_for_a_folder
-
         return ask_this_machine_for_a_folder()
 
     kwargs = {
@@ -119,7 +119,7 @@ def open_window(
     if data_dir is not None:
         kwargs["data_dir"] = data_dir
 
-    server = make_server(port, **kwargs)
+    server = make_window_server(port, **kwargs)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{server.server_address[1]}"
 

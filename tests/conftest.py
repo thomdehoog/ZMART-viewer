@@ -110,7 +110,7 @@ for source_root in (_REPO_ROOT, _VIZ_ROOT, _TESTS):
         sys.path.insert(0, str(source_root))
 
 from demo_data import write_demo_zarr  # noqa: E402
-from zmart_viewer.serving.server import make_server  # noqa: E402
+from zmart_viewer.gui.window_server import make_window_server  # noqa: E402
 
 _DIST = _VIZ_ROOT / "gui" / "build"
 
@@ -174,7 +174,7 @@ def live_server(built_dist: Path, demo_store: Path):
     """The real server, on a free port, serving the built page and the volume."""
     # The selection list is off unless asked for, so the shared test server asks
     # for it: most of these tests are about marking places on the image.
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=demo_store,
         store="demo.zarr",

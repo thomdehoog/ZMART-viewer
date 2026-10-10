@@ -38,7 +38,8 @@ sys.path.insert(0, str(_VIZ / "tests"))
 
 import engine_on_path  # noqa: E402, F401
 from demo_data import write_demo_zarr  # noqa: E402
-from zmart_viewer.serving.server import THE_BUILT_PAGE, make_server  # noqa: E402
+from zmart_viewer.gui.window_server import make_window_server  # noqa: E402
+from zmart_viewer.serving.server import THE_BUILT_PAGE  # noqa: E402
 
 # Where the screenshot lands, and how long we allow for a cold start (the engine
 # must boot, spawn its workers, fetch the chunks, and decode them).
@@ -147,7 +148,7 @@ def run_check() -> int:
     write_demo_zarr(demo)
 
     _OUT.mkdir(exist_ok=True)
-    server = make_server(port=0, data_dir=demo.parent, store="demo.zarr")
+    server = make_window_server(port=0, data_dir=demo.parent, store="demo.zarr")
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{port}"

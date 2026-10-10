@@ -28,14 +28,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from grid_scans import _a_grid_scan, _post  # noqa: E402
 from test_a_transfer_is_built_into_one_picture import STEP_UM, _write_a_tile  # noqa: E402
 from test_open_and_close import _store  # noqa: E402
+from zmart_viewer.gui.window_server import make_window_server  # noqa: E402
 from zmart_viewer.picture.built_picture import the_scene_folder_name  # noqa: E402
-from zmart_viewer.serving.server import make_server  # noqa: E402
 
 
 @pytest.fixture
 def viewer(tmp_path):
     """A live viewer with nothing open, and its address."""
-    server = make_server(port=0, data_dir=tmp_path, live=True)
+    server = make_window_server(port=0, data_dir=tmp_path, live=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -91,7 +91,7 @@ def test_a_viewer_on_finished_data_composes_once(tmp_path):
     run.mkdir()
     for number, (row, column) in enumerate([(0, 0), (0, 1)]):
         _write_a_tile(run / f"Tile{number}.ome.zarr", number, (row * STEP_UM, column * STEP_UM))
-    server = make_server(port=0, data_dir=tmp_path, live=False)
+    server = make_window_server(port=0, data_dir=tmp_path, live=False)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

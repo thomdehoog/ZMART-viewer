@@ -38,7 +38,7 @@ import zarr
 from driving import open_through_the_window
 from pixels import fraction_lit, image_middle
 from test_a_plate_lays_itself_out import a_small_plate
-from zmart_viewer.serving.server import make_server
+from zmart_viewer.gui.window_server import make_window_server
 
 # One micrometre per voxel across the specimen, two through it. Round numbers
 # so that a tile's size in voxels and its place in micrometres can be reasoned
@@ -265,7 +265,7 @@ def shapes(tmp_path):
 @pytest.fixture
 def page_on(browser, built_dist, shapes):
     """A viewer started on the 0.4 image, from which the rest are opened."""
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=shapes / "plain04",
         site_dir=built_dist,
@@ -508,7 +508,7 @@ def test_tiles_that_overlap_load_and_do_not_blend(page_on):
 
 def _photograph_a_scene(browser, built_dist, root, scene_folder):
     """Open one already-declared picture and bring back what reached the screen."""
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=scene_folder.parent, site_dir=built_dist, store=scene_folder.name
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)

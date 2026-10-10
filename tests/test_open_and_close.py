@@ -16,12 +16,12 @@ import pytest
 import zarr
 from driving import open_through_the_window
 from pixels import fraction_lit
+from zmart_viewer.gui.window_server import make_window_server
 
 # Importing the server put the building folder on ``sys.path``; the naming
 # rule below is the one every built view follows, so no test spells the
 # ``.zmartview.zarr`` suffix by hand.
 from zmart_viewer.picture.built_picture import the_scene_folder_name  # noqa: E402
-from zmart_viewer.serving.server import make_server
 
 
 def _store(path, *, value=4000, channels=2):
@@ -81,7 +81,7 @@ def live(browser, built_dist, tmp_path):
     _store(first / "overview_pos001.ome.zarr")
     _store(second / "targetscan_cell007.ome.zarr")
 
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=first,
         site_dir=built_dist,
@@ -261,9 +261,9 @@ def test_the_load_data_box_can_be_switched_off(browser, built_dist, demo_store):
     """
     import threading
 
-    from zmart_viewer.serving.server import make_server
+    from zmart_viewer.gui.window_server import make_window_server
 
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, allow_open=False
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -304,9 +304,9 @@ def test_the_selection_list_is_absent_unless_asked_for(browser, built_dist, demo
     """
     import threading
 
-    from zmart_viewer.serving.server import make_server
+    from zmart_viewer.gui.window_server import make_window_server
 
-    server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
+    server = make_window_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page()
@@ -329,9 +329,9 @@ def test_the_bar_of_controls_can_be_put_on_the_left(browser, built_dist, demo_st
     """
     import threading
 
-    from zmart_viewer.serving.server import make_server
+    from zmart_viewer.gui.window_server import make_window_server
 
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, panel_side="left"
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -354,9 +354,9 @@ def test_the_controls_fold_away(browser, built_dist, demo_store):
     """The bar folds to the edge, so the whole screen can show the specimen."""
     import threading
 
-    from zmart_viewer.serving.server import make_server
+    from zmart_viewer.gui.window_server import make_window_server
 
-    server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
+    server = make_window_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page(viewport={"width": 1200, "height": 900})
@@ -393,9 +393,9 @@ def test_finished_data_opens_no_listening_connection(browser, built_dist, demo_s
     """
     import threading
 
-    from zmart_viewer.serving.server import make_server
+    from zmart_viewer.gui.window_server import make_window_server
 
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist, live=False
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -460,9 +460,9 @@ def test_a_live_viewer_waits_to_be_told(browser, built_dist, demo_store):
     """
     import threading
 
-    from zmart_viewer.serving.server import make_server
+    from zmart_viewer.gui.window_server import make_window_server
 
-    server = make_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
+    server = make_window_server(port=0, data_dir=demo_store, store="demo.zarr", site_dir=built_dist)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     page = browser.new_page()
@@ -504,7 +504,7 @@ def no_chooser(browser, built_dist, tmp_path):
     second.mkdir()
     _store(first / "overview_pos001.ome.zarr")
     _store(second / "targetscan_cell007.ome.zarr")
-    server = make_server(
+    server = make_window_server(
         port=0,
         data_dir=first,
         site_dir=built_dist,
@@ -627,7 +627,7 @@ class TestTheLoadWindow:
         run.mkdir()
         _store(first / "overview_pos001.ome.zarr", channels=1)
         _store(run / "surveyrun_pos001.ome.zarr", channels=2)
-        server = make_server(
+        server = make_window_server(
             port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -687,7 +687,7 @@ class TestTheLoadWindow:
         first.mkdir()
         _store(first / "overview_pos001.ome.zarr", channels=1)
         _a_grid_scan(tmp_path / "big", across=8)
-        server = make_server(
+        server = make_window_server(
             port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -785,7 +785,7 @@ class TestTheLoadWindow:
         button would be decoration over an API anyone could still call.
         """
         _store(tmp_path / "overview_pos001.ome.zarr")
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,
@@ -844,7 +844,7 @@ class TestRelinking:
         is what lets the window prompt for where it is now.
         """
         run, store, moved_to = self._a_viewer_with_moved_data(tmp_path)
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,
@@ -881,7 +881,7 @@ class TestRelinking:
         self, browser, built_dist, tmp_path, demo_store
     ):
         run, store, moved_to = self._a_viewer_with_moved_data(tmp_path)
-        server = make_server(
+        server = make_window_server(
             port=0,
             data_dir=tmp_path,
             site_dir=built_dist,

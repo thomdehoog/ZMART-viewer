@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from zmart_viewer.gui.window_server import make_window_server
 from zmart_viewer.opening.contrast import display_window
 from zmart_viewer.opening.open_folders import (
     channel_color,
@@ -30,7 +31,6 @@ from zmart_viewer.opening.open_folders import (
     prefer_filter,
     select_tiles,
 )
-from zmart_viewer.serving.server import make_server
 
 # --------------------------------------------------------------------------
 # Helpers: write real OME-Zarr v2 stores, the way the acquisition does.
@@ -303,7 +303,7 @@ def serving(tmp_path):
     channel_folder(data, names)
     (tmp_path / "outside.txt").write_text("SECRET", encoding="utf-8")
 
-    server = make_server(port=0, data_dir=data, site_dir=site, store=names)
+    server = make_window_server(port=0, data_dir=data, site_dir=site, store=names)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

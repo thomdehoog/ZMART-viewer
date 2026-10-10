@@ -27,8 +27,8 @@ from grid_scans import (  # noqa: E402
     _post,
 )
 from test_open_and_close import _store  # noqa: E402
+from zmart_viewer.gui.window_server import make_window_server  # noqa: E402
 from zmart_viewer.picture.built_picture import the_scene_folder_name  # noqa: E402
-from zmart_viewer.serving.server import make_server  # noqa: E402
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def door(built_dist, tmp_path):
     first = tmp_path / "overview"
     first.mkdir()
     _store(first / "overview_pos001.ome.zarr", channels=1)
-    server = make_server(
+    server = make_window_server(
         port=0, data_dir=first, site_dir=built_dist, store="overview_pos001.ome.zarr"
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
