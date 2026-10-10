@@ -263,6 +263,25 @@ class _StoppedByTheOperator(Exception):
     """Raised inside a build loop when the operator asked to stop."""
 
 
+def put_a_folder_in_place(made: Path, where: Path, *, spare: Path) -> None:
+    """Move a finished folder to ``where``, replacing any folder already there.
+
+    A folder cannot be renamed over another, so one standing at ``where`` is
+    first moved to ``spare`` (and removed by whoever owns ``spare``). If the
+    new one then cannot be moved in, the old one is put back.
+    """
+    if where.exists():
+        where.rename(spare)
+
+        try:
+            made.rename(where)
+        except OSError:
+            spare.rename(where)
+            raise
+    else:
+        made.rename(where)
+
+
 class _Handler(SimpleHTTPRequestHandler):
     """Serve the built page, the image data, and the small JSON endpoints."""
 
@@ -1312,6 +1331,12 @@ class _Handler(SimpleHTTPRequestHandler):
         job.clear()
         job.update({"state": "running", "fraction": 0.0, "bake": bake})
         viewer_path = Path(viewer.strip()).expanduser()
+        scene = viewer_path / the_scene_folder_name(name or data_path.name)
+        # Built aside and put in place only when whole, so that a build that
+        # is stopped or fails takes away what it made and nothing else -- not
+        # a scene that stood there before it began (review N2). The leading
+        # dot keeps the half-made build out of the load window's list.
+        aside = viewer_path / f".{scene.name}.building"
 
         def told(done, total):
             if job.get("stop"):
@@ -1321,22 +1346,22 @@ class _Handler(SimpleHTTPRequestHandler):
 
         def work():
             try:
-                store = declare_a_built_picture(
-                    viewer_path,
+                shutil.rmtree(aside, ignore_errors=True)
+                built = declare_a_built_picture(
+                    aside,
                     data_path,
                     name=name or data_path.name,
                     bake=bake,
                     told=told,
                 )
-                job.update({"state": "done", "fraction": 1.0, "store": str(store)})
+                put_a_folder_in_place(built, scene, spare=aside / "replaced")
+                job.update({"state": "done", "fraction": 1.0, "store": str(scene)})
             except _StoppedByTheOperator:
-                shutil.rmtree(
-                    viewer_path / the_scene_folder_name(name or data_path.name),
-                    ignore_errors=True,
-                )
                 job.update({"state": "cancelled"})
             except Exception as why:  # noqa: BLE001 -- shown to the operator whole
                 job.update({"state": "error", "error": str(why)})
+            finally:
+                shutil.rmtree(aside, ignore_errors=True)
 
         threading.Thread(target=work, daemon=True).start()
         self._send_json({"started": True})
@@ -1406,6 +1431,21 @@ class _Handler(SimpleHTTPRequestHandler):
             status = HTTPStatus.CONFLICT if "relink" in why.detail else HTTPStatus.BAD_REQUEST
             self._send_json(refused, status)
             return
+        except OSError as why:
+            # Said plainly: a dropped connection left the load window waiting
+            # for an answer that never came (review S2).
+            self._send_json(
+                {
+                    "error": (
+                        f"the viewer could not write the picture it shows for {target} "
+                        f"into its own folder ({why.strerror or why}). Nothing was "
+                        "written beside your data. This is usually a home folder that "
+                        "cannot be written to, or a drive that has filled up."
+                    )
+                },
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return
 
         try:
             # A folder is watched for new images only while the data is still
@@ -1422,6 +1462,11 @@ class _Handler(SimpleHTTPRequestHandler):
         except (ValueError, OSError) as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+
+        if opened.composed_from is not None and self._live:
+            # A folder of positions opened while it may still be written: the
+            # picture composed over it keeps up with it. See ScenesKeptUp.
+            self._scratch["kept up"].follow(opened.target, opened.composed_from)
 
         self._send_json(self._config())
 
@@ -1462,6 +1507,7 @@ class _Handler(SimpleHTTPRequestHandler):
             forget(root / name)
             pieces.forget(root / name)
             self.forget_described(root / name)
+            self._scratch["kept up"].forget(root / name)
 
         self._forget_measurements(closed)
         self._send_json(self._config())
@@ -2012,6 +2058,10 @@ class _LayerPanelConfig:
                 row["coverageSources"] = [coverage.source_url(url) for url in row["sources"]]
 
 
+#: How often the scenes composed over folders still being written are checked.
+KEEP_UP_EVERY_S = 1.0
+
+
 class _Server(ThreadingHTTPServer):
     """The viewer's HTTP server: many requests at once, and a tidy stop.
 
@@ -2029,6 +2079,7 @@ class _Server(ThreadingHTTPServer):
         self._registry = registry
         self._published = published
         self._scratch = scratch
+        self._stopping = threading.Event()
         super().__init__(address, handler)
 
     def server_bind(self):
@@ -2040,9 +2091,34 @@ class _Server(ThreadingHTTPServer):
     def serve_forever(self, *args, **kwargs):
         # The disk is watched only while the server is actually running.
         self._registry.start()
+        threading.Thread(
+            target=self.keep_the_scenes_up, name="zmart-scenes-kept-up", daemon=True
+        ).start()
         super().serve_forever(*args, **kwargs)
 
+    def keep_the_scenes_up(self) -> None:
+        """Once a second, compose again the scenes whose folders changed, and tell the pages."""
+        kept_up = self._scratch["kept up"]
+
+        while not self._stopping.wait(KEEP_UP_EVERY_S):
+            try:
+                changed = kept_up.catch_up()
+            except Exception:  # noqa: BLE001 -- one bad pass must not end the watch
+                logging.getLogger(__name__).exception("keeping the composed scenes up failed")
+                continue
+
+            for scene in changed:
+                forget(scene)
+                pieces.forget(scene)
+                _Handler.forget_described(scene)
+
+            if changed:
+                # The scene's pieces are rewritten where the page already
+                # holds them, which is what this word tells it to let go of.
+                self._registry.announcements.say_something_changed(image_written_in_place=True)
+
     def shutdown(self):
+        self._stopping.set()
         self._registry.stop()
         self._published.close()
 
@@ -2108,7 +2184,11 @@ def make_server(
 
     published = PublishedFolders(library, bake=bake, canvas=canvas)
     clear_what_stopped_viewers_left(the_viewers_home() / "scenes")
-    scratch: dict = {"published": published, "making": threading.Lock()}
+    scratch: dict = {
+        "published": published,
+        "making": threading.Lock(),
+        "kept up": loading.ScenesKeptUp(),
+    }
     if bake:
         for dataset in library.datasets():
             if live_run_holding(dataset.root) is None:

@@ -521,19 +521,21 @@ def test_a_plate_store_opened_directly_lays_itself_out(door):
     Pointed straight at the plate STORE -- the view or other tab, not the
     scene builder -- the door used to hand it to the library as an
     ordinary image, which drew every well at the origin, stacked. Now the
-    door notices the plate, builds (or reuses) the scene beside it exactly
-    as the build tab would, and serves THAT: what reaches the screen is
-    the laid-out plate, whichever tab opened it.
+    door notices the plate, builds the scene in the viewer's own folder,
+    exactly as it does for a run of positions, and serves THAT: what
+    reaches the screen is the laid-out plate, whichever tab opened it, and
+    nothing is written beside the plate (review S2).
     """
     from grid_scans import _post
 
     address, screen = door
     status, answer = _post(address, "/api/stores/open", {"path": str(screen / "plate.ome.zarr")})
     assert status == 200, answer
+    assert not (screen / "scenes").exists(), "opening a plate must write nothing beside it"
     # The scene's folder name follows the one naming rule every built view
     # follows, so the test can never disagree with the builder about it.
-    scene = screen / "scenes" / the_scene_folder_name("plate")
-    described = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))
+    name = the_scene_folder_name("plate")
+    described = the_served_description(address, answer, name)
     assert described["attributes"]["zmart"]["built_from"] == (
         (screen / "plate.ome.zarr").as_posix()
     ), "the scene must say which plate it was built from"
@@ -542,13 +544,22 @@ def test_a_plate_store_opened_directly_lays_itself_out(door):
     composed = [
         one
         for one in answer.get("layers", [])
-        if one.get("kind") == "image" and one.get("group") == scene.name
+        if one.get("kind") == "image" and one.get("group") == name
     ]
     assert len(composed) == 1, (
         "the laid-out scene is ONE composed picture; several rows means the "
         "raw plate's fields were served directly -- the "
         "wells-stacked-at-the-origin picture"
     )
+
+
+def the_served_description(address, answer, scene_name):
+    """The scene's own description, read the way the page reads it: over the wire."""
+    import urllib.request
+
+    row = next(one for one in answer["layers"] if one.get("group") == scene_name)
+    with urllib.request.urlopen(f"{address}{row['sources'][0].split('|')[0]}zarr.json") as got:
+        return json.loads(got.read())
 
 
 def test_a_real_plate_lives_beside_other_data(door, tmp_path):
@@ -570,15 +581,16 @@ def test_a_real_plate_lives_beside_other_data(door, tmp_path):
     _store(bench / "loose_pos001.ome.zarr", channels=1)
     status, answer = _post(address, "/api/stores/open", {"path": str(bench / "HA_plate.zarr")})
     assert status == 200, answer
-    scene = bench / "scenes" / the_scene_folder_name("HA_plate")
-    described = json.loads((scene / "zarr.json").read_text(encoding="utf-8"))
+    assert not (bench / "scenes").exists(), "opening a plate must write nothing beside it"
+    name = the_scene_folder_name("HA_plate")
+    described = the_served_description(address, answer, name)
     assert described["attributes"]["zmart"]["built_from"] == (
         (bench / "HA_plate.zarr").as_posix()
     ), "the scene must say it was built from the plate itself"
     composed = [
         one
         for one in answer.get("layers", [])
-        if one.get("kind") == "image" and one.get("group") == scene.name
+        if one.get("kind") == "image" and one.get("group") == name
     ]
     assert len(composed) == 1, (
         "the served rows must draw the one composed scene, never the raw plate's fields"
