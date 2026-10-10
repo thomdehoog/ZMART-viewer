@@ -219,9 +219,16 @@ server = make_server(port=8848, data_dir=Path("run/view"), live=False,
 try:
     server.serve_forever()
 finally:
+    server.shutdown()
     server.server_close()
 ```
 
-Open `http://127.0.0.1:8848` in a browser. A folder containing any subset of named
-views, or one individual named view, can be opened. The 0.4.0 feature branch does
-not update operator pins, deploy to the rig, create a release tag or merge main.
+Open `http://127.0.0.1:8848` in a browser, and press Ctrl+C to stop. A folder
+containing any subset of named views, or one individual named view, can be
+opened.
+
+`shutdown()` matters: it stops the engine's folder watchers and closes the
+views it published, and it removes the session's scratch folder. Closing the
+socket alone (`server_close()`) leaves those running. Call `shutdown()` only
+after `serve_forever()` has started; called before, it waits for a loop that
+never runs, as Python's own servers do.
