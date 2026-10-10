@@ -23,9 +23,17 @@ The names below are what other software may rely on. They stay stable
 between versions; everything deeper inside may move.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from zmart_viewer.serving.server import make_server
 from zmart_viewer.views.projections import write_projection
 from zmart_viewer.views.publishing import STORE, PublishedAcquisition
+
+try:
+    #: The installed version, as pip knows it. Quote it when you report a problem.
+    __version__ = version("zmart-viewer")
+except PackageNotFoundError:  # running from a copy that was never installed
+    __version__ = "unknown"
 
 __all__ = [
     "PublishedAcquisition",
