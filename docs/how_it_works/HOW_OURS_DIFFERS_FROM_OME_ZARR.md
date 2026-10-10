@@ -64,21 +64,22 @@ at zmart-links.json is not recognized as a component of a Zarr hierarchy"*, and 
 colleague meets a warning about a file they have never heard of. Reading the images
 never requires reading ours.
 
-**We write the scale beside each resolution and the position above all of them.**
-OME-Zarr allows `coordinateTransformations` on the multiscales as a whole *or* on
-each dataset, and the two **compose**. Read off disk, a store of ours carries a
-`scale` in each dataset and a single `translation` on the multiscales block, and no
-per-dataset translation at all.
+**We write both the scale and the position beside each resolution, and nowhere
+else.** OME-Zarr allows `coordinateTransformations` on the multiscales as a whole
+*or* on each dataset, and a reader applies the outer one on top of the inner one.
+A store of ours carries a `scale` and a `translation` in each dataset and no outer
+block (`engine/live/record/omezarr.py`; built pictures and projections follow the
+same rule).
 
-**Which is legal, and is still the item on this page most likely to bite somebody.**
-This paragraph used to say we write the translation per dataset; read off disk we
-do not. The format allows either place, so this is not a divergence from OME-Zarr —
-it is a divergence from what a large part of the ecosystem reads. `ngff-zarr`, and
-so `multiview-stitcher` and much of the Python imaging world with it, takes the
-position **only** from the per-dataset block and never composes the outer one, so
-every ZMART acquisition opens there stacked on the origin with nothing to say so.
-`docs/how_it_works/INTEROP.md` has the reading of their source and what to do about it, which is to
-write the translation per dataset as well.
+**Why only there.** A large part of the ecosystem reads the position from the
+per-dataset block alone: `ngff-zarr`, and so `multiview-stitcher` and much of the
+Python imaging world with it, never applies the outer one. A store that put its
+position only in the outer block would open there with every acquisition stacked
+on the origin, and nothing would say so. Writing it in *both* places is no cure:
+the two add up, and the specimen would be placed twice as far from the origin as it
+really is, in neuroglancer as well. Our own reader applies both blocks, so it opens
+other people's files either way. [INTEROP.md](INTEROP.md) has the reading of their
+source.
 
 **We shrink by taking every second voxel rather than averaging.** The format says
 nothing about how the smaller copies are made, so this is within it, and the writer
