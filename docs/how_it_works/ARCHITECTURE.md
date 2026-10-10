@@ -21,11 +21,16 @@ important thing in this document.
   `engine/drawing/`: `embedding.js`, which the server hands to any page that
   embeds the named views, and `neuroglancer-growth.mjs`, the neuroglancer
   patches an interface applies when it builds its own page. It has no buttons,
-  panels or sliders of its own.
+  panels or sliders of its own, and none of the window's settings or doors:
+  a page that wants more passes `page_settings` and `routes` to `make_server`.
 - **The GUI** (`gui/`, imported as `zmart_viewer.gui`) is the viewer's own
   window, for people who only want to look at their data: the panels, the
   sliders, the load window, and `window.py`, which opens the window with
-  pywebview and is what the `zmart-viewer` command runs. The page's sources,
+  pywebview and is what the `zmart-viewer` command runs. `window_server.py`
+  starts the engine with the window's settings (where the bar of controls
+  sits, whether the selection list is offered) and its own doors, which live
+  in `window_routes.py`: the folder chooser, the load window's folder list and
+  builder, and the file of marked places. The page's sources,
   including the JavaScript that drives neuroglancer (`gui/source/drawing/`),
   live in `gui/source/` with everything Node needs to build them; the built
   page lives in `gui/build/`.
@@ -228,6 +233,9 @@ to open.
 
      window.py ───────────── opens the window with pywebview; the zmart-viewer command
      __main__.py ─────────── lets `python -m zmart_viewer.gui` do the same
+     window_server.py ────── the engine, with the window's settings and doors
+     window_routes.py ────── the folder chooser, the load window's list and builder,
+                             and the file of marked places
      source/ ─────────────── the page's sources, and everything Node needs to build them
        App.jsx ───────────── the whole window's state
          ├── LoadWindow.jsx ─────── LOAD DATA: walking folders and opening one

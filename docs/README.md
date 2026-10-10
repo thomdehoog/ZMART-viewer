@@ -194,6 +194,8 @@ port = server.server_address[1]
 
 `port=0` lets the machine pick a free port. `make_server` builds the server and leaves the thread to you.
 
+The engine knows nothing of your page beyond the pictures. If your page wants to be told something more, pass it as `page_settings`: `/api/config` hands those on unchanged. If your page needs routes of its own, pass them as `routes`, for example `{"POST /api/my-thing": answer}`, where `answer(payload)` returns `(document, status)`. The engine checks who is asking, and that a body is JSON, before any of them runs. The viewer's own window is built this way: its folder chooser, its load window and its list of marked places are routes it adds, in `zmart_viewer.gui.window_server`.
+
 **2. Tell it what to show, and when something changed.**
 
 ```json
