@@ -1347,13 +1347,13 @@ class _Handler(SimpleHTTPRequestHandler):
 
     def _a_session_folder(self, kind: str) -> Path:
         """A folder of the viewer's own for this session, made when wanted."""
-        folder = self._scratch.get(kind)
+        with self._scratch["making"]:
+            folder = self._scratch.get(kind)
 
-        if folder is None:
-            home = Path.home() / ".zmart-viewer" / kind
-            home.mkdir(parents=True, exist_ok=True)
-            folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
-            self._scratch[kind] = folder
+            if folder is None:
+                folder, held = a_held_session_folder(the_viewers_home() / kind)
+                self._scratch[kind] = folder
+                self._scratch[f"{kind}-held"] = held
 
         return folder
 
@@ -1540,6 +1540,85 @@ class _Handler(SimpleHTTPRequestHandler):
     # Quieten the default per-request logging so the console stays readable.
     def log_message(self, *args) -> None:  # noqa: D401
         pass
+
+
+# -- the viewer's own folders in the home folder ---------------------------------
+
+
+def the_viewers_home() -> Path:
+    """Where the viewer keeps what it makes for itself: ``~/.zmart-viewer``."""
+    return Path.home() / ".zmart-viewer"
+
+
+#: The file inside a session folder its viewer holds locked while it runs.
+HELD = "held-by-a-running-viewer"
+
+#: A session folder without that file is cleared only once it is this old, so a
+#: viewer that has just made its folder, and not yet locked it, keeps it.
+UNHELD_GRACE_S = 60
+
+
+def a_held_session_folder(home: Path):
+    """A new ``session-*`` folder in ``home``, and the open file that holds it.
+
+    The file stays open and locked for as long as this viewer runs, which is
+    how another viewer starting later tells a folder in use from one left
+    behind by a viewer that was killed and never tidied up.
+    """
+    home.mkdir(parents=True, exist_ok=True)
+    folder = Path(tempfile.mkdtemp(prefix="session-", dir=home))
+    held = open(folder / HELD, "a+b")  # noqa: SIM115 -- held for the session's life
+    held.write(b"x")
+    held.flush()
+    lock_one_byte(held)
+    return folder, held
+
+
+def lock_one_byte(handle) -> None:
+    """Lock the first byte of an open file, or raise OSError when another holds it."""
+    handle.seek(0)
+
+    if sys.platform == "win32":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def held_by_a_running_viewer(folder: Path) -> bool:
+    """Whether a viewer that is still running holds this session folder."""
+    try:
+        with open(folder / HELD, "a+b") as handle:
+            lock_one_byte(handle)
+    except FileNotFoundError:
+        try:
+            return time.time() - folder.stat().st_mtime < UNHELD_GRACE_S
+        except OSError:
+            return False
+    except OSError:
+        return True
+
+    # Locked and let go again by closing: nobody held it.
+    return False
+
+
+def clear_what_stopped_viewers_left(home: Path) -> None:
+    """Remove the session folders in ``home`` that no running viewer holds.
+
+    A viewer removes its own folder when it stops; one that was killed never
+    gets to, and its folder stayed in the home folder for good (review N3).
+    """
+    try:
+        found = [one for one in home.glob("session-*") if one.is_dir()]
+    except OSError:
+        return
+
+    for folder in found:
+        if not held_by_a_running_viewer(folder):
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 _ONE_DIALOG_AT_A_TIME = threading.Lock()
@@ -1969,6 +2048,10 @@ class _Server(ThreadingHTTPServer):
 
         for own in ("scenes",):
             made = self._scratch.pop(own, None)
+            held = self._scratch.pop(f"{own}-held", None)
+
+            if held is not None:
+                held.close()
 
             if made is not None:
                 shutil.rmtree(made, ignore_errors=True)
@@ -2024,7 +2107,8 @@ def make_server(
     from zmart_viewer.views.publishing import PublishedFolders
 
     published = PublishedFolders(library, bake=bake, canvas=canvas)
-    scratch: dict = {"published": published}
+    clear_what_stopped_viewers_left(the_viewers_home() / "scenes")
+    scratch: dict = {"published": published, "making": threading.Lock()}
     if bake:
         for dataset in library.datasets():
             if live_run_holding(dataset.root) is None:

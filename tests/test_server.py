@@ -998,3 +998,48 @@ def test_every_coverage_address_handed_out_is_served(tmp_path):
 def test_coverage_nobody_was_told_about_is_not_served(serving):
     """The other half: a plain store on an opaque background has no coverage to serve."""
     assert request(serving, "/data/0/demo.zarr/__zmart_coverage__/zarr.json")[0] == 403
+
+
+# --- the viewer's own folders in the home folder (review N3) -------------------
+
+
+def test_folders_left_by_a_viewer_that_was_killed_are_cleared_at_start(tmp_path, monkeypatch):
+    """A viewer that was killed never ran its shutdown, so its folder stayed for good."""
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    left = tmp_path / ".zmart-viewer" / "scenes" / "session-killed"
+    (left / "a.zmartview.zarr").mkdir(parents=True)
+    server = make_server(port=0, data_dir=tmp_path)
+    server.server_close()
+    assert not left.exists()
+
+
+def test_the_folder_of_a_viewer_still_running_is_left_alone(tmp_path, monkeypatch):
+    """Two viewers may run at once; the second must not clear the first one's scenes."""
+    from pathlib import Path
+
+    from test_open_and_close import _store
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    data = tmp_path / "run"
+    for name in ("pos1.ome.zarr", "pos2.ome.zarr"):
+        _store(data / name, channels=1)
+    first = make_server(port=0, data_dir=tmp_path)
+    thread = threading.Thread(target=first.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = first.server_address[1]
+        opening = json.dumps({"path": str(data)}).encode()
+        status, _, body = request(port, "/api/stores/open", "POST", opening)
+        assert status == 200, body
+        sessions = list((tmp_path / ".zmart-viewer" / "scenes").glob("session-*"))
+        assert len(sessions) == 1
+        second = make_server(port=0, data_dir=tmp_path)
+        second.server_close()
+        assert sessions[0].is_dir(), "a running viewer's scenes were cleared by another"
+        assert any(sessions[0].iterdir())
+    finally:
+        first.shutdown()
+        thread.join(timeout=5)
+    assert not sessions[0].exists(), "a viewer that stops tidies its own folder away"
