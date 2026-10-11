@@ -295,11 +295,13 @@ class PublishedFolders:
                     modes=views.get("modes", ("slice", "top")),
                     projections=views.get("projections", ()),
                     projection_folder=views.get("projection_path"),
+                    projections_given=views.get("projections_given", False),
                 )
             )
             if held and (
                 view.modes != set(views.get("modes", ("slice", "top")))
                 or view.projections != set(views.get("projections", ()))
+                or view.projections_given != bool(views.get("projections_given", False))
                 or view.projection_folder
                 != (
                     Path(views["projection_path"]).resolve()

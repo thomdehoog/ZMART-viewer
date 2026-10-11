@@ -38,8 +38,14 @@ class ViewSet:
         modes=("slice", "top"),
         projections=(),
         projection_folder=None,
+        projections_given=False,
         piece=512,
     ):
+        """``projections_given``: the projection folder already holds each
+        position's projection under the position's own store name (the
+        microscope's driver made them as it saved the capture, or, for a
+        flat capture, the folder is the capture's own). The view set then
+        reads them and makes none, so no projection exists twice."""
         if not acquisition or Path(acquisition).name != acquisition or acquisition in (".", ".."):
             raise ValueError("Acquisition must be a plain nonempty name")
         if any(mode not in ("top", "slice") for mode in modes) or any(
@@ -53,6 +59,7 @@ class ViewSet:
             raise ValueError("Saved projections need an explicit output folder")
         self.folder = Path(folder).resolve()
         self.projection_folder = Path(projection_folder).resolve() if projection_folder else None
+        self.projections_given = bool(projections_given)
         self.acquisition = acquisition
         self.modes, self.projections = frozenset(modes), frozenset(projections)
         self._lock = threading.RLock()
@@ -213,7 +220,15 @@ class ViewSet:
             source = self.source_folder
             projected_versions = versions
             candidates = {}
-            if key in METHODS:
+            if key in METHODS and self.projections_given:
+                source = self.projection_folder
+                missing = [name for name in versions if not (source / name).is_dir()]
+                if missing:
+                    raise ValueError(f"The given projections of {missing} are not in {source}")
+                # Same names, same coverage: the positions' own regions stand.
+                snapshot["pyramid_reduction"] = MEAN_REDUCTION
+                projected_versions = versions
+            elif key in METHODS:
                 source = self.projection_folder / key
                 coverage, projected_versions, names = {}, {}, {}
                 for name, revision in versions.items():
