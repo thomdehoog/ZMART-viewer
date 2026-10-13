@@ -9465,6 +9465,12 @@ var Chunk = class {
    * DOWNLOADING.  This should not be accessed by code outside this module.
    */
   downloadAbortController = void 0;
+  /**
+   * Indicates that the frontend still holds a copy of this chunk from before the most recent
+   * `invalidateSourceCache` call.  The frontend keeps displaying that copy until it is either
+   * replaced by the re-downloaded chunk or expired, if the chunk is not re-downloaded.
+   */
+  staleFrontendCopy = false;
   initialize(key) {
     this.key = key;
     this.priority = Number.NEGATIVE_INFINITY;
@@ -9475,6 +9481,7 @@ var Chunk = class {
     this.state = ChunkState.NEW;
     this.requestedState = ChunkState.NEW;
     this.newRequestedState = ChunkState.NEW;
+    this.staleFrontendCopy = false;
   }
   /**
    * Sets this.priority{Tier,} to this.newPriority{Tier,}, and resets this.newPriorityTier to
@@ -10034,6 +10041,7 @@ var ChunkQueueManager = class extends SharedObjectCounterpart {
   // var freedChunks = 0;
   addChunkToQueues_(chunk) {
     if (chunk.state === ChunkState.QUEUED && chunk.priorityTier === ChunkPriorityTier.RECENT) {
+      this.expireStaleFrontendCopy(chunk);
       const { source } = chunk;
       source.removeChunk(chunk);
       this.adjustCapacitiesForChunk(chunk, false);
@@ -10076,9 +10084,39 @@ var ChunkQueueManager = class extends SharedObjectCounterpart {
     this.adjustCapacitiesForChunk(chunk, false);
     this.removeChunkFromQueues_(chunk);
     chunk.state = newState;
+    if (chunk.staleFrontendCopy) {
+      switch (newState) {
+        case ChunkState.SYSTEM_MEMORY:
+        case ChunkState.GPU_MEMORY:
+          chunk.staleFrontendCopy = false;
+          break;
+        case ChunkState.QUEUED:
+        case ChunkState.DOWNLOADING:
+          break;
+        case ChunkState.SYSTEM_MEMORY_WORKER:
+          if (chunk.requestedState === ChunkState.GPU_MEMORY) break;
+          this.expireStaleFrontendCopy(chunk);
+          break;
+        default:
+          this.expireStaleFrontendCopy(chunk);
+      }
+    }
     this.adjustCapacitiesForChunk(chunk, true);
     this.addChunkToQueues_(chunk);
     this.scheduleUpdate();
+  }
+  /**
+   * Tells the frontend to drop the copy of `chunk` retained by `invalidateSourceCache`, because
+   * the chunk will not be re-downloaded.
+   */
+  expireStaleFrontendCopy(chunk) {
+    if (!chunk.staleFrontendCopy) return;
+    chunk.staleFrontendCopy = false;
+    this.rpc.invoke("Chunk.update", {
+      id: chunk.key,
+      state: ChunkState.EXPIRED,
+      source: chunk.source.rpcId
+    });
   }
   markRecentlyUsed(chunk) {
     this.removeChunkFromQueues_(chunk);
@@ -10260,6 +10298,10 @@ var ChunkQueueManager = class extends SharedObjectCounterpart {
           break;
         case ChunkState.SYSTEM_MEMORY_WORKER:
           chunk.freeSystemMemory();
+          break;
+        case ChunkState.SYSTEM_MEMORY:
+        case ChunkState.GPU_MEMORY:
+          chunk.staleFrontendCopy = true;
           break;
       }
       this.updateChunkState(chunk, ChunkState.QUEUED);

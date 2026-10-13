@@ -134,12 +134,15 @@ instead of keeping a copy that drifts:
   browser, so any build can take it as it is. Gamma is added only when asked
   for; without it the program is exactly the one the viewer's window uses.
 - `neuroglancer-patches.mjs` holds the remaining edits to neuroglancer as
-  tables: `transparencyPatches(lib)`, which keep an image see-through only
-  where nothing was imaged, for a host that asks for a transparent background,
-  and `refreshPatches(lib)`, which make a refresh replace pixels instead of
-  removing them. `applyPatches(patches, { modulesOnly, say })` applies a list
-  of them, each once, and returns what went wrong instead of guessing at a
-  neuroglancer that has changed.
+  tables: `transparencyPatches(lib)` (google/neuroglancer#1128), which add the
+  viewer option `transparentBackground`: the flat picture is see-through where
+  nothing was imaged, and translucent content keeps its alpha. A host turns it
+  on through that option (`transparentBackground: true` among the viewer's
+  options, or `viewer.uiConfiguration.transparentBackground.value`), not on
+  the display. `refreshPatches(lib)` (google/neuroglancer#1126) make a
+  refresh replace pixels instead of removing them. `applyPatches(patches,
+  { modulesOnly, say })` applies a list of them, each once, and returns what
+  went wrong instead of guessing at a neuroglancer that has changed.
 
 ZMART-interface's page build reads all three files (with
 `neuroglancer-growth.mjs`) from the viewer installed in the Python it runs

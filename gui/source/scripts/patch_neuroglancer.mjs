@@ -1,10 +1,15 @@
 /**
  * Patches against the pinned Neuroglancer: live refresh and opt-in 2D transparency.
  *
- * The transparency edits preserve binary image coverage only when the host sets
- * display.transparentBackground. The host must also supply geometry-based
- * coverage for sparse mosaics; intensity zero cannot distinguish their gaps
- * from acquired black pixels. The engine serves that coverage beside each image
+ * Both are upstream pull requests, applied to the compiled package exactly as
+ * they compile: google/neuroglancer#1126 (a refreshed source keeps displaying
+ * its chunks until they are replaced) and google/neuroglancer#1128 (the viewer
+ * option `transparentBackground`).
+ *
+ * Transparency applies only when the host sets the viewer option
+ * `transparentBackground`. The host must also supply geometry-based coverage
+ * for sparse mosaics; intensity zero cannot distinguish their gaps from
+ * acquired black pixels. The engine serves that coverage beside each image
  * (engine/serving/coverage.py).
  *
  * The edits themselves are tables in engine/drawing/neuroglancer-patches.mjs,
@@ -12,29 +17,14 @@
  * two pages cannot drift apart. This script applies them to the viewer's own
  * copy of neuroglancer.
  *
- * The refresh pair says: **a refresh should replace pixels, not remove them.**
- *
- * Neuroglancer refreshes a chunk source by re-queueing its chunks and then
- * telling the page to drop every chunk it holds. Between the drop and the
+ * The refresh edits say: **a refresh should replace pixels, not remove them.**
+ * Stock Neuroglancer refreshes a chunk source by re-queueing its chunks and
+ * then telling the page to drop every chunk it holds. Between the drop and the
  * refetch there is nothing left to draw, so the picture empties and refills.
  * On a static dataset that never happens; on a live acquisition it happens on
- * every commit, and the operator watches the specimen flash.
- *
- * Two edits, both to stock functions, both a few lines:
- *
- * - **worker** (`lib/chunk_manager/backend.js`) — `invalidateSourceCache`
- *   keeps its re-queue loop exactly as it is and no longer sends the page the
- *   key-less "drop your whole copy of this source" message. The stale pixels
- *   keep drawing while the fresh bytes download.
- * - **page** (`lib/chunk_manager/frontend.js`) — when those fresh bytes
- *   arrive for a chunk the page already holds, they are written INTO the held
- *   object rather than replacing it, so the render layer's reference stays
- *   valid and the ordinary state transition uploads the new texture.
- *
- * The refresh pair adds no new RPC, no parallel refresh machinery, no per-chunk
- * bookkeeping. Both edits are inside functions Neuroglancer already has, and
- * both are improvements to it rather than accommodations of us — which is the
- * point, because this is meant to be sendable upstream and read in a minute.
+ * every commit, and the operator watches the specimen flash. With the edits
+ * the page keeps each chunk it holds until the re-downloaded one replaces it,
+ * or until the worker expires it because it will not be downloaded again.
  *
  * The gate that holds it is `tests/test_the_screen_never_goes_black.py`,
  * which measured the fault it cures: one whole frame at 0% lit, about 17 ms,
