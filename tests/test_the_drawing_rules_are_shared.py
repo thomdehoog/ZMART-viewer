@@ -122,10 +122,12 @@ def test_the_neuroglancer_edits_are_the_engines_and_the_page_keeps_no_table():
         }));
     """)
     assert answer["transparency"] == [
-        "sliceview/panel.js", "sliceview/panel.js", "display_context.js",
-        "sliceview/panel.js", "sliceview/frontend.js",
+        "display_context.js", "display_context.js", "perspective_view/panel.js",
+        *["sliceview/panel.js"] * 7, "viewer.js", "viewer.js",
     ]
-    assert answer["refresh"] == ["chunk_manager/backend.js", "chunk_manager/frontend.js"]
+    assert answer["refresh"] == [
+        *["chunk_manager/backend.js"] * 5, *["chunk_manager/frontend.js"] * 2,
+    ]
     script = (ROOT / "gui/source/scripts/patch_neuroglancer.mjs").read_text(encoding="utf-8")
     assert "anchor:" not in script and "replacement:" not in script, (
         "the page's patch script should apply the engine's tables, not keep its own"

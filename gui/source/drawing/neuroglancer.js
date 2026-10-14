@@ -1556,11 +1556,7 @@ function carryTheFieldAcross(viewer, from, to) {
 }
 
 export function syncView(viewer, { layout, chrome, transparentBackground = false }) {
-  const transparent = transparentBackground && layout === "xy";
-  if (viewer.display.transparentBackground !== transparent) {
-    viewer.display.transparentBackground = transparent;
-    viewer.display.scheduleRedraw();
-  }
+  viewer.uiConfiguration.transparentBackground.value = transparentBackground && layout === "xy";
   const leaving = viewer.layout.toJSON();
   if (leaving !== layout) {
     carryTheFieldAcross(viewer, leaving, layout);
