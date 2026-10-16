@@ -1,0 +1,3 @@
+include build_support.py
+recursive-include gui *
+prune gui/source/node_modules

@@ -1,0 +1,22 @@
+{
+  "name": "zmart-viewer",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/patch_neuroglancer.mjs --modules-only && node scripts/precompile-workers.mjs && node scripts/patch_neuroglancer.mjs && vite build && node scripts/copy-async-worker.mjs && node scripts/stamp-build.mjs",
+    "postinstall": "node scripts/patch_neuroglancer.mjs --modules-only",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "neuroglancer": "2.41.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.25.0",
+    "vite": "^7.0.0"
+  }
+}

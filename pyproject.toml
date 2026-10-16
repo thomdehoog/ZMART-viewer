@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zmart-viewer"
+version = "0.5.0rc4"
+description = "A viewer for large, growing, multi-channel microscopy images: point it at a folder and it draws what is there, and follows it while a microscope writes."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Thom de Hoog", email = "thom.dehoog@zmb.uzh.ch" }]
+keywords = ["microscopy", "ome-zarr", "viewer", "neuroglancer", "smart microscopy"]
+
+# What the viewer needs to run, and nothing else. The record machinery --
+# how an acquisition writes itself and what that means -- lives inside this
+# package (``zmart_viewer.live.record``), so a viewer install is self-contained:
+# it opens anything, follows live runs, and its tests exercise the same
+# writer a microscope controller drives.
+dependencies = [
+    "zarr>=3,<4",
+    "numpy>=1.24",
+    "pywebview>=5",
+]
+
+[project.optional-dependencies]
+dev = [
+    # The tests check the wheel build, so they need the build tool itself.
+    "setuptools>=77",
+    "pytest>=8",
+    "pytest-timeout>=2",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+    "playwright>=1.58,<2",
+    "pillow>=10",
+    "ngff-zarr[validate]>=0.41",
+]
+
+[project.urls]
+Homepage = "https://github.com/ZMB-UZH/ZMART-viewer"
+"ZMART Microscopy" = "https://github.com/ZMB-UZH/ZMART-microscopy"
+
+# The command that opens the viewer: `zmart-viewer`, with a folder or without.
+[project.scripts]
+zmart-viewer = "zmart_viewer.gui.window:main"
+
+[tool.setuptools]
+packages = [
+    "zmart_viewer",
+    "zmart_viewer.serving",
+    "zmart_viewer.opening",
+    "zmart_viewer.picture",
+    "zmart_viewer.views",
+    "zmart_viewer.live",
+    "zmart_viewer.live.record",
+    "zmart_viewer.drawing",
+    "zmart_viewer.gui",
+    "zmart_viewer._frontend",
+]
+
+[tool.setuptools.package-dir]
+"zmart_viewer" = "engine"
+"zmart_viewer.gui" = "gui"
+"zmart_viewer._frontend" = "gui/build"
+
+[tool.setuptools.cmdclass]
+build_py = "build_support.BuildPy"
+bdist_wheel = "build_support.Wheel"
+
+# The page's sources and everything Node needs live in gui/source, and are
+# built into gui/build, which ships as zmart_viewer._frontend. The sources stay
+# out of the wheel: an installed viewer needs the built page, never Node, npm
+# or Vite.
+[tool.setuptools.exclude-package-data]
+"zmart_viewer.gui" = ["source/*", "build/*", "__pycache__/*"]
+
+# Four drawing files ship as they are, because other programs read them from
+# the installed package: the server hands embedding.js to any page that embeds
+# the viewer, and the operator interface builds its page with the viewer's own
+# shader programs (programs.js) and neuroglancer edits (neuroglancer-growth.mjs,
+# neuroglancer-patches.mjs).
+[tool.setuptools.package-data]
+"zmart_viewer.drawing" = ["embedding.js", "programs.js", "neuroglancer-growth.mjs", "neuroglancer-patches.mjs"]
+"zmart_viewer._frontend" = ["**/*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+    "build",
+    "dist",
+    ".venv",
+    ".eggs",
+    "**/__pycache__",
+    # Generated, not written.
+    "gui/build",
+    "node_modules",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+# A test that sits still is failed with a stack trace, never waited on.
+# The slowest honest tests (storms, replays) finish well inside this.
+timeout = 600

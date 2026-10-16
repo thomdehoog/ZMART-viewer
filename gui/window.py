@@ -1,0 +1,455 @@
+"""The viewer's own window, and the ``zmart-viewer`` command that opens it.
+
+This is the front door for anyone who wants to look at their own images.
+After installing the package, type ``zmart-viewer`` to open an empty window
+with a way to choose a folder, or ``zmart-viewer /path/to/data`` to open
+that folder straight away. The folder may be one OME-Zarr image or a folder
+holding many of them; the viewer works out which.
+
+The window is a native desktop window (on Windows it uses the WebView2 engine
+that ships with Edge). When no such window can be shown, the viewer prints an
+address instead, and you open that address in an ordinary browser. Either way
+the same page appears and works the same.
+
+Smart-microscopy interfaces do not go through here. They start the engine
+directly with :func:`zmart_viewer.make_server` and build their own window
+around it; see ``docs/README.md`` and ``docs/tutorials/``.
+"""
+
+from __future__ import annotations
+
+import sys
+import threading
+from pathlib import Path
+
+from zmart_viewer.gui.window_routes import ask_this_machine_for_a_folder
+from zmart_viewer.gui.window_server import make_window_server
+from zmart_viewer.serving.server import THE_BUILT_PAGE
+
+
+def _webview2_present() -> bool:
+    """On Windows, check that the WebView2 runtime the window needs is installed."""
+    if not sys.platform.startswith("win"):
+        return True  # not Windows: not our concern here
+
+    try:
+        import winreg
+
+        for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            for key in (
+                r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+                r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+            ):
+                try:
+                    with winreg.OpenKey(root, key) as k:
+                        version, _ = winreg.QueryValueEx(k, "pv")
+                        # An uninstalled runtime can leave the key behind with a
+                        # zero version; treat that as "not present".
+                        if version and version != "0.0.0.0":
+                            return True
+                except OSError:
+                    continue
+    except Exception:
+        return False
+
+    return False
+
+
+def open_window(
+    port: int = 8848,
+    *,
+    width: int = 1500,
+    height: int = 950,
+    data_dir: Path | None = None,
+    store: str | list[str] | None = None,
+    window: tuple[float, float] | None = None,
+    depth_samples: int = 256,
+    chrome: bool = False,
+    live: bool = True,
+    allow_open: bool = True,
+    allow_selection: bool = False,
+    panel_side: str = "right",
+    transparent_background: bool = False,
+    open_from: Path | None = None,
+    native: bool = True,
+    open_path: Path | None = None,
+) -> int:
+    """Start the engine and open the viewer in a native window.
+
+    ``open_path`` is a folder to show at once. It is opened through the
+    engine's own door (``/api/stores/open``), the same one the load window
+    uses, so a plate, a run of positions or a live run opens here exactly as
+    it would there. If the engine refuses it, the reason is printed and
+    nothing is left running.
+
+    With ``native=False`` no window is opened: the address is printed and the
+    engine keeps serving until you press Ctrl+C. That is the way to use the
+    viewer over a remote desktop or from a machine without a window library.
+    The same happens when a native window cannot be started.
+
+    Returns the exit code for the shell: 0 when the viewer ran, 1 when the
+    folder could not be opened.
+    """
+    chooser: dict = {}
+
+    def browse():
+        show = chooser.get("show")
+
+        if show:
+            return show()
+
+        return ask_this_machine_for_a_folder()
+
+    kwargs = {
+        "store": store,
+        "window": window,
+        "depth_samples": depth_samples,
+        "chrome": chrome,
+        "browse": browse,
+        "live": live,
+        "allow_open": allow_open,
+        "allow_selection": allow_selection,
+        "panel_side": panel_side,
+        "transparent_background": transparent_background,
+        # Where the load window starts browsing, when that is somewhere other
+        # than the data folder itself.
+        "open_from": open_from,
+    }
+
+    if data_dir is not None:
+        kwargs["data_dir"] = data_dir
+
+    server = make_window_server(port, **kwargs)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+
+    if open_path is not None:
+        refused = _open_through_the_door(url, open_path)
+        if refused is not None:
+            server.shutdown()
+            server.server_close()
+            print(f"\n{refused}")
+            return 1
+
+    if not native:
+        _serve_until_interrupt(server, url)
+        return 0
+
+    if not _webview2_present():
+        print(
+            "The WebView2 runtime does not appear to be installed, so a native "
+            "window cannot be shown.\n"
+            "Install it (a small free download from Microsoft, search "
+            '"WebView2 Evergreen Runtime"), or just open this address in Edge '
+            f"or Chrome:\n    {url}"
+        )
+        _serve_until_interrupt(server, url)
+        return 0
+
+    try:
+        import webview  # pywebview
+    except ImportError:
+        print(
+            "The native-window library (pywebview) is not installed, so the "
+            f"viewer will not pop up on its own.\nOpen this address in a "
+            f"browser instead:\n    {url}\n"
+            "(To get the pop-up window, install it with: pip install pywebview)"
+        )
+        _serve_until_interrupt(server, url)
+        return 0
+
+    try:
+        native_window = webview.create_window("ZMART Viewer", url, width=width, height=height)
+    except Exception as why:  # noqa: BLE001 -- any failure here has the same answer
+        return _serve_without_a_window(server, url, why, chooser)
+
+    def show_folder_dialog():
+        """Show the operating system's own folder chooser and return what was picked."""
+        chosen = native_window.create_file_dialog(webview.FOLDER_DIALOG)
+
+        if not chosen:
+            return None
+
+        return chosen[0] if isinstance(chosen, (list, tuple)) else str(chosen)
+
+    chooser["show"] = show_folder_dialog
+    try:
+        webview.start()
+    except Exception as why:  # noqa: BLE001 -- any failure here has the same answer
+        # pywebview installs on every system, but it can only open a window
+        # when the system also has a window toolkit it can use (on Linux, GTK
+        # or Qt with their Python bindings). Without one, it fails here, and
+        # the viewer carries on in a browser instead.
+        return _serve_without_a_window(server, url, why, chooser)
+    server.shutdown()
+    return 0
+
+
+def _serve_without_a_window(server, url: str, why: Exception, chooser: dict) -> int:
+    """Explain that no native window could open, and serve for a browser instead."""
+    chooser.pop("show", None)  # the native folder chooser went with the window
+    print(
+        "A native window could not be opened on this computer:\n"
+        f"    {why}\n"
+        "The viewer is running anyway. Open this address in a browser:\n"
+        f"    {url}"
+    )
+    _serve_until_interrupt(server, url)
+    return 0
+
+
+def _open_through_the_door(url: str, path: Path) -> str | None:
+    """Ask the running engine to open ``path``. Returns the refusal, or None."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    asked = urllib.request.Request(
+        f"{url}/api/stores/open",
+        data=json.dumps({"path": str(path)}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(asked, timeout=600):
+            return None
+    except urllib.error.HTTPError as refusal:
+        try:
+            answer = json.loads(refusal.read() or b"{}")
+        except ValueError:
+            answer = {}
+        return answer.get("error") or f"the folder could not be opened ({refusal.code})"
+
+
+def _serve_until_interrupt(server, url: str) -> None:
+    import time
+
+    # Flushed at once: a program that started the viewer reads the address from
+    # here, and with the output going to a pipe it would otherwise wait in a buffer.
+    print(f"Serving at {url} — press Ctrl+C to stop.", flush=True)
+
+    try:
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        server.shutdown()
+        server.server_close()
+
+
+def _a_display_window(text: str) -> tuple[float, float]:
+    """Read ``--range LOW,HIGH`` into two numbers, or say plainly what is wrong."""
+    import argparse
+
+    low, comma, high = text.partition(",")
+    try:
+        if not comma:
+            raise ValueError
+        return float(low), float(high)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not LOW,HIGH -- give two numbers with a comma, e.g. 100,4000"
+        ) from None
+
+
+def _tile_numbers(text: str) -> list[int]:
+    """Read ``--tiles 0,1,2`` into whole numbers, or say plainly what is wrong."""
+    import argparse
+
+    try:
+        return [int(part) for part in text.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not a list of tile numbers -- use whole numbers with commas, e.g. 0,1"
+        ) from None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the ``zmart-viewer`` command. Returns the exit code for the shell."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="zmart-viewer",
+        description=(
+            "Open the ZMART Viewer. Give it a folder of OME-Zarr images to open "
+            "that folder; give it nothing to open an empty window and choose a "
+            "folder from there."
+        ),
+    )
+    parser.add_argument(
+        "folder",
+        nargs="?",
+        type=Path,
+        help="an OME-Zarr image, or a folder holding many of them (optional)",
+    )
+    parser.add_argument(
+        "--range",
+        type=_a_display_window,
+        help="display window as LOW,HIGH; by default it is read from the "
+        "image's own description, or measured from the smallest copy of it",
+    )
+    parser.add_argument(
+        "--tiles",
+        type=_tile_numbers,
+        help="which tiles to open, e.g. 0,1 — default is every tile found",
+    )
+    parser.add_argument(
+        "--filter",
+        dest="filter_name",
+        help="when a tile and channel were acquired through several filters, "
+        "keep the one whose name contains this, e.g. Empty",
+    )
+    parser.add_argument(
+        "--depth-samples",
+        type=int,
+        default=256,
+        help="samples along each viewing ray in 3-D mode (default 256). "
+        "Higher is sharper and slower.",
+    )
+    parser.add_argument(
+        "--chrome",
+        action="store_true",
+        help="show the engine's own bounding box and axis lines (off by default)",
+    )
+    parser.add_argument(
+        "--static",
+        action="store_true",
+        help="the data is finished, not still being written. The viewer then stops "
+        "looking for new images and new frames, which is the largest thing it "
+        "does on a big folder. Leave it off while an experiment is producing data.",
+    )
+    parser.add_argument(
+        "--select",
+        action="store_true",
+        help="show the selection list, where places you mark on the image are "
+        "gathered. Off by default.",
+    )
+    parser.add_argument(
+        "--panel-side",
+        choices=("right", "left"),
+        default="right",
+        help="which edge the bar of controls sits on, and which way it folds away",
+    )
+    parser.add_argument(
+        "--no-open-button",
+        action="store_true",
+        help="leave out the way of choosing folders by hand, so only what was "
+        "given on the command line can be shown",
+    )
+    parser.add_argument(
+        "--no-window",
+        action="store_true",
+        help="do not open a window; print the address and serve until Ctrl+C. "
+        "Use this over a remote desktop, or to open the viewer in a browser.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8848,
+        help="which port on this machine the viewer answers on (default 8848). "
+        "Change it when something else is already using that number, or give 0 "
+        "to let the machine pick a free one.",
+    )
+    args = parser.parse_args(argv)
+
+    if not (THE_BUILT_PAGE / "index.html").exists():
+        print(
+            "The viewer's page (gui/build) is missing, so there is nothing to show.\n"
+            "It normally comes with the viewer. Reinstall it with:\n"
+            "    pip install --force-reinstall "
+            "git+https://github.com/ZMB-UZH/ZMART-viewer\n"
+            "or, in a copy of the repository where you changed gui/source, rebuild it with:\n"
+            "    cd gui/source && npm ci && npm run build"
+        )
+        return 1
+
+    common = {
+        "port": args.port,
+        "window": args.range,
+        "depth_samples": args.depth_samples,
+        "chrome": args.chrome,
+        "allow_selection": args.select,
+        "panel_side": args.panel_side,
+        "allow_open": not args.no_open_button,
+        "native": not args.no_window,
+    }
+
+    try:
+        if args.folder is None:
+            # Nothing to open yet: an empty viewer with the load window, where
+            # a folder can be chosen by hand.
+            print("Opening the ZMART Viewer. Use the load button to choose a folder.")
+            return open_window(live=not args.static, **common) or 0
+
+        if args.tiles or args.filter_name:
+            return _open_some_tiles(args, common)
+
+        return _open_a_folder(args, common)
+    except OSError as why:
+        # Most often the port is taken; the engine's own message says what to do.
+        print(f"\n{why}")
+        return 1
+
+
+def _open_a_folder(args, common: dict) -> int:
+    """Open whatever the folder holds, through the engine's own door.
+
+    The engine works out what the folder is (one image, a folder of images, an
+    HCS plate, raw positions from a microscope, or a run still being written)
+    and opens it the right way, exactly as the load window would.
+    """
+    from zmart_viewer.opening.open_folders import is_store
+
+    folder = args.folder.expanduser()
+    if not folder.exists():
+        print(f"There is no folder at {folder}.")
+        return 1
+    print(f"Opening {folder.name}...")
+    return (
+        open_window(
+            # Where marks are saved and where the load window starts browsing.
+            data_dir=folder.parent if is_store(folder) else folder,
+            live=not args.static,
+            open_path=folder,
+            **common,
+        )
+        or 0
+    )
+
+
+def _open_some_tiles(args, common: dict) -> int:
+    """Open only some tiles or one filter's images from a folder of images.
+
+    Choosing tiles or a filter narrows a plain folder of images, so this reads
+    the folder's images directly rather than asking the engine what it is.
+    """
+    from zmart_viewer.opening.open_folders import discover, prefer_filter, select_tiles
+
+    try:
+        parent, names = discover(args.folder)
+    except OSError as unreadable:
+        print(f"That folder could not be read: {unreadable}")
+        return 1
+    if args.tiles:
+        names = select_tiles(names, args.tiles)
+    names = prefer_filter(names, args.filter_name)
+    if not names:
+        print(
+            f"No OME-Zarr image matching those tiles or that filter was found at "
+            f"{args.folder}.\n--tiles and --filter pick images out of one folder of "
+            "OME-Zarr images; leave them out to open the folder as a whole."
+        )
+        return 1
+    print(f"Opening {len(names)} of the images in {parent.name}...")
+    try:
+        # A narrowed selection must stay narrowed: were the folder still being
+        # watched, the tiles and filters deliberately left out would reappear.
+        return open_window(data_dir=parent, store=names, live=False, **common) or 0
+    except ValueError as refused:
+        # More than one acquisition among the chosen images. The message names
+        # the images in each and was written for the person at the microscope,
+        # so it is printed as it stands rather than as a traceback.
+        print(f"\n{refused}")
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

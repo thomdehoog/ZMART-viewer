@@ -1,0 +1,21 @@
+# Node's packages are downloaded, not source. The built page (gui/build) IS
+# kept in the repository, so that pip alone can install the viewer.
+node_modules
+
+# Python and test scratch.
+**/__pycache__/
+tests/_check/
+
+# What the tests write on demand.
+test_stores/
+testdata/
+
+# What an install or a wheel build leaves behind. Only the top-level build/
+# is setuptools' scratch; gui/build is the page and is kept.
+*.egg-info/
+/build/
+dist/
+
+# What the tutorial notebooks write, and what Jupyter leaves behind.
+docs/tutorials/tutorial-data/
+.ipynb_checkpoints/
