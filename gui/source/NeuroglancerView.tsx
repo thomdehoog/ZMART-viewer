@@ -1,5 +1,12 @@
 import React from "react";
+import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import { createViewer } from "./drawing/viewer.ts";
+
+interface NeuroglancerViewProps {
+  onViewer: (viewer: Viewer) => void;
+  generation?: number;
+  veiled?: boolean;
+}
 
 /**
  * Mounts the engine's neuroglancer viewer in this window and hands the live
@@ -18,8 +25,8 @@ import { createViewer } from "./drawing/viewer.ts";
  * thing that ever put it right was a fresh drawing context (measured
  * 2026-08-21). So a close builds one.
  */
-export default function NeuroglancerView({ onViewer, generation = 0, veiled = false }) {
-  const containerRef = React.useRef(null);
+export default function NeuroglancerView({ onViewer, generation = 0, veiled = false }: NeuroglancerViewProps) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const target = containerRef.current;

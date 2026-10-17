@@ -1,5 +1,35 @@
 import React from "react";
+import type { CSSProperties } from "react";
 import { askToStop, constructionStatus, openPath, startConstruction, tryNativeChooser } from "./asking-python.ts";
+import type { Config, ListedFolder, Listing } from "./asking-python.ts";
+
+/**
+ * A view being built over raw data: from which folder, where its files go,
+ * whether the low-resolution mosaic is baked, and how the build is going.
+ * `relink` marks a view whose raw data has moved and is being pointed at it
+ * again.
+ */
+interface Build {
+  relink?: true;
+  name: string;
+  data: string;
+  destination: string;
+  bake: boolean;
+  running?: boolean;
+  fraction?: number;
+  error?: string | null;
+  stopped?: boolean;
+  built?: string;
+}
+
+interface LoadWindowProps {
+  listing: Listing;
+  onNavigate: (path: string) => void;
+  onOpened: (config: Config) => void;
+  onConstructed?: unknown;
+  onCancel: () => void;
+  onArriving?: unknown;
+}
 
 /**
  * The load window: pick the thing to look at, and the window says what it is.
@@ -19,7 +49,7 @@ import { askToStop, constructionStatus, openPath, startConstruction, tryNativeCh
 // listing (see _serve_list_folders); a row with no kind is just a place to
 // walk into. A "run" covers both shapes raw data takes: a plain folder of
 // position stores, and a bare zarr group wrapping them.
-const ROW_KINDS = {
+const ROW_KINDS: Record<string, { tag: string; said: string }> = {
   // A view is at heart a LINK file: a small description pointing at the raw
   // data, copying nothing. Baking only adds one hard-copied piece — the
   // low-resolution mosaic (the ⚡ in the list) — and everything at full
@@ -39,21 +69,23 @@ const ROW_KINDS = {
            + "nothing is kept unless the mosaic is asked for" },
 };
 
-function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
-                     onArriving }) {
+/** What a row of the given kind is, if it is anything to open. */
+const rowKind = (kind: string | undefined) => (kind ? ROW_KINDS[kind] : undefined);
+
+function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps) {
   const [busy, setBusy] = React.useState(false);
-  const [openError, setOpenError] = React.useState(null);
+  const [openError, setOpenError] = React.useState<string | null>(null);
   // Raw data being constructed into a viewer: which folder, where the
   // viewer's files go, and whether the pieces are prebaked now or made on
   // the fly later. Null while the operator is still walking folders.
-  const [constructing, setConstructing] = React.useState(null);
+  const [constructing, setConstructing] = React.useState<Build | null>(null);
   // The row the operator clicked last: highlighted in the list, and what
   // the Open button below the list acts on. Cleared when the folder or the
   // tab changes, because the list under it has changed.
-  const [selected, setSelected] = React.useState(null);
-  const polling = React.useRef(null);
+  const [selected, setSelected] = React.useState<ListedFolder | null>(null);
+  const polling = React.useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  const navigate = (path) => {
+  const navigate = (path: string) => {
     setSelected(null);
     onNavigate(path);
   };
@@ -62,18 +94,18 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
 
   // Opening a store directly -- and a viewer whose raw data has moved
   // answers with a relink ask, which becomes the pane below, prefilled.
-  const openStore = async (path) => {
+  const openStore = async (path: string) => {
     setBusy(true);
-    let result;
+    let result: Awaited<ReturnType<typeof openPath>>;
     try {
       result = await openPath(path);
     } finally {
       // Whatever happened, the Open button is free again.
       setBusy(false);
     }
-    if (result.config) {
+    if ("config" in result && result.config) {
       onOpened(result.config);
-    } else if (result.relink) {
+    } else if ("relink" in result && result.relink) {
       setConstructing({
         relink: true,
         name: result.relink.name,
@@ -85,7 +117,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
       });
     } else {
       setConstructing(null);
-      setOpenError(result.error);
+      setOpenError("error" in result ? result.error : null);
     }
   };
 
@@ -95,12 +127,13 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
   // openStore, and the server composes a link file it keeps to itself and
   // forgets when it closes (the operator's rule, 2026-08-23).
   const openRun = async () => {
+    if (!constructing) return;
     const { data, destination, bake } = constructing;
-    setConstructing((current) => ({ ...current, running: true, fraction: 0,
-                                    error: null }));
+    setConstructing((current) => current && { ...current, running: true, fraction: 0,
+                                              error: null });
     const begun = await startConstruction(data, destination, bake);
-    if (begun.error) {
-      setConstructing((current) => ({ ...current, running: false, error: begun.error }));
+    if ("error" in begun) {
+      setConstructing((current) => current && { ...current, running: false, error: begun.error });
       return;
     }
     polling.current = setInterval(async () => {
@@ -112,7 +145,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
       }
       clearInterval(polling.current);
       if (status.state === "done") {
-        await openStore(status.store);
+        await openStore(status.store ?? "");
       } else if (status.state === "cancelled") {
         setConstructing((current) => current &&
           { ...current, running: false, fraction: 0 });
@@ -125,13 +158,14 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
   };
 
   const start = async () => {
+    if (!constructing) return;
     const { data, destination, bake, relink, name } = constructing;
-    setConstructing((current) => ({ ...current, running: true, fraction: 0,
-                                    error: null, stopped: false }));
+    setConstructing((current) => current && { ...current, running: true, fraction: 0,
+                                              error: null, stopped: false });
     const begun = await startConstruction(data, destination, bake,
                                           relink ? name : undefined);
-    if (begun.error) {
-      setConstructing((current) => ({ ...current, running: false, error: begun.error }));
+    if ("error" in begun) {
+      setConstructing((current) => current && { ...current, running: false, error: begun.error });
       return;
     }
     polling.current = setInterval(async () => {
@@ -162,7 +196,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         type="text"
         value={constructing.destination}
         onChange={(event) => setConstructing(
-          (current) => ({ ...current, destination: event.target.value }))}
+          (current) => current && { ...current, destination: event.target.value })}
         aria-label="scene folder"
         title="Where the scene's own files are written. The raw data is read and never changed"
         style={{ ...styles.loadPath, marginBottom: 0, flex: 1 }}
@@ -171,8 +205,8 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         type="button"
         onClick={async () => {
           const chosen = await tryNativeChooser();
-          if (chosen.path) setConstructing(
-            (current) => ({ ...current, destination: chosen.path }));
+          if ("path" in chosen) setConstructing(
+            (current) => current && { ...current, destination: chosen.path });
         }}
         aria-label="choose where to save the scene"
         title="Pick the folder with the operating system's own chooser"
@@ -205,7 +239,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
             type="checkbox"
             checked={constructing.bake}
             onChange={(event) => setConstructing(
-              (current) => ({ ...current, bake: event.target.checked }))}
+              (current) => current && { ...current, bake: event.target.checked })}
             disabled={constructing.running || !!constructing.built}
             aria-label="include a hard copy of the low-resolution overview"
             title="The zoomed-out picture is computed once now and kept as files, so the whole survey opens instantly. Left unchecked, it is composed from the raw data the first time it is looked at"
@@ -250,7 +284,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
         {constructing.built ? (
           <button
             type="button"
-            onClick={() => openStore(constructing.built)}
+            onClick={() => constructing.built && openStore(constructing.built)}
             aria-label="show the scene"
             title="The scene is built; open it in the image data"
             style={styles.loadOpen}
@@ -309,13 +343,13 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
             type="button"
             onClick={async () => {
               const chosen = await tryNativeChooser();
-              if (chosen.path) {
+              if ("path" in chosen) {
                 // Land on the parent: the picked folder then sits in the
                 // list as an ordinary row, wearing its own Open button.
                 // The parent is the server's word, never worked out here:
                 // slicing at "/" mangled every Windows path.
                 navigate(chosen.parent || chosen.path);
-              } else if (chosen.window) {
+              } else if ("window" in chosen) {
                 setOpenError(
                   "no system folder chooser here — type a path above or walk the folders below");
               }
@@ -335,7 +369,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
           {listing.parent && (
             <button
               type="button"
-              onClick={() => navigate(listing.parent)}
+              onClick={() => listing.parent && navigate(listing.parent)}
               aria-label="up one folder"
               title="Go up to the folder holding this one"
               style={styles.loadRow}
@@ -351,7 +385,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
           {[...listing.folders].sort((a, b) => {
             // What the chosen tab can act on floats to the top; the plain
             // folders to walk into follow.
-            const wanted = (folder) => (Boolean(folder.kind) ? 0 : 1);
+            const wanted = (folder: ListedFolder) => (Boolean(folder.kind) ? 0 : 1);
             return wanted(a) - wanted(b) || a.name.localeCompare(b.name);
           }).map((folder) => (
             <button
@@ -373,7 +407,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                 } : null);
               }}
               onDoubleClick={() =>
-                ["view", "image", "plate"].includes(folder.kind)
+                ["view", "image", "plate"].includes(folder.kind ?? "")
                   ? openStore(`${listing.path}/${folder.name}`)
                   : navigate(`${listing.path}/${folder.name}`)
               }
@@ -382,8 +416,8 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
               style={{ ...styles.loadRow,
                        ...(selected?.name === folder.name
                          ? styles.loadRowChosen : null) }}
-              title={ROW_KINDS[folder.kind]
-                ? `${ROW_KINDS[folder.kind].said}. Click to select it`
+              title={rowKind(folder.kind)
+                ? `${rowKind(folder.kind)?.said}. Click to select it`
                 : "Click to select this folder; double-click to look inside it"}
             >
               <span style={styles.loadRowName}>{folder.name}</span>
@@ -398,8 +432,8 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                   ⚡ precomputed mosaic
                 </span>
               )}
-              {ROW_KINDS[folder.kind] && (
-                <span style={styles.loadRowTag}>{ROW_KINDS[folder.kind].tag}</span>
+              {rowKind(folder.kind) && (
+                <span style={styles.loadRowTag}>{rowKind(folder.kind)?.tag}</span>
               )}
             </button>
           ))}
@@ -412,7 +446,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
             row that offers nothing is never a silent mystery. */}
         {selected && (
           <div style={styles.loadEmptyNote} role="status">
-            {ROW_KINDS[selected.kind]?.said
+            {rowKind(selected.kind)?.said
               ?? "a plain folder — double-click to look inside"}
           </div>
         )}
@@ -429,7 +463,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                   type="checkbox"
                   checked={constructing.bake}
                   onChange={(event) => setConstructing(
-                    (current) => ({ ...current, bake: event.target.checked }))}
+                    (current) => current && { ...current, bake: event.target.checked })}
                   disabled={constructing.running}
                   aria-label="build the low-resolution mosaic and keep the view"
                   title="The zoomed-out mosaic is computed once now and kept as files beside the view's link file, so it opens fast ever after — views wearing ⚡ in the list have it. Left unchecked, nothing is written to your data: the viewer links the positions together for this session and forgets it after"
@@ -494,7 +528,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                         // whole door being broken (2026-08-23).
                         || !(selected
                           ? selected.kind
-                          : ["view", "image", "plate"].includes(listing.kind))}
+                          : ["view", "image", "plate"].includes(listing.kind ?? ""))}
               aria-label={selected ? `open ${selected.name}`
                 : listing.kind ? "open this folder"
                 : "open the selection"}
@@ -546,7 +580,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
                 type="text"
                 value={constructing.data}
                 onChange={(event) => setConstructing(
-                  (current) => ({ ...current, data: event.target.value }))}
+                  (current) => current && { ...current, data: event.target.value })}
                 aria-label="raw data folder"
                 title="Where the raw data lives now. The viewer was built from a folder that is no longer there"
                 style={{ ...styles.loadPath, marginBottom: 0, flex: 1 }}
@@ -742,4 +776,4 @@ const styles = {
     color: "var(--danger-text)",
     font: "12px/1.5 system-ui, sans-serif",
   },
-};
+} satisfies Record<string, CSSProperties>;

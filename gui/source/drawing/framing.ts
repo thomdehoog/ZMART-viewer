@@ -128,7 +128,7 @@ function firstStepAlong(space: CoordinateSpace, at: number): number {
   // separately whether a step sits *on* a whole number or half way between two.
   // Both conventions occur, and the first step has to be worked out for the one
   // in use or the view lands between two frames. This is the same reading the
-  // time slider does -- see AxisSlider.jsx, where it is set out at length.
+  // time slider does -- see AxisSlider.tsx, where it is set out at length.
   const onWholeNumbers = space.bounds.voxelCenterAtIntegerCoordinates[at];
   const lower = space.bounds.lowerBounds[at];
   return onWholeNumbers ? Math.ceil(lower) : Math.ceil(lower - 0.5) + 0.5;

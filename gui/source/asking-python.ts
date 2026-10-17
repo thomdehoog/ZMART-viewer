@@ -45,6 +45,8 @@ export interface LayerSpec {
   histogram?: Histogram | null;
   window?: Window | null;
   volumeWindow?: Window | null;
+  /** The whole range this channel's numbers live in, where the run says. */
+  range?: Window | null;
   opaque?: boolean;
   localPosition?: number[];
   channelIndex?: number | null;
@@ -105,7 +107,7 @@ export async function fetchLiveState(etag: string | null = null) {
 // The desktop window can show the operating system's own folder chooser; a
 // page in a plain browser cannot, and used to fall back to a bare prompt
 // asking for a path typed blind. Now the page draws its own load window
-// instead (see LoadWindow.jsx), walking the server's folders by listing
+// instead (see LoadWindow.tsx), walking the server's folders by listing
 // them through the API.
 export async function tryNativeChooser(): Promise<{ cancelled: true } | { path: string; parent: string } | { window: true }> {
   try {
@@ -121,10 +123,19 @@ export async function tryNativeChooser(): Promise<{ cancelled: true } | { path: 
   return { window: true };
 }
 
+/** A view whose raw data has moved: its name, where its data was, the folder it
+    stands in, and whether it keeps a baked mosaic. */
+export interface Relink {
+  name: string;
+  was: string;
+  parent: string;
+  baked: boolean;
+}
+
 /** What a refusal carries: the server's own sentence, and for an open, what to relink. */
 interface Refused {
   error?: string;
-  relink?: unknown;
+  relink?: Relink;
 }
 
 /** A measurement of the pixels in a box: the window and histogram found there, or
@@ -143,12 +154,23 @@ export interface BuildStatus {
   error?: string;
 }
 
+/** One folder in a listing; `kind` says what it holds when it is something to open. */
+export interface ListedFolder {
+  name: string;
+  kind?: string;
+  /** A view that keeps its precomputed low-resolution mosaic. */
+  baked?: boolean;
+}
+
 /** A folder as the load window lists it. */
 export interface Listing {
   path: string;
   parent?: string | null;
-  /** Each folder in it; `kind` says what it holds when it is something to open. */
-  folders: { name: string; kind?: string }[];
+  /** What the folder itself is, when it can be opened as it stands. */
+  kind?: string;
+  folders: ListedFolder[];
+  /** Why the last walk went wrong, kept beside the listing it left in place. */
+  error?: string;
 }
 
 /**
@@ -180,7 +202,7 @@ export async function measureHere(asked: object) {
   return asking?.ok ? asking.answer : null;
 }
 
-export async function openPath(path: string): Promise<{ error: string; relink?: unknown } | { config: Config }> {
+export async function openPath(path: string): Promise<{ error: string; relink?: Relink | null } | { config: Config }> {
   const asking = await post<Config & Refused>("/api/stores/open", { path });
   if (!asking) return { error: `could not open ${path}: ${UNANSWERED}` };
   if (!asking.ok) {

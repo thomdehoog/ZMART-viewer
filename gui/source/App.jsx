@@ -1,6 +1,6 @@
 import React from "react";
-import NeuroglancerView from "./NeuroglancerView.jsx";
-import LayerPanel from "./LayerPanel.jsx";
+import NeuroglancerView from "./NeuroglancerView.tsx";
+import LayerPanel from "./LayerPanel.tsx";
 import TargetsPanel from "./TargetsPanel.tsx";
 import { PlacePointTool, PlaceBoundingBoxTool } from "neuroglancer/unstable/ui/annotations.js";
 import {
@@ -19,12 +19,12 @@ import {
 import { sourcesStillWaiting } from "./drawing/feeding.ts";
 import { syncView, stretchTheDisplay } from "./drawing/viewer.ts";
 import ScaleBar from "./ScaleBar.tsx";
-import AxisSlider from "./AxisSlider.jsx";
+import AxisSlider from "./AxisSlider.tsx";
 import { LOOKUP_TABLE_NAMES } from "../../engine/drawing/programs.js";
 import { engineName, layerKey, layersFor } from "./drawing/layers.ts";
 import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../../engine/drawing/embedding.js";
 import { liveStateProblem } from "./drawing/live-refresh.ts";
-import LoadWindow from "./LoadWindow.jsx";
+import LoadWindow from "./LoadWindow.tsx";
 import ModeToggle from "./ModeToggle.tsx";
 import BringItBack from "./BringItBack.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";

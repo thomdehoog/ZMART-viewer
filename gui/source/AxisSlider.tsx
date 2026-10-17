@@ -1,6 +1,34 @@
 import React from "react";
+import type { CSSProperties, InputHTMLAttributes } from "react";
+import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import FilledRange from "./FilledRange.tsx";
 import { momentsInRanges } from "./drawing/live-refresh.ts";
+import type { TimeRange } from "./drawing/live-refresh.ts";
+
+/** One axis of the image as the slider reads it: where it can travel, and where it is. */
+interface AxisReading {
+  index: number;
+  min: number;
+  max: number;
+  value: number;
+  unitUm: number;
+}
+
+interface AxisSliderProps {
+  viewer: Viewer | null;
+  axis: string;
+  label: string;
+  /** How many steps there is data for, where fewer than the axis declares. */
+  limit?: number | null;
+  /** The moments written so far, where the run says. */
+  ranges?: readonly TimeRange[] | null;
+  orientation?: "horizontal" | "vertical";
+  /** Whether the reading also gives the depth in micrometres. */
+  physicalZ?: boolean;
+}
+
+/** Firefox's own attribute for a slider stood on end, which React's types leave out. */
+type Upright = InputHTMLAttributes<HTMLInputElement> & { orient?: "vertical" };
 
 // How long to rest on each plane while playing. Slow enough to see what is there,
 // fast enough to read movement across a stack.
@@ -10,10 +38,10 @@ const PLAY_STEP_MS = 140;
 // travel, and where it is now. Returns null when the image has no such axis --
 // which is the normal answer for `t` on anything that is not a timelapse, and is
 // exactly how the interface decides whether to offer a time slider at all.
-function axisInfo(viewer, name) {
+function axisInfo(viewer: Viewer | null, name: string): AxisReading | null {
   const position = viewer?.navigationState.position;
   const space = position?.coordinateSpace.value;
-  if (!space?.valid) return null;
+  if (!position || !space?.valid) return null;
   const index = space.names.indexOf(name);
   if (index < 0) return null;
   // Neuroglancer describes an axis by the real-valued extent the data covers, and
@@ -52,8 +80,8 @@ export default function AxisSlider({
   ranges = null,
   orientation = "horizontal",
   physicalZ = false,
-}) {
-  const [axis, setAxis] = React.useState(null);
+}: AxisSliderProps) {
+  const [axis, setAxis] = React.useState<AxisReading | null>(null);
   const committedMoments = React.useMemo(() => momentsInRanges(ranges), [ranges]);
   const [playing, onPlay] = usePlayback(
     viewer,
@@ -111,7 +139,7 @@ export default function AxisSlider({
   // saying "the middle"), so anything within half a frame counts as on it.
   React.useEffect(() => {
     if (!viewer || !axis || !committedMoments?.length) return;
-    const distance = (moment) => Math.abs(axis.min + moment - axis.value);
+    const distance = (moment: number) => Math.abs(axis.min + moment - axis.value);
     const nearest = committedMoments.reduce(
       (best, moment) => (distance(moment) < distance(best) ? moment : best),
     );
@@ -129,7 +157,7 @@ export default function AxisSlider({
   // mid-comparison would be the same class of fault as the stale restore
   // the written-moments gate killed. "On the front" is within half a
   // frame, the engine's own way of saying "on it".
-  const front = React.useRef(null);
+  const front = React.useRef<number | null>(null);
   React.useEffect(() => {
     if (!viewer || !axis || !committedMoments?.length) return;
     const newest = committedMoments[committedMoments.length - 1];
@@ -164,15 +192,15 @@ export default function AxisSlider({
   // actually takes, so what is shown and what is meant never come apart.
   if (allowed && !allowed.length) return null;
   const nearestAllowed = allowed
-    ? allowed.reduce((best, moment, at) => (
+    ? allowed.reduce((best: number, moment, at) => (
         Math.abs(axis.min + moment - axis.value)
           < Math.abs(axis.min + allowed[best] - axis.value) ? at : best
       ), 0)
     : null;
-  const value = allowed
+  const value = allowed && nearestAllowed !== null
     ? nearestAllowed
     : Math.max(reachable.min, Math.min(reachable.max, reachable.value));
-  const stepNumber = allowed ? nearestAllowed + 1 : Math.round(value - reachable.min + 1);
+  const stepNumber = allowed && nearestAllowed !== null ? nearestAllowed + 1 : Math.round(value - reachable.min + 1);
   const count = allowed ? allowed.length : Math.round(reachable.max - reachable.min + 1);
   // A live acquisition declares its whole room along this axis before the
   // frames exist, so the committed list can stop well short of the declared
@@ -181,7 +209,8 @@ export default function AxisSlider({
   // operator watching "2 / 2 of 40" knows the run has just begun,
   // not that it is over.
   const declared = Math.round(axis.max - axis.min + 1);
-  const moveTo = (next) => {
+  const moveTo = (next: number) => {
+    if (!viewer) return;
     const current = viewer.navigationState.position.value;
     const moved = Float32Array.from(current);
     moved[reachable.index] = allowed ? axis.min + allowed[next] : next;
@@ -227,7 +256,7 @@ export default function AxisSlider({
         // this attribute; the others read the writing direction in the style
         // beside it. Giving both means the control is upright everywhere rather
         // than lying on its side in half of them.
-        {...(upright ? { orient: "vertical" } : null)}
+        {...(upright ? ({ orient: "vertical" } satisfies Upright) : null)}
       />
       <output aria-label={`${axisName} position value`} style={styles.axisValue}>
         {physicalZ ? `${Number((axis.value * axis.unitUm).toFixed(3))} µm · ` : null}
@@ -251,7 +280,10 @@ export default function AxisSlider({
  * told. The step rate is a compromise: fast enough to read as motion, slow
  * enough that the engine has a chance to fetch each plane as it arrives.
  */
-function usePlayback(viewer, axisName, limit, committedMoments) {
+function usePlayback(
+  viewer: Viewer | null, axisName: string, limit: number | null,
+  committedMoments: number[] | null,
+): [boolean, () => void] {
   const [playing, setPlaying] = React.useState(false);
 
   React.useEffect(() => {
@@ -259,7 +291,7 @@ function usePlayback(viewer, axisName, limit, committedMoments) {
     const step = () => {
       const axis = axisInfo(viewer, axisName);
       if (!axis) return;
-      let next;
+      let next: number;
       if (committedMoments) {
         const allowed = committedMoments.filter((moment) => axis.min + moment <= axis.max);
         if (!allowed.length) return;
@@ -359,4 +391,4 @@ const styles = {
     cursor: "pointer",
   },
   playOn: { background: "var(--accent)", color: "#fff", borderColor: "var(--accent)" },
-};
+} satisfies Record<string, CSSProperties>;

@@ -1,9 +1,48 @@
 import React from "react";
-import ChannelControls from "./ChannelControls.jsx";
+import ChannelControls from "./ChannelControls.tsx";
 import ColourChooser from "./ColourChooser.tsx";
 import Eye from "./Eye.tsx";
 import VolumeMode from "./VolumeMode.tsx";
 import { styles } from "./layer-panel-styles.ts";
+import type { ChannelControlsProps } from "./ChannelControls.tsx";
+import type { GroupState, LayerState, VolumeMode as Projection } from "./drawing/layers.ts";
+import type { LayerSpec } from "./asking-python.ts";
+import type { DisplayScales, Mode } from "./display-axes.ts";
+
+interface LayerPanelProps {
+  layers: LayerSpec[];
+  /** The rows the chosen views show, by index; every row when null. */
+  included?: Set<number> | null;
+  state: LayerState[];
+  mode: Mode;
+  groupOrder?: string[];
+  groupState?: GroupState;
+  onToggle: ChannelControlsProps["onToggle"];
+  onColor: ChannelControlsProps["onColor"];
+  onOpacity: ChannelControlsProps["onOpacity"];
+  onWindow: ChannelControlsProps["onWindow"];
+  onMeasureHere: ChannelControlsProps["onMeasureHere"];
+  onLut: ChannelControlsProps["onLut"];
+  volumeMode?: Projection;
+  onVolumeMode: (mode: Projection) => void;
+  volumeGain?: number;
+  onVolumeGain: (gain: number) => void;
+  volumeAttenuation?: number;
+  onVolumeAttenuation: (attenuation: number) => void;
+  depthSamples?: number;
+  onDepthSamples: (samples: number) => void;
+  displayScales?: DisplayScales;
+  onDisplayScales: (scales: DisplayScales) => void;
+  selected?: number;
+  onSelect?: (index: number) => void;
+  canOpen?: boolean;
+  lookupTables?: readonly string[];
+  onGroupToggle?: (group: string) => void;
+  onOpenStore?: () => void;
+  onCloseGroup?: (group: string) => void;
+  busy?: boolean;
+  notice?: string | null;
+}
 
 /**
  * The layer list, in napari's shape: one row per layer, an eye to hide it, a
@@ -45,8 +84,8 @@ export default function LayerPanel({
   onCloseGroup,
   busy = false,
   notice = null,
-}) {
-  const [collapsed, setCollapsed] = React.useState({});
+}: LayerPanelProps) {
+  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
 
   // Every row, paired with the position it holds in the panel's own state, so a
   // row can still be controlled after being gathered under its group.
@@ -62,7 +101,7 @@ export default function LayerPanel({
   // The reason is simply that there is not room otherwise: with every slider on
   // every row, three channels filled a tall screen and six could not be seen at
   // all. Adjusting one channel at a time is also how the work actually goes.
-  const renderRow = ({ layer, index }) => {
+  const renderRow = ({ layer, index }: { layer: LayerSpec; index: number }) => {
     const { visible } = state[index];
     const chosen = index === selected;
     return (

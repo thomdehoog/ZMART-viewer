@@ -1,13 +1,35 @@
 import React from "react";
 import FilledRange from "./FilledRange.tsx";
 import { restingWindow } from "./drawing/layers.ts";
+import type { LayerState } from "./drawing/layers.ts";
+import type { Histogram as Measurement, LayerSpec, Measured } from "./asking-python.ts";
+import type { Rgb } from "./colours.ts";
 import ColourChooser from "./ColourChooser.tsx";
 import Eye from "./Eye.tsx";
 import Histogram from "./Histogram.tsx";
 import ValueBox from "./ValueBox.tsx";
 import { contrastRange, frameTheWindow } from "./contrast-window.ts";
+import type { Window } from "./contrast-window.ts";
 import { stretchedUnevenly } from "./display-axes.ts";
+import type { DisplayScales, Mode } from "./display-axes.ts";
 import { styles } from "./layer-panel-styles.ts";
+
+export interface ChannelControlsProps {
+  layer: LayerSpec;
+  index: number;
+  entry: LayerState;
+  mode: Mode;
+  lookupTables: readonly string[];
+  /** A new window for the channel; Auto with nothing to go on hands on what it has. */
+  onWindow: (index: number, window: Window | null | undefined) => void;
+  onOpacity: (index: number, opacity: number) => void;
+  onToggle: (index: number) => void;
+  onColor: (index: number, color: Rgb | null | undefined) => void;
+  onLut: (index: number, lut: string | null) => void;
+  /** Measure the pixels of this channel on screen, or null where it cannot be asked. */
+  onMeasureHere?: ((index: number) => Promise<Measured | null>) | null;
+  displayScales?: DisplayScales;
+}
 
 /**
  * The one block of controls, acting on whichever channel is picked out in the list.
@@ -20,12 +42,12 @@ import { styles } from "./layer-panel-styles.ts";
  */
 function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, onOpacity, onToggle,
                           onColor, onLut, onMeasureHere = null,
-                          displayScales = { x: 1, y: 1, z: 1 } }) {
+                          displayScales = { x: 1, y: 1, z: 1 } }: ChannelControlsProps) {
   // The brightness of the part of the picture on screen, once Auto has asked
   // for it. Kept here rather than pushed into the layer because it describes
   // where the operator was looking at one moment, not the channel: pan away
   // and the old reading is no longer about anything.
-  const [here, setHere] = React.useState(null);
+  const [here, setHere] = React.useState<Measurement | null>(null);
   // The same resting window the canvas draws with (see drawing/layers.ts): the run's
   // recorded window, or the measured one when the run said nothing.
   const window_ = entry.window || restingWindow(layer, mode === "volume")
@@ -34,7 +56,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // own span; the two boxes under the histogram are where an operator says
   // otherwise, and their answer is kept per channel for as long as the panel
   // is showing it.
-  const [shown, setShown] = React.useState(null);
+  const [shown, setShown] = React.useState<Window | null>(null);
   // The image's own range of values, which nothing in this panel may claim
   // to exceed: not the handles (a black or white point beyond the pixels
   // would describe brightness that does not exist, 2026-08-23), and not the
@@ -43,7 +65,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   const imageRange = layer.range && Number.isFinite(layer.range.high)
     ? { low: layer.range.low ?? 0, high: layer.range.high }
     : { low: 0, high: 65535 };
-  const withinImage = (value) =>
+  const withinImage = (value: number) =>
     Math.min(Math.max(value, imageRange.low), imageRange.high);
   // The stretch of brightness the picture draws when the operator has not
   // said otherwise: settled from the window this channel was handed, and
@@ -51,7 +73,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // dragging a handle moves the handle rather than the ground under it.
   const [framed, setFramed] = React.useState(
     () => frameTheWindow(window_, imageRange));
-  const frameAround = (given) => {
+  const frameAround = (given: Window | null | undefined) => {
     const around = frameTheWindow(given, imageRange);
     if (!around) return;
     setShown(null);
@@ -66,10 +88,10 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // The two handles are kept at least one count apart. A window of no width
   // makes every value in the image land on the same shade, so the picture
   // goes flat and it is not obvious why.
-  const setLow = (low) =>
+  const setLow = (low: number) =>
     onWindow(index, { low: Math.min(withinImage(low), window_.high - 1),
                       high: window_.high });
-  const setHigh = (high) =>
+  const setHigh = (high: number) =>
     onWindow(index, { low: window_.low,
                       high: Math.max(withinImage(high), window_.low + 1) });
 
@@ -88,7 +110,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // dwarf everything else. It was briefly turned on by itself for such
   // channels, back when the axis ran to the camera's whole range and needed
   // the help.
-  const [scale, setScale] = React.useState("linear");
+  const [scale, setScale] = React.useState<"linear" | "log">("linear");
 
   // The measurement Auto falls back on: the whole picture's, taken once when
   // the run was opened. It is what the button can still offer in the moment
