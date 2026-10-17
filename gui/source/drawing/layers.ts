@@ -178,11 +178,11 @@ export function layersFor(
       // whole point. A row's own frame count is the highest across its positions, so
       // one position advancing moves it and says nothing about which one moved --
       // which left the engine going back to every store on the row to ask. See
-      // syncSources in neuroglancer.js for what that cost: every store on the row
+      // syncSources in layer-sync.ts for what that cost: every store on the row
       // re-read for one position's new frame.
       frameCounts: spec.frameCounts ?? undefined,
       // Manifest-driven sources keep a stable address.  Their separately carried
-      // identities and committed revisions tell neuroglancer.js exactly which existing
+      // identities and committed revisions tell layer-sync.ts exactly which existing
       // source must be refreshed after a publication, without making the address
       // itself look like a new image.
       sourceIds: spec.sourceIds ?? undefined,

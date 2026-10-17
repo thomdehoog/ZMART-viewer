@@ -75,6 +75,11 @@ export function holdCompleteSlice(sliceView, changed = () => {}) {
   };
 }
 
+/**
+ * @param {object} layer the engine's layer
+ * @param {object | null} [viewer] the viewer whose depth the layer follows, or null to hold it
+ * @param {((value: any) => object) | null} [makeTransform] the engine's own coordinate transform, made from a default one
+ */
 export function keepDepthLocal(layer, viewer = null, makeTransform = null) {
   // Top samples a clamped local Z while retaining its native global slider range.
   // Persistent flats use the same local axis but do not follow the slider.

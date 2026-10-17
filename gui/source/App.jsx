@@ -9,14 +9,15 @@ import {
   chooseScaleWhenTheImagesAreMeasured,
   keepSpatialAxes,
   whenTheSourcesHaveSettled,
+} from "./drawing/framing.ts";
+import {
   letGoOfDecodedPieces,
   lettingGo,
   sourceRefreshing,
   sourcesStillWaiting,
   syncLayers,
-  syncView,
-  stretchTheDisplay,
-} from "./drawing/neuroglancer.js";
+} from "./drawing/layer-sync.ts";
+import { syncView, stretchTheDisplay } from "./drawing/viewer.ts";
 import ScaleBar from "./ScaleBar.jsx";
 import AxisSlider from "./AxisSlider.jsx";
 import { LOOKUP_TABLE_NAMES } from "../../engine/drawing/programs.js";
@@ -38,7 +39,7 @@ const LIVE_STATE_CHECK_MS = 10_000;
 // The engine names its panels after *display* axes -- the first, second and third
 // of the axes it has been handed, not the axes the image calls x, y and z. So
 // this name only means anything alongside the order those axes are handed over
-// in, which is settled in neuroglancer.js by `pinTheAxesThatMeasureDistance`. It hands
+// in, which is settled in drawing/framing.ts by `pinTheAxesThatMeasureDistance`. It hands
 // them over width first, then height, then depth. With that order, "xy" puts width
 // across the window running to the right, height down it, and depth into the
 // screen -- the plane the operator scrolls through, drawn the same way round as
@@ -47,7 +48,7 @@ const LIVE_STATE_CHECK_MS = 10_000;
 // **The two must be changed together.** Either one on its own gives a view that
 // is edge-on or mirrored, and a mirrored view is the dangerous one because it
 // still looks like a good picture. The viewer shipped a mirrored one for months.
-// neuroglancer.js sets this out at length, and
+// drawing/framing.ts sets this out at length, and
 // `tests/test_the_picture_is_not_mirrored.py` measures it off the screen.
 const SLICE_LAYOUT = "xy";
 const VOLUME_LAYOUT = "3d";
@@ -626,7 +627,7 @@ export default function App() {
 
   // Let the engine settle on a starting magnification once the images have said
   // how big they are. Declared ahead of the effect that adds the layers so the
-  // waiting is in place before there is anything to wait for; see neuroglancer.js for
+  // waiting is in place before there is anything to wait for; see drawing/framing.ts for
   // what goes wrong without it.
   //
   // Until that first fit has run, the canvas is kept veiled: the engine
@@ -695,7 +696,7 @@ export default function App() {
     const reread = rereadWanted.current;
     rereadWanted.current = false;
     // The descriptions the panel just handed the engine, exactly as they were
-    // handed over. This exists for one test and is worth the line: `neuroglancer.js`
+    // handed over. This exists for one test and is worth the line: `layer-sync.ts`
     // carries every field of a description onto the live layer by hand, one line
     // each, so a field added to `drawing/layers.ts` and forgotten there is dropped in
     // silence -- three controls were found dead that way in a single afternoon.

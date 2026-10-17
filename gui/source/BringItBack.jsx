@@ -1,5 +1,5 @@
 import React from "react";
-import { putTheViewBack } from "./drawing/neuroglancer.js";
+import { putTheViewBack } from "./drawing/framing.ts";
 import { topBarStyles as styles } from "./top-bar-styles.ts";
 
 /**
