@@ -1,5 +1,5 @@
 import React from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { askToStop, constructionStatus, openPath, startConstruction, tryNativeChooser } from "./asking-python.ts";
 import type { Config, ListedFolder, Listing } from "./asking-python.ts";
 
@@ -22,13 +22,20 @@ interface Build {
   built?: string;
 }
 
+/** What a build does once it ends: on success, when stopped, and the words for a failure. */
+interface Afterwards {
+  /** Set as the build starts, beside the running state every build sets. */
+  starting?: Partial<Build>;
+  done: (store: string) => void | Promise<void>;
+  stopped: Partial<Build>;
+  failed: string;
+}
+
 interface LoadWindowProps {
   listing: Listing;
   onNavigate: (path: string) => void;
   onOpened: (config: Config) => void;
-  onConstructed?: unknown;
   onCancel: () => void;
-  onArriving?: unknown;
 }
 
 /**
@@ -80,10 +87,14 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
   // the fly later. Null while the operator is still walking folders.
   const [constructing, setConstructing] = React.useState<Build | null>(null);
   // The row the operator clicked last: highlighted in the list, and what
-  // the Open button below the list acts on. Cleared when the folder or the
-  // tab changes, because the list under it has changed.
+  // the Open button below the list acts on. Cleared when the folder
+  // changes, because the list under it has changed.
   const [selected, setSelected] = React.useState<ListedFolder | null>(null);
   const polling = React.useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  // Change the build being laid out, if one still is.
+  const change = (patch: Partial<Build>) =>
+    setConstructing((current) => current && { ...current, ...patch });
 
   const navigate = (path: string) => {
     setSelected(null);
@@ -121,73 +132,57 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
     }
   };
 
+  // Both ways of building start the build the same way and follow it the
+  // same way, asking every 350 ms how far it has got; they differ only in
+  // what the end means. A poll the server did not answer is no end: the
+  // build may well still be running, so the next poll asks again.
+  const buildThenFollow = async (afterwards: Afterwards) => {
+    if (!constructing) return;
+    const { data, destination, bake, relink, name } = constructing;
+    change({ running: true, fraction: 0, error: null, ...afterwards.starting });
+    const begun = await startConstruction(data, destination, bake,
+                                          relink ? name : undefined);
+    if ("error" in begun) {
+      change({ running: false, error: begun.error });
+      return;
+    }
+    polling.current = setInterval(async () => {
+      const status = await constructionStatus();
+      if (!status) return;
+      if (status.state === "running") {
+        change({ fraction: status.fraction || 0 });
+        return;
+      }
+      clearInterval(polling.current);
+      if (status.state === "done") {
+        await afterwards.done(status.store ?? "");
+      } else if (status.state === "cancelled") {
+        change({ running: false, fraction: 0, ...afterwards.stopped });
+      } else {
+        change({ running: false, error: status.error || afterwards.failed });
+      }
+    }, 350);
+  };
+
   // The kept way to open a run: build the view — with its baked mosaic, at
   // the place the operator chose — and open what was built, as one press.
   // The plain way is not here at all: an untouched Open goes straight to
   // openStore, and the server composes a link file it keeps to itself and
   // forgets when it closes (the operator's rule, 2026-08-23).
-  const openRun = async () => {
-    if (!constructing) return;
-    const { data, destination, bake } = constructing;
-    setConstructing((current) => current && { ...current, running: true, fraction: 0,
-                                              error: null });
-    const begun = await startConstruction(data, destination, bake);
-    if ("error" in begun) {
-      setConstructing((current) => current && { ...current, running: false, error: begun.error });
-      return;
-    }
-    polling.current = setInterval(async () => {
-      const status = await constructionStatus();
-      if (!status) return;
-      if (status.state === "running") {
-        setConstructing((current) => current && { ...current, fraction: status.fraction || 0 });
-        return;
-      }
-      clearInterval(polling.current);
-      if (status.state === "done") {
-        await openStore(status.store ?? "");
-      } else if (status.state === "cancelled") {
-        setConstructing((current) => current &&
-          { ...current, running: false, fraction: 0 });
-      } else {
-        setConstructing((current) => current &&
-          { ...current, running: false,
-            error: status.error || "the view could not be built" });
-      }
-    }, 350);
-  };
+  const openRun = () => buildThenFollow({
+    done: (store) => openStore(store),
+    stopped: {},
+    failed: "the view could not be built",
+  });
 
-  const start = async () => {
-    if (!constructing) return;
-    const { data, destination, bake, relink, name } = constructing;
-    setConstructing((current) => current && { ...current, running: true, fraction: 0,
-                                              error: null, stopped: false });
-    const begun = await startConstruction(data, destination, bake,
-                                          relink ? name : undefined);
-    if ("error" in begun) {
-      setConstructing((current) => current && { ...current, running: false, error: begun.error });
-      return;
-    }
-    polling.current = setInterval(async () => {
-      const status = await constructionStatus();
-      if (!status) return;
-      if (status.state === "running") {
-        setConstructing((current) => current && { ...current, fraction: status.fraction || 0 });
-      } else {
-        clearInterval(polling.current);
-        if (status.state === "done") {
-          setConstructing((current) => current &&
-            { ...current, running: false, built: status.store });
-        } else if (status.state === "cancelled") {
-          setConstructing((current) => current &&
-            { ...current, running: false, fraction: 0, stopped: true });
-        } else {
-          setConstructing((current) => current &&
-            { ...current, running: false, error: status.error || "the build failed" });
-        }
-      }
-    }, 350);
-  };
+  // Rebuilding a view whose raw data moved: the build is kept, and shown
+  // with its own button once it is done.
+  const start = () => buildThenFollow({
+    starting: { stopped: false },
+    done: (store) => change({ running: false, built: store }),
+    stopped: { stopped: true },
+    failed: "the build failed",
+  });
 
   // The pieces the relink pane and the build blocks share, written once.
   const saveField = constructing && (
@@ -195,8 +190,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
       <input
         type="text"
         value={constructing.destination}
-        onChange={(event) => setConstructing(
-          (current) => current && { ...current, destination: event.target.value })}
+        onChange={(event) => change({ destination: event.target.value })}
         aria-label="scene folder"
         title="Where the scene's own files are written. The raw data is read and never changed"
         style={{ ...styles.loadPath, marginBottom: 0, flex: 1 }}
@@ -205,8 +199,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
         type="button"
         onClick={async () => {
           const chosen = await tryNativeChooser();
-          if ("path" in chosen) setConstructing(
-            (current) => current && { ...current, destination: chosen.path });
+          if ("path" in chosen) change({ destination: chosen.path });
         }}
         aria-label="choose where to save the scene"
         title="Pick the folder with the operating system's own chooser"
@@ -233,20 +226,15 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
           levels holding at most 1% of the full-resolution voxels
           (PINNED_SHARE in composer.py) plus the shrinking tail above them,
           about half a percent typically, 1.33% at the geometric worst. */}
-      <div style={styles.constructRow}>
-        <label style={styles.constructChoice}>
-          <input
-            type="checkbox"
-            checked={constructing.bake}
-            onChange={(event) => setConstructing(
-              (current) => current && { ...current, bake: event.target.checked })}
-            disabled={constructing.running || !!constructing.built}
-            aria-label="include a hard copy of the low-resolution overview"
-            title="The zoomed-out picture is computed once now and kept as files, so the whole survey opens instantly. Left unchecked, it is composed from the raw data the first time it is looked at"
-          />
-          include a hard copy of the low-resolution overview
-        </label>
-      </div>
+      <BakeSwitch
+        checked={constructing.bake}
+        onChange={(bake) => change({ bake })}
+        disabled={constructing.running || !!constructing.built}
+        label="include a hard copy of the low-resolution overview"
+        title="The zoomed-out picture is computed once now and kept as files, so the whole survey opens instantly. Left unchecked, it is composed from the raw data the first time it is looked at"
+      >
+        include a hard copy of the low-resolution overview
+      </BakeSwitch>
       <div style={styles.constructNote}>
         A scene is assembled by linking the raw data into a virtual
         OME-Zarr, so nothing is copied. We found that also building the
@@ -271,15 +259,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
           </button>
         ) : null}
         {constructing.running && (
-          <button
-            type="button"
-            onClick={() => askToStop("construct")}
-            aria-label="stop the build"
-            title="Stop the build at its next step. Nothing half-made is kept; building again starts fresh"
-            style={{ ...styles.loadCancel, marginLeft: 8 }}
-          >
-            Stop
-          </button>
+          <StopBuild title="Stop the build at its next step. Nothing half-made is kept; building again starts fresh" />
         )}
         {constructing.built ? (
           <button
@@ -301,17 +281,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
       {/* The bar stays once the build is done, standing full: a finished
           build should look finished, not vanish. */}
       {(constructing.running || constructing.built) && (
-        <div
-          style={styles.progressTrack}
-          role="progressbar"
-          aria-label="construction progress"
-          aria-valuenow={constructing.built ? 100
-            : Math.round((constructing.fraction || 0) * 100)}
-        >
-          <div style={{ ...styles.progressFill,
-                        width: `${constructing.built ? 100
-                          : Math.round((constructing.fraction || 0) * 100)}%` }} />
-        </div>
+        <BuildProgress fraction={constructing.built ? 1 : constructing.fraction || 0} />
       )}
       {constructing.error && (
         <div style={styles.loadError} role="alert">{constructing.error}</div>
@@ -325,8 +295,6 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
         <div style={styles.loadHead}>
           <span style={styles.loadTitle}>load data</span>
         </div>
-        <>
-        <div style={{ display: "contents" }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input
             key={listing.path}
@@ -379,12 +347,9 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
           )}
           {/* One click selects a row and highlights it, the way the
               operating system's own choosers behave; a double click steps
-              into a folder or opens an image at once. What the chosen tab
-              is looking for floats to the top; the plain folders to walk
-              into follow. */}
+              into a folder or opens an image at once. What can be opened
+              floats to the top; the plain folders to walk into follow. */}
           {[...listing.folders].sort((a, b) => {
-            // What the chosen tab can act on floats to the top; the plain
-            // folders to walk into follow.
             const wanted = (folder: ListedFolder) => (Boolean(folder.kind) ? 0 : 1);
             return wanted(a) - wanted(b) || a.name.localeCompare(b.name);
           }).map((folder) => (
@@ -441,7 +406,6 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
             <div style={styles.loadEmptyNote}>no folders in here</div>
           )}
         </div>
-        </div>
         {/* What the chosen row IS, said under the list in one line — so a
             row that offers nothing is never a silent mystery. */}
         {selected && (
@@ -457,20 +421,15 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
             kept view should live. */}
         {constructing && !constructing.relink && (
           <div style={styles.constructPane}>
-            <div style={styles.constructRow}>
-              <label style={styles.constructChoice}>
-                <input
-                  type="checkbox"
-                  checked={constructing.bake}
-                  onChange={(event) => setConstructing(
-                    (current) => current && { ...current, bake: event.target.checked })}
-                  disabled={constructing.running}
-                  aria-label="build the low-resolution mosaic and keep the view"
-                  title="The zoomed-out mosaic is computed once now and kept as files beside the view's link file, so it opens fast ever after — views wearing ⚡ in the list have it. Left unchecked, nothing is written to your data: the viewer links the positions together for this session and forgets it after"
-                />
-                build the low-resolution mosaic and keep the view (opens fast ever after)
-              </label>
-            </div>
+            <BakeSwitch
+              checked={constructing.bake}
+              onChange={(bake) => change({ bake })}
+              disabled={constructing.running}
+              label="build the low-resolution mosaic and keep the view"
+              title="The zoomed-out mosaic is computed once now and kept as files beside the view's link file, so it opens fast ever after — views wearing ⚡ in the list have it. Left unchecked, nothing is written to your data: the viewer links the positions together for this session and forgets it after"
+            >
+              build the low-resolution mosaic and keep the view (opens fast ever after)
+            </BakeSwitch>
             {constructing.bake && (
               <label style={styles.constructRow}>
                 <span style={styles.constructLabel}
@@ -480,17 +439,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
                 {saveField}
               </label>
             )}
-            {constructing.running && (
-              <div
-                style={styles.progressTrack}
-                role="progressbar"
-                aria-label="construction progress"
-                aria-valuenow={Math.round((constructing.fraction || 0) * 100)}
-              >
-                <div style={{ ...styles.progressFill,
-                              width: `${Math.round((constructing.fraction || 0) * 100)}%` }} />
-              </div>
-            )}
+            {constructing.running && <BuildProgress fraction={constructing.fraction || 0} />}
             {constructing.error && (
               <div style={styles.loadError} role="alert">{constructing.error}</div>
             )}
@@ -540,15 +489,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
               {busy || constructing?.running ? "…" : "Open"}
             </button>
             {constructing?.running && (
-              <button
-                type="button"
-                onClick={() => askToStop("construct")}
-                aria-label="stop the build"
-                title="Stop building the view at its next step. Nothing half-made is kept"
-                style={{ ...styles.loadCancel, marginLeft: 8 }}
-              >
-                Stop
-              </button>
+              <StopBuild title="Stop building the view at its next step. Nothing half-made is kept" />
             )}
             <button
               type="button"
@@ -579,8 +520,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
               <input
                 type="text"
                 value={constructing.data}
-                onChange={(event) => setConstructing(
-                  (current) => current && { ...current, data: event.target.value })}
+                onChange={(event) => change({ data: event.target.value })}
                 aria-label="raw data folder"
                 title="Where the raw data lives now. The viewer was built from a folder that is no longer there"
                 style={{ ...styles.loadPath, marginBottom: 0, flex: 1 }}
@@ -593,13 +533,70 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
             {buildParts}
           </div>
         )}
-        </>
         {(listing.error || openError) && (
           <div style={styles.loadError} role="alert">
             {listing.error || openError}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** How far a build has got, as a bar filling from the left; `fraction` runs from 0 to 1. */
+function BuildProgress({ fraction }: { fraction: number }) {
+  const percent = Math.round(fraction * 100);
+  return (
+    <div
+      style={styles.progressTrack}
+      role="progressbar"
+      aria-label="construction progress"
+      aria-valuenow={percent}
+    >
+      <div style={{ ...styles.progressFill, width: `${percent}%` }} />
+    </div>
+  );
+}
+
+/** The button that asks the build to stop at its next step. */
+function StopBuild({ title }: { title: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => askToStop("construct")}
+      aria-label="stop the build"
+      title={title}
+      style={{ ...styles.loadCancel, marginLeft: 8 }}
+    >
+      Stop
+    </button>
+  );
+}
+
+interface BakeSwitchProps {
+  checked: boolean;
+  onChange: (bake: boolean) => void;
+  disabled?: boolean;
+  label: string;
+  title: string;
+  children: ReactNode;
+}
+
+/** Whether the low-resolution mosaic is baked and kept with the view. */
+function BakeSwitch({ checked, onChange, disabled, label, title, children }: BakeSwitchProps) {
+  return (
+    <div style={styles.constructRow}>
+      <label style={styles.constructChoice}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          disabled={disabled}
+          aria-label={label}
+          title={title}
+        />
+        {children}
+      </label>
     </div>
   );
 }

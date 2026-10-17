@@ -1,47 +1,36 @@
 import React from "react";
 import ChannelControls from "./ChannelControls.tsx";
 import ColourChooser from "./ColourChooser.tsx";
-import Eye from "./Eye.tsx";
-import VolumeMode from "./VolumeMode.tsx";
+import EyeButton from "./Eye.tsx";
 import { styles } from "./layer-panel-styles.ts";
+import type { ReactNode } from "react";
 import type { ChannelControlsProps } from "./ChannelControls.tsx";
-import type { GroupState, LayerState, VolumeMode as Projection } from "./drawing/layers.ts";
+import type { GroupState, LayerState } from "./drawing/layers.ts";
 import type { LayerSpec } from "./asking-python.ts";
 import type { DisplayScales, Mode } from "./display-axes.ts";
 
 interface LayerPanelProps {
   layers: LayerSpec[];
-  /** The rows the chosen views show, by index; every row when null. */
-  included?: Set<number> | null;
+  /** The rows the chosen views show, by index. */
+  included: Set<number>;
   state: LayerState[];
   mode: Mode;
-  groupOrder?: string[];
-  groupState?: GroupState;
-  onToggle: ChannelControlsProps["onToggle"];
-  onColor: ChannelControlsProps["onColor"];
-  onOpacity: ChannelControlsProps["onOpacity"];
+  groupOrder: string[];
+  groupState: GroupState;
+  onChange: ChannelControlsProps["onChange"];
   onWindow: ChannelControlsProps["onWindow"];
   onMeasureHere: ChannelControlsProps["onMeasureHere"];
-  onLut: ChannelControlsProps["onLut"];
-  volumeMode?: Projection;
-  onVolumeMode: (mode: Projection) => void;
-  volumeGain?: number;
-  onVolumeGain: (gain: number) => void;
-  volumeAttenuation?: number;
-  onVolumeAttenuation: (attenuation: number) => void;
-  depthSamples?: number;
-  onDepthSamples: (samples: number) => void;
-  displayScales?: DisplayScales;
-  onDisplayScales: (scales: DisplayScales) => void;
-  selected?: number;
-  onSelect?: (index: number) => void;
-  canOpen?: boolean;
-  lookupTables?: readonly string[];
-  onGroupToggle?: (group: string) => void;
-  onOpenStore?: () => void;
-  onCloseGroup?: (group: string) => void;
-  busy?: boolean;
-  notice?: string | null;
+  displayScales: DisplayScales;
+  selected: number;
+  onSelect: (index: number) => void;
+  canOpen: boolean;
+  onGroupToggle: (group: string) => void;
+  onOpenStore: () => void;
+  onCloseGroup: (group: string) => void;
+  busy: boolean;
+  notice: string | null;
+  /** The volume's own settings, shown in a section of their own in the 3-D view. */
+  children: ReactNode;
 }
 
 /**
@@ -54,43 +43,31 @@ interface LayerPanelProps {
  */
 export default function LayerPanel({
   layers,
-  included = null,
+  included,
   state,
   mode,
-  groupOrder = [],
-  groupState = {},
-  onToggle,
-  onColor,
-  onOpacity,
+  groupOrder,
+  groupState,
+  onChange,
   onWindow,
   onMeasureHere,
-  onLut,
-  volumeMode = "max",
-  onVolumeMode,
-  volumeGain = 0,
-  onVolumeGain,
-  volumeAttenuation = 0,
-  onVolumeAttenuation,
-  depthSamples = 256,
-  onDepthSamples,
-  displayScales = { x: 1, y: 1, z: 1 },
-  onDisplayScales,
-  selected = 0,
+  displayScales,
+  selected,
   onSelect,
-  canOpen = true,
-  lookupTables = [],
+  canOpen,
   onGroupToggle,
   onOpenStore,
   onCloseGroup,
-  busy = false,
-  notice = null,
+  busy,
+  notice,
+  children,
 }: LayerPanelProps) {
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
 
   // Every row, paired with the position it holds in the panel's own state, so a
   // row can still be controlled after being gathered under its group.
   const rows = layers.map((layer, index) => ({ layer, index }))
-    .filter(({ index }) => !included || included.has(index));
+    .filter(({ index }) => included.has(index));
   const groups = groupOrder.length
     ? groupOrder
     : [...new Set(layers.map((layer) => layer.group || ""))];
@@ -108,31 +85,22 @@ export default function LayerPanel({
       <div
         key={layer.name}
         style={{ ...styles.layer, ...(chosen ? styles.layerChosen : null) }}
-        onClick={() => onSelect?.(index)}
+        onClick={() => onSelect(index)}
         aria-current={chosen ? "true" : undefined}
       >
         <div style={styles.row}>
-          <button
-            onClick={() => onToggle(index)}
-            style={{ ...styles.eye, opacity: visible ? 1 : 0.4 }}
-            title={visible ? "Hide this channel" : "Show this channel"}
-            aria-label={`toggle ${layer.name}`}
-          >
-            <Eye open={visible} />
-          </button>
+          <EyeButton
+            open={visible}
+            onClick={() => onChange(index, { visible: !visible })}
+            label={`toggle ${layer.name}`}
+            what="channel"
+          />
           {/* The colour, and the way to change it: press the square and the
               list of everything this channel could be painted in opens. */}
           <ColourChooser
             layer={layer}
             entry={state[index]}
-            onPick={(choice) => {
-              if (choice.lut) {
-                onLut?.(index, choice.lut);
-              } else {
-                onLut?.(index, null);
-                onColor?.(index, choice.rgb);
-              }
-            }}
+            onPick={(change) => onChange(index, change)}
           />
           <span style={styles.name} title={layer.name}>
             {layer.name}
@@ -147,7 +115,7 @@ export default function LayerPanel({
       {/* Choosing folders by hand is for using the viewer on its own. During a
           run the workflow decides what is shown, so this whole box is absent —
           see `allow_open` in the server. */}
-      {canOpen && onOpenStore && (
+      {canOpen && (
         <div style={styles.card}>
           <div style={styles.headingRow}>
             <span style={styles.heading}>load data</span>
@@ -199,21 +167,19 @@ export default function LayerPanel({
               >
                 {isCollapsed ? "▸" : "▾"}
               </button>
-              <button
-                onClick={() => onGroupToggle?.(group)}
-                style={{ ...styles.eye, opacity: settings.visible ? 1 : 0.4 }}
-                aria-label={`toggle group ${group}`}
-                title={settings.visible ? "Hide this acquisition" : "Show this acquisition"}
-              >
-                <Eye open={settings.visible} />
-              </button>
+              <EyeButton
+                open={settings.visible}
+                onClick={() => onGroupToggle(group)}
+                label={`toggle group ${group}`}
+                what="acquisition"
+              />
               <span style={styles.groupName} title={group}>
                 {group}
               </span>
               {/* Closing an acquisition by hand belongs to the browse-your-own
                   workflow; during a run the workflow decides what is shown, so
                   the button is absent then -- same rule as the folder chooser. */}
-              {canOpen && onCloseGroup && (
+              {canOpen && (
                 <button
                   type="button"
                   onClick={() => onCloseGroup(group)}
@@ -241,13 +207,9 @@ export default function LayerPanel({
           index={selected}
           entry={state[selected]}
           mode={mode}
-          onToggle={onToggle}
-          lookupTables={lookupTables}
+          onChange={onChange}
           onWindow={onWindow}
           onMeasureHere={onMeasureHere}
-          onOpacity={onOpacity}
-          onColor={onColor}
-          onLut={onLut}
           displayScales={displayScales}
         />
       )}
@@ -262,25 +224,9 @@ export default function LayerPanel({
           <div style={styles.headingRow}>
             <span style={styles.heading}>3d viewer</span>
           </div>
-          <VolumeMode
-            volumeMode={volumeMode}
-            onVolumeMode={onVolumeMode}
-            gain={volumeGain}
-            onGain={onVolumeGain}
-            attenuation={volumeAttenuation}
-            onAttenuation={onVolumeAttenuation}
-            depthSamples={depthSamples}
-            onDepthSamples={onDepthSamples}
-            displayScales={displayScales}
-            onDisplayScales={onDisplayScales}
-          />
+          {children}
         </div>
       )}
     </section>
   );
 }
-
-// -- how it all looks ---------------------------------------------------------
-
-// What separates one block of the bar from the next: a rule, and enough room on
-// either side of it that the eye reads two sections rather than one long list.

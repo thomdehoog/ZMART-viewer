@@ -1,11 +1,7 @@
 import { styles } from "./layer-panel-styles.ts";
 
-interface EyeProps {
-  open: boolean;
-}
-
 /** A drawn eye, open or crossed out — the show/hide idea every biologist knows. */
-function Eye({ open }: EyeProps) {
+function Eye({ open }: { open: boolean }) {
   return (
     <svg viewBox="0 0 16 16" style={styles.eyeGlyph} aria-hidden="true">
       <path
@@ -20,4 +16,26 @@ function Eye({ open }: EyeProps) {
   );
 }
 
-export default Eye;
+interface EyeButtonProps {
+  open: boolean;
+  onClick: () => void;
+  label: string;
+  /** What it shows or hides, as its title names it. */
+  what: "channel" | "acquisition";
+}
+
+/** The eye as a button: pressed, it shows or hides what it sits beside. */
+function EyeButton({ open, onClick, label, what }: EyeButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ ...styles.eye, opacity: open ? 1 : 0.4 }}
+      title={`${open ? "Hide" : "Show"} this ${what}`}
+      aria-label={label}
+    >
+      <Eye open={open} />
+    </button>
+  );
+}
+
+export default EyeButton;

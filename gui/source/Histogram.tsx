@@ -1,5 +1,6 @@
 import React from "react";
 import type { LayerSpec } from "./asking-python.ts";
+import { withEdgeAt } from "./contrast-window.ts";
 import type { Window } from "./contrast-window.ts";
 import { styles } from "./layer-panel-styles.ts";
 
@@ -118,8 +119,6 @@ function Histogram({ layer, window_, onWindow, onAxis, range, scale, axis, stead
   // range showed a sixteen-bit histogram running to numbers no camera
   // produced (the operator's refinement, 2026-08-24). Panning and zooming
   // therefore travel at most to the range itself.
-  const withinImage = (value: number) =>
-    Math.min(Math.max(value, range.low), range.high);
   const holdTheAxis = (next: Window): Window => {
     const width = Math.min(
       Math.max(next.high - next.low, (range.high - range.low) / 256),
@@ -167,14 +166,7 @@ function Histogram({ layer, window_, onWindow, onAxis, range, scale, axis, stead
       return;
     }
     if (held.bar) {
-      const value = withinImage(valueUnder(event));
-      // The floor may not cross the ceiling: a window at least one count
-      // wide always remains, so the picture can never invert.
-      if (held.bar === "low") {
-        onWindow({ low: Math.min(value, window_.high - 1), high: window_.high });
-      } else {
-        onWindow({ low: window_.low, high: Math.max(value, window_.low + 1) });
-      }
+      onWindow(withEdgeAt(window_, held.bar, valueUnder(event), range));
       return;
     }
     const face = event.currentTarget.getBoundingClientRect();

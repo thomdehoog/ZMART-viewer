@@ -50,6 +50,23 @@ export function frameTheWindow(window_: Window | null | undefined, bounds: Windo
 }
 
 /**
+ * The window with one edge moved to `value`.
+ *
+ * The edge stays inside the image's own range: a black or white point beyond
+ * the pixels would describe brightness that does not exist. And the two edges
+ * stay at least one count apart: a window of no width makes every value in the
+ * image land on the same shade, so the picture goes flat and it is not obvious
+ * why. The histogram's bars and the MIN and MAX controls move the window
+ * through here alike.
+ */
+export function withEdgeAt(window_: Window, edge: "low" | "high", value: number, range: Window): Window {
+  const within = Math.min(Math.max(value, range.low), range.high);
+  return edge === "low"
+    ? { low: Math.min(within, window_.high - 1), high: window_.high }
+    : { low: window_.low, high: Math.max(within, window_.low + 1) };
+}
+
+/**
  * How far the black and white handles are allowed to travel.
  *
  * From the dimmest pixel in the channel to the brightest, and no further. An

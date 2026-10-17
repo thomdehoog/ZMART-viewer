@@ -64,6 +64,25 @@ function axisInfo(viewer: Viewer | null, name: string): AxisReading | null {
   return { index, min, max, value: position.value[index], unitUm: space.scales[index] * 1e6 };
 }
 
+/** Move the view along one axis to `value`, leaving every other axis where it is. */
+function moveAlong(viewer: Viewer, index: number, value: number): void {
+  const position = viewer.navigationState.position;
+  const moved = Float32Array.from(position.value);
+  moved[index] = value;
+  position.value = moved;
+}
+
+/**
+ * The last step there is data for. A store is given its full length when it is
+ * created, long before the run has produced that much, so `limit` -- how many
+ * steps have been written -- can end the axis early.
+ */
+function lastStep(axis: AxisReading, limit: number | null): number {
+  return limit != null && Number.isFinite(limit)
+    ? Math.min(axis.max, axis.min + limit - 1)
+    : axis.max;
+}
+
 /**
  * One slider that steps the view along a single axis of the image.
  *
@@ -144,9 +163,7 @@ export default function AxisSlider({
       (best, moment) => (distance(moment) < distance(best) ? moment : best),
     );
     if (distance(nearest) <= 0.5) return;
-    const moved = Float32Array.from(viewer.navigationState.position.value);
-    moved[axis.index] = axis.min + nearest;
-    viewer.navigationState.position.value = moved;
+    moveAlong(viewer, axis.index, axis.min + nearest);
   }, [viewer, axis, committedMoments]);
 
   // A landing follows the watcher, never the other way round. An operator
@@ -165,9 +182,7 @@ export default function AxisSlider({
     front.current = newest;
     if (was == null || newest <= was) return;
     if (Math.abs(axis.value - (axis.min + was)) > 0.5) return;
-    const moved = Float32Array.from(viewer.navigationState.position.value);
-    moved[axis.index] = axis.min + newest;
-    viewer.navigationState.position.value = moved;
+    moveAlong(viewer, axis.index, axis.min + newest);
   }, [viewer, axis, committedMoments]);
 
   if (!axis) return null;
@@ -175,21 +190,10 @@ export default function AxisSlider({
   // length in time when it is created, long before the run has produced that many
   // frames, so what the file claims and what exists are not the same thing.
   const allowed = committedMoments?.filter(
-    (moment) => axis.min + moment >= axis.min && axis.min + moment <= axis.max,
+    (moment) => moment >= 0 && axis.min + moment <= axis.max,
   );
-  const reachable = limit != null && Number.isFinite(limit)
-    ? { ...axis, max: Math.min(axis.max, axis.min + limit - 1) }
-    : axis;
+  const reachable = { ...axis, max: lastStep(axis, limit) };
   if (reachable.max < reachable.min) return null;
-  // The slider steps in halves rather than whole planes, and that is deliberate.
-  // The engine opens a view in the *middle* of an axis, which for an even number
-  // of planes lands halfway between two of them: a four-frame timelapse starts at
-  // 1.5. A control that could only hold whole numbers would be unable to show
-  // that, and the browser would quietly round the thumb to 2 while our code still
-  // believed 1.5 -- after which dragging it to 2 would change nothing, because as
-  // far as the browser was concerned it was already there. The slider would look
-  // correct and do nothing at all. Halves can represent every position the engine
-  // actually takes, so what is shown and what is meant never come apart.
   if (allowed && !allowed.length) return null;
   const nearestAllowed = allowed
     ? allowed.reduce((best: number, moment, at) => (
@@ -211,11 +215,18 @@ export default function AxisSlider({
   const declared = Math.round(axis.max - axis.min + 1);
   const moveTo = (next: number) => {
     if (!viewer) return;
-    const current = viewer.navigationState.position.value;
-    const moved = Float32Array.from(current);
-    moved[reachable.index] = allowed ? axis.min + allowed[next] : next;
-    viewer.navigationState.position.value = moved;
+    moveAlong(viewer, reachable.index, allowed ? axis.min + allowed[next] : next);
   };
+  // The slider steps in halves rather than whole planes, and that is deliberate.
+  // The engine opens a view in the *middle* of an axis, which for an even number
+  // of planes lands halfway between two of them: a four-frame timelapse starts at
+  // 1.5. A control that could only hold whole numbers would be unable to show
+  // that, and the browser would quietly round the thumb to 2 while our code still
+  // believed 1.5 -- after which dragging it to 2 would change nothing, because as
+  // far as the browser was concerned it was already there. The slider would look
+  // correct and do nothing at all. Halves can represent every position the engine
+  // actually takes, so what is shown and what is meant never come apart.
+  const step = allowed || label === "Plane" ? 1 : 0.5;
 
   // Only one plane or frame to look at is not a choice, so no control is offered.
   // This is how a still image ends up with no time slider and a single plane with
@@ -247,7 +258,7 @@ export default function AxisSlider({
         upright={upright}
         min={allowed ? 0 : reachable.min}
         max={allowed ? allowed.length - 1 : reachable.max}
-        step={allowed || label === "Plane" ? 1 : 0.5}
+        step={step}
         value={value}
         onChange={(event) => moveTo(Number(event.target.value))}
         aria-label={`${axisName} position`}
@@ -299,16 +310,9 @@ function usePlayback(
         const following = allowed.find((moment) => moment > current) ?? allowed[0];
         next = axis.min + following;
       } else {
-        const top =
-          limit != null && Number.isFinite(limit)
-            ? Math.min(axis.max, axis.min + limit - 1)
-            : axis.max;
-        next = axis.value + 1 > top ? axis.min : axis.value + 1;
+        next = axis.value + 1 > lastStep(axis, limit) ? axis.min : axis.value + 1;
       }
-      const position = viewer.navigationState.position;
-      const moved = Float32Array.from(position.value);
-      moved[axis.index] = next;
-      position.value = moved;
+      moveAlong(viewer, axis.index, next);
     };
     const timer = setInterval(step, PLAY_STEP_MS);
     return () => clearInterval(timer);

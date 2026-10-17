@@ -3,12 +3,11 @@ import FilledRange from "./FilledRange.tsx";
 import { restingWindow } from "./drawing/layers.ts";
 import type { LayerState } from "./drawing/layers.ts";
 import type { Histogram as Measurement, LayerSpec, Measured } from "./asking-python.ts";
-import type { Rgb } from "./colours.ts";
 import ColourChooser from "./ColourChooser.tsx";
-import Eye from "./Eye.tsx";
+import EyeButton from "./Eye.tsx";
 import Histogram from "./Histogram.tsx";
 import ValueBox from "./ValueBox.tsx";
-import { contrastRange, frameTheWindow } from "./contrast-window.ts";
+import { contrastRange, frameTheWindow, withEdgeAt } from "./contrast-window.ts";
 import type { Window } from "./contrast-window.ts";
 import { stretchedUnevenly } from "./display-axes.ts";
 import type { DisplayScales, Mode } from "./display-axes.ts";
@@ -19,16 +18,13 @@ export interface ChannelControlsProps {
   index: number;
   entry: LayerState;
   mode: Mode;
-  lookupTables: readonly string[];
+  /** A change to what the operator has set on one channel. */
+  onChange: (index: number, change: Partial<LayerState>) => void;
   /** A new window for the channel; Auto with nothing to go on hands on what it has. */
   onWindow: (index: number, window: Window | null | undefined) => void;
-  onOpacity: (index: number, opacity: number) => void;
-  onToggle: (index: number) => void;
-  onColor: (index: number, color: Rgb | null | undefined) => void;
-  onLut: (index: number, lut: string | null) => void;
-  /** Measure the pixels of this channel on screen, or null where it cannot be asked. */
-  onMeasureHere?: ((index: number) => Promise<Measured | null>) | null;
-  displayScales?: DisplayScales;
+  /** Measure the pixels of this channel on screen; null where there is nothing to read. */
+  onMeasureHere: (index: number) => Promise<Measured | null>;
+  displayScales: DisplayScales;
 }
 
 /**
@@ -40,9 +36,8 @@ export interface ChannelControlsProps {
  * then move to the next. It is the arrangement napari uses, and anyone who has
  * used napari will already know where to look.
  */
-function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, onOpacity, onToggle,
-                          onColor, onLut, onMeasureHere = null,
-                          displayScales = { x: 1, y: 1, z: 1 } }: ChannelControlsProps) {
+function ChannelControls({ layer, index, entry, mode, onChange, onWindow, onMeasureHere,
+                          displayScales }: ChannelControlsProps) {
   // The brightness of the part of the picture on screen, once Auto has asked
   // for it. Kept here rather than pushed into the layer because it describes
   // where the operator was looking at one moment, not the channel: pan away
@@ -85,15 +80,8 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // of disagreeing about which picture they are talking about.
   const seen = here ? { ...layer, histogram: here } : layer;
   const { min, max } = contrastRange(seen, window_, shown || framed);
-  // The two handles are kept at least one count apart. A window of no width
-  // makes every value in the image land on the same shade, so the picture
-  // goes flat and it is not obvious why.
-  const setLow = (low: number) =>
-    onWindow(index, { low: Math.min(withinImage(low), window_.high - 1),
-                      high: window_.high });
-  const setHigh = (high: number) =>
-    onWindow(index, { low: window_.low,
-                      high: Math.max(withinImage(high), window_.low + 1) });
+  const setLow = (low: number) => onWindow(index, withEdgeAt(window_, "low", low, imageRange));
+  const setHigh = (high: number) => onWindow(index, withEdgeAt(window_, "high", high, imageRange));
 
   // There used to be BRIGHTNESS and CONTRAST sliders below MIN and MAX --
   // the same window re-described, the way Fiji presents it. They were removed
@@ -132,29 +120,17 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
       <div style={styles.controlsHead}>
         <span style={styles.controlsGroup} title={layer.group}>{layer.group}</span>
         <div style={styles.controlsChannel}>
-          <button
-            onClick={() => onToggle?.(index)}
-            style={{ ...styles.eye, opacity: entry.visible ? 1 : 0.4 }}
-            title={entry.visible ? "Hide this channel" : "Show this channel"}
-            aria-label="toggle the chosen channel"
-          >
-            <Eye open={entry.visible} />
-          </button>
+          <EyeButton
+            open={entry.visible}
+            onClick={() => onChange(index, { visible: !entry.visible })}
+            label="toggle the chosen channel"
+            what="channel"
+          />
           <ColourChooser
             layer={layer}
             entry={entry}
             named="the chosen channel"
-            onPick={(choice) => {
-              if (choice.lut) {
-                onLut?.(index, choice.lut);
-              } else {
-                // A flat colour replaces whatever map was on, or the square
-                // would go on showing a run of colours the channel is no
-                // longer painted in.
-                onLut?.(index, null);
-                onColor(index, choice.rgb);
-              }
-            }}
+            onPick={(change) => onChange(index, change)}
           />
           <span style={styles.controlsName} title={layer.name}>
             {layer.name}
@@ -181,10 +157,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
               // The bars' height scale is anchored to the resting frame, so
               // panning or zooming the axis never moves it — only Auto or a
               // fresh window does, by laying a new frame.
-              steady={(() => {
-                const resting = contrastRange(seen, window_, framed);
-                return { min: resting.min, max: resting.max };
-              })()}
+              steady={contrastRange(seen, window_, framed)}
             />
           </div>
           {/* Under the picture, in one row: what stretch of brightness it
@@ -224,7 +197,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
                   // the whole picture's reading and one well's are worlds
                   // apart. The whole picture's is the fallback for the moment
                   // the view cannot be asked.
-                  const answer = onMeasureHere ? await onMeasureHere(index) : null;
+                  const answer = await onMeasureHere(index);
                   if (answer?.histogram) {
                     setHere(answer.histogram);
                     // A fresh reading is a fresh picture, so the axis is laid
@@ -238,7 +211,6 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
                   onWindow(index, fallingBackOn);
                   frameAround(fallingBackOn);
                 }}
-                disabled={!onMeasureHere && !autoWindow && !layer.window}
                 aria-label={`auto contrast ${layer.name}`}
                 title="Set the window from the brightness of what is on screen, leaving out the ground nobody imaged"
                 style={styles.autoButton}
@@ -336,28 +308,19 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
           max="1"
           step="0.01"
           value={entry.opacity}
-          onChange={(event) => onOpacity(index, Number(event.target.value))}
+          onChange={(event) => onChange(index, { opacity: Number(event.target.value) })}
           aria-label={`opacity ${layer.name}`}
           style={styles.range}
         />
         <ValueBox
           value={Math.round(entry.opacity * 100)}
           suffix="%"
-          onCommit={(asked) => onOpacity(index, Math.min(1, Math.max(0, asked / 100)))}
+          onCommit={(asked) => onChange(index, { opacity: Math.min(1, Math.max(0, asked / 100)) })}
           label={`opacity value ${layer.name}`}
         />
       </label>
     </div>
   );
 }
-
-/**
- * The layer list, in napari's shape: one row per layer, an eye to hide it, a
- * swatch to recolour it.
- *
- * Deliberately the only chrome on screen. Everything the engine would otherwise
- * put up -- its own layer panel, top bar and dialogs -- is off, so this is the
- * single place layers are controlled and there is no second owner to fight.
- */
 
 export default ChannelControls;

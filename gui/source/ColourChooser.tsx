@@ -6,11 +6,20 @@ import { LUT_GRADIENTS, PALETTE, css, rgbOf } from "./colours.ts";
 import type { Rgb } from "./colours.ts";
 import { LIST_TALL_AT_MOST, styles } from "./layer-panel-styles.ts";
 
-/** What the operator picked: a flat colour, or a colour map by its name. */
-export type ColourChoice = { rgb: Rgb | null; lut: null } | { rgb?: undefined; lut: string };
+/** What an entry paints with: a flat colour, or a colour map by its name. */
+type Paint = { rgb: Rgb | null; lut: null } | { rgb?: undefined; lut: string };
 
 /** One entry of the list, with how it looks. */
-type Entry = ColourChoice & { key: string; name: string; look: string };
+type Entry = Paint & { key: string; name: string; look: string };
+
+/**
+ * What picking an entry changes on the channel. A map leaves the flat colour
+ * underneath it alone; a flat colour also takes off whatever map was on, or the
+ * square would go on showing a run of colours the channel is no longer painted in.
+ */
+function changeFor(paint: Paint): Partial<LayerState> {
+  return paint.lut ? { lut: paint.lut } : { lut: null, color: paint.rgb };
+}
 
 /** Where the list is drawn, in window coordinates. */
 type ListPlace = { left: number; top: number } | { left: number; bottom: number };
@@ -18,7 +27,7 @@ type ListPlace = { left: number; top: number } | { left: number; bottom: number 
 interface ColourChooserProps {
   layer: LayerSpec;
   entry: LayerState;
-  onPick: (choice: ColourChoice) => void;
+  onPick: (change: Partial<LayerState>) => void;
   /** What the labels call the channel; its own name when not given. */
   named?: string | null;
 }
@@ -130,7 +139,7 @@ function ColourChooser({ layer, entry, onPick, named = null }: ColourChooserProp
               value={hexColour(entry.color)}
               onBlur={closeOnLeaving}
               onChange={(event) => {
-                onPick({ rgb: rgbOf(event.target.value), lut: null });
+                onPick(changeFor({ rgb: rgbOf(event.target.value), lut: null }));
                 setOpenAt(null);
               }}
               aria-label={`choose a colour for ${about}`}
@@ -146,7 +155,7 @@ function ColourChooser({ layer, entry, onPick, named = null }: ColourChooserProp
               aria-label={`${choice.name} for ${about}`}
               onBlur={closeOnLeaving}
               onClick={() => {
-                onPick(choice);
+                onPick(changeFor(choice));
                 setOpenAt(null);
               }}
               style={{

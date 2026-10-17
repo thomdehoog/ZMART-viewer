@@ -1,6 +1,7 @@
 import React from "react";
 import NeuroglancerView from "./NeuroglancerView.tsx";
 import LayerPanel from "./LayerPanel.tsx";
+import VolumeMode from "./VolumeMode.tsx";
 import TargetsPanel from "./TargetsPanel.tsx";
 import { PlacePointTool, PlaceBoundingBoxTool } from "neuroglancer/unstable/ui/annotations.js";
 import {
@@ -20,7 +21,6 @@ import { sourcesStillWaiting } from "./drawing/feeding.ts";
 import { syncView, stretchTheDisplay } from "./drawing/viewer.ts";
 import ScaleBar from "./ScaleBar.tsx";
 import AxisSlider from "./AxisSlider.tsx";
-import { LOOKUP_TABLE_NAMES } from "../../engine/drawing/programs.js";
 import { engineName, layerKey, layersFor } from "./drawing/layers.ts";
 import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../../engine/drawing/embedding.js";
 import { liveStateProblem } from "./drawing/live-refresh.ts";
@@ -1154,9 +1154,7 @@ export default function App() {
                 setEngineGeneration((count) => count + 1);
                 setStoreBusy(false);
               }}
-              onToggle={(i) => setLayer(i, { visible: !layerState[i].visible })}
-              onColor={(i, color) => setLayer(i, { color })}
-              onOpacity={(i, opacity) => setLayer(i, { opacity })}
+              onChange={setLayer}
               onWindow={(i, window) => {
                 // Marked touched before anything else: the automatic
                 // windowing below must never answer over an operator's own
@@ -1201,19 +1199,21 @@ export default function App() {
                 else if (!asked.span) setLayer(i, { window: answer.window });
                 return answer;
               }}
-              onLut={(i, lut) => setLayer(i, { lut })}
-              volumeMode={volumeMode}
-              onVolumeMode={setVolumeMode}
-              volumeGain={volumeGain}
-              onVolumeGain={setVolumeGain}
-              volumeAttenuation={volumeAttenuation}
-              onVolumeAttenuation={setVolumeAttenuation}
-              depthSamples={depthSamples}
-              onDepthSamples={setChosenDepthSamples}
               displayScales={displayScales}
-              onDisplayScales={setDisplayScales}
-              lookupTables={LOOKUP_TABLE_NAMES}
-            />
+            >
+              <VolumeMode
+                volumeMode={volumeMode}
+                onVolumeMode={setVolumeMode}
+                gain={volumeGain}
+                onGain={setVolumeGain}
+                attenuation={volumeAttenuation}
+                onAttenuation={setVolumeAttenuation}
+                depthSamples={depthSamples}
+                onDepthSamples={setChosenDepthSamples}
+                displayScales={displayScales}
+                onDisplayScales={setDisplayScales}
+              />
+            </LayerPanel>
           )}
           {config?.canSelect && (
           <TargetsPanel
@@ -1242,19 +1242,6 @@ export default function App() {
           }}
           onOpened={(config) => {
             applyConfig(config);
-            setLoadListing(null);
-          }}
-          onArriving={(loaded, perSecond) => {
-            // The acquisition just opened, shown position by position. Its
-            // group is the one the server has just added, and the first
-            // position is on screen at once -- an empty screen for the first
-            // beat says nothing about anything.
-            const group = (loaded.groups || []).at(-1) || "";
-            setRevealing({ group, count: 1, perSecond });
-          }}
-          onConstructed={async () => {
-            const config = await fetchConfig();
-            if (config) applyConfig(config);
             setLoadListing(null);
           }}
           onCancel={() => setLoadListing(null)}
