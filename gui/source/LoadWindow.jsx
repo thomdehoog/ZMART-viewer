@@ -105,6 +105,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
     }
     polling.current = setInterval(async () => {
       const status = await constructionStatus();
+      if (!status) return;
       if (status.state === "running") {
         setConstructing((current) => current && { ...current, fraction: status.fraction || 0 });
         return;
@@ -135,6 +136,7 @@ function LoadWindow({ listing, onNavigate, onOpened, onConstructed, onCancel,
     }
     polling.current = setInterval(async () => {
       const status = await constructionStatus();
+      if (!status) return;
       if (status.state === "running") {
         setConstructing((current) => current && { ...current, fraction: status.fraction || 0 });
       } else {

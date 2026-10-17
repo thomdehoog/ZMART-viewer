@@ -60,95 +60,80 @@ export async function tryNativeChooser() {
   return { window: true };
 }
 
-export async function measureHere(asked) {
+/**
+ * Post a JSON body and read the JSON answer: `{ ok, answer }`, or null when the
+ * server did not answer at all -- the connection dropped, or it is gone. Every
+ * request below says what that means for its own button, so none of them can
+ * leave one waiting for ever.
+ */
+async function post(path, body = {}) {
   try {
-    const response = await fetch("/api/measure", {
+    const response = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(asked),
+      body: JSON.stringify(body),
     });
-    if (!response.ok) return null;
-    return await response.json();
+    return { ok: response.ok, answer: await response.json().catch(() => null) };
   } catch {
-    // A measurement that cannot be taken leaves the picture as it is, which
-    // is the honest answer to a button that had nothing to read.
     return null;
   }
 }
 
+/** What a request says when the server never answered it. */
+const UNANSWERED = "the viewer's server did not answer";
+
+// A measurement that cannot be taken leaves the picture as it is, which is the
+// honest answer to a button that had nothing to read.
+export async function measureHere(asked) {
+  const asking = await post("/api/measure", asked);
+  return asking?.ok ? asking.answer : null;
+}
+
 export async function openPath(path) {
-  let response;
-  try {
-    response = await fetch("/api/stores/open", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
-    });
-  } catch {
-    // No answer at all -- the server dropped the connection, or is gone. Said
-    // as plainly as a refusal, so the window never waits for ever.
-    return { error: `could not open ${path}: the viewer's server did not answer` };
-  }
-  const answer = await response.json().catch(() => null);
-  if (!response.ok) {
+  const asking = await post("/api/stores/open", { path });
+  if (!asking) return { error: `could not open ${path}: ${UNANSWERED}` };
+  if (!asking.ok) {
     return {
-      error: answer?.error || `could not open ${path}`,
-      relink: answer?.relink || null,
+      error: asking.answer?.error || `could not open ${path}`,
+      relink: asking.answer?.relink || null,
     };
   }
-  return { config: answer };
+  return { config: asking.answer };
 }
 
 export async function startConstruction(path, viewerFolder, bake, name) {
-  const response = await fetch("/api/stores/construct", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, viewer_folder: viewerFolder, bake, name }),
-  });
-  const answer = await response.json().catch(() => null);
-  if (!response.ok) return { error: answer?.error || "the construction could not start" };
+  const asking = await post("/api/stores/construct", { path, viewer_folder: viewerFolder, bake, name });
+  if (!asking) return { error: `the construction could not start: ${UNANSWERED}` };
+  if (!asking.ok) return { error: asking.answer?.error || "the construction could not start" };
   return { started: true };
 }
 
+// Null when the poll went unanswered: the build may well still be running, so
+// the page asks again rather than calling it failed.
 export async function constructionStatus() {
-  const response = await fetch("/api/stores/construct-status", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  return response.json().catch(() => ({ state: "error", error: "unreadable answer" }));
+  const asking = await post("/api/stores/construct-status");
+  if (!asking) return null;
+  return asking.answer ?? { state: "error", error: "unreadable answer" };
 }
 
 // Ask the running build to stop at its next step. Cooperative: the step in
 // flight finishes whole, and a stopped build removes its half-made scene.
 export async function askToStop(what) {
-  await fetch(`/api/stores/${what}-cancel`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  }).catch(() => null);
+  await post(`/api/stores/${what}-cancel`);
 }
 
 export async function listFolders(path) {
-  const response = await fetch("/api/stores/list", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(path ? { path } : {}),
-  });
-  const answer = await response.json().catch(() => null);
-  if (!response.ok) return { error: answer?.error || "the folders could not be listed" };
-  return answer;
+  const asking = await post("/api/stores/list", path ? { path } : {});
+  if (!asking) return { error: `the folders could not be listed: ${UNANSWERED}` };
+  if (!asking.ok) return { error: asking.answer?.error || "the folders could not be listed" };
+  return asking.answer;
 }
 
 export async function closeGroup(group) {
-  const response = await fetch("/api/stores/close", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ group }),
-  });
-  const answer = await response.json().catch(() => null);
-  if (!response.ok) return { error: answer?.error || `could not close ${group}` };
-  return { config: answer };
+  const asking = await post("/api/stores/close", { group });
+  if (!asking) return { error: `could not close ${group}: ${UNANSWERED}` };
+  if (!asking.ok) return { error: asking.answer?.error || `could not close ${group}` };
+  return { config: asking.answer };
 }
 
 // The targets saved beside the images, as ``{ targets }``, or ``{ error }`` when
