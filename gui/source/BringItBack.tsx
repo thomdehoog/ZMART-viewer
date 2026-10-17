@@ -1,6 +1,11 @@
-import React from "react";
+import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import { putTheViewBack } from "./drawing/framing.ts";
 import { topBarStyles as styles } from "./top-bar-styles.ts";
+
+interface BringItBackProps {
+  /** The engine's viewer, or null before it has been built. */
+  viewer: Viewer | null;
+}
 
 /**
  * The way back to the whole picture, from wherever the operator has wandered.
@@ -22,7 +27,7 @@ import { topBarStyles as styles } from "./top-bar-styles.ts";
  * What it does not touch is where the operator is in depth or in time. That
  * is which picture they are looking at, not how they are looking at it.
  */
-function BringItBack({ viewer }) {
+function BringItBack({ viewer }: BringItBackProps) {
   if (!viewer) return null;
   return (
     <button

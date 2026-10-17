@@ -1,8 +1,8 @@
 import React from "react";
 import ChannelControls from "./ChannelControls.jsx";
-import ColourChooser from "./ColourChooser.jsx";
-import Eye from "./Eye.jsx";
-import VolumeMode from "./VolumeMode.jsx";
+import ColourChooser from "./ColourChooser.tsx";
+import Eye from "./Eye.tsx";
+import VolumeMode from "./VolumeMode.tsx";
 import { styles } from "./layer-panel-styles.ts";
 
 /**
@@ -86,7 +86,6 @@ export default function LayerPanel({
           <ColourChooser
             layer={layer}
             entry={state[index]}
-            names={lookupTables}
             onPick={(choice) => {
               if (choice.lut) {
                 onLut?.(index, choice.lut);

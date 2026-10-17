@@ -309,7 +309,7 @@ export function syncView(viewer: Viewer, { layout, chrome, transparentBackground
   // Neuroglancer's own scale bars are off. It draws one per axis along the bottom
   // left, including one for time -- which looks like a distance and is not one. A
   // single bar for distance is drawn in the corner of the image instead, and it is
-  // ours so it can be put somewhere out of the way. See ScaleBar.jsx.
+  // ours so it can be put somewhere out of the way. See ScaleBar.tsx.
   viewer.showScaleBar.value = false;
   // The theme's ground behind the slice, rather than the engine's mid-grey.
   //

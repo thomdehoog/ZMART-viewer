@@ -1,6 +1,14 @@
 import React from "react";
 import { styles } from "./layer-panel-styles.ts";
 
+interface ValueBoxProps {
+  value: number;
+  onCommit: (asked: number) => void;
+  label: string;
+  suffix?: string;
+  align?: "left" | "right";
+}
+
 /**
  * The number beside a slider, as a box that can be typed into.
  *
@@ -9,8 +17,8 @@ import { styles } from "./layer-panel-styles.ts";
  * is not a number is quietly dropped and the real value comes back. So box
  * and slider always describe the same setting, whichever one moved last.
  */
-function ValueBox({ value, onCommit, label, suffix = "", align = "right" }) {
-  const [draft, setDraft] = React.useState(null);
+function ValueBox({ value, onCommit, label, suffix = "", align = "right" }: ValueBoxProps) {
+  const [draft, setDraft] = React.useState<string | null>(null);
   const commit = () => {
     if (draft !== null) {
       const asked = Number(draft.replace(suffix, ""));
@@ -34,7 +42,5 @@ function ValueBox({ value, onCommit, label, suffix = "", align = "right" }) {
     />
   );
 }
-
-/** A drawn eye, open or crossed out — the show/hide idea every biologist knows. */
 
 export default ValueBox;

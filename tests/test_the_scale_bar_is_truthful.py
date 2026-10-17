@@ -10,7 +10,7 @@ That makes a wrong bar much worse than an ugly one. If the bar reads "50 µm"
 while the field of view is really five hundred micrometres wide, the operator is
 handed a wrong number carrying the full authority of the instrument, and there is
 nothing on screen — no warning, no oddity, no blank panel — that would ever give
-it away. ``ScaleBar.jsx`` says as much in its own words: a bar that does not
+it away. ``ScaleBar.tsx`` says as much in its own words: a bar that does not
 follow the zoom "would quietly state the wrong size". Until these tests were
 written, nothing anywhere in this suite looked at the bar at all.
 
@@ -115,7 +115,7 @@ METRES_IN = {
 }
 
 # The lengths the bar is allowed to read, as multiples of a power of ten. These
-# are the same seven values ``ScaleBar.jsx`` lists, and they are the reason a
+# are the same seven values ``ScaleBar.tsx`` lists, and they are the reason a
 # microscope's scale bar says "2 µm" and never "1.87 µm".
 ROUND_LENGTHS = (1.0, 1.5, 2.0, 3.0, 5.0, 7.5, 10.0)
 
@@ -600,7 +600,7 @@ class TestItReadsTheVoxelSizeFromTheData:
 class TestTheNumberIsOneAPersonWouldWrite:
     """A scale bar is only useful if the number on it is one you can reason with.
 
-    This is the intent ``ScaleBar.jsx`` states at the top of the file, and it is a
+    This is the intent ``ScaleBar.tsx`` states at the top of the file, and it is a
     real convenience rather than a decoration: "50 µm" can be halved and doubled
     in your head against a cell on screen, and "0.0472 mm" cannot. The tests here
     pin that intent so that a change which starts printing awkward numbers is

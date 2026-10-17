@@ -1,7 +1,27 @@
 import React from "react";
-import { hexColour } from "../../engine/drawing/programs.js";
+import { LOOKUP_TABLE_NAMES, hexColour } from "../../engine/drawing/programs.js";
+import type { LayerState } from "./drawing/layers.ts";
+import type { LayerSpec } from "./asking-python.ts";
 import { LUT_GRADIENTS, PALETTE, css, rgbOf } from "./colours.ts";
+import type { Rgb } from "./colours.ts";
 import { LIST_TALL_AT_MOST, styles } from "./layer-panel-styles.ts";
+
+/** What the operator picked: a flat colour, or a colour map by its name. */
+export type ColourChoice = { rgb: Rgb | null; lut: null } | { rgb?: undefined; lut: string };
+
+/** One entry of the list, with how it looks. */
+type Entry = ColourChoice & { key: string; name: string; look: string };
+
+/** Where the list is drawn, in window coordinates. */
+type ListPlace = { left: number; top: number } | { left: number; bottom: number };
+
+interface ColourChooserProps {
+  layer: LayerSpec;
+  entry: LayerState;
+  onPick: (choice: ColourChoice) => void;
+  /** What the labels call the channel; its own name when not given. */
+  named?: string | null;
+}
 
 /**
  * The square a channel is painted in, which is also how the colour is chosen.
@@ -21,16 +41,15 @@ import { LIST_TALL_AT_MOST, styles } from "./layer-panel-styles.ts";
  * anything but text. That costs the keyboard nothing: each entry is a real
  * button, so tabbing walks them and Enter picks, and Escape closes the list.
  */
-function ColourChooser({ layer, entry, names, onPick, named = null }) {
+function ColourChooser({ layer, entry, onPick, named = null }: ColourChooserProps) {
   // Where the list is drawn, in window coordinates rather than inside the
   // square. The channel list it may be opened from scrolls, and anything
   // drawn inside a box that scrolls is cut off at that box's edge -- opened
   // from a row, the list showed two of its twelve entries (seen 2026-08-22).
   // Placed against the window instead, it escapes that box entirely.
-  const [openAt, setOpenAt] = React.useState(null);
+  const [openAt, setOpenAt] = React.useState<ListPlace | null>(null);
   const open = openAt !== null;
-  const setOpen = (want) => setOpenAt(want ? openAt : null);
-  const openBeside = (square) => {
+  const openBeside = (square: HTMLElement) => {
     const box = square.getBoundingClientRect();
     // Above the square where there is no room beneath it, so the list is
     // never half off the bottom of the screen.
@@ -39,7 +58,7 @@ function ColourChooser({ layer, entry, names, onPick, named = null }) {
       ? { left: box.left, bottom: window.innerHeight - box.top + 2 }
       : { left: box.left, top: box.bottom + 2 });
   };
-  const choices = [
+  const choices: Entry[] = [
     ...PALETTE.map((one) => ({
       key: `flat:${one.name}`,
       name: one.name,
@@ -47,11 +66,11 @@ function ColourChooser({ layer, entry, names, onPick, named = null }) {
       lut: null,
       look: css(one.rgb),
     })),
-    ...names.map((name) => ({
+    ...LOOKUP_TABLE_NAMES.map((name) => ({
       key: name,
       name,
       lut: name,
-      look: LUT_GRADIENTS[name] || "#d8dee6",
+      look: LUT_GRADIENTS[name] || css(null),
     })),
   ];
   const chosen = entry.lut
@@ -70,10 +89,10 @@ function ColourChooser({ layer, entry, names, onPick, named = null }) {
   // Closed as soon as the focus leaves the whole chooser. Asking about the
   // chooser rather than about the button pressed means pressing an entry does
   // not close the list out from under the press.
-  const closeOnLeaving = (event) => {
+  const closeOnLeaving = (event: React.FocusEvent<HTMLElement>) => {
     if (!event.currentTarget.closest("[data-chooser]")
       ?.contains(event.relatedTarget)) {
-      setOpen(false);
+      setOpenAt(null);
     }
   };
   return (
@@ -112,7 +131,7 @@ function ColourChooser({ layer, entry, names, onPick, named = null }) {
               onBlur={closeOnLeaving}
               onChange={(event) => {
                 onPick({ rgb: rgbOf(event.target.value), lut: null });
-                setOpen(false);
+                setOpenAt(null);
               }}
               aria-label={`choose a colour for ${about}`}
               style={styles.hiddenPicker}
@@ -128,7 +147,7 @@ function ColourChooser({ layer, entry, names, onPick, named = null }) {
               onBlur={closeOnLeaving}
               onClick={() => {
                 onPick(choice);
-                setOpen(false);
+                setOpenAt(null);
               }}
               style={{
                 ...styles.chooserEntry,

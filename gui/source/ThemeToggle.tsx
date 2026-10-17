@@ -1,10 +1,24 @@
 import React from "react";
 import { topBarStyles as styles } from "./top-bar-styles.ts";
 
-// Where the chosen theme is remembered between sessions. main.jsx reads the
-// same key before anything is drawn, so a page that was left light comes
-// back light with no dark flash on the way.
+/** The two dresses the interface comes in. */
+type Theme = "dark" | "light";
+
+// Where the chosen theme is remembered between sessions, in the browser's
+// localStorage.
 const THEME_KEY = "zmart-theme";
+
+/**
+ * The theme the page was left in, read where it is remembered. Dark is the
+ * default: microscopy is looked at in dark rooms.
+ *
+ * main.jsx puts it on before anything is drawn, so a page that was left light
+ * comes back light with no dark flash on the way; the button below starts
+ * from the same reading.
+ */
+export function rememberedTheme(): Theme {
+  return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+}
 
 /**
  * The button that swaps the interface between its dark and light dress.
@@ -20,9 +34,7 @@ const THEME_KEY = "zmart-theme";
  * <html> element decides which set of values those names take.
  */
 function ThemeToggle() {
-  const [theme, setTheme] = React.useState(
-    () => (localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"),
-  );
+  const [theme, setTheme] = React.useState<Theme>(rememberedTheme);
   React.useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);

@@ -1,5 +1,16 @@
-import React from "react";
+import type { CSSProperties, InputHTMLAttributes } from "react";
 import "./filled-range.css";
+
+interface FilledRangeProps extends InputHTMLAttributes<HTMLInputElement> {
+  value: number | string;
+  min: number | string;
+  max: number | string;
+  /** Stood on end, for the depth slider down the side of the picture. */
+  upright?: boolean;
+}
+
+/** A style that also sets the stylesheet's own variables, such as `--fill`. */
+type StyleWithVariables = CSSProperties & Record<`--${string}`, string>;
 
 /**
  * A slider whose travelled part is painted blue.
@@ -15,9 +26,10 @@ import "./filled-range.css";
  * tell the stylesheet how far along the value is (the --fill variable), and
  * to keep telling it as the value moves.
  */
-export default function FilledRange({ value, min = 0, max = 100, upright = false, style, ...rest }) {
+export default function FilledRange({ value, min, max, upright = false, style, ...rest }: FilledRangeProps) {
   const span = Number(max) - Number(min) || 1;
   const fill = Math.min(1, Math.max(0, (Number(value) - Number(min)) / span));
+  const painted: StyleWithVariables = { ...style, "--fill": `${fill * 100}%` };
   return (
     <input
       type="range"
@@ -25,7 +37,7 @@ export default function FilledRange({ value, min = 0, max = 100, upright = false
       value={value}
       min={min}
       max={max}
-      style={{ ...style, "--fill": `${fill * 100}%` }}
+      style={painted}
       {...rest}
     />
   );

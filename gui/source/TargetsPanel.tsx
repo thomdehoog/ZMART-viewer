@@ -1,11 +1,42 @@
-import React from "react";
+import type { CSSProperties } from "react";
+
+/** One place the operator has marked, as the engine's annotation layer holds it. */
+export interface Target {
+  id: string;
+  type: string;
+  description?: string;
+}
+
+/** Where the last save of the targets stands. */
+export type SaveState =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "saved" }
+  | { status: "error"; message: string };
+
+/** The drawing tool the operator has picked, if any. */
+export type TargetTool = "point" | "box" | null;
+
+interface TargetsPanelProps {
+  targets: Target[];
+  activeTool: TargetTool;
+  color: string;
+  visible: boolean;
+  saveState: SaveState;
+  onTool: (tool: TargetTool) => void;
+  onColor: (color: string) => void;
+  onVisible: () => void;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onDescribe: (id: string, description: string) => void;
+}
 
 // What to say about the last save. Saving is automatic and quick, so most of the
 // time this is a quiet "Saved" -- but a failure has to be loud, because an
 // unsaved target list looks identical to a saved one until the acquisition is
 // reopened and the targets have vanished.
-function saveMessage(saveState) {
-  if (!saveState || saveState.status === "idle") return null;
+function saveMessage(saveState: SaveState): { text: string; tone: "quiet" | "bad" } | null {
+  if (saveState.status === "idle") return null;
   if (saveState.status === "saving") return { text: "Saving…", tone: "quiet" };
   if (saveState.status === "saved") return { text: "Saved beside the image.", tone: "quiet" };
   return { text: `Not saved: ${saveState.message}`, tone: "bad" };
@@ -35,17 +66,17 @@ export default function TargetsPanel({
   onSelect,
   onDelete,
   onDescribe,
-}) {
+}: TargetsPanelProps) {
   const save = saveMessage(saveState);
 
   return (
     <section style={styles.panel} aria-label="selection panel">
       <div style={styles.heading}>selection</div>
       <div style={styles.tools}>
-        {[
+        {([
           ["point", "Point"],
           ["box", "Box"],
-        ].map(([key, label]) => (
+        ] as const).map(([key, label]) => (
           <button
             key={key}
             aria-pressed={activeTool === key}
@@ -202,4 +233,4 @@ const styles = {
   statusLine: { fontSize: 11 },
   quiet: { color: "var(--text-muted)" },
   bad: { color: "var(--danger-text)" },
-};
+} satisfies Record<string, CSSProperties>;

@@ -1,7 +1,7 @@
 import React from "react";
 import NeuroglancerView from "./NeuroglancerView.jsx";
 import LayerPanel from "./LayerPanel.jsx";
-import TargetsPanel from "./TargetsPanel.jsx";
+import TargetsPanel from "./TargetsPanel.tsx";
 import { PlacePointTool, PlaceBoundingBoxTool } from "neuroglancer/unstable/ui/annotations.js";
 import {
   lookAtWhatOpened,
@@ -18,16 +18,16 @@ import {
 } from "./drawing/layer-sync.ts";
 import { sourcesStillWaiting } from "./drawing/feeding.ts";
 import { syncView, stretchTheDisplay } from "./drawing/viewer.ts";
-import ScaleBar from "./ScaleBar.jsx";
+import ScaleBar from "./ScaleBar.tsx";
 import AxisSlider from "./AxisSlider.jsx";
 import { LOOKUP_TABLE_NAMES } from "../../engine/drawing/programs.js";
 import { engineName, layerKey, layersFor } from "./drawing/layers.ts";
 import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../../engine/drawing/embedding.js";
 import { liveStateProblem } from "./drawing/live-refresh.ts";
 import LoadWindow from "./LoadWindow.jsx";
-import ModeToggle from "./ModeToggle.jsx";
-import BringItBack from "./BringItBack.jsx";
-import ThemeToggle from "./ThemeToggle.jsx";
+import ModeToggle from "./ModeToggle.tsx";
+import BringItBack from "./BringItBack.tsx";
+import ThemeToggle from "./ThemeToggle.tsx";
 import { TARGET_LAYER, annotationLayer } from "./annotation-layer.js";
 import { closeGroup, fetchConfig, fetchLiveState, listFolders, loadTargets, measureHere } from "./asking-python.ts";
 import { topBarStyles } from "./top-bar-styles.ts";

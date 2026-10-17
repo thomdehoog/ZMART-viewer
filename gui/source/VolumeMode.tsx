@@ -1,6 +1,20 @@
-import React from "react";
-import FilledRange from "./FilledRange.jsx";
+import FilledRange from "./FilledRange.tsx";
+import type { VolumeMode as Projection } from "./drawing/layers.ts";
+import type { DisplayScales } from "./display-axes.ts";
 import { styles } from "./layer-panel-styles.ts";
+
+interface VolumeModeProps {
+  volumeMode: Projection;
+  onVolumeMode: (mode: Projection) => void;
+  gain: number;
+  onGain: (gain: number) => void;
+  attenuation: number;
+  onAttenuation: (attenuation: number) => void;
+  depthSamples: number;
+  onDepthSamples: (samples: number) => void;
+  displayScales: DisplayScales;
+  onDisplayScales: (scales: DisplayScales) => void;
+}
 
 /**
  * How a ray through the volume becomes a colour.
@@ -14,7 +28,7 @@ import { styles } from "./layer-panel-styles.ts";
 function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
                      attenuation, onAttenuation,
                      depthSamples, onDepthSamples,
-                     displayScales, onDisplayScales }) {
+                     displayScales, onDisplayScales }: VolumeModeProps) {
   const accumulating = volumeMode === "on";
   return (
     <>
@@ -27,7 +41,7 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
       </span>
       <select
         value={volumeMode}
-        onChange={(event) => onVolumeMode?.(event.target.value)}
+        onChange={(event) => onVolumeMode(event.target.value as Projection)}
         aria-label="volume projection"
         title="Brightest keeps the brightest voxel along each ray -- a maximum-intensity projection (MIP), which is how most fluorescence is looked at. Accumulated adds every voxel up instead."
         // The row has no value readout, so the dropdown may take the value
@@ -57,7 +71,7 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
       <FilledRange
         min="-3" max="3" step="0.1" value={gain}
         disabled={!accumulating}
-        onChange={(event) => onGain?.(Number(event.target.value))}
+        onChange={(event) => onGain(Number(event.target.value))}
         aria-label="volume gain"
         title={accumulating
           ? "Accumulating along a ray washes a picture out; this brightens it back"
@@ -77,7 +91,7 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
       <FilledRange
         min="6" max="16" step="1"
         value={Math.round(Math.log2(depthSamples))}
-        onChange={(event) => onDepthSamples?.(2 ** Number(event.target.value))}
+        onChange={(event) => onDepthSamples(2 ** Number(event.target.value))}
         aria-label="volume detail"
         title="Too few steps and the volume stays on its coarsest copy however far you zoom in; too many and it will not keep up"
         style={styles.range}
@@ -90,7 +104,7 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
       </span>
       <FilledRange
         min="0" max="8" step="0.1" value={attenuation}
-        onChange={(event) => onAttenuation?.(Number(event.target.value))}
+        onChange={(event) => onAttenuation(Number(event.target.value))}
         aria-label="volume depth fade"
         title="Weighs each voxel by how far along the line of sight it is. Nought is no fading"
         style={styles.range}
@@ -110,7 +124,7 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
       {/* The three inputs take the slider column AND the value column, so
           their right edge lines up with the numbers above them. */}
       <div style={{ display: "flex", gap: 6, gridColumn: "2 / -1" }}>
-        {["x", "y", "z"].map((axis) => (
+        {(["x", "y", "z"] as const).map((axis) => (
           <label key={axis} style={{ display: "flex", alignItems: "center", gap: 3, flex: 1 }}>
             <span style={{ ...styles.controlLabel, minWidth: 0 }}>{axis}</span>
             <input
@@ -118,7 +132,7 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
               value={displayScales[axis]}
               onChange={(event) => {
                 const asked = Number(event.target.value);
-                if (asked > 0) onDisplayScales?.({ ...displayScales, [axis]: asked });
+                if (asked > 0) onDisplayScales({ ...displayScales, [axis]: asked });
               }}
               aria-label={`stretch ${axis}`}
               title={`How many times to stretch the picture along ${axis}. 1 is as the run declared it`}
@@ -131,25 +145,5 @@ function VolumeMode({ volumeMode, onVolumeMode, gain, onGain,
     </>
   );
 }
-
-
-/**
- * The axes the operator can actually see, which is what decides whether one
- * scale bar can be true.
- *
- * A bar states one distance per screen pixel, so it stays honest only while every
- * axis on screen is drawn at the same stretch. Which axes those are is a property
- * of the *view* rather than of the data, and that is the whole reason this cannot
- * be decided from the stretch factors alone.
- *
- * A single plane shows x and y and leaves depth off screen entirely, so
- * stretching z there — the ordinary thing to do with anisotropic data — cannot
- * make the bar wrong, and warning about it would cry wolf on the common case.
- * Turning the volume on puts z on screen beside them and the same stretch now
- * does make it wrong: measured on the demo volume with z quadrupled, ten
- * micrometres covers about 201 screen pixels along z against 50 along x, so a bar
- * reading either one is off by four for the other. The operator changed nothing
- * but what they were looking at.
- */
 
 export default VolumeMode;

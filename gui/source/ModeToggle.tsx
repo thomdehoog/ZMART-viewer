@@ -1,15 +1,20 @@
-import React from "react";
+import type { Mode } from "./display-axes.ts";
 import { topBarStyles as styles } from "./top-bar-styles.ts";
 
 // The two ways of looking at a volume, and the only thing the operator has to
 // choose between. 2-D is the working view -- one plane, scroll through the
 // stack. 3-D is for reading shape: the same data ray-cast, rotatable.
-const MODES = { flat: "2D", volume: "3D" };
+const MODES: readonly [Mode, string][] = [["flat", "2D"], ["volume", "3D"]];
 
-function ModeToggle({ mode, onChange }) {
+interface ModeToggleProps {
+  mode: Mode;
+  onChange: (mode: Mode) => void;
+}
+
+function ModeToggle({ mode, onChange }: ModeToggleProps) {
   return (
     <div style={styles.toggle}>
-      {Object.entries(MODES).map(([key, label]) => (
+      {MODES.map(([key, label]) => (
         <button
           key={key}
           onClick={() => onChange(key)}

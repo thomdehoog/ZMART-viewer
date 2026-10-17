@@ -1,5 +1,34 @@
 import React from "react";
+import type { LayerSpec } from "./asking-python.ts";
+import type { Window } from "./contrast-window.ts";
 import { styles } from "./layer-panel-styles.ts";
+
+/** A stretch of brightness by its two ends. */
+interface Span {
+  min: number;
+  max: number;
+}
+
+interface HistogramProps {
+  /** The channel, wearing the histogram to draw. */
+  layer: LayerSpec;
+  window_: Window;
+  onWindow: (next: Window) => void;
+  /** A new stretch of the axis to draw, or null for the resting framing. */
+  onAxis: (next: Window | null) => void;
+  /** The image's own range of values, which neither the window nor the axis may leave. */
+  range: Window;
+  scale: "linear" | "log";
+  /** The stretch of brightness the box spans. */
+  axis: Span;
+  /** The resting frame the bars' height is measured over. */
+  steady: Span;
+}
+
+/** What the pointer has hold of: a bar of the window, or the axis to pan. */
+type Hold =
+  | { bar: "low" | "high" }
+  | { bar?: undefined; panFrom: number; axisWas: { low: number; span: number } };
 
 /**
  * The spread of brightness in a channel, with the chosen window marked on it.
@@ -24,16 +53,14 @@ import { styles } from "./layer-panel-styles.ts";
  * framed the usual way and no further. Auto puts the default framing back.
  * (All of this is the operator's design, 2026-08-23.)
  */
-function Histogram({ layer, window_, color, onWindow, onAxis = null,
-                     range = null, scale = "linear", axis = null,
-                     steady = null }) {
-  const dragging = React.useRef(null);
+function Histogram({ layer, window_, onWindow, onAxis, range, scale, axis, steady }: HistogramProps) {
+  const dragging = React.useRef<Hold | null>(null);
   const [overBar, setOverBar] = React.useState(false);
-  const box = React.useRef(null);
+  const box = React.useRef<SVGSVGElement>(null);
   // The freshest zoom arithmetic, held where the listener below can reach
   // it. The listener itself is attached once per mount; the maths it calls
   // is replaced on every render, so it always reads today's axis.
-  const zooming = React.useRef(null);
+  const zooming = React.useRef<((event: WheelEvent) => void) | null>(null);
   const counts = layer.histogram?.counts;
   // The wheel zooms the axis, so the page must not scroll with it. React's
   // own wheel listener is registered as "passive" — one that has promised
@@ -42,34 +69,34 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
   React.useEffect(() => {
     const target = box.current;
     if (!target) return undefined;
-    const wheel = (event) => zooming.current?.(event);
+    const wheel = (event: WheelEvent) => zooming.current?.(event);
     target.addEventListener("wheel", wheel, { passive: false });
     return () => target.removeEventListener("wheel", wheel);
   }, [Boolean(counts?.length)]);
-  if (!counts?.length) return null;
   const measured = layer.histogram;
+  if (!measured || !counts?.length) return null;
   // The box spans the AXIS -- the camera's whole range when the store's
   // numbers have one -- and the bars sit at the brightness they were
   // measured at inside it, so the empty stretch up to saturation is honest
   // headroom on show. Marks, bars and the pointer all share one mapping, or
   // they would sit under the wrong values; on the log axis it warps them
   // together.
-  const low = axis ? axis.min : measured.low;
-  const span = (axis ? axis.max - axis.min : measured.high - measured.low) || 1;
+  const low = axis.min;
+  const span = (axis.max - axis.min) || 1;
   // Brightness runs along the box evenly, always. It once ran logarithmically
   // when Log was on, which moved every bar sideways and dragged the handles
   // with them, so a window an operator had set stopped sitting where they put
   // it. Log now lifts the bars instead (see their height below), which is the
   // thing that actually needs it: fluorescence piles almost every pixel into
   // the dim bins and leaves the interesting tail one pixel high.
-  const at = (value) =>
+  const at = (value: number) =>
     Math.min(Math.max((value - low) / span, 0), 1) * counts.length;
   const left = at(window_.low);
   const right = at(window_.high);
 
   // Which bin each count belongs to, in the brightness the server counted.
   const bins = measured.high - measured.low || 1;
-  const brightnessOf = (index) =>
+  const brightnessOf = (index: number) =>
     measured.low + ((index + 0.5) * bins) / counts.length;
   // The tallest bar is measured over the bins inside the RESTING frame --
   // the one Auto or a fresh window lays out -- not over every bin the
@@ -80,10 +107,9 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
   // under the eye measuring against it (2026-08-23). Anchored to the
   // frame, the heights hold still until the framing itself is asked to
   // change.
-  const anchor = steady || { min: low, max: low + span };
   const drawn = counts.filter(
-    (_count, index) => brightnessOf(index) >= anchor.min
-      && brightnessOf(index) <= anchor.max);
+    (_count, index) => brightnessOf(index) >= steady.min
+      && brightnessOf(index) <= steady.max);
   const peak = Math.max(...(drawn.length ? drawn : counts), 1);
 
   // The image's own range of values, which neither the window nor the axis
@@ -92,57 +118,51 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
   // range showed a sixteen-bit histogram running to numbers no camera
   // produced (the operator's refinement, 2026-08-24). Panning and zooming
   // therefore travel at most to the range itself.
-  const bounds = range && Number.isFinite(range.high)
-    ? { low: range.low ?? 0, high: range.high }
-    : { low: Math.min(0, measured.low), high: Math.max(65535, measured.high) };
-  const widest = bounds;
-  const withinImage = (value) =>
-    Math.min(Math.max(value, bounds.low), bounds.high);
-  const holdTheAxis = (next) => {
+  const withinImage = (value: number) =>
+    Math.min(Math.max(value, range.low), range.high);
+  const holdTheAxis = (next: Window): Window => {
     const width = Math.min(
-      Math.max(next.high - next.low, (bounds.high - bounds.low) / 256),
-      widest.high - widest.low,
+      Math.max(next.high - next.low, (range.high - range.low) / 256),
+      range.high - range.low,
     );
-    const from = Math.min(Math.max(next.low, widest.low), widest.high - width);
+    const from = Math.min(Math.max(next.low, range.low), range.high - width);
     return { low: from, high: from + width };
   };
 
   // Where a pointer event sits on the brightness axis.
-  const valueUnder = (event) => {
+  const valueUnder = (event: React.PointerEvent<SVGSVGElement>) => {
     const face = event.currentTarget.getBoundingClientRect();
     const fraction = Math.min(1, Math.max(0, (event.clientX - face.left) / face.width));
     return low + fraction * span;
   };
   // Which bar the pointer is over, if either: within a few screen pixels,
   // so the target is the drawn line and not "the nearer half of the box".
-  const barUnder = (event) => {
+  const barUnder = (event: React.PointerEvent<SVGSVGElement>): "low" | "high" | null => {
     const face = event.currentTarget.getBoundingClientRect();
     const grace = (6 / face.width) * span;
     if (Math.abs(valueUnder(event) - window_.low) <= grace) return "low";
     if (Math.abs(valueUnder(event) - window_.high) <= grace) return "high";
     return null;
   };
-  const takeHold = (event) => {
-    const bar = onWindow ? barUnder(event) : null;
+  const takeHold = (event: React.PointerEvent<SVGSVGElement>) => {
+    const bar = barUnder(event);
     if (bar) {
       dragging.current = { bar };
-    } else if (onAxis) {
+    } else {
       // Not a bar: the drag pans the axis. Everything is measured from
       // where the drag began, so the ground cannot creep under a held
       // pointer as the axis it is measured against moves.
       dragging.current = { panFrom: event.clientX, axisWas: { low, span } };
-    } else {
-      return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
     follow(event);
   };
-  const follow = (event) => {
+  const follow = (event: React.PointerEvent<SVGSVGElement>) => {
     const held = dragging.current;
     if (!held) {
       // A resting pointer only updates what the cursor face says it would
       // grab, so the bars read as handles before they are ever touched.
-      const bar = onWindow ? barUnder(event) : null;
+      const bar = barUnder(event);
       if (Boolean(bar) !== overBar) setOverBar(Boolean(bar));
       return;
     }
@@ -171,19 +191,18 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
   // cursor stays under the cursor, everything else breathes in or out
   // around it. The picture itself is untouched — this moves only what
   // stretch of brightness is DRAWN.
-  zooming.current = onAxis
-    ? (event) => {
-      event.preventDefault();
-      const face = box.current.getBoundingClientRect();
-      const fraction = Math.min(1, Math.max(0, (event.clientX - face.left) / face.width));
-      const anchor = low + fraction * span;
-      const factor = Math.exp(event.deltaY * 0.002);
-      onAxis(holdTheAxis({
-        low: anchor - (anchor - low) * factor,
-        high: anchor + (low + span - anchor) * factor,
-      }));
-    }
-    : null;
+  zooming.current = (event) => {
+    event.preventDefault();
+    if (!box.current) return;
+    const face = box.current.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientX - face.left) / face.width));
+    const anchor = low + fraction * span;
+    const factor = Math.exp(event.deltaY * 0.002);
+    onAxis(holdTheAxis({
+      low: anchor - (anchor - low) * factor,
+      high: anchor + (low + span - anchor) * factor,
+    }));
+  };
 
   return (
     <svg
@@ -191,7 +210,7 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
       viewBox={`0 0 ${counts.length} 24`}
       preserveAspectRatio="none"
       style={{ ...styles.histogram,
-               cursor: overBar ? "ew-resize" : onAxis ? "grab" : "default" }}
+               cursor: overBar ? "ew-resize" : "grab" }}
       role="img"
       aria-label={`histogram ${layer.name}`}
       onPointerDown={takeHold}
@@ -203,7 +222,7 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
       // — the same resting layout the panel opened with. It does NOT press
       // Auto: nothing is measured and the window does not move (the
       // operator's ask, 2026-08-23).
-      onDoubleClick={() => onAxis?.(null)}
+      onDoubleClick={() => onAxis(null)}
     >
       {/* Bars inside the window at full light -- near-white, so the stretch
           the display ramp is spent on is unmistakable -- and bars outside it
@@ -245,14 +264,5 @@ function Histogram({ layer, window_, color, onWindow, onAxis = null,
     </svg>
   );
 }
-
-/**
- * The number beside a slider, as a box that can be typed into.
- *
- * While untouched it simply shows the slider's value. Start typing and it
- * holds your draft until Enter or leaving the box commits it; a draft that
- * is not a number is quietly dropped and the real value comes back. So box
- * and slider always describe the same setting, whichever one moved last.
- */
 
 export default Histogram;

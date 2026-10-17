@@ -1,5 +1,5 @@
 import React from "react";
-import FilledRange from "./FilledRange.jsx";
+import FilledRange from "./FilledRange.tsx";
 import { momentsInRanges } from "./drawing/live-refresh.ts";
 
 // How long to rest on each plane while playing. Slow enough to see what is there,

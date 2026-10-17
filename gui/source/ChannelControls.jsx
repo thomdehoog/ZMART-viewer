@@ -1,15 +1,23 @@
 import React from "react";
-import FilledRange from "./FilledRange.jsx";
+import FilledRange from "./FilledRange.tsx";
 import { restingWindow } from "./drawing/layers.ts";
-import ColourChooser from "./ColourChooser.jsx";
-import Eye from "./Eye.jsx";
-import Histogram from "./Histogram.jsx";
-import ValueBox from "./ValueBox.jsx";
-import { css } from "./colours.ts";
+import ColourChooser from "./ColourChooser.tsx";
+import Eye from "./Eye.tsx";
+import Histogram from "./Histogram.tsx";
+import ValueBox from "./ValueBox.tsx";
 import { contrastRange, frameTheWindow } from "./contrast-window.ts";
 import { stretchedUnevenly } from "./display-axes.ts";
 import { styles } from "./layer-panel-styles.ts";
 
+/**
+ * The one block of controls, acting on whichever channel is picked out in the list.
+ *
+ * There is a single copy of this rather than one per channel. That is partly for
+ * room — with sliders on every row, three channels filled a tall screen — and
+ * partly because it matches how the work goes: you look at one channel, set it up,
+ * then move to the next. It is the arrangement napari uses, and anyone who has
+ * used napari will already know where to look.
+ */
 function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, onOpacity, onToggle,
                           onColor, onLut, onMeasureHere = null,
                           displayScales = { x: 1, y: 1, z: 1 } }) {
@@ -113,7 +121,6 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
           <ColourChooser
             layer={layer}
             entry={entry}
-            names={lookupTables}
             named="the chosen channel"
             onPick={(choice) => {
               if (choice.lut) {
@@ -144,7 +151,6 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
             <Histogram
               layer={seen}
               window_={window_}
-              color={css(entry.color)}
               onWindow={(next) => onWindow(index, next)}
               onAxis={(next) => setShown(next)}
               range={imageRange}

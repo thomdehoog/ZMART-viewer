@@ -1,5 +1,14 @@
 import React from "react";
+import type { CSSProperties } from "react";
+import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import { pickSiPrefix } from "neuroglancer/unstable/util/si_units.js";
+
+/** The bar to draw: how many pixels long, and what that length reads. */
+interface Bar {
+  pixels: number;
+  length: number;
+  unit: string;
+}
 
 /**
  * How long a bar is allowed to be, and the lengths it is allowed to read.
@@ -21,7 +30,7 @@ const TARGET_PIXELS = 120;
  * zooming in walks the bar down from millimetres to micrometres to nanometres
  * rather than showing an ever-smaller fraction.
  */
-export function barFor(perPixel, unit) {
+function barFor(perPixel: number, unit: string): Bar | null {
   if (!Number.isFinite(perPixel) || perPixel <= 0) return null;
   const wanted = TARGET_PIXELS * perPixel;
   const exponent = Math.floor(Math.log10(wanted));
@@ -52,7 +61,7 @@ export function barFor(perPixel, unit) {
  * bar has to read. Returns nothing when the flat view is showing, which is the
  * ordinary case.
  */
-function volumePanelOnScreen(viewer) {
+function volumePanelOnScreen(viewer: Viewer): { zoom: number; height: number } | null {
   for (const panel of viewer?.display?.panels || []) {
     // Told apart by what the panel holds rather than by its class name, because
     // the built page has those names shortened to a couple of letters and they
@@ -109,7 +118,7 @@ function volumePanelOnScreen(viewer) {
  * approximation. Only the per-axis stretch in the layer panel makes the axes
  * disagree, and that panel warns when the ones on screen do.
  */
-function pixelSize(viewer) {
+function pixelSize(viewer: Viewer): { perPixel: number; unit: string } | null {
   const navigation = viewer?.navigationState;
   const render = navigation?.displayDimensionRenderInfo?.value;
   if (!render) return null;
@@ -150,8 +159,8 @@ function pixelSize(viewer) {
  * all: it would quietly state the wrong size. So it listens to the same
  * navigation signals the sliders do and recomputes whenever the view moves.
  */
-export default function ScaleBar({ viewer }) {
-  const [bar, setBar] = React.useState(null);
+export default function ScaleBar({ viewer }: { viewer: Viewer | null }) {
+  const [bar, setBar] = React.useState<Bar | null>(null);
 
   React.useEffect(() => {
     if (!viewer) return undefined;
@@ -238,4 +247,4 @@ const styles = {
     borderRadius: 1,
     boxShadow: "0 1px 3px var(--scale-bar-shadow, rgba(0,0,0,.9))",
   },
-};
+} satisfies Record<string, CSSProperties>;
