@@ -1,11 +1,50 @@
 /** Pure decisions used by the manifest-driven refresh path.
  *
  * Kept free of React, the DOM and Neuroglancer so the safety rules can be
- * exercised in a plain JavaScript process as well as in the real browser.
+ * exercised in a plain Node process as well as in the real browser.
  */
 
-/** Return why a live-state answer is unsafe to apply, or null when sound. */
-export function liveStateProblem(previous, next) {
+/** A half-open run of moments, `[start, stop)`, that has been written. */
+export interface TimeRange {
+  start: number;
+  stop: number;
+}
+
+/** One store of a live run, as the server's live state describes it. */
+export interface LiveSource {
+  source_id: string;
+  url: string;
+  revision: number;
+  layout_revision: number;
+  committed_time_ranges: TimeRange[];
+}
+
+/** One live run, as the server's live state describes it. */
+export interface LiveRun {
+  dataset: number;
+  run_id: string;
+  revision: number;
+  layout_revision: number;
+  freshness: "current" | "degraded";
+  error?: string;
+  sources: LiveSource[];
+}
+
+/** The live state the server answers: every live run it has open. */
+export interface LiveStateSet {
+  schema: string;
+  runs: LiveRun[];
+}
+
+/** A source's revision, by its stable identity, with the address it is read from. */
+export type SourceRevisions = Map<string, { url: string; revision: number | undefined }>;
+
+/** The revisions last applied, by identity and by address alike. */
+export type RememberedRevisions = Map<string, number | undefined>;
+
+/** Return why a live-state answer is unsafe to apply, or null when sound. The
+    answer is the server's, so every field is checked rather than trusted. */
+export function liveStateProblem(previous: LiveStateSet | null | undefined, next: LiveStateSet | null | undefined): string | null {
   if (next == null) return null;
   if (next.schema !== "zmart-live-frontend-state-set/1" || !Array.isArray(next.runs)) {
     return "the server returned an unknown live-state description";
@@ -13,7 +52,7 @@ export function liveStateProblem(previous, next) {
   const before = new Map(
     (previous?.runs || []).map((run) => [run.dataset, run]),
   );
-  const seen = new Set();
+  const seen = new Set<number>();
   for (const run of next.runs) {
     if (
       !Number.isInteger(run.dataset)
@@ -41,7 +80,7 @@ export function liveStateProblem(previous, next) {
       return `the publication state for ${run.run_id} regressed`;
     }
     const oldSources = new Map((was?.sources || []).map((source) => [source.source_id, source]));
-    const sourceIds = new Set();
+    const sourceIds = new Set<string>();
     for (const source of run.sources) {
       if (
         typeof source.source_id !== "string"
@@ -86,14 +125,15 @@ export function liveStateProblem(previous, next) {
 }
 
 /** Expand settled half-open ranges without pretending gaps were committed. */
-export function momentsInRanges(ranges) {
+export function momentsInRanges(ranges: readonly (TimeRange | null | undefined)[] | null | undefined): number[] | null {
   if (!Array.isArray(ranges)) return null;
-  const moments = [];
+  const moments: number[] = [];
   let previous = -1;
   for (const range of ranges) {
     if (
-      !Number.isInteger(range?.start)
-      || !Number.isInteger(range?.stop)
+      !range
+      || !Number.isInteger(range.start)
+      || !Number.isInteger(range.stop)
       || range.start < 0
       || range.stop <= range.start
       || range.start < previous
@@ -107,7 +147,10 @@ export function momentsInRanges(ranges) {
 }
 
 /** Pair each stable source identity and URL with its separately carried revision. */
-export function sourceRevisionsFor(urls, sourceIds, sourceRevisions) {
+export function sourceRevisionsFor(
+  urls: readonly string[], sourceIds: readonly (string | undefined)[] | null | undefined,
+  sourceRevisions: readonly number[] | null | undefined,
+): SourceRevisions {
   if (!Array.isArray(sourceRevisions)) return new Map();
   return new Map(
     urls.map((url, at) => [
@@ -118,18 +161,18 @@ export function sourceRevisionsFor(urls, sourceIds, sourceRevisions) {
 }
 
 /** Select only sources whose valid committed revision moved strictly forwards. */
-export function advancingSourceRevisions(previous, current) {
+export function advancingSourceRevisions(previous: RememberedRevisions | null | undefined, current: SourceRevisions) {
   if (!previous) return [];
   return [...current.entries()].filter(([identity, now]) => {
     const before = previous.get(identity) ?? previous.get(now.url);
-    return Number.isFinite(now.revision)
-      && Number.isFinite(before)
+    return typeof now.revision === "number" && Number.isFinite(now.revision)
+      && typeof before === "number" && Number.isFinite(before)
       && now.revision > before;
   });
 }
 
 /** Remember both identity and stable URL, allowing either to match the next pass. */
-export function rememberedSourceRevisions(current) {
+export function rememberedSourceRevisions(current: SourceRevisions): RememberedRevisions {
   return new Map(
     [...current.entries()].flatMap(([identity, value]) => [
       [identity, value.revision],
@@ -145,9 +188,9 @@ export function rememberedSourceRevisions(current) {
  * similarly prefixed neighbour cannot match. Returning keys rather than mutating
  * the map keeps this policy independently testable.
  */
-export function memoEntriesForStableSource(questions, url) {
+export function memoEntriesForStableSource(questions: Iterable<string>, url: string) {
   const folder = url.split("|")[0];
-  const found = { metadata: [], decoded: [] };
+  const found: { metadata: string[]; decoded: string[] } = { metadata: [], decoded: [] };
   if (!folder) return found;
   for (const question of questions) {
     if (!question.includes(folder)) continue;

@@ -1,5 +1,5 @@
 import React from "react";
-import { styles } from "./layer-panel-styles.js";
+import { styles } from "./layer-panel-styles.ts";
 
 /**
  * The number beside a slider, as a box that can be typed into.

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE = ROOT / "gui" / "source" / "asking-python.js"
+MODULE = ROOT / "gui" / "source" / "asking-python.ts"
 
 
 def _answers_with_no_server(expression: str):

@@ -96,6 +96,13 @@ export function hexColour(rgb) {
 // leaves it out rather than sending a gamma of one, because `pow(v, 1.0)` is
 // not always exactly `v` on a graphics card and the picture would shift by a
 // level here and there for nothing.
+/**
+ * @param {boolean} volumetric
+ * @param {string | null} [lut] a colour map's name, or null for the flat colour
+ * @param {boolean} [opaque]
+ * @param {{ gamma?: boolean }} [options]
+ * @returns {string}
+ */
 export function shaderFor(volumetric, lut = null, opaque = false, { gamma = false } = {}) {
   const stops = lut ? LOOKUP_TABLES[lut] : null;
   const declared = [
@@ -163,6 +170,16 @@ export function shaderFor(volumetric, lut = null, opaque = false, { gamma = fals
 //
 // `gamma` is sent only to a program that declares it (see `shaderFor`): a
 // number, or `null` for a program without one.
+/**
+ * @param {{ low: number, high: number } | null | undefined} window_
+ * @param {boolean} volumetric
+ * @param {number} weight
+ * @param {readonly number[] | null | undefined} colour
+ * @param {string | null} [lut]
+ * @param {number} [attenuation]
+ * @param {number | null} [gamma]
+ * @returns {Record<string, unknown> | undefined}
+ */
 export function shaderControlsFor(window_, volumetric, weight, colour,
                                   lut = null, attenuation = 0, gamma = null) {
   if (!window_) return undefined;

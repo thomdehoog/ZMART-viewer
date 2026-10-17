@@ -3,7 +3,7 @@ import ChannelControls from "./ChannelControls.jsx";
 import ColourChooser from "./ColourChooser.jsx";
 import Eye from "./Eye.jsx";
 import VolumeMode from "./VolumeMode.jsx";
-import { styles } from "./layer-panel-styles.js";
+import { styles } from "./layer-panel-styles.ts";
 
 /**
  * The layer list, in napari's shape: one row per layer, an eye to hide it, a

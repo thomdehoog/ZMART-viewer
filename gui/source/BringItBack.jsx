@@ -1,6 +1,6 @@
 import React from "react";
 import { putTheViewBack } from "./drawing/neuroglancer.js";
-import { topBarStyles as styles } from "./top-bar-styles.js";
+import { topBarStyles as styles } from "./top-bar-styles.ts";
 
 /**
  * The way back to the whole picture, from wherever the operator has wandered.
@@ -27,7 +27,7 @@ function BringItBack({ viewer }) {
   return (
     <button
       onClick={() => putTheViewBack(viewer)}
-      style={{ ...styles.button, ...styles.bringItBack }}
+      style={{ ...styles.button, ...styles.action }}
       title="Put the view back as it opened: straight, centred and sized to the window. The plane and the moment stay where they are"
     >
       Overview

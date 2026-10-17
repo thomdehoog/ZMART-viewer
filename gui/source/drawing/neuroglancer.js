@@ -47,7 +47,7 @@ import {
   memoEntriesForStableSource,
   rememberedSourceRevisions,
   sourceRevisionsFor,
-} from "./live-refresh.js";
+} from "./live-refresh.ts";
 
 // -- what each layer was last told ---------------------------------------------
 //

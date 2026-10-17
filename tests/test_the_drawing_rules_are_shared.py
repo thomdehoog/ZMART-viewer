@@ -60,18 +60,24 @@ def test_the_programs_are_the_engines_and_unchanged_by_the_move():
     answer = run_node("""
         import {createHash} from 'node:crypto';
         import * as shared from './engine/drawing/programs.js';
-        import * as page from './gui/source/drawing/layers.js';
+        globalThis.window = { location: { origin: 'http://viewer' } };
+        const page = await import('./gui/source/drawing/layers.ts');
         const digest = text => createHash('sha256').update(text).digest('hex').slice(0, 16);
         const programs = [];
         for (const volumetric of [false, true])
           for (const lut of [null, ...shared.LOOKUP_TABLE_NAMES])
             for (const opaque of [false, true])
               programs.push([volumetric, lut, opaque, digest(shared.shaderFor(volumetric, lut, opaque))]);
-        console.log(JSON.stringify({
-          programs,
-          samePage: ['shaderFor', 'shaderControlsFor', 'hexColour', 'lutShader', 'LOOKUP_TABLES',
-                     'LOOKUP_TABLE_NAMES'].every(name => page[name] === shared[name]),
-        }));
+        // What the page hands the engine for one channel, in each mode and with
+        // a colour map: its program is the engine's, character for character.
+        const config = { layers: [{ name: 'c0', group: 'overview', source: '/data/0', opaque: true,
+                                    window: { low: 0, high: 100 } }] };
+        const state = [{ visible: true, color: [1, 0, 1], lut: 'magma', opacity: 1, window: null }];
+        const drawn = mode => page.layersFor(config, mode, state, {}, ['overview'])
+          .find(layer => layer.name.endsWith('c0'));
+        const samePage = ['flat', 'volume'].every(mode =>
+          drawn(mode).shader === shared.shaderFor(mode === 'volume', 'magma', false));
+        console.log(JSON.stringify({ programs, samePage }));
     """)
     assert answer["programs"] == PROGRAMS_BEFORE_THE_MOVE
     assert answer["samePage"] is True

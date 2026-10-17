@@ -1,5 +1,5 @@
 import React from "react";
-import { styles } from "./layer-panel-styles.js";
+import { styles } from "./layer-panel-styles.ts";
 
 /** A drawn eye, open or crossed out — the show/hide idea every biologist knows. */
 function Eye({ open }) {

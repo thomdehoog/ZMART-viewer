@@ -1,5 +1,5 @@
 import React from "react";
-import { askToStop, constructionStatus, openPath, startConstruction, tryNativeChooser } from "./asking-python.js";
+import { askToStop, constructionStatus, openPath, startConstruction, tryNativeChooser } from "./asking-python.ts";
 
 /**
  * The load window: pick the thing to look at, and the window says what it is.

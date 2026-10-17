@@ -1,5 +1,5 @@
 import React from "react";
-import { topBarStyles as styles } from "./top-bar-styles.js";
+import { topBarStyles as styles } from "./top-bar-styles.ts";
 
 // The two ways of looking at a volume, and the only thing the operator has to
 // choose between. 2-D is the working view -- one plane, scroll through the

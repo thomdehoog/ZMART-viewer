@@ -19,16 +19,17 @@ import {
 } from "./drawing/neuroglancer.js";
 import ScaleBar from "./ScaleBar.jsx";
 import AxisSlider from "./AxisSlider.jsx";
-import { LOOKUP_TABLE_NAMES, engineName, layerKey, layersFor } from "./drawing/layers.js";
+import { LOOKUP_TABLE_NAMES } from "../../engine/drawing/programs.js";
+import { engineName, layerKey, layersFor } from "./drawing/layers.ts";
 import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../../engine/drawing/embedding.js";
-import { liveStateProblem } from "./drawing/live-refresh.js";
+import { liveStateProblem } from "./drawing/live-refresh.ts";
 import LoadWindow from "./LoadWindow.jsx";
 import ModeToggle from "./ModeToggle.jsx";
 import BringItBack from "./BringItBack.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 import { TARGET_LAYER, annotationLayer } from "./annotation-layer.js";
-import { closeGroup, fetchConfig, fetchLiveState, listFolders, loadTargets, measureHere } from "./asking-python.js";
-import { topBarStyles } from "./top-bar-styles.js";
+import { closeGroup, fetchConfig, fetchLiveState, listFolders, loadTargets, measureHere } from "./asking-python.ts";
+import { topBarStyles } from "./top-bar-styles.ts";
 
 const LIVE_STATE_CHECK_MS = 10_000;
 
@@ -696,7 +697,7 @@ export default function App() {
     // The descriptions the panel just handed the engine, exactly as they were
     // handed over. This exists for one test and is worth the line: `neuroglancer.js`
     // carries every field of a description onto the live layer by hand, one line
-    // each, so a field added to `layers.js` and forgotten there is dropped in
+    // each, so a field added to `drawing/layers.ts` and forgotten there is dropped in
     // silence -- three controls were found dead that way in a single afternoon.
     // A test can only guard against the *next* one if it can ask what fields are
     // in a description rather than being told a list somebody has to remember to

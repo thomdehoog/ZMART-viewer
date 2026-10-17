@@ -1,14 +1,14 @@
 import React from "react";
 import FilledRange from "./FilledRange.jsx";
-import { restingWindow } from "./drawing/layers.js";
+import { restingWindow } from "./drawing/layers.ts";
 import ColourChooser from "./ColourChooser.jsx";
 import Eye from "./Eye.jsx";
 import Histogram from "./Histogram.jsx";
 import ValueBox from "./ValueBox.jsx";
-import { css } from "./colours.js";
-import { contrastRange, frameTheWindow } from "./contrast-window.js";
-import { stretchedUnevenly } from "./display-axes.js";
-import { styles } from "./layer-panel-styles.js";
+import { css } from "./colours.ts";
+import { contrastRange, frameTheWindow } from "./contrast-window.ts";
+import { stretchedUnevenly } from "./display-axes.ts";
+import { styles } from "./layer-panel-styles.ts";
 
 function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, onOpacity, onToggle,
                           onColor, onLut, onMeasureHere = null,
@@ -18,7 +18,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   // where the operator was looking at one moment, not the channel: pan away
   // and the old reading is no longer about anything.
   const [here, setHere] = React.useState(null);
-  // The same resting window the canvas draws with (see layers.js): the run's
+  // The same resting window the canvas draws with (see drawing/layers.ts): the run's
   // recorded window, or the measured one when the run said nothing.
   const window_ = entry.window || restingWindow(layer, mode === "volume")
     || { low: 0, high: 65535 };
@@ -89,7 +89,7 @@ function ChannelControls({ layer, index, entry, mode, lookupTables, onWindow, on
   const autoWindow = seen.histogram?.autoWindow;
 
   return (
-    <div style={styles.controls} aria-label="channel controls">
+    <div style={styles.card} aria-label="channel controls">
       <div style={styles.headingRow}>
         <span style={styles.heading}>channel settings</span>
       </div>

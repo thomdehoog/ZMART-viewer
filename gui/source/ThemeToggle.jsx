@@ -1,5 +1,5 @@
 import React from "react";
-import { topBarStyles as styles } from "./top-bar-styles.js";
+import { topBarStyles as styles } from "./top-bar-styles.ts";
 
 // Where the chosen theme is remembered between sessions. main.jsx reads the
 // same key before anything is drawn, so a page that was left light comes
@@ -31,7 +31,7 @@ function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(other)}
-      style={{ ...styles.button, ...styles.themeToggle }}
+      style={{ ...styles.button, ...styles.action }}
       aria-label={`switch to the ${other} theme`}
       title={other === "light"
         ? "Dress the controls in light colours. The image itself stays on black"

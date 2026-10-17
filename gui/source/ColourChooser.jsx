@@ -1,6 +1,7 @@
 import React from "react";
-import { LUT_GRADIENTS, PALETTE, css, hexOf, rgbOf } from "./colours.js";
-import { LIST_TALL_AT_MOST, styles } from "./layer-panel-styles.js";
+import { hexColour } from "../../engine/drawing/programs.js";
+import { LUT_GRADIENTS, PALETTE, css, rgbOf } from "./colours.ts";
+import { LIST_TALL_AT_MOST, styles } from "./layer-panel-styles.ts";
 
 /**
  * The square a channel is painted in, which is also how the colour is chosen.
@@ -107,7 +108,7 @@ function ColourChooser({ layer, entry, names, onPick, named = null }) {
             custom
             <input
               type="color"
-              value={hexOf(entry.color)}
+              value={hexColour(entry.color)}
               onBlur={closeOnLeaving}
               onChange={(event) => {
                 onPick({ rgb: rgbOf(event.target.value), lut: null });

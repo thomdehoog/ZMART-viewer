@@ -2,18 +2,69 @@
  * Turning what the panel says into what the engine should draw.
  *
  * This is the translation layer, and it is kept on its own because none of it
- * touches React or the browser: give it the panel's state and it hands back plain
- * descriptions of layers, which `neuroglancer.js` then applies to the engine. That makes
- * it the easiest part of the viewer to reason about and to check, and it keeps the
- * shell free of the fiddly business of writing shader programs.
+ * touches React or the engine: give it the panel's state and it hands back plain
+ * descriptions of layers, which the engine's side then applies. All it asks of
+ * the browser is the page's own address, which every store's is written
+ * against. That makes it the easiest part of the viewer to reason about and to
+ * check, and it keeps the shell free of the fiddly business of writing shader
+ * programs.
  */
 
 // The shader programs, their colour maps and their controls are the engine's,
 // shared with the operator page of ZMART-interface; see engine/drawing/programs.js.
-import { hexColour, LOOKUP_TABLE_NAMES, LOOKUP_TABLES, lutShader, shaderControlsFor, shaderFor }
-  from "../../../engine/drawing/programs.js";
+import { shaderControlsFor, shaderFor } from "../../../engine/drawing/programs.js";
+import type { Config, LayerSpec } from "../asking-python.ts";
+import type { Rgb } from "../colours.ts";
+import type { Window } from "../contrast-window.ts";
+import type { Mode } from "../display-axes.ts";
 
-export { hexColour, LOOKUP_TABLE_NAMES, LOOKUP_TABLES, lutShader, shaderControlsFor, shaderFor };
+/** What the panel holds for one channel: what the operator has set on it. */
+export interface LayerState {
+  visible: boolean;
+  color: Rgb | null | undefined;
+  /** A colour map's name, or null for the flat colour. */
+  lut: string | null;
+  opacity: number;
+  /** Null until the operator moves a contrast handle: until then the resting window. */
+  window: Window | null;
+}
+
+/** Whether each acquisition type is shown, by its name. */
+export type GroupState = Record<string, { visible: boolean }>;
+
+/** How the volume is drawn: a projection of the brightest or the dimmest voxel, or accumulated. */
+export type VolumeMode = "max" | "on" | "min";
+
+/** A row as `layersFor` hands it on: a channel, cut to one depth where the flat view splits it. */
+type Row = LayerSpec & { depth?: "flat" | "stack" };
+
+/**
+ * One layer as the engine is told to draw it: neuroglancer's own layer
+ * description, plus the few fields the engine's side reads to know which
+ * stores have changed and how a layer is held (neuroglancer ignores those).
+ */
+export interface EngineLayer {
+  type: "image" | "segmentation";
+  name: string;
+  source: string[];
+  visible?: boolean;
+  persistentFlat?: boolean;
+  boundaryHeld?: boolean;
+  frameCounts?: number[];
+  sourceIds?: string[];
+  sourceRevisions?: number[];
+  sourceGeometryRevisions?: number[];
+  localPosition?: number[];
+  shader?: string;
+  shaderControls?: Record<string, unknown>;
+  blend?: "additive" | "default";
+  opacity?: number;
+  selectedAlpha?: number;
+  notSelectedAlpha?: number;
+  volumeRendering?: VolumeMode;
+  volumeRenderingDepthSamples?: number;
+  volumeRenderingGain?: number;
+}
 
 // How one channel is recognised again after something has been opened or closed.
 // The acquisition type and the channel name together, because that pair is what
@@ -21,7 +72,7 @@ export { hexColour, LOOKUP_TABLE_NAMES, LOOKUP_TABLES, lutShader, shaderControls
 // as anything is added or removed, so a number would quietly come to mean a
 // different channel. This is the key the panel carries colour and contrast across
 // on, and it never leaves the page.
-export function layerKey(spec) {
+export function layerKey(spec: LayerSpec): string {
   const view = spec.view;
   return `${spec.group}/${spec.name}` + (view ? `/${view.acquisition}/${view.type}/${view.method || ""}` : "");
 }
@@ -32,9 +83,27 @@ export function layerKey(spec) {
 // both an overview and a target scan have a "marker-a" -- so the name handed over
 // carries the type with it. The panel still shows the short name on screen; this is
 // only what the engine hears.
-export function engineName(spec) {
+export function engineName(spec: LayerSpec): string {
   if (spec.view) return layerKey(spec);
   return spec.group ? `${spec.group} · ${spec.name}` : spec.name;
+}
+
+/**
+ * The brightness window a layer rests at before the operator touches anything.
+ *
+ * The run's own recorded window comes first: that is what the microscopist
+ * asked for, and it stays authoritative. Where the run recorded nothing, the
+ * window measured from the pixels (the same one the Auto button applies) is
+ * used instead of the camera's whole range -- a real specimen sits in the
+ * bottom few per cent of that range, so the whole range showed a picture that
+ * was very nearly black until somebody pressed Auto. Watched on every live run
+ * before this fallback existed. Both the canvas and the panel's sliders read
+ * the window through here, so they can never disagree about where a fresh
+ * layer starts.
+ */
+export function restingWindow(spec: LayerSpec, volumetric: boolean): Window | null {
+  const asked = volumetric ? spec.volumeWindow || spec.window : spec.window;
+  return asked || spec.histogram?.autoWindow || null;
 }
 
 /**
@@ -49,35 +118,25 @@ export function engineName(spec) {
  * used to multiply in here was removed with its slider (2026-08-18): two
  * opacities acting on one channel read as a control that does nothing.
  */
-/**
- * The brightness window a layer rests at before the operator touches anything.
- *
- * The run's own recorded window comes first: that is what the microscopist
- * asked for, and it stays authoritative. Where the run recorded nothing, the
- * window measured from the pixels (the same one the Auto button applies) is
- * used instead of the camera's whole range -- a real specimen sits in the
- * bottom few per cent of that range, so the whole range showed a picture that
- * was very nearly black until somebody pressed Auto. Watched on every live run
- * before this fallback existed. Both the canvas and the panel's sliders read
- * the window through here, so they can never disagree about where a fresh
- * layer starts.
- */
-export function restingWindow(spec, volumetric) {
-  const asked = volumetric ? spec.volumeWindow || spec.window : spec.window;
-  return asked || spec.histogram?.autoWindow || null;
-}
-
-export function layersFor(config, mode, layerState, groupState, groupOrder,
-                          volumeMode = "max", volume = {}) {
+export function layersFor(
+  config: Config, mode: Mode, layerState: LayerState[], groupState: GroupState,
+  groupOrder: string[], volumeMode: VolumeMode = "max",
+  volume: { attenuation?: number; depthSamples?: number; gain?: number } = {},
+): EngineLayer[] {
   const volumetric = mode === "volume";
-  const rows = config.layers.flatMap((spec, index) => {
-    if (volumetric || !spec.sourceDepths) return [{ spec, index }];
-    return ["flat", "stack"].flatMap(depth => {
-      const indices = spec.sourceDepths.flatMap((kind, i) => kind === depth ? [i] : []);
+  const rows = config.layers.flatMap((spec, index): { spec: Row; index: number }[] => {
+    const depths = spec.sourceDepths;
+    if (volumetric || !depths) return [{ spec, index }];
+    return (["flat", "stack"] as const).flatMap((depth) => {
+      const indices = depths.flatMap((kind, i) => (kind === depth ? [i] : []));
       if (!indices.length) return [];
-      const selected = { ...spec, depth };
-      for (const key of ["sources", "coverageSources", "sourceIds", "sourceRevisions", "frameCounts"])
-        if (spec[key]) selected[key] = indices.map(i => spec[key][i]);
+      const pick = <T>(values: T[] | undefined) => values && indices.map((i) => values[i]);
+      const selected: Row = {
+        ...spec, depth,
+        sources: pick(spec.sources), coverageSources: pick(spec.coverageSources),
+        sourceIds: pick(spec.sourceIds), sourceRevisions: pick(spec.sourceRevisions),
+        frameCounts: pick(spec.frameCounts),
+      };
       return [{ spec: selected, index }];
     });
   });
@@ -98,7 +157,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
     // is for. Brightness and contrast mean nothing on an identity number, so none
     // of that is sent.
     const isMask = spec.kind === "segmentation";
-    const layer = {
+    const layer: EngineLayer = {
       type: isMask ? "segmentation" : "image",
       name: engineName(spec) + (spec.depth ? `__${spec.depth}` : ""),
       persistentFlat: spec.depth === "flat" || spec.view?.type === "projection",
@@ -106,7 +165,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       // A row may be drawn from several stores -- several positions of the same
       // acquisition type. The engine takes the list and places each one using the
       // stage position recorded inside it.
-      source: (spec.sources || [spec.source]).map(
+      source: (spec.sources || [spec.source!]).map(
         (source) => `${window.location.origin}${source}`,
       ),
       // How many frames the server has counted on disk for each store above, in the
@@ -141,7 +200,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
       layer.notSelectedAlpha = opacity;
       return layer;
     }
-    layer.shader = shaderFor(volumetric, lut, (config.transparentBackground || spec.view) && spec.opaque);
+    layer.shader = shaderFor(volumetric, lut, Boolean((config.transparentBackground || spec.view) && spec.opaque));
     // A row that got here is a channel a microscope wrote as its own file, so
     // the engine has to add it to its neighbours from outside -- there is no
     // one program holding both. Adding is safe only while the row is fed by a
@@ -205,7 +264,7 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
   // Coverage goes below its flat/stack channel block, so acquired black can
   // cover an earlier picture without obscuring channels in its own block.
   // One tiled source per image source; the layer count does not grow with positions.
-  const coverage = layers.flatMap((layer, index) => {
+  const coverage = layers.flatMap((layer, index): EngineLayer[] => {
     const sources = all[index].spec.coverageSources;
     if (layer.type !== "image" || !sources?.length) return [];
     return [{
@@ -223,8 +282,8 @@ export function layersFor(config, mode, layerState, groupState, groupOrder,
         + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }",
     }];
   });
-  const result = [], handled = new Set();
-  const block = spec => JSON.stringify([spec.group || "", spec.view?.acquisition]);
+  const result: EngineLayer[] = [], handled = new Set<string>();
+  const block = (spec: Row) => JSON.stringify([spec.group || "", spec.view?.acquisition]);
   for (let i = 0; i < layers.length; ++i) {
     const spec = all[i].spec;
     const group = block(spec);

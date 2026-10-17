@@ -4,6 +4,67 @@
 // components that hold them. Every one answers with something the interface can show
 // even when it went wrong, because a button that silently does nothing is the
 // hardest kind of fault for an operator to make sense of.
+//
+// The shapes of what the server answers are declared here too, beside the
+// requests that bring them in: what is open (`Config`) and each row of it.
+
+import type { Rgb } from "./colours.ts";
+import type { Window } from "./contrast-window.ts";
+import type { LiveStateSet } from "./drawing/live-refresh.ts";
+
+/** Which of a run's named pictures a row is: a slice, the top, or a projection. */
+export interface View {
+  acquisition: string;
+  type: string;
+  method?: string;
+}
+
+/** A channel's brightness as measured: the counts per bin from `low` to `high`,
+    and the window Auto would choose. */
+export interface Histogram extends Window {
+  counts: number[];
+  autoWindow?: Window | null;
+}
+
+/** One channel row of what is open, as the server describes it. */
+export interface LayerSpec {
+  name: string;
+  group?: string;
+  kind?: "image" | "segmentation";
+  source?: string;
+  sources?: string[];
+  coverageSources?: string[];
+  sourceIds?: string[];
+  sourceRevisions?: number[];
+  sourceGeometryRevisions?: number[];
+  frameCounts?: number[];
+  frames?: number | null;
+  /** Per store, whether it is one plane or a stack: the flat view draws them apart. */
+  sourceDepths?: ("flat" | "stack")[];
+  view?: View;
+  histogram?: Histogram | null;
+  window?: Window | null;
+  volumeWindow?: Window | null;
+  opaque?: boolean;
+  localPosition?: number[];
+  channelIndex?: number | null;
+  liveRunId?: string | null;
+  color?: Rgb | null;
+  /** False where the run says this channel was switched off at the instrument. */
+  active?: boolean;
+}
+
+/** What is open, as the server says it: the rows, and how the page should behave. */
+export interface Config {
+  layers: LayerSpec[];
+  groups?: string[];
+  liveState?: LiveStateSet | null;
+  live?: boolean;
+  canOpen?: boolean;
+  chrome?: boolean;
+  depthSamples?: number;
+  transparentBackground?: boolean;
+}
 
 /**
  * Ask the server what is open, or return null if it cannot be reached.
@@ -15,7 +76,7 @@
  * not be reached is far more use to someone at two in the morning wondering
  * whether their experiment is still running.
  */
-export async function fetchConfig() {
+export async function fetchConfig(): Promise<Config | null> {
   try {
     const response = await fetch("/api/config");
     if (!response.ok) return null;
@@ -25,16 +86,16 @@ export async function fetchConfig() {
   }
 }
 
-export async function fetchLiveState(etag = null) {
+export async function fetchLiveState(etag: string | null = null) {
   try {
-    const headers = etag ? { "If-None-Match": etag } : {};
+    const headers: Record<string, string> = etag ? { "If-None-Match": etag } : {};
     const response = await fetch("/api/live-state", { headers });
     if (response.status === 304) return { unchanged: true, etag };
     if (!response.ok) return null;
     return {
       unchanged: false,
       etag: response.headers.get("ETag"),
-      state: await response.json(),
+      state: await response.json() as LiveStateSet,
     };
   } catch {
     return null;
@@ -46,7 +107,7 @@ export async function fetchLiveState(etag = null) {
 // asking for a path typed blind. Now the page draws its own load window
 // instead (see LoadWindow.jsx), walking the server's folders by listing
 // them through the API.
-export async function tryNativeChooser() {
+export async function tryNativeChooser(): Promise<{ cancelled: true } | { path: string; parent: string } | { window: true }> {
   try {
     const response = await fetch("/api/browse", { method: "POST" });
     const answer = await response.json().catch(() => null);
@@ -60,20 +121,50 @@ export async function tryNativeChooser() {
   return { window: true };
 }
 
+/** What a refusal carries: the server's own sentence, and for an open, what to relink. */
+interface Refused {
+  error?: string;
+  relink?: unknown;
+}
+
+/** A measurement of the pixels in a box: the window and histogram found there, or
+    `empty` where the box held no pixels. */
+export interface Measured {
+  empty?: true;
+  window?: Window;
+  histogram?: Histogram;
+}
+
+/** How far a build of a view has got. */
+export interface BuildStatus {
+  state: "running" | "done" | "cancelled" | "error" | string;
+  fraction?: number;
+  store?: string;
+  error?: string;
+}
+
+/** A folder as the load window lists it. */
+export interface Listing {
+  path: string;
+  parent?: string | null;
+  /** Each folder in it; `kind` says what it holds when it is something to open. */
+  folders: { name: string; kind?: string }[];
+}
+
 /**
  * Post a JSON body and read the JSON answer: `{ ok, answer }`, or null when the
  * server did not answer at all -- the connection dropped, or it is gone. Every
  * request below says what that means for its own button, so none of them can
  * leave one waiting for ever.
  */
-async function post(path, body = {}) {
+async function post<Answer>(path: string, body: object = {}): Promise<{ ok: boolean; answer: Answer | null } | null> {
   try {
     const response = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return { ok: response.ok, answer: await response.json().catch(() => null) };
+    return { ok: response.ok, answer: await response.json().catch(() => null) as Answer | null };
   } catch {
     return null;
   }
@@ -84,13 +175,13 @@ const UNANSWERED = "the viewer's server did not answer";
 
 // A measurement that cannot be taken leaves the picture as it is, which is the
 // honest answer to a button that had nothing to read.
-export async function measureHere(asked) {
-  const asking = await post("/api/measure", asked);
+export async function measureHere(asked: object) {
+  const asking = await post<Measured>("/api/measure", asked);
   return asking?.ok ? asking.answer : null;
 }
 
-export async function openPath(path) {
-  const asking = await post("/api/stores/open", { path });
+export async function openPath(path: string): Promise<{ error: string; relink?: unknown } | { config: Config }> {
+  const asking = await post<Config & Refused>("/api/stores/open", { path });
   if (!asking) return { error: `could not open ${path}: ${UNANSWERED}` };
   if (!asking.ok) {
     return {
@@ -98,11 +189,13 @@ export async function openPath(path) {
       relink: asking.answer?.relink || null,
     };
   }
-  return { config: asking.answer };
+  return { config: asking.answer! };
 }
 
-export async function startConstruction(path, viewerFolder, bake, name) {
-  const asking = await post("/api/stores/construct", { path, viewer_folder: viewerFolder, bake, name });
+export async function startConstruction(
+  path: string, viewerFolder: string, bake: boolean, name?: string,
+): Promise<{ error: string } | { started: true }> {
+  const asking = await post<Refused>("/api/stores/construct", { path, viewer_folder: viewerFolder, bake, name });
   if (!asking) return { error: `the construction could not start: ${UNANSWERED}` };
   if (!asking.ok) return { error: asking.answer?.error || "the construction could not start" };
   return { started: true };
@@ -110,36 +203,36 @@ export async function startConstruction(path, viewerFolder, bake, name) {
 
 // Null when the poll went unanswered: the build may well still be running, so
 // the page asks again rather than calling it failed.
-export async function constructionStatus() {
-  const asking = await post("/api/stores/construct-status");
+export async function constructionStatus(): Promise<BuildStatus | null> {
+  const asking = await post<BuildStatus>("/api/stores/construct-status");
   if (!asking) return null;
   return asking.answer ?? { state: "error", error: "unreadable answer" };
 }
 
 // Ask the running build to stop at its next step. Cooperative: the step in
 // flight finishes whole, and a stopped build removes its half-made scene.
-export async function askToStop(what) {
+export async function askToStop(what: string): Promise<void> {
   await post(`/api/stores/${what}-cancel`);
 }
 
-export async function listFolders(path) {
-  const asking = await post("/api/stores/list", path ? { path } : {});
+export async function listFolders(path: string | null): Promise<{ error: string } | Listing> {
+  const asking = await post<Listing & Refused>("/api/stores/list", path ? { path } : {});
   if (!asking) return { error: `the folders could not be listed: ${UNANSWERED}` };
   if (!asking.ok) return { error: asking.answer?.error || "the folders could not be listed" };
-  return asking.answer;
+  return asking.answer!;
 }
 
-export async function closeGroup(group) {
-  const asking = await post("/api/stores/close", { group });
+export async function closeGroup(group: string): Promise<{ error: string } | { config: Config }> {
+  const asking = await post<Config & Refused>("/api/stores/close", { group });
   if (!asking) return { error: `could not close ${group}: ${UNANSWERED}` };
   if (!asking.ok) return { error: asking.answer?.error || `could not close ${group}` };
-  return { config: asking.answer };
+  return { config: asking.answer! };
 }
 
 // The targets saved beside the images, as ``{ targets }``, or ``{ error }`` when
 // the file is there but could not be read. A failed read is never an empty list:
 // that list would be saved back over the file and lose what is in it.
-export async function loadTargets() {
+export async function loadTargets(): Promise<{ error: string } | { targets: unknown[] }> {
   try {
     const response = await fetch("/api/annotations");
     const answer = await response.json().catch(() => null);

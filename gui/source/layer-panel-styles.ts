@@ -2,16 +2,18 @@
 // the few sizes they share, so that a row restyled in one place stays in
 // step everywhere else.
 
+import type { CSSProperties } from "react";
+
 // One block for every small control in the display settings: the boxes an
 // operator types into and the buttons beside them. Named rather than repeated
 // so the row cannot drift apart the next time one of them is restyled.
-export const ROW_ITEM = 54;
+const ROW_ITEM = 54;
 
-export const ROW_HEIGHT = 24;
+const ROW_HEIGHT = 24;
 
 // What separates one block of the bar from the next: a rule, and enough room on
 // either side of it that the eye reads two sections rather than one long list.
-export const BLOCK = {
+const BLOCK: CSSProperties = {
   // Ruled top and bottom, so a section reads as a card whichever side the
   // eye arrives from.
   borderTop: "1px solid var(--panel-border)",
@@ -24,15 +26,7 @@ export const BLOCK = {
 // The ground under the channel being adjusted, in both the places it is
 // named: its row in the list, and its row above the histogram. One value, so
 // the two cannot drift apart.
-
-// The ground under the channel being adjusted, in both the places it is
-// named: its row in the list, and its row above the histogram. One value, so
-// the two cannot drift apart.
-export const CHOSEN_GROUND = "var(--selected-row-bg)";
-
-// How tall the colour list may grow before it scrolls. Named, because the
-// list also asks "is there room for me below the square?", and the two have
-// to be the same number.
+const CHOSEN_GROUND = "var(--selected-row-bg)";
 
 // How tall the colour list may grow before it scrolls. Named, because the
 // list also asks "is there room for me below the square?", and the two have
@@ -47,24 +41,6 @@ export const styles = {
     borderRadius: 5,
     color: "var(--text-muted)",
     font: "11px/1.5 system-ui, sans-serif",
-  },
-  emptyLine: { margin: "0 0 6px" },
-  orderNote: {
-    margin: "0 12px 6px",
-    color: "var(--text-muted)",
-    font: "10px/1.4 system-ui, sans-serif",
-  },
-  // The two numbers under the histogram are the window in use, so the picture
-  // above can be read as "this part of the spread is what you are seeing".
-  histogramCaption: {
-    display: "grid",
-    gridTemplateColumns: "1fr auto 1fr",
-    alignItems: "baseline",
-    gap: 6,
-    padding: "0 12px 3px 60px",
-    color: "var(--text-muted)",
-    font: "10px/1.3 system-ui, sans-serif",
-    fontVariantNumeric: "tabular-nums",
   },
   eyeGlyph: { width: 14, height: 14, display: "block" },
   // The card every section sits on. Same blue as the display settings, so the
@@ -192,17 +168,6 @@ export const styles = {
   // the same thing twice and drew the eye to the panel's edge rather than to
   // the row.
   layerChosen: { background: CHOSEN_GROUND },
-  // Directly below the list of channels, so the two things that belong
-  // together -- the highlighted row naming the channel and the controls
-  // adjusting it -- end up next to each other rather than at opposite ends
-  // of the bar.
-  // The clear space above the block is what separates it from the list at a
-  // glance; the section rule alone was too easy to read past.
-  // Every section is separated from the next by the darker panel ground
-  // showing between the cards, and by the same amount: what set this one
-  // apart with extra room above was making the settings look like a
-  // different kind of thing from the list they belong to.
-  controls: { ...BLOCK, paddingBottom: 12, background: "var(--card-bg)", flexShrink: 0 },
   controlsHead: {
     display: "flex",
     flexDirection: "column",
@@ -426,4 +391,4 @@ export const styles = {
     textAlign: "right",
     padding: "1px 3px",
   },
-};
+} satisfies Record<string, CSSProperties>;

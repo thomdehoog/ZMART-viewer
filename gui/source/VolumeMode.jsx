@@ -1,6 +1,6 @@
 import React from "react";
 import FilledRange from "./FilledRange.jsx";
-import { styles } from "./layer-panel-styles.js";
+import { styles } from "./layer-panel-styles.ts";
 
 /**
  * How a ray through the volume becomes a colour.
