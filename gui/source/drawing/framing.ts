@@ -12,9 +12,10 @@
 import type { CoordinateSpace } from "neuroglancer/unstable/coordinate_transform.js";
 import type { RenderViewport } from "neuroglancer/unstable/display_context.js";
 import type { LayerDataSource } from "neuroglancer/unstable/layer/layer_data_source.js";
+import type { DisplayDimensionRenderInfo } from "neuroglancer/unstable/navigation_state.js";
 import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import { geometryRefreshPending } from "../../../engine/drawing/embedding.js";
-import { sourcesStillWaiting } from "./layer-sync.ts";
+import { sourcesStillWaiting } from "./feeding.ts";
 
 /**
  * What the growth edit (`engine/drawing/neuroglancer-growth.mjs`) adds to a data
@@ -188,6 +189,65 @@ function startTimeAtTheFirstMoment(viewer: Viewer): void {
 const OVERVIEW_MARGIN = 1.2;
 
 /**
+ * The drawing areas of the flat panel and of the volume panel, where each is on
+ * screen. A panel is told apart by what it draws: one slice, or several.
+ */
+function panelsOnScreen(viewer: Viewer): { flat: RenderViewport | null; volume: RenderViewport | null } {
+  let flat: RenderViewport | null = null;
+  let volume: RenderViewport | null = null;
+  for (const panel of viewer.display?.panels ?? []) {
+    if ("sliceView" in panel) flat = panel.renderViewport;
+    else if ("sliceViews" in panel) volume = panel.renderViewport;
+  }
+  return { flat, volume };
+}
+
+/**
+ * Zoom both views so the picture's reach along the drawn axes just fills the
+ * window, with the overview's margin.
+ *
+ * The flat view is fitted on the first two drawn axes, against the panel's width
+ * and height; the volume's box on all three, against the window's smaller side,
+ * because its zoom counts across the height of the panel. ``extent`` says how far
+ * the picture reaches along an axis, or null where it does not say. A view nothing
+ * fits keeps its zoom, unless ``resetWhenNothingFits`` puts it back to the engine's
+ * default -- which the whole-picture fit does and the fit around one acquisition
+ * does not.
+ */
+function fitExtents(
+  viewer: Viewer, render: DisplayDimensionRenderInfo, drawn: readonly number[],
+  extent: (axis: number) => number | null, { resetWhenNothingFits }: { resetWhenNothingFits: boolean },
+): void {
+  const { flat, volume } = panelsOnScreen(viewer);
+
+  let fit = 0;
+  drawn.slice(0, 2).forEach((axis, slot) => {
+    const across = extent(axis);
+    const pixels = slot === 0 ? flat?.logicalWidth : flat?.logicalHeight;
+    if (across === null || !pixels) return;
+    fit = Math.max(fit, (across * render.canonicalVoxelFactors[slot]) / pixels);
+  });
+  if (fit > 0) viewer.navigationState.zoomFactor.value = fit * OVERVIEW_MARGIN;
+  else if (resetWhenNothingFits) viewer.navigationState.zoomFactor.reset();
+
+  let boxFit = 0;
+  const smaller = Math.min(volume?.logicalWidth ?? 0, volume?.logicalHeight ?? 0);
+  drawn.slice(0, 3).forEach((axis, slot) => {
+    const across = extent(axis);
+    if (across === null || !volume || !smaller) return;
+    boxFit = Math.max(
+      boxFit,
+      (across * render.canonicalVoxelFactors[slot] * volume.logicalHeight) / smaller,
+    );
+  });
+  if (boxFit > 0) {
+    viewer.perspectiveNavigationState.zoomFactor.value = boxFit * OVERVIEW_MARGIN;
+  } else if (resetWhenNothingFits) {
+    viewer.perspectiveNavigationState.zoomFactor.reset();
+  }
+}
+
+/**
  * Which part of the picture is on screen, as fractions of its own bounds.
  *
  * Given as fractions rather than as voxels because that is the form the
@@ -212,12 +272,8 @@ export function whatIsOnScreen(viewer: Viewer): [[number, number], [number, numb
   const render = viewer.navigationState.pose.displayDimensionRenderInfo.value;
   const drawn = Array.from(render?.displayDimensionIndices ?? []).slice(0, 2);
   if (drawn.length < 2) return null;
-  let panel: RenderViewport | null = null;
-  for (const one of viewer.display?.panels ?? []) {
-    if ("sliceView" in one) panel = one.renderViewport;
-  }
-  if (!panel?.logicalWidth || !panel?.logicalHeight) return null;
-  const viewport = panel;
+  const viewport = panelsOnScreen(viewer).flat;
+  if (!viewport?.logicalWidth || !viewport?.logicalHeight) return null;
 
   const zoom = viewer.navigationState.zoomFactor.value;
   const { lowerBounds, upperBounds } = space.bounds;
@@ -329,38 +385,7 @@ function showTheWholePicture(viewer: Viewer): boolean {
     return Number.isFinite(low) && Number.isFinite(high) ? high - low : null;
   };
 
-  let flat: RenderViewport | null = null;
-  let volume: RenderViewport | null = null;
-  for (const panel of viewer.display?.panels ?? []) {
-    if ("sliceView" in panel) flat = panel.renderViewport;
-    else if ("sliceViews" in panel) volume = panel.renderViewport;
-  }
-
-  let fit = 0;
-  drawn.slice(0, 2).forEach((axis, slot) => {
-    const across = extent(axis);
-    const pixels = slot === 0 ? flat?.logicalWidth : flat?.logicalHeight;
-    if (across === null || !pixels) return;
-    fit = Math.max(fit, (across * render.canonicalVoxelFactors[slot]) / pixels);
-  });
-  if (fit > 0) viewer.navigationState.zoomFactor.value = fit * OVERVIEW_MARGIN;
-  else viewer.navigationState.zoomFactor.reset();
-
-  let boxFit = 0;
-  const smaller = Math.min(volume?.logicalWidth ?? 0, volume?.logicalHeight ?? 0);
-  drawn.slice(0, 3).forEach((axis, slot) => {
-    const across = extent(axis);
-    if (across === null || !volume || !smaller) return;
-    boxFit = Math.max(
-      boxFit,
-      (across * render.canonicalVoxelFactors[slot] * volume.logicalHeight) / smaller,
-    );
-  });
-  if (boxFit > 0) {
-    viewer.perspectiveNavigationState.zoomFactor.value = boxFit * OVERVIEW_MARGIN;
-  } else {
-    viewer.perspectiveNavigationState.zoomFactor.reset();
-  }
+  fitExtents(viewer, render, drawn, extent, { resetWhenNothingFits: true });
   return true;
 }
 
@@ -455,36 +480,11 @@ export function lookAtWhatOpened(viewer: Viewer, named: readonly string[] | null
   }
   position.value = middle;
 
-  let flat: RenderViewport | null = null;
-  let volume: RenderViewport | null = null;
-  for (const panel of viewer.display?.panels ?? []) {
-    if ("sliceView" in panel) flat = panel.renderViewport;
-    else if ("sliceViews" in panel) volume = panel.renderViewport;
-  }
-
-  let fit = 0;
-  drawn.slice(0, 2).forEach((axis, slot) => {
+  const extent = (axis: number): number | null => {
     const span = spanOf(axis);
-    const pixels = slot === 0 ? flat?.logicalWidth : flat?.logicalHeight;
-    if (!span || !pixels) return;
-    fit = Math.max(fit, ((span[1] - span[0]) * render.canonicalVoxelFactors[slot]) / pixels);
-  });
-  if (fit > 0) viewer.navigationState.zoomFactor.value = fit * OVERVIEW_MARGIN;
-
-  let boxFit = 0;
-  const smaller = Math.min(volume?.logicalWidth ?? 0, volume?.logicalHeight ?? 0);
-  drawn.slice(0, 3).forEach((axis, slot) => {
-    const span = spanOf(axis);
-    if (!span || !volume || !smaller) return;
-    boxFit = Math.max(
-      boxFit,
-      ((span[1] - span[0]) * render.canonicalVoxelFactors[slot] * volume.logicalHeight)
-        / smaller,
-    );
-  });
-  if (boxFit > 0) {
-    viewer.perspectiveNavigationState.zoomFactor.value = boxFit * OVERVIEW_MARGIN;
-  }
+    return span ? span[1] - span[0] : null;
+  };
+  fitExtents(viewer, render, drawn, extent, { resetWhenNothingFits: false });
   return true;
 }
 

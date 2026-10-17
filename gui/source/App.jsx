@@ -14,9 +14,9 @@ import {
   letGoOfDecodedPieces,
   lettingGo,
   sourceRefreshing,
-  sourcesStillWaiting,
   syncLayers,
 } from "./drawing/layer-sync.ts";
+import { sourcesStillWaiting } from "./drawing/feeding.ts";
 import { syncView, stretchTheDisplay } from "./drawing/viewer.ts";
 import ScaleBar from "./ScaleBar.jsx";
 import AxisSlider from "./AxisSlider.jsx";
