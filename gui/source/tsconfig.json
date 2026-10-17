@@ -1,0 +1,36 @@
+{
+  // The type checker's view of the page. Nothing is emitted: Vite builds the
+  // page, and `tsc --noEmit` only checks it. The page is TypeScript, strict.
+  // What stays JavaScript is read as it is, not checked: the build's own
+  // tooling (`scripts/*.mjs`, `vite.config.js`), which runs in Node, and the
+  // four drawing files in `engine/drawing/`, which other pages and builds take
+  // by name and which must stay plain browser and Node modules.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    // A name nobody reads is dead code: in the TypeScript files, the checker says so.
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    // Node runs some of these files in the tests by stripping their types, and
+    // that needs every type import marked as one, and no syntax it cannot strip.
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    // A module is named with its own ending, `.ts` included, as Vite and Node read it.
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false,
+    // Stylesheet imports, as Vite answers them; `node:` modules in the tests' reach.
+    "types": ["vite/client", "node"],
+    // Neuroglancer's insides by the names it offers them under.
+    "paths": {
+      "neuroglancer/unstable/*": ["./node_modules/neuroglancer/lib/*"]
+    }
+  },
+  "include": ["."],
+  "exclude": ["node_modules", "scripts", "vite.config.js"]
+}
