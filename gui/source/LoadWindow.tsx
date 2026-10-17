@@ -155,7 +155,10 @@ function LoadWindow({ listing, onNavigate, onOpened, onCancel }: LoadWindowProps
       }
       clearInterval(polling.current);
       if (status.state === "done") {
-        await afterwards.done(status.store ?? "");
+        // A finished build names the view it made; one that names none has
+        // nothing to show, and says so rather than opening a guess.
+        if (status.store) await afterwards.done(status.store);
+        else change({ running: false, error: "the build finished but named no view" });
       } else if (status.state === "cancelled") {
         change({ running: false, fraction: 0, ...afterwards.stopped });
       } else {
