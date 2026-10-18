@@ -145,8 +145,9 @@ cd gui/source && npm ci && cd ../..
 python -m playwright install chromium
 ```
 
-Node.js 22.12 or newer is needed for the page. In a conda environment, take it
-from conda-forge (`conda install -c conda-forge nodejs`). Playwright puts its
+Node.js 22.18 or newer is needed for the page: its sources are TypeScript, and
+the tests run some of them in Node, which reads TypeScript from 22.18 on. In a
+conda environment, take it from conda-forge (`conda install -c conda-forge nodejs`). Playwright puts its
 browsers inside your user profile unless told otherwise; to keep them
 somewhere else, set `PLAYWRIGHT_BROWSERS_PATH` to that folder before
 installing them and keep it set when running the tests. After changing the

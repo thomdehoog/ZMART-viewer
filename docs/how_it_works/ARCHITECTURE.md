@@ -46,13 +46,13 @@ inside it may move between versions.
 ## 2. Neuroglancer draws; we do the rest
 
 Neuroglancer is the drawing engine, and its own interface is switched off:
-`gui/source/drawing/viewer.js` creates it with `makeMinimalViewer` and
+`gui/source/drawing/viewer.ts` creates it with `makeMinimalViewer` and
 `showUIControls: false`, and `neuroglancer-chrome.css` hides the little that
 remains. Everything a person sees around the picture is ours.
 
 One trap comes with that, and it costs a day to rediscover: `makeMinimalViewer`
 builds the engine but installs **no mouse or keyboard bindings**. Without them
-the picture renders perfectly and nothing responds to the mouse. `viewer.js`
+the picture renders perfectly and nothing responds to the mouse. `viewer.ts`
 installs exactly the gestures this viewer documents; `CONTROLS.md` records
 each decision, and `tests/test_interaction.py` holds them in place. Render
 tests alone cannot catch this, because drawing and navigating are independent.
@@ -78,14 +78,14 @@ Two places where this is done well, to be copied rather than disturbed:
 - **A channel is one layer with many sources.** Neuroglancer composites the
   positions; we never stitch pixels in the browser.
 - **Contrast travels as control values, not as shader text.** `shaderFor` in
-  `gui/source/drawing/layers.js` declares the contrast control once, and
+  `engine/drawing/programs.js` declares the contrast control once, and
   `shaderControlsFor` sends the numbers separately, so dragging a contrast
   handle does not recompile a program on the graphics card.
 
-`layers.js` and `neuroglancer.js` are separate on purpose. `layers.js` is pure
+`layers.ts` and `layer-sync.ts` are separate on purpose. `layers.ts` is pure
 translation: give it the window's settings and it hands back descriptions of
-layers, with no browser involved, which makes it easy to test.
-`neuroglancer.js` does the fiddly work of applying those descriptions to a
+layers, with no engine involved, which makes it easy to test.
+`layer-sync.ts` does the fiddly work of applying those descriptions to a
 running viewer without rebuilding the scene.
 
 ### Where the rule is broken today: contrast is measured in Python
@@ -236,19 +236,25 @@ to open.
      window_server.py ────── the engine, with the window's settings and doors
      window_routes.py ────── the folder chooser, the load window's list and builder,
                              and the file of marked places
-     source/ ─────────────── the page's sources, and everything Node needs to build them
-       App.jsx ───────────── the whole window's state
-         ├── LoadWindow.jsx ─────── LOAD DATA: walking folders and opening one
-         ├── NeuroglancerView.jsx ── gives the engine an element to draw into
-         ├── LayerPanel.jsx ─────── acquisitions, channels, colour, contrast
-         ├── AxisSlider.jsx ─────── depth up the side, time along the bottom
-         ├── ScaleBar.jsx ───────── how large the specimen really is
-         ├── TargetsPanel.jsx ───── places you mark, saved to a file
-         └── the small pieces they are made of (ChannelControls.jsx, Histogram.jsx, …)
-       drawing/ viewer.js ─── creates neuroglancer with its own interface off
-                layers.js ─── settings → plain layer descriptions
-                neuroglancer.js  applies them to the viewer without rebuilding
-                live-refresh.js  what changed since the window last looked
+     source/ ─────────────── the page's sources (TypeScript), and everything Node
+                             needs to check and build them
+       App.tsx ───────────── the whole window: the scene, the engine, the layout
+         ├── following-the-server.ts  what is open, kept up to date as it changes
+         ├── targets.tsx ─────────── places you mark, saved to a file
+         ├── asking-python.ts ────── every request to the server, and its answers' shapes
+         ├── LoadWindow.tsx ─────── LOAD DATA: walking folders and opening one
+         ├── NeuroglancerView.tsx ── gives the engine an element to draw into
+         ├── LayerPanel.tsx ─────── acquisitions, channels, colour, contrast
+         ├── AxisSlider.tsx ─────── depth up the side, time along the bottom
+         ├── ScaleBar.tsx ───────── how large the specimen really is
+         └── the small pieces they are made of (ChannelControls.tsx, Histogram.tsx, …)
+       drawing/ viewer.ts ─── creates neuroglancer with its own interface off, and
+                              its view settings
+                layers.ts ─── settings → plain layer descriptions
+                layer-sync.ts  applies them to the viewer without rebuilding
+                feeding.ts ── hands new stores to the engine a few at a time
+                framing.ts ── axes, first moment, fitting and the camera
+                live-refresh.ts  what changed since the window last looked
      build/ ──────────────── the page, already built; what an installed viewer serves
 
      A smart-microscopy interface replaces this folder with its own window.
@@ -290,11 +296,12 @@ to open.
                   vocabulary.py ──── the words the rest of record/ speaks in
 
  ═══════════════════════════════════════════════════════════════════════════════
-   THE BUILD — only for changing the GUI's JavaScript
+   THE BUILD — only for changing the GUI's page
  ═══════════════════════════════════════════════════════════════════════════════
 
      gui/source/package.json,
-     gui/source/vite.config.js ────── `npm run build` in gui/source turns the page's
+     gui/source/vite.config.js ────── `npm run build` in gui/source checks the page's
+                                      types (`tsc`) and turns its
      gui/source/scripts/              sources and engine/drawing/ into gui/build/,
                                       and stamps what went in
      build_support.py ─────────────── refuses to package a gui/build/ that no longer

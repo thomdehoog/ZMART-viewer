@@ -17,7 +17,8 @@ Running the full suite needs [Node.js](https://nodejs.org) and `npm ci` in
 import the neuroglancer package it installs there. That is only for testing.
 **Using** the viewer needs pip alone, and the built page is already in the
 repository (`gui/build/`), so it needs rebuilding (`npm run build` in
-`gui/source`) only after you change the GUI's JavaScript.
+`gui/source`, which checks the page's types first) only after you change the
+GUI's page.
 
 Playwright keeps its browsers inside your user profile unless
 `PLAYWRIGHT_BROWSERS_PATH` names another folder. Set it before

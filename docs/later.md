@@ -47,3 +47,48 @@ record would be split so that one commit touches only a small file.
 positions, and it changes the record that a run's safety rests on, so it
 needs its own careful design and test. Raised under N5 in
 `REVIEW_2026-10-10.md`.
+
+## The interface keeps copies of the viewer's colours and coverage program
+
+**Today.** ZMART-interface's operator page draws with the same programs as
+this window (`engine/drawing/programs.js`), but keeps its own hand copies of
+a few small things beside them: the palette, the conversions between a colour
+and its `#rrggbb` spelling, where the contrast window sits over its histogram
+(fifteen and eighty-five per cent), and the program that paints acquired ground
+for transparency. Copies kept in line by hand drift.
+
+**What would change.** These would move into `engine/drawing/`, ship with the
+viewer, and be taken from there by both pages, as `programs.js` already is.
+
+**Why it waits.** It changes what the interface takes from the viewer, so it
+moves together with an interface release, and it was not part of porting the
+viewer's page to TypeScript (2026-10-18).
+
+## The colour-map swatches are drawn from their own stops
+
+**Today.** The little gradient beside a colour map's name in the chooser is
+written by hand with three stops, while the picture is drawn through four
+stops in `engine/drawing/programs.js`; the swatch only roughly matches what the
+map does.
+
+**What would change.** The swatch would be drawn from the program's own stops,
+so it shows exactly what the picture will look like.
+
+**Why it waits.** It changes what every swatch looks like, which is a visible
+change to decide on, not a tidy-up; it was kept out of the TypeScript port for
+that reason.
+
+## The window keeps the last engine after it is closed
+
+**Today.** The page keeps a reference to the engine it is drawing with, for the
+connection that listens to the server. When the engine is closed and built
+again (closing an acquisition does this), the reference is replaced but never
+cleared in between, so for a moment it can point at an engine that is gone.
+Nothing has been seen to go wrong because of it.
+
+**What would change.** The reference would be cleared when its engine is
+closed, and the listener would wait for the new one.
+
+**Why it waits.** It changes when the page reacts to the server during a
+rebuild, which needs a test that can catch the moment; noticed while porting
+the page to TypeScript (2026-10-18) and left as it was.
