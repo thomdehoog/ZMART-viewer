@@ -1272,7 +1272,7 @@ before the loading starts:
 
 So the speed of a large folder of separate positions is accepted rather than engineered
 around. The two mechanisms proposed to engineer around it are both rejected — a window of
-only the positions in view (see the note in `gui/source/drawing/feeding.ts`) and fusing finished positions into
+only the positions in view (see the note in `engine/drawing/primitives/feeding.ts`) and fusing finished positions into
 a copy (Decision 1b) — and this is the reason: neither was worth its complexity once the
 operator could simply open less.
 

@@ -16,13 +16,15 @@ import json
 import sys
 from pathlib import Path
 
-
 VIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(VIZ))
 
 from record_fixtures import FRAME, some_specimen  # noqa: E402
 from test_the_composer_obeys_the_manifest import PIECE, pixels_of, the_columns_of  # noqa: E402
-from zmart_viewer.live.record.live_serving import answer_from_a_live_run, forget_live_run  # noqa: E402
+from zmart_viewer.live.record.live_serving import (  # noqa: E402
+    answer_from_a_live_run,
+    forget_live_run,
+)
 from zmart_viewer.live.record.storage_plans import plan_the_writing  # noqa: E402
 from zmart_viewer.live.record.vocabulary import GridCell  # noqa: E402
 from zmart_viewer.picture.built_picture import GovernedRun  # noqa: E402

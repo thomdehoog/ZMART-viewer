@@ -46,9 +46,40 @@ inside it may move between versions.
 ## 2. Neuroglancer draws; we do the rest
 
 Neuroglancer is the drawing engine, and its own interface is switched off:
-`gui/source/drawing/viewer.ts` creates it with `makeMinimalViewer` and
-`showUIControls: false`, and `neuroglancer-chrome.css` hides the little that
+`engine/drawing/primitives/viewer.ts` creates it with `makeMinimalViewer` and
+`showUIControls: false`, and `chrome.css` beside it hides the little that
 remains. Everything a person sees around the picture is ours.
+
+### The drawing primitives
+
+Two pages drive neuroglancer with its interface off: this window and the
+operator page of ZMART-interface. What both do with it is written once, in
+`engine/drawing/primitives/` (TypeScript), and both build with it: engine
+(neuroglancer) → its API → the primitives → each page. Each page owns its
+controls -- palette, colour picking, where the contrast window sits -- and
+tells the primitives the values; the engine never instructs a page.
+
+| file | what it holds |
+|---|---|
+| `viewer.ts` | `createViewer(target, {gestures, ground})`: the engine with its interface off, its gestures (`"engine"` or `"none"`), the ground colour, the view settings, and a handle that drops everything with `dispose` |
+| `description.ts` | the layer description a page hands over, and the one rule for how layers meet (below); free of neuroglancer, so Node checks it |
+| `sync.ts` | bringing the engine's layers into line with a page's scene without rebuilding it, and refreshing stores whose revision advanced |
+| `feeding.ts` | handing stores over a group at a time, under one budget per engine |
+| `axes.ts` | which axes are drawn, reading and stepping one, opening at the first moment |
+| `camera.ts` | the camera in micrometres, and what share of the picture is on screen |
+| `revisions.ts` | which stores committed something new; free of neuroglancer |
+
+Everything an engine keeps -- its feeding queue, what each layer was last
+told, the counters the tests read -- lives in the closure `createViewer`
+makes, so two engines on one page each keep their own. Fitting the picture,
+looking at what opened, the 2-D/3-D field carry, the stretch, the scale bar,
+annotations and the volume stay in this window's page: only it uses them.
+
+The build writes the primitives' declarations to `engine/drawing/declarations/`
+(`npm run declarations`, part of `npm run build`), with those of
+`programs.js` and `embedding.js`. The wheel ships the sources and the
+declarations; the operator page bundles the sources and keeps a copy of the
+declarations for its type checks, held equal to the installed viewer's.
 
 One trap comes with that, and it costs a day to rediscover: `makeMinimalViewer`
 builds the engine but installs **no mouse or keyboard bindings**. Without them
@@ -75,17 +106,24 @@ a loophole: inefficiency of our own making is ours to fix.
 
 Two places where this is done well, to be copied rather than disturbed:
 
-- **A channel is one layer with many sources.** Neuroglancer composites the
-  positions; we never stitch pixels in the browser.
+- **Channels of one place mix; where positions overlap, the last one in
+  covers** (Thom, 2026-10-18). A picture the viewer composed holds its
+  channels in one store and its positions already laid in that order (or
+  averaged, when a page asks), so its layers simply add. A folder the
+  composer cannot make one picture of is drawn store by store: a channel of
+  one acquisition is one layer with many sources, which neuroglancer
+  composites, covering; and where the acquisition has several channels, each
+  place stands on a black ground of its own and its channels are added on
+  top (`coverPositionsMixChannels`). We never stitch pixels in the browser.
 - **Contrast travels as control values, not as shader text.** `shaderFor` in
   `engine/drawing/programs.js` declares the contrast control once, and
   `shaderControlsFor` sends the numbers separately, so dragging a contrast
   handle does not recompile a program on the graphics card.
 
-`layers.ts` and `layer-sync.ts` are separate on purpose. `layers.ts` is pure
-translation: give it the window's settings and it hands back descriptions of
-layers, with no engine involved, which makes it easy to test.
-`layer-sync.ts` does the fiddly work of applying those descriptions to a
+`layers.ts` and the primitives' `sync.ts` are separate on purpose.
+`layers.ts` is pure translation: give it the window's settings and it hands
+back descriptions of layers, with no engine involved, which makes it easy to
+test. `sync.ts` does the fiddly work of applying those descriptions to a
 running viewer without rebuilding the scene.
 
 ### Where the rule is broken today: contrast is measured in Python
@@ -248,12 +286,10 @@ to open.
          ├── AxisSlider.tsx ─────── depth up the side, time along the bottom
          ├── ScaleBar.tsx ───────── how large the specimen really is
          └── the small pieces they are made of (ChannelControls.tsx, Histogram.tsx, …)
-       drawing/ viewer.ts ─── creates neuroglancer with its own interface off, and
-                              its view settings
+       drawing/ viewer.ts ─── the field carried across 2-D/3-D, the theme's
+                              ground, the stretch
                 layers.ts ─── settings → plain layer descriptions
-                layer-sync.ts  applies them to the viewer without rebuilding
-                feeding.ts ── hands new stores to the engine a few at a time
-                framing.ts ── axes, first moment, fitting and the camera
+                framing.ts ── fitting the picture, and looking at what opened
                 live-refresh.ts  what changed since the window last looked
      build/ ──────────────── the page, already built; what an installed viewer serves
 
@@ -268,6 +304,9 @@ to open.
      filesystem.py ──────────────── writing files in one step, patient with a brief hold
      drawing/   embedding.js ─────── the named views, for windows that draw themselves
                 neuroglancer-growth.mjs  lets an image grow while it is shown
+                programs.js ──────── the shader programs both pages draw with
+                primitives/ ──────── what both pages do with neuroglancer (see §2)
+                declarations/ ────── their types, written by the build
      serving/   server.py ────────── answers every request; guards the opened folder
                 picture_pieces.py ── pieces that are not plain files
                 coverage.py ──────── which ground was acquired, for transparency
