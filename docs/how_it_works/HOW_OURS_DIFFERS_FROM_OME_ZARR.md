@@ -69,7 +69,9 @@ else.** OME-Zarr allows `coordinateTransformations` on the multiscales as a whol
 *or* on each dataset, and a reader applies the outer one on top of the inner one.
 A store of ours carries a `scale` and a `translation` in each dataset and no outer
 block (`engine/live/record/omezarr.py`; built pictures and projections follow the
-same rule).
+same rule). The translation is the centre of the level's first voxel, as OME-NGFF
+RFC-5 says: "The pixel/voxel center is the origin of the continuous coordinate
+system." [INTEROP.md](INTEROP.md) §1a has the arithmetic.
 
 **Why only there.** A large part of the ecosystem reads the position from the
 per-dataset block alone: `ngff-zarr`, and so `multiview-stitcher` and much of the
@@ -91,9 +93,10 @@ own zoomed-out copies instead of writing its own. Averaging would look smoother 
 would quietly make that impossible.
 
 The catch that goes with it is written up in the voxel-placement note carried with the elder writer
-§3a: a coarse voxel's value is the fine voxel at the *low corner* of the block it
-covers, not the block's average, so a reader that assumes averaging places it
-`(2^k − 1)/2` fine voxels too far along in y and x. Nothing is out along z, because
+§3a: a coarse voxel's value is the first fine voxel of the block it covers, not
+the block's average, so its translation is that fine voxel's centre and a reader
+that assumes averaging places it `(2^k − 1)/2` fine voxels too far along in y
+and x. Nothing is out along z, because
 z is not shrunk at all.
 
 **We use the `omero` block for channel names, colours and brightness.** That block is

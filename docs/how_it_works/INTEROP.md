@@ -41,24 +41,35 @@ nowhere else (`engine/live/record/omezarr.py`). Two reasons:
   `datasource/zarr/ome.js`), so this would break the viewer too.
 
 `tests/make_test_stores.py` opens its test stores with `ngff-zarr` and checks
-that grid positions sit apart. No test yet writes a *run* at a known corner and
+that grid positions sit apart. No test yet writes a *run* at a known place and
 reads it back with `ngff-zarr`; such a test would hold this rule in place.
 
 ### 1a. The half-voxel question
 
-Where does a voxel's position point: at its corner or at its centre? The
-format does not say.
+Where does a translation point: at a voxel's corner or at its centre? OME-NGFF
+RFC-5 (accepted 2025-12-01) settles it: "The pixel/voxel center is the origin of
+the continuous coordinate system." A translation is the **centre of the first
+voxel**.
 
-ZMART writes the **corner**, with one translation for every resolution, so that
-the coarse copies nest exactly over the fine ones. `multiview-stitcher` writes
-the **centre**: it shifts each level by `(factor - 1) * spacing / 2`
-(`calc_ngff_coordinate_transformations_and_axes` in `ngff_utils`), so that
-voxel centres nest.
+ZMART writes that. A position's first voxel is centred half a voxel past the
+corner the layout counts pixels from, in y and x. A level made by averaging 2x2
+voxels begins with a voxel centred among the ones it averages, at
+`first_centre + 0.5 * (2^level - 1) * base`, so the centres nest. That is also
+what `multiview-stitcher` writes (`calc_ngff_coordinate_transformations_and_axes`
+in `ngff_utils`) and what `ngff-zarr` computes for its own coarse levels. Depth
+is a plane's own height and is written as it is. One function holds the rule:
+`first_centre_of_a_level` in `engine/live/record/vocabulary.py`, used by the
+live writer, the composer, the baked levels and the projections.
 
-The cost of our choice is small and known: neuroglancer assumes centres, and a
-zoomed-out view can be drawn up to half a screen pixel out. Writing each
-resolution with a translation of half its own voxel would remove that and match
-`multiview-stitcher`. It is worth reopening if another tool needs it.
+A canvas is a rectangle on the specimen, so its bounds are **edges**. A picture
+baked onto a canvas has its first voxel centred half a voxel inside the low
+edge, and tiles snap to the grid `low + step/2 + k * step`; a tile already on
+that grid is not moved.
+
+Nothing on disk is converted. A view an older viewer published for a request
+that named `xy_origin: "corner"` already describes centres and opens as it was;
+nothing new is published into it. A position store written as a corner is read
+as a centre, half a voxel early.
 
 ---
 

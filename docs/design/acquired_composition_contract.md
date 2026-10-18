@@ -204,15 +204,25 @@ undeclared truncating means, publication rewrites, declaration changes and reope
 The sparse browser cases run both with and without the declaration, bake off/on.
 Operator adoption and producer qualification are not part of this increment.
 
-## Corner-coordinate producer adapter
+## XY coordinates: first-voxel centres on a canvas of edges
 
-`composition.xy_origin` accepts `"center"` (default) or `"corner"`. This describes
-XY only; Z stays a plane coordinate. Corner sources keep a constant translation
-across native levels. The aggregate converts its output XY translations to sample
-centers by adding half the level's voxel size, so every level covers the same
-specimen rectangle. No original metadata is rewritten. The convention is fixed
-for an open acquisition; changing it requires a new acquisition because it changes
-geometry, not merely pixels.
+OME-NGFF RFC-5 (accepted 2025-12-01): "The pixel/voxel center is the origin of
+the continuous coordinate system". Every source translation is read as the
+centre of that level's first voxel, and a 2x2-mean level's first voxel is
+centred at `first_centre + 0.5 * (2^level - 1) * base` in XY; Z stays a plane
+coordinate. There is one convention, so a composition names none: a composition
+with `xy_origin` is refused.
+
+The canvas bounds are edges. The aggregate's first voxel is centred half a voxel
+inside the low edge, sources snap to `low + step/2 + k * step`, and every output
+level's translation is the centre of its first voxel, so every level covers the
+same specimen rectangle. No original metadata is rewritten.
+
+An acquisition an older viewer published with `xy_origin: "corner"` recorded
+its sources' corners. It is read back as the centres it described and opens as
+it was; a new publication into it is refused, because its positions were written
+as corners. Write them again with first-voxel centres and publish into a new
+view folder.
 
 The additional explicit reducer `"mean-xy2-crop-f32-rint-int"` describes successive
 2x2 XY means with float32 accumulation, integer nearest-even rounding and dtype
@@ -223,7 +233,7 @@ means are exact in float32 and no cropped edge is encountered. Other dtypes or o
 level dimensions retain L0-derived composition; the declaration does not override
 geometry/coverage eligibility. It must still describe completed native levels.
 
-`tests/test_corner_pyramids.py` qualifies the actual writer when
+`tests/test_centre_pyramids.py` qualifies the actual writer when
 `ZMART_OPERATOR_SOURCE` points to a microscopy checkout. It generates synthetic
 vendor TIFFs in scratch, invokes the real position writer, and checks original
 bytes, native reads, coverage and browser fine/coarse placement in both bake modes.
