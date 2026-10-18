@@ -2,6 +2,8 @@
 // palette, the lookup-table gradients, and the conversions between the
 // numbers the shader wants and the text a style sheet wants.
 
+import { hexColour, LOOKUP_TABLE_NAMES, LOOKUP_TABLES } from "../../engine/drawing/programs.js";
+
 /** A colour as the shader is given it: red, green and blue, each 0 to 1. */
 export type Rgb = readonly [number, number, number];
 
@@ -26,17 +28,18 @@ export const rgbOf = (hex: string): Rgb => {
   return [(value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255];
 };
 
-// What each colour map roughly looks like, as a little gradient. Drawn beside
-// its name in the chooser and on the channel's row, so a map is chosen and
-// recognised by eye. It used to be explained in words instead -- "magma"
-// means nothing until you have seen one -- and showing the thing itself says
-// it better than a sentence could.
-export const LUT_GRADIENTS: Readonly<Record<string, string>> = {
-  viridis: "linear-gradient(90deg, #440154, #21918c, #fde725)",
-  magma: "linear-gradient(90deg, #000004, #b73779, #fcfdbf)",
-  fire: "linear-gradient(90deg, #000000, #e63b1f, #fff3c4)",
-  ice: "linear-gradient(90deg, #000000, #3a6fd8, #ffffff)",
-};
+// What each colour map looks like, as a little gradient. Drawn beside its name
+// in the chooser and on the channel's row, so a map is chosen and recognised by
+// eye. It used to be explained in words instead -- "magma" means nothing until
+// you have seen one -- and showing the thing itself says it better than a
+// sentence could. Drawn from the engine's own colours for the map, so the strip
+// is what the picture will be: a hand-written strip once showed fire a red the
+// picture never has, and none of its orange.
+export const LUT_GRADIENTS: Readonly<Record<string, string>> = Object.fromEntries(
+  LOOKUP_TABLE_NAMES.map((name) => [
+    name, `linear-gradient(90deg, ${LOOKUP_TABLES[name as keyof typeof LOOKUP_TABLES].map(hexColour).join(", ")})`,
+  ]),
+);
 
 /** A colour as a style sheet writes it; a channel with none is drawn in the page's pale grey. */
 export const css = (rgb: Rgb | null | undefined): string =>

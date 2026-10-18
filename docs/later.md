@@ -64,19 +64,6 @@ viewer, and be taken from there by both pages, as `programs.js` already is.
 moves together with an interface release, and it was not part of porting the
 viewer's page to TypeScript (2026-10-18).
 
-## The colour-map swatches are drawn from their own stops
-
-**Today.** The little gradient beside a colour map's name in the chooser is
-written by hand with three stops, while the picture is drawn through four
-stops in `engine/drawing/programs.js`; the swatch only roughly matches what the
-map does.
-
-**What would change.** The swatch would be drawn from the program's own stops,
-so it shows exactly what the picture will look like.
-
-**Why it waits.** It changes what every swatch looks like, which is a visible
-change to decide on, not a tidy-up; it was kept out of the TypeScript port for
-that reason.
 
 ## The window keeps the last engine after it is closed
 
