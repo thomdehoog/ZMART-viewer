@@ -107,7 +107,18 @@ export function keepDepthLocal(layer, viewer = null, makeTransform = null) {
     layer.registerDisposer(viewer.navigationState.position.changed.add(follow));
     layer.registerDisposer(layer.localCoordinateSpace.changed.add(follow));
   }
-  for (const source of layer.dataSources) {
+  // Every store the layer reads keeps its depth, including those handed to it
+  // after it was built: a layer is built with at most one group of stores and
+  // fed the rest later, and a run's stores arrive one at a time.
+  const kept = new WeakSet();
+  const keepEach = () => {
+    for (const source of layer.dataSources) {
+      if (kept.has(source)) continue;
+      kept.add(source);
+      keepOne(source);
+    }
+  };
+  const keepOne = source => {
     let native, lastDefault;
     const place = () => {
       const transform = source.loadState?.transform;
@@ -133,7 +144,9 @@ export function keepDepthLocal(layer, viewer = null, makeTransform = null) {
     };
     layer.registerDisposer(source.changed.add(place));
     place();
-  }
+  };
+  if (layer.dataSourcesChanged) layer.registerDisposer(layer.dataSourcesChanged.add(keepEach));
+  keepEach();
 }
 
 function forgetWhatWasReadAbout(chunkManager, url) {
