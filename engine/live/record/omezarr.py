@@ -47,12 +47,12 @@ plain lists of numbers.
 
 The **scale** says how much ground one step along each axis covers — a voxel
 0.35 microns wide and 2 microns deep. Multiply the counted position by the scale
-and you have a distance, but measured from the corner of this picture rather
-than from anywhere on the microscope.
+and you have a distance, but measured from the first voxel of this picture
+rather than from anywhere on the microscope.
 
-The **translation** says where that corner sits in the run's shared coordinates.
-Add it, and the same voxel now has a place on the stage that a neighbouring
-position agrees with. This is what lets two tiles imaged an hour apart line up
+The **translation** says where that first voxel sits in the run's shared
+coordinates. Add it, and the same voxel now has a place on the stage that a
+neighbouring position agrees with. This is what lets two tiles imaged an hour apart line up
 when a colleague opens them together.
 
 The order matters and the format fixes it: the scale is written first and the
@@ -60,14 +60,17 @@ translation second, because the offset is given in real distance rather than in
 voxels. Written the other way round the picture lands a whole run's width away
 from where it belongs.
 
-Two further decisions, both taken to match the rest of this project rather than
-invented here. The translation is written **beside each copy and nowhere else**;
-OME-Zarr also allows one statement for the image as a whole, and saying it in
-both places moves the picture twice as far out as it really is. And the number
-is the **corner** of the first voxel rather than its middle, so that the copies
-nest exactly — a coarse voxel covers precisely the fine voxels it was built
-from. Halving a copy therefore keeps its corner where it was, and the
-position written beside each resolution is that shared corner.
+Two further decisions. The translation is written **beside each copy and
+nowhere else**; OME-Zarr also allows one statement for the image as a whole,
+and saying it in both places moves the picture twice as far out as it really
+is. And the number is the **centre** of the first voxel, as the format says
+(OME-NGFF RFC-5, accepted 2025-12-01: "The pixel/voxel center is the origin of
+the continuous coordinate system"). The layout counts pixels from the run's
+corner, so in y and x the first voxel's centre is half a voxel further on. A
+coarse voxel made by averaging covers the fine voxels it was built from, so its
+centre is the middle of theirs: each averaged copy's translation is the first
+fine centre plus half of the extra width, ``0.5 * (2**level - 1)`` fine voxels.
+Depth is a plane's own height and is written as it is.
 
 Using it
 --------
@@ -87,7 +90,7 @@ already on disk into an image::
     )
 
 Afterwards ``zarr.open_group`` opens the folder, ``ngff-zarr`` reads the voxel
-size and the corner back, and a colleague can drag the position into napari.
+size and the place back, and a colleague can drag the position into napari.
 """
 
 from __future__ import annotations
@@ -104,6 +107,7 @@ from zmart_viewer.live.record.vocabulary import (
     Channel,
     LevelGeometry,
     ZmartLiveError,
+    first_centre_of_a_level,
 )
 
 __all__ = [
@@ -192,7 +196,7 @@ def the_axes(profile: AcquisitionProfile, *, time_unit: str = "second") -> list[
 
     This is the part of the description that tells a reader which dimension is
     depth, which is time, and what the numbers along each of them are measured
-    in. Everything else — the voxel size, the corner, the smaller copies — is
+    in. Everything else — the voxel size, the place, the smaller copies — is
     written against this list and has to line up with it.
 
     Args:
@@ -299,32 +303,41 @@ def _how_far_one_step_reaches(
     return reach
 
 
-def _where_the_corner_sits(
-    profile: AcquisitionProfile, origin_pixels: Mapping[str, float]
+def _where_the_first_voxel_is_centred(
+    profile: AcquisitionProfile,
+    level: LevelGeometry,
+    origin_pixels: Mapping[str, float],
+    *,
+    averaged: bool,
 ) -> list[float]:
-    """Where this position's first voxel sits, in the run's shared measurements.
+    """Where this copy's first voxel is centred, in the run's shared measurements.
 
     This is the ``translation`` half of the coordinate transformation. The run
     keeps a position's place as a count of full-resolution pixels from the corner
     of the mosaic, because that is the form the tiling arithmetic needs. A reader
-    needs it as a distance, so it is multiplied by the voxel size here.
+    needs the centre of the first voxel as a distance: the count times the voxel
+    size, plus half a voxel in y and x. Depth is a plane's own height.
 
-    Every level is given the same corner. A zoomed-out copy covers more ground
-    per voxel but it still begins at the same place on the stage, and saying
-    otherwise would make the specimen appear to slide sideways as the operator
-    zoomed out.
+    An averaged copy's first voxel is centred among the fine voxels it averages,
+    so each level is placed from the full-resolution centre by
+    :func:`~zmart_viewer.live.record.vocabulary.first_centre_of_a_level`. A
+    copy that kept every second voxel begins with the fine first voxel itself.
     """
-    corner = []
-    for axis in profile.axes:
-        if _WHAT_AN_AXIS_MEASURES[axis] != "space":
-            # Time and colour have no place on the stage, and the format still
-            # wants an entry for every axis, so they are left at nought.
-            corner.append(0.0)
-            continue
-        corner.append(
-            float(origin_pixels.get(axis, 0.0)) * float(profile.voxel_size.get(axis, 1.0))
-        )
-    return corner
+    base = tuple(float(profile.voxel_size.get(axis, 1.0)) for axis in ("z", "y", "x"))
+    first = tuple(
+        float(origin_pixels.get(axis, 0.0)) * size + (size / 2 if axis != "z" else 0.0)
+        for axis, size in zip(("z", "y", "x"), base, strict=True)
+    )
+    voxel = tuple(
+        size * float(level.downsampling.get(axis, 1)) if averaged else size
+        for axis, size in zip(("z", "y", "x"), base, strict=True)
+    )
+    centre = dict(zip(("z", "y", "x"), first_centre_of_a_level(first, base, voxel), strict=True))
+    # Time and colour have no place on the stage, and the format still wants an
+    # entry for every axis, so they are left at nought.
+    return [
+        centre[axis] if _WHAT_AN_AXIS_MEASURES[axis] == "space" else 0.0 for axis in profile.axes
+    ]
 
 
 def _the_brightest_a_pixel_can_be(dtype: str) -> int:
@@ -467,7 +480,12 @@ def the_image_description(
             placing.append(
                 {
                     "type": "translation",
-                    "translation": _where_the_corner_sits(profile, origin_pixels),
+                    "translation": _where_the_first_voxel_is_centred(
+                        profile,
+                        level,
+                        origin_pixels,
+                        averaged=smaller_copies_made_by == "mean",
+                    ),
                 }
             )
         datasets.append({"path": str(level.level), "coordinateTransformations": placing})

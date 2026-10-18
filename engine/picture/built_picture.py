@@ -12,6 +12,7 @@ from __future__ import annotations
 import errno
 import json
 import logging
+import math
 import os
 import shutil
 import threading
@@ -27,7 +28,11 @@ import zarr
 from zmart_viewer.filesystem import done_despite_brief_holds
 from zmart_viewer.live.record.live_serving import LiveRun
 from zmart_viewer.live.record.shard_lookup import how_the_array_is_stored
-from zmart_viewer.live.record.vocabulary import rounded_up, the_position_of
+from zmart_viewer.live.record.vocabulary import (
+    first_centre_of_a_level,
+    rounded_up,
+    the_position_of,
+)
 from zmart_viewer.picture.arrangement import (
     OURS,
     PIECE,
@@ -324,7 +329,9 @@ def _bake_the_coarse_ground(
     whole = np.asarray(zarr.open_array(str(store / str(coarsest)), mode="r"))
     room = whole.shape[:-3]
     depth, height, width = whole.shape[-3:]
-    voxel = list(composer.mosaic.voxel_um(coarsest))
+    coarsest_voxel = composer.mosaic.voxel_um(coarsest)
+    coarsest_centre = composer.mosaic.first_centre(coarsest)
+    voxel = list(coarsest_voxel)
     level = coarsest
 
     while height > composer.piece or width > composer.piece:
@@ -349,7 +356,10 @@ def _bake_the_coarse_ground(
                     {"type": "scale", "scale": [1.0] * len(room) + list(voxel)},
                     {
                         "type": "translation",
-                        "translation": [0.0] * len(room) + list(composer.mosaic.corner_um),
+                        # Each baked level averages the one before, so its first
+                        # voxel is centred among the coarsest level's it covers.
+                        "translation": [0.0] * len(room)
+                        + list(first_centre_of_a_level(coarsest_centre, coarsest_voxel, voxel)),
                     },
                 ],
             }
@@ -434,10 +444,15 @@ _after_a_windows_reader = done_despite_brief_holds
 def _a_tile_stamped(
     pattern: Tile,
     store: Path,
-    corner_um: tuple[float, float, float],
+    first_centre: tuple[float, float, float],
     moments: frozenset[int] | None = None,
 ) -> Tile:
-    """One published position's tile, stamped from the pattern instead of read."""
+    """One published position's tile, stamped from the pattern instead of read.
+
+    ``first_centre`` is where the position's first full-resolution voxel is
+    centred; each averaged copy is centred from it, as the writer wrote it.
+    """
+    base = pattern.copies[0].voxel_um
     copies = [
         _promising_its_blocks(
             Copy(
@@ -446,7 +461,7 @@ def _a_tile_stamped(
                 chunks=one.chunks,
                 dtype=one.dtype,
                 voxel_um=one.voxel_um,
-                corner_um=corner_um,
+                corner_um=first_centre_of_a_level(first_centre, base, one.voxel_um),
                 outer_shape=one.outer_shape,
             )
         )
@@ -464,7 +479,11 @@ def _a_tile_stamped(
 
 
 class TheWorldFrame(Mosaic):
-    """A mosaic whose geometry is the layout's, whatever tiles have arrived."""
+    """A mosaic whose geometry is the layout's, whatever tiles have arrived.
+
+    The layout counts full-resolution pixels from the run's corner; the
+    picture's first voxel is centred half a voxel inside it in y and x.
+    """
 
     _origins: dict[tuple, tuple[float, float, float]] = {}
     _shapes: dict[tuple, tuple[int, int, int]] = {}
@@ -483,6 +502,7 @@ class TheWorldFrame(Mosaic):
                     ),
                     default=0.0,
                 )
+                + (float(profile.voxel_size.get(axis, 1.0)) / 2 if axis != "z" else 0.0)
                 for axis in ("z", "y", "x")
             )
             TheWorldFrame._origins[named] = remembered
@@ -1342,20 +1362,25 @@ class GovernedRun(ComposedPicture):
         self,
         position_id: str,
         generation: int,
-        corner_um: tuple[float, float, float],
+        first_centre: tuple[float, float, float],
     ) -> Tile:
         """Read the one store that stands in for every other, and check it."""
         pattern = read_one_tile(self._the_store_of(position_id, generation))
+        base = pattern.copies[0].voxel_um
 
         for copy in pattern.copies:
-            if copy.corner_um != corner_um:
+            expected = first_centre_of_a_level(first_centre, base, copy.voxel_um)
+            if any(
+                not math.isclose(a, b, rel_tol=0, abs_tol=1e-9)
+                for a, b in zip(copy.corner_um, expected, strict=True)
+            ):
                 raise ValueError(
-                    f"position {position_id!r} says its corner sits at "
+                    f"position {position_id!r} says its first voxel is centred at "
                     f"{copy.corner_um} micrometres, but the layout places it "
-                    f"at {corner_um}. The writer stamps a store's corner from "
+                    f"at {expected}. The writer stamps a store's place from "
                     "the layout's own placement, so a disagreement means the "
                     "run's records have drifted apart — and every other "
-                    "position's corner is taken from the layout on that "
+                    "position's place is taken from the layout on that "
                     "store's word, so this is refused rather than drawn "
                     "somewhere quietly wrong."
                 )
@@ -1363,7 +1388,11 @@ class GovernedRun(ComposedPicture):
         return pattern
 
     def _corners_of(self, layout, profile) -> dict[str, tuple[float, float, float]]:
-        """Where each planned position's first voxel sits, in micrometres."""
+        """Where each planned position's first voxel is centred, in micrometres.
+
+        The layout counts pixels from the run's corner, so in y and x the
+        centre is half a voxel further on; depth is a plane's own height.
+        """
         named = (layout.revision, profile.profile_id)
 
         if self._corners_mark != named:
@@ -1371,6 +1400,7 @@ class GovernedRun(ComposedPicture):
             self._corners = {
                 placement.position_id: tuple(
                     float(placement.origin.get(axis, 0.0)) * size
+                    + (size / 2 if axis != "z" else 0.0)
                     for axis, size in zip(("z", "y", "x"), voxel, strict=True)
                 )
                 for placement in layout.positions

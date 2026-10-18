@@ -364,7 +364,7 @@ class AffinePlacement:
         """Where a point given in this image's own pixels lands on the specimen.
 
         Axes the point does not mention are taken as zero, so asking about a tile's
-        own corner is simply ``placement.applied_to({})``.
+        own first voxel is simply ``placement.applied_to({})``, its centre.
         """
         return {
             axis: float(point.get(axis, 0.0)) * self.scale[axis] + self.translation[axis]
@@ -652,6 +652,11 @@ def _voxel_sizes(profile: AcquisitionProfile) -> dict[str, float]:
     return {axis: float(profile.voxel_size.get(axis, 1.0)) for axis in profile.axes}
 
 
+def _half_a_voxel_in_the_plane(axis: str, voxel_size: Mapping[str, float]) -> float:
+    """How far a first voxel's centre lies past its corner: half a voxel in y and x."""
+    return voxel_size[axis] / 2 if axis in ("y", "x") else 0.0
+
+
 def build_the_scene(
     profile: AcquisitionProfile,
     layout: SceneLayoutRevision,
@@ -719,10 +724,14 @@ def build_the_scene(
     # specimen: scaled by the voxel size, then slid to wherever its grid cell put
     # it. The origin comes from the layout snapshot rather than from any stage
     # reading, because the layout is what the ownership rules were worked out
-    # against and the two must not disagree.
+    # against and the two must not disagree. Pixel index 0 maps to the centre of
+    # the first voxel, as the stores say: half a voxel past the counted corner
+    # in y and x.
     for placement in layout.positions:
         translation = {
-            axis: float(placement.origin.get(axis, 0)) * voxel_size[axis] for axis in axes
+            axis: float(placement.origin.get(axis, 0)) * voxel_size[axis]
+            + _half_a_voxel_in_the_plane(axis, voxel_size)
+            for axis in axes
         }
         images.append(
             SceneImage(
@@ -746,9 +755,10 @@ def build_the_scene(
 
     position_ids = tuple(placement.position_id for placement in layout.positions)
 
-    # The one linked overview begins at the run's own origin, so its placement is
-    # the voxel size alone. It draws every position whole; where two overlap, the
-    # one committed later lands on top, so no second presentation is needed.
+    # The one linked overview begins at the run's own origin, so its first voxel
+    # is centred half a voxel in. It draws every position whole; where two
+    # overlap, the one committed later lands on top, so no second presentation
+    # is needed.
     images.append(
         SceneImage(
             image_id=overview_name,
@@ -757,7 +767,13 @@ def build_the_scene(
             axes=axes,
             voxel_size=FrozenMap(voxel_size),
             voxel_unit=profile.voxel_unit,
-            placement=AffinePlacement(axes=axes, scale=FrozenMap(voxel_size)),
+            placement=AffinePlacement(
+                axes=axes,
+                scale=FrozenMap(voxel_size),
+                translation=FrozenMap(
+                    {axis: _half_a_voxel_in_the_plane(axis, voxel_size) for axis in axes}
+                ),
+            ),
             channels=channels,
             draws=position_ids,
         )

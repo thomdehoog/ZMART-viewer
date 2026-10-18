@@ -181,6 +181,69 @@ def test_a_published_pictures_levels_are_first_voxel_centres(tmp_path, composed)
         view.close()
 
 
+def test_the_governed_pictures_levels_are_first_voxel_centres(tmp_path):
+    """The live picture, its baked extra levels included, at ``centre_0 + 0.5(2^l-1)base``."""
+    from record_fixtures import some_specimen
+    from test_the_composer_obeys_the_manifest import PIECE, a_governed_run
+    from zmart_viewer.picture.built_picture import declare_a_governed_picture
+
+    run = a_governed_run(tmp_path / "run")
+    run.write_and_publish("posA", some_specimen(700))
+    run.write_and_publish("posB", some_specimen(900))
+    base = float(run.profile.voxel_size["x"])
+    store = declare_a_governed_picture(
+        tmp_path / "views", run.folder, name="live", piece=PIECE, bake=True
+    )
+    levels = the_translations_of(store)
+    assert len(levels) > len(run.profile.levels), "the bake must add a level of its own"
+    for level, (scale, translation) in enumerate(levels):
+        centre = base / 2 + 0.5 * (2**level - 1) * base
+        assert scale[-1] == base * 2**level
+        assert translation == pytest.approx([0.0, centre, centre], abs=1e-9), f"level {level}"
+
+
+def test_a_live_position_store_declares_first_voxel_centres(tmp_path):
+    """The live writer: per level ``origin*voxel + voxel_l/2`` in y and x, depth as it was."""
+    from record_fixtures import some_specimen
+    from test_the_composer_obeys_the_manifest import a_governed_run
+
+    run = a_governed_run(tmp_path / "run")
+    run.write_and_publish("posA", some_specimen(700))
+    run.write_and_publish("posB", some_specimen(900))
+    voxel = {axis: float(run.profile.voxel_size.get(axis, 1.0)) for axis in "zyx"}
+    for placement in run.layout.positions:
+        origin = {axis: float(placement.origin.get(axis, 0)) for axis in "zyx"}
+        for scale, translation in the_translations_of(run.position_store(placement.position_id)):
+            expected = [
+                origin["z"] * voxel["z"],
+                origin["y"] * voxel["y"] + scale[-2] / 2,
+                origin["x"] * voxel["x"] + scale[-1] / 2,
+            ]
+            assert translation[-3:] == pytest.approx(expected, abs=1e-9)
+            assert translation[:-3] == [0.0] * (len(translation) - 3)
+
+
+def test_the_scene_places_first_voxel_centres(tmp_path):
+    """The run's scene agrees with its stores: pixel index 0 maps to the voxel centre."""
+    from test_the_composer_obeys_the_manifest import a_governed_run
+    from zmart_viewer.live.record.scene import build_the_scene
+
+    run = a_governed_run(tmp_path / "run")
+    scene = build_the_scene(run.profile, run.layout)
+    voxel = {axis: float(run.profile.voxel_size.get(axis, 1.0)) for axis in "zyx"}
+    origins = {p.position_id: p.origin for p in run.layout.positions}
+    for image in scene.images:
+        if image.placement is None:
+            continue
+        origin = origins.get(image.image_id, {})
+        at = image.placement.applied_to({})
+        assert at["z"] == float(origin.get("z", 0)) * voxel["z"]
+        for axis in "yx":
+            assert at[axis] == pytest.approx(
+                float(origin.get(axis, 0)) * voxel[axis] + voxel[axis] / 2
+            ), image.image_id
+
+
 def test_a_request_naming_an_xy_origin_is_refused():
     """There is one convention; a request cannot choose another."""
     with pytest.raises(ValueError, match="xy_origin"):
