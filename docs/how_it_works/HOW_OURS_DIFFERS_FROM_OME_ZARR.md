@@ -83,14 +83,14 @@ really is, in neuroglancer as well. Our own reader applies both blocks, so it op
 other people's files either way. [INTEROP.md](INTEROP.md) has the reading of their
 source.
 
-**We shrink by taking every second voxel rather than averaging.** The format says
-nothing about how the smaller copies are made, so this is within it, and the writer
-declares it — `"type": "nearest"`, with a `metadata` block saying every second
-voxel is kept along y and x. It is worth stating because it is deliberate and
-load-bearing rather than lazy: because no voxels are combined, a zoomed-out voxel
-comes from exactly one position, which is what lets a view point at the positions'
-own zoomed-out copies instead of writing its own. Averaging would look smoother and
-would quietly make that impossible.
+**Each position shrinks on its own, by averaging two-by-two blocks of its own
+pixels.** The format says nothing about how the smaller copies are made, so this is
+within it, and the writer declares it (method `mean`). Averaging rather than dropping
+every other pixel keeps a faint object on an odd row. It is load-bearing that the
+blocks never cross from one position into another: a zoomed-out voxel comes from
+exactly one position, which is what lets a view point at the positions' own
+zoomed-out copies instead of writing its own. Averaging across the joins between
+positions would quietly make that impossible.
 
 The catch that goes with it is written up in the voxel-placement note carried with the elder writer
 §3a: a coarse voxel's value is the first fine voxel of the block it covers, not

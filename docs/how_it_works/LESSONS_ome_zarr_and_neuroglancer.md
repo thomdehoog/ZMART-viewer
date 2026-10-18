@@ -41,11 +41,11 @@ warning about a file they have never heard of. It also makes a live run look lik
 is changing thousands of times, because the viewer notices change by when a folder
 was last touched.
 
-**Shrinking by decimation, not averaging, is a load-bearing choice.** `image[::2, ::2]`
-keeps every second voxel, so a zoomed-out voxel comes from exactly one tile and there
-is no join to blend. That is what lets a view point at the tiles' own pyramids
-instead of writing its own. Averaging would look smoother and would quietly make all
-of it impossible.
+**Shrinking within each tile, never across tiles, is a load-bearing choice.** Each
+tile averages two-by-two blocks of its own pixels, so a zoomed-out voxel comes from
+exactly one tile and there is no join to blend. That is what lets a view point at
+the tiles' own pyramids instead of writing its own. Averaging across the joins would
+quietly make all of it impossible.
 
 ---
 
