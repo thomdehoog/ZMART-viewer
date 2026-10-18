@@ -10,17 +10,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "gui" / "source" / "drawing" / "live-refresh.ts"
-ENGINE = ROOT / "gui" / "source" / "drawing" / "layer-sync.ts"
+REVISIONS = ROOT / "engine" / "drawing" / "primitives" / "revisions.ts"
+ENGINE = ROOT / "engine" / "drawing" / "primitives" / "sync.ts"
 
 
-def _javascript(expression: str):
+def _javascript(expression: str, module: Path = MODULE):
     finished = subprocess.run(
         [
             "node",
             "--input-type=module",
             "--eval",
             (
-                f"const m = await import({json.dumps(MODULE.as_uri())});\n"
+                f"const m = await import({json.dumps(module.as_uri())});\n"
                 f"const answer = await ({expression});\n"
                 "console.log(JSON.stringify(answer));"
             ),
@@ -93,7 +94,8 @@ def test_only_a_strictly_higher_affected_source_revision_is_selected():
             duplicate: m.advancingSourceRevisions(remembered, duplicate).map(([id]) => id),
           };
         })()
-        """
+        """,
+        REVISIONS,
     )
     assert answer == {"advanced": ["run/a"], "duplicate": []}
 
@@ -111,7 +113,8 @@ def test_cache_selection_is_exact_and_separates_metadata_from_decoded_absence():
           ];
           return m.memoEntriesForStableSource(questions, `${one}|zarr3:`);
         })()
-        """
+        """,
+        REVISIONS,
     )
     assert len(answer["metadata"]) == 1
     assert len(answer["decoded"]) == 1

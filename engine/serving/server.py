@@ -48,6 +48,7 @@ from zmart_viewer.opening.open_folders import (
     read_array_description,
     read_attrs_at,
     the_address_of,
+    the_place_of,
     written_timepoints,
 )
 
@@ -1496,6 +1497,10 @@ class _LayerPanelConfig:
         frames, revision, depth, geometry_revision = self._frames_and_revisions(
             store_path, name, root_number, source_attrs, named_view
         )
+        # Which place this store shows: a row drawn from several stores is
+        # drawn place by place, so the channels of one place mix and a later
+        # place covers an earlier one (see the page's drawing primitives).
+        place = the_place_of(name, holds_its_channels="c" in axis_names(store_path))
 
         for index, channel_name, color, declared_range, active in found:
             logical_channel = 0 if depth is not None and index is None else index
@@ -1524,6 +1529,7 @@ class _LayerPanelConfig:
                     **({"sourceRevisions": [revision]} if revision is not None else {}),
                     **({"sourceDepths": [depth]} if depth is not None else {}),
                     "sources": [address],
+                    "sourcePlaces": [place],
                     "name": channel_name,
                     "group": group,
                     "channelIndex": index,
@@ -1536,6 +1542,7 @@ class _LayerPanelConfig:
                 }
             else:
                 row["sources"].append(address)
+                row["sourcePlaces"].append(place)
                 row["frameCounts"].append(frames)
                 if revision is not None:
                     row["sourceRevisions"].append(revision)

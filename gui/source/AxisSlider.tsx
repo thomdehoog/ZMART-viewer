@@ -2,17 +2,10 @@ import React from "react";
 import type { CSSProperties, InputHTMLAttributes } from "react";
 import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import FilledRange from "./FilledRange.tsx";
+import { moveAlong, readTheAxis } from "../../engine/drawing/primitives/axes.ts";
+import type { AxisReading } from "../../engine/drawing/primitives/axes.ts";
 import { momentsInRanges } from "./drawing/live-refresh.ts";
 import type { TimeRange } from "./drawing/live-refresh.ts";
-
-/** One axis of the image as the slider reads it: where it can travel, and where it is. */
-interface AxisReading {
-  index: number;
-  min: number;
-  max: number;
-  value: number;
-  unitUm: number;
-}
 
 interface AxisSliderProps {
   viewer: Viewer | null;
@@ -33,44 +26,6 @@ type Upright = InputHTMLAttributes<HTMLInputElement> & { orient?: "vertical" };
 // How long to rest on each plane while playing. Slow enough to see what is there,
 // fast enough to read movement across a stack.
 const PLAY_STEP_MS = 140;
-
-// Read one named axis out of the engine's current coordinate space: where it can
-// travel, and where it is now. Returns null when the image has no such axis --
-// which is the normal answer for `t` on anything that is not a timelapse, and is
-// exactly how the interface decides whether to offer a time slider at all.
-function axisInfo(viewer: Viewer | null, name: string): AxisReading | null {
-  const position = viewer?.navigationState.position;
-  const space = position?.coordinateSpace.value;
-  if (!position || !space?.valid) return null;
-  const index = space.names.indexOf(name);
-  if (index < 0) return null;
-  // Neuroglancer describes an axis by the real-valued extent the data covers, and
-  // separately says whether a whole plane (or frame) sits *on* an integer
-  // coordinate or halfway between two. Both conventions occur, and the slider has
-  // to land exactly on the planes that exist -- one step too few and the last
-  // plane of every stack is unreachable, one too many and the slider runs off the
-  // end of the data.
-  //
-  // When centres are on integers the engine reports the extent shifted by half a
-  // voxel (a 48-plane stack comes back as -0.5 to 47.5), so the planes are simply
-  // the integers inside that range. When centres fall between integers the extent
-  // is unshifted, so the reachable positions are the half-integers inside it.
-  const integerCentres = space.bounds.voxelCenterAtIntegerCoordinates[index];
-  const lower = space.bounds.lowerBounds[index];
-  const upper = space.bounds.upperBounds[index];
-  const min = integerCentres ? Math.ceil(lower) : Math.ceil(lower - 0.5) + 0.5;
-  const max = integerCentres ? Math.floor(upper) : Math.floor(upper - 0.5) + 0.5;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) return null;
-  return { index, min, max, value: position.value[index], unitUm: space.scales[index] * 1e6 };
-}
-
-/** Move the view along one axis to `value`, leaving every other axis where it is. */
-function moveAlong(viewer: Viewer, index: number, value: number): void {
-  const position = viewer.navigationState.position;
-  const moved = Float32Array.from(position.value);
-  moved[index] = value;
-  position.value = moved;
-}
 
 /**
  * The last step there is data for. A store is given its full length when it is
@@ -112,7 +67,7 @@ export default function AxisSlider({
   React.useEffect(() => {
     if (!viewer) return undefined;
     const update = () => {
-      const next = axisInfo(viewer, axisName);
+      const next = readTheAxis(viewer, axisName);
       setAxis((current) =>
         current?.index === next?.index &&
         current?.min === next?.min &&
@@ -300,7 +255,7 @@ function usePlayback(
   React.useEffect(() => {
     if (!playing || !viewer) return undefined;
     const step = () => {
-      const axis = axisInfo(viewer, axisName);
+      const axis = readTheAxis(viewer, axisName);
       if (!axis) return;
       let next: number;
       if (committedMoments) {
@@ -321,7 +276,7 @@ function usePlayback(
   // Playing an axis the image no longer has would be a control quietly doing
   // nothing, so it stops itself if the axis goes away with the image.
   React.useEffect(() => {
-    if (playing && viewer && !axisInfo(viewer, axisName)) setPlaying(false);
+    if (playing && viewer && !readTheAxis(viewer, axisName)) setPlaying(false);
   }, [playing, viewer, axisName]);
 
   return [playing, () => setPlaying((on) => !on)];

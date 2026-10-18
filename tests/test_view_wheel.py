@@ -96,21 +96,35 @@ def test_installed_wheel_serves_page_and_workers(tmp_path, built_dist):
                 for p in (repo / "gui").glob("*.py")
             }
         )
-        # Four drawing files ship as they are, because other programs read them
+        # The drawing files ship as they are, because other programs read them
         # from the installed package: the server hands out embedding.js, and
-        # the operator interface's page build takes the shader programs and the
-        # neuroglancer edits from programs.js, neuroglancer-patches.mjs and
-        # neuroglancer-growth.mjs. The rest of the drawing code is only read by
-        # the page's build, and arrives already built in _frontend.
+        # the operator interface's page build takes the shader programs, the
+        # neuroglancer edits and the drawing primitives, and checks its copy of
+        # the primitives' declarations against these. The rest of the drawing
+        # code is only read by the page's build, and arrives already built in
+        # _frontend.
+        drawing = repo / "engine" / "drawing"
+        shared = [
+            drawing / name
+            for name in (
+                "embedding.js", "programs.js",
+                "neuroglancer-growth.mjs", "neuroglancer-patches.mjs",
+            )
+        ]
+        shared += sorted((drawing / "primitives").glob("*.ts"))
+        shared += sorted((drawing / "primitives").glob("*.css"))
+        shared += sorted((drawing / "declarations").rglob("*.d.ts"))
         expected_files.update(
             {
-                f"drawing/{name}": (repo / "engine" / "drawing" / name).read_bytes()
-                for name in (
-                    "embedding.js", "programs.js",
-                    "neuroglancer-growth.mjs", "neuroglancer-patches.mjs",
-                )
+                "drawing/" + path.relative_to(drawing).as_posix(): path.read_bytes()
+                for path in shared
             }
         )
+        assert {
+            "drawing/primitives/viewer.ts",
+            "drawing/primitives/description.ts",
+            "drawing/declarations/primitives/viewer.d.ts",
+        } <= expected_files.keys()
         assert packaged == expected_files, (
             "Wheel must contain exactly this build, with no retired assets"
         )

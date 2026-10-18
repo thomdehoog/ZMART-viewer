@@ -196,3 +196,21 @@ export function shaderControlsFor(window_, volumetric, weight, colour,
   if (gamma !== null) controls.gamma = gamma;
   return controls;
 }
+
+// Two programs paint the ground a picture stands on rather than the picture
+// itself. Both are black, and both cover whatever lies beneath them where they
+// draw: that is how a position drawn later covers one drawn earlier, while the
+// channels drawn over it are still added together.
+
+/**
+ * Black wherever a coverage store says something was acquired, and nothing
+ * elsewhere: the ground under a position whose acquired part is known.
+ */
+export const COVERAGE_SHADER = "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
+  + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }";
+
+/**
+ * Black over everything a store holds: the ground under a position when only
+ * its extent is known.
+ */
+export const GROUND_SHADER = "void main() { emitRGBA(vec4(0.0, 0.0, 0.0, 1.0)); }";

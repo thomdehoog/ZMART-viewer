@@ -12,7 +12,15 @@
 
 // The shader programs, their colour maps and their controls are the engine's,
 // shared with the operator page of ZMART-interface; see engine/drawing/programs.js.
+// What a description is, and the rule for how layers meet, are the drawing
+// primitives'; this file is the viewer's own panel turned into them.
 import { shaderControlsFor, shaderFor } from "../../../engine/drawing/programs.js";
+import {
+  coverageLayerFor,
+  coverPositionsMixChannels,
+  needsAGroundPerPlace,
+} from "../../../engine/drawing/primitives/description.ts";
+import type { ChannelRow, EngineLayer, VolumeMode } from "../../../engine/drawing/primitives/description.ts";
 import type { Config, LayerSpec } from "../asking-python.ts";
 import type { Rgb } from "../colours.ts";
 import type { Window } from "../contrast-window.ts";
@@ -32,39 +40,8 @@ export interface LayerState {
 /** Whether each acquisition type is shown, by its name. */
 export type GroupState = Record<string, { visible: boolean }>;
 
-/** How the volume is drawn: a projection of the brightest or the dimmest voxel, or accumulated. */
-export type VolumeMode = "max" | "on" | "min";
-
 /** A row as `layersFor` hands it on: a channel, cut to one depth where the flat view splits it. */
 type Row = LayerSpec & { depth?: "flat" | "stack" };
-
-/**
- * One layer as the engine is told to draw it: neuroglancer's own layer
- * description, plus the few fields the engine's side reads to know which
- * stores have changed and how a layer is held (neuroglancer ignores those).
- */
-export interface EngineLayer {
-  type: "image" | "segmentation";
-  name: string;
-  source: string[];
-  visible?: boolean;
-  persistentFlat?: boolean;
-  boundaryHeld?: boolean;
-  frameCounts?: number[];
-  sourceIds?: string[];
-  sourceRevisions?: number[];
-  sourceGeometryRevisions?: number[];
-  localPosition?: number[];
-  shader?: string;
-  shaderControls?: Record<string, unknown>;
-  blend?: "additive" | "default";
-  opacity?: number;
-  selectedAlpha?: number;
-  notSelectedAlpha?: number;
-  volumeRendering?: VolumeMode;
-  volumeRenderingDepthSamples?: number;
-  volumeRenderingGain?: number;
-}
 
 // How one channel is recognised again after something has been opened or closed.
 // The acquisition type and the channel name together, because that pair is what
@@ -135,7 +112,7 @@ export function layersFor(
         ...spec, depth,
         sources: pick(spec.sources), coverageSources: pick(spec.coverageSources),
         sourceIds: pick(spec.sourceIds), sourceRevisions: pick(spec.sourceRevisions),
-        frameCounts: pick(spec.frameCounts),
+        frameCounts: pick(spec.frameCounts), sourcePlaces: pick(spec.sourcePlaces),
       };
       return [{ spec: selected, index }];
     });
@@ -201,15 +178,14 @@ export function layersFor(
       return layer;
     }
     layer.shader = shaderFor(volumetric, lut, Boolean((config.transparentBackground || spec.view) && spec.opaque));
-    // A row that got here is a channel a microscope wrote as its own file, so
-    // the engine has to add it to its neighbours from outside -- there is no
-    // one program holding both. Adding is safe only while the row is fed by a
-    // single store: the engine draws each store as its own pass, so a row
-    // stitched from overlapping tiles would sum them into a bright seam along
-    // every join, and such a row keeps the covering rule instead (and with it
-    // the old fault, where only the topmost channel is seen). The cure is not
-    // a cleverer rule here but the composed picture the server already builds,
-    // whose channels live together and mix in one program.
+    // Channels mix: each row is added to its neighbours. Adding is safe only
+    // while the row is fed by a single store: the engine draws each store as
+    // its own pass, so a row stitched from overlapping tiles would sum them
+    // into a bright seam along every join. Such a row covers instead, which
+    // is right for an acquisition of one channel; where it has several, the
+    // flat view splits them place by place below, so the later position
+    // covers the earlier and its channels still add. A volume keeps the
+    // covering rule, since no ground can be laid under a ray.
     if ((spec.sources || [spec.source]).length === 1) {
       layer.blend = "additive";
     }
@@ -260,6 +236,7 @@ export function layersFor(
     return layer;
   });
   if (volumetric) return layers;
+  const address = (source: string) => `${window.location.origin}${source}`;
   // Black underpainting supplies acquisition coverage independently of intensity.
   // Coverage goes below its flat/stack channel block, so acquired black can
   // cover an earlier picture without obscuring channels in its own block.
@@ -267,20 +244,8 @@ export function layersFor(
   const coverage = layers.flatMap((layer, index): EngineLayer[] => {
     const sources = all[index].spec.coverageSources;
     if (layer.type !== "image" || !sources?.length) return [];
-    return [{
-      type: "image", name: `__coverage__${layer.name}`,
-      source: sources.map(source => `${window.location.origin}${source}`),
-      sourceIds: layer.sourceIds?.map(id => `${id}/coverage`),
-      sourceRevisions: layer.sourceRevisions,
-      sourceGeometryRevisions: layer.sourceGeometryRevisions,
-      frameCounts: layer.frameCounts, localPosition: layer.localPosition,
-      persistentFlat: layer.persistentFlat,
-      boundaryHeld: layer.boundaryHeld,
-      visible: layer.visible, opacity: 1,
-      blend: all[index].spec.depth || all[index].spec.view ? "default" : "additive",
-      shader: "#uicontrol invlerp covered(range=[0,1], clamp=false)\n"
-        + "void main() { emitRGBA(vec4(0.0,0.0,0.0,float(covered() > 0.0))); }",
-    }];
+    const blend = all[index].spec.depth || all[index].spec.view ? "default" : "additive";
+    return [coverageLayerFor(layer, sources.map(address), blend)];
   });
   const result: EngineLayer[] = [], handled = new Set<string>();
   const block = (spec: Row) => JSON.stringify([spec.group || "", spec.view?.acquisition]);
@@ -290,10 +255,21 @@ export function layersFor(
     if (handled.has(group)) continue;
     handled.add(group);
     for (const depth of [undefined, "flat", "stack"]) {
-      const selected = layers.filter((_, j) => block(all[j].spec) === group
-        && all[j].spec.depth === depth);
-      const names = new Set(selected.map(layer => `__coverage__${layer.name}`));
-      result.push(...coverage.filter(layer => names.has(layer.name)), ...selected);
+      const chosen = layers.flatMap((_, j) => block(all[j].spec) === group
+        && all[j].spec.depth === depth ? [j] : []);
+      const rows: ChannelRow[] = chosen.map(j => ({
+        layer: layers[j],
+        places: all[j].spec.sourcePlaces,
+        coverage: all[j].spec.coverageSources?.map(address),
+      }));
+      // Channels drawn from several stores each: every place stands on a
+      // ground of its own, which also stands in for the block's coverage.
+      if (needsAGroundPerPlace(rows)) {
+        result.push(...coverPositionsMixChannels(rows));
+        continue;
+      }
+      const names = new Set(chosen.map(j => `__coverage__${layers[j].name}`));
+      result.push(...coverage.filter(layer => names.has(layer.name)), ...chosen.map(j => layers[j]));
     }
   }
   return result;

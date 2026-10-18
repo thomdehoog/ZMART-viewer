@@ -1,5 +1,5 @@
 import FilledRange from "./FilledRange.tsx";
-import type { VolumeMode as Projection } from "./drawing/layers.ts";
+import type { VolumeMode as Projection } from "../../engine/drawing/primitives/description.ts";
 import type { DisplayScales } from "./display-axes.ts";
 import { styles } from "./layer-panel-styles.ts";
 

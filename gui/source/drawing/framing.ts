@@ -1,7 +1,8 @@
 /**
- * Settling the view: which axes are drawn, where in time it opens, and how the
- * picture is fitted to the window -- at first open, on Overview, and when a new
- * acquisition is opened beside the others.
+ * Settling the view: how the picture is fitted to the window -- at first open,
+ * on Overview, and when a new acquisition is opened beside the others. Which
+ * axes are drawn and where in time it opens are the drawing primitives'
+ * (`engine/drawing/primitives/axes.ts`), called from here at the first fit.
  *
  * Three things have to be decided the moment an image says how big it is, and all
  * three were wrong at some point in a way that produced a picture nobody could see:
@@ -9,13 +10,16 @@
  * before anybody is looking, and afterwards the operator is in charge.
  */
 
-import type { CoordinateSpace } from "neuroglancer/unstable/coordinate_transform.js";
-import type { RenderViewport } from "neuroglancer/unstable/display_context.js";
 import type { LayerDataSource } from "neuroglancer/unstable/layer/layer_data_source.js";
 import type { DisplayDimensionRenderInfo } from "neuroglancer/unstable/navigation_state.js";
 import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import { geometryRefreshPending } from "../../../engine/drawing/embedding.js";
-import { sourcesStillWaiting } from "./feeding.ts";
+import {
+  pinTheAxesThatMeasureDistance,
+  startTimeAtTheFirstMoment,
+} from "../../../engine/drawing/primitives/axes.ts";
+import { panelsOnScreen } from "../../../engine/drawing/primitives/camera.ts";
+import type { Engine } from "../../../engine/drawing/primitives/viewer.ts";
 
 /**
  * What the growth edit (`engine/drawing/neuroglancer-growth.mjs`) adds to a data
@@ -24,158 +28,6 @@ import { sourcesStillWaiting } from "./feeding.ts";
  */
 interface GrowingDataSource {
   metadataRefresh?: AbortController;
-}
-
-/**
- * Draw the axes that measure distance, and leave the rest to the sliders.
- *
- * An image says what its axes are and what each one measures. Some are places in
- * the specimen — depth, height, width — and some are not: which moment this is,
- * or which colour of light was recorded. Only the first kind belongs on screen.
- *
- * The engine does not know that on its own. Left alone it takes the first three
- * axes the image declares, in the order they were written. For an image of a
- * single moment those happen to be depth, height and width and everything looks
- * right — which is exactly what made this hard to see. Add a time axis at the
- * front, as every timelapse has, and the first three become time, depth and
- * height: the engine draws time against depth and pins width, so the specimen is
- * nowhere on screen. Nothing reports a fault. The picture is simply black while
- * the data on disk is perfectly correct.
- *
- * Measured, on the same tiles in the same places: an image declaring one moment
- * filled the view, and an image declaring three drew nothing at all.
- *
- * Which axes measure distance is not guessed at. An image declares a unit for
- * each axis, and "m" — metres — is the only one that measures distance across a
- * specimen. Seconds do not, and an axis with no unit does not. That is the same
- * test the scale bar uses, for the same reason.
- *
- * The *order* they are handed over in matters as much as which ones they are, and
- * it cannot be chosen on its own. The engine decides what goes across the window,
- * what goes down it and what goes into the screen from two things together: the
- * order of this list, and which of its named panel layouts the viewer asks for.
- * The layout is chosen in `App.tsx`, next to `SLICE_LAYOUT`, and the two are a
- * matched pair. Change one without the other and the view comes out either
- * edge-on — looking at the specimen from the side, so a stack of planes collapses
- * to a line — or mirrored left to right, which is the quieter and more dangerous
- * of the two because the picture still looks perfectly healthy.
- *
- * The order used here is the reverse of the order the image declares. An OME-Zarr
- * image lists its distance axes slowest-changing first, which is depth, then
- * height, then width; reversing that gives width, height, depth, and asking for
- * the layout `App.tsx` calls `xy` then puts width across the window running to the
- * right, height down it, and depth into the screen — the plane the operator
- * scrolls through. That is the specimen the right way round.
- *
- * This was not always so. The viewer used to hand the axes over in the declared
- * order and ask for the layout called `yz`, which also put width across and height
- * down and looked entirely right, but ran width towards the *left*: every picture
- * was a mirror image of the specimen, and nothing said so. It is measured, from
- * the picture rather than from anything the engine reports about itself, in
- * `tests/test_the_picture_is_not_mirrored.py`.
- *
- * Note that none of this reads an axis by name. Which axes are drawn comes from
- * their unit, and which way round they go comes from the order the image declares
- * them in — so an image whose axes are called something other than z, y and x is
- * treated exactly the same way.
- *
- * An image declaring fewer than two such axes is left completely alone. We would
- * have nothing better to offer than the engine's own choice, and replacing a
- * possibly-odd view with a certainly-wrong one is not an improvement.
- */
-export function keepSpatialAxes(viewer: Viewer): () => void {
-  const place = () => pinTheAxesThatMeasureDistance(viewer);
-  const stop = viewer.navigationState.position.coordinateSpace.changed.add(place);
-  place();
-  return stop;
-}
-
-function pinTheAxesThatMeasureDistance(viewer: Viewer): void {
-  const space = viewer.navigationState.position.coordinateSpace.value;
-  if (!space?.names) return;
-  const distances = space.names.filter((_, at) => space.units?.[at] === "m");
-  if (distances.length < 2) return;
-  // Width first, depth last. The image declares its distance axes the other way
-  // round -- depth, height, width -- so reversing them is what puts width across
-  // the window and depth into the screen, which is what the `xy` layout asked for
-  // in App.tsx expects. The two belong together; see the note above.
-  const facing = distances.every(name => ["x", "y", "z"].includes(name))
-    ? ["x", "y", "z"].filter(name => distances.includes(name))
-    : distances.slice(0, 3).reverse();
-  const current = viewer.navigationState.pose.displayDimensions.value;
-  // Left alone when it is already right. Handing the engine the same answer it
-  // already had is not free: it counts as a change, and everything downstream
-  // that follows the view -- the zoom, the scale bar, the panel -- is asked to
-  // catch up with a difference that does not exist.
-  const showing = Array.from(current?.displayDimensionIndices ?? [])
-    .filter((at) => at >= 0)
-    .map((at) => space.names[at]);
-  if (showing.length === facing.length
-      && showing.every((name, at) => name === facing[at])) {
-    return;
-  }
-  try {
-    viewer.navigationState.pose.displayDimensions.restoreState(facing);
-  } catch {
-    // An engine that will not take them leaves the view as it was rather than
-    // leaving the page broken. This runs while an operator is waiting for their
-    // acquisition to appear, so it must not be the thing that stops it.
-  }
-}
-
-function firstStepAlong(space: CoordinateSpace, at: number): number {
-  // The engine describes an axis by the extent the data covers, and says
-  // separately whether a step sits *on* a whole number or half way between two.
-  // Both conventions occur, and the first step has to be worked out for the one
-  // in use or the view lands between two frames. This is the same reading the
-  // time slider does -- see AxisSlider.tsx, where it is set out at length.
-  const onWholeNumbers = space.bounds.voxelCenterAtIntegerCoordinates[at];
-  const lower = space.bounds.lowerBounds[at];
-  return onWholeNumbers ? Math.ceil(lower) : Math.ceil(lower - 0.5) + 0.5;
-}
-
-function startAxisAtItsFirstStep(viewer: Viewer, at: number): void {
-  const { position } = viewer.navigationState;
-  const space = position.coordinateSpace.value;
-  const first = firstStepAlong(space, at);
-  if (!Number.isFinite(first) || position.value[at] === first) return;
-  const moved = Float32Array.from(position.value);
-  moved[at] = first;
-  position.value = moved;
-}
-
-/**
- * Open a timelapse at its first moment rather than half way through it.
- *
- * The engine opens every axis in the middle, which is the right thing to do for
- * the axes that measure the specimen — the middle of a stack is a sensible plane
- * to start on. Time is not like that. A recording is watched from the beginning,
- * and the middle of a run is not a place anybody asked for.
- *
- * There is a second reason, and it is the one that shows on screen. A timelapse
- * declares room for all the moments it could record and fills them in as the
- * experiment goes, so until the run ends most of its declared moments are empty.
- * Opening in the middle of one therefore means opening on a black screen, with
- * the recorded data sitting at the beginning, unseen and with nothing to say so.
- * Measured, on a store declaring three moments with only the first imaged: the
- * view opened blank, and moving to the first moment showed the specimen.
- *
- * This is not a rare shape. It is what every run in progress looks like, and what
- * an instrument that plans its length up front writes as well.
- *
- * The time axis is recognised by its unit — seconds — which is the same test used
- * for the axes that measure distance, and for the same reason: an image says what
- * its axes mean, so there is no need to guess from their names.
- *
- * This runs once, as the image is opened. Afterwards the operator is in charge of
- * where in time they are, and nothing here moves them again.
- */
-function startTimeAtTheFirstMoment(viewer: Viewer): void {
-  const space = viewer.navigationState.position.coordinateSpace.value;
-  if (!space?.names || !space.units) return;
-  const at = Array.from(space.units).indexOf("s");
-  if (at < 0) return;
-  startAxisAtItsFirstStep(viewer, at);
 }
 
 // How much window the overview leaves around the picture. The picture's longest
@@ -187,20 +39,6 @@ function startTimeAtTheFirstMoment(viewer: Viewer): void {
 // the 12,800-position survey: first that the exact fit needed an edge at all,
 // then that the first margin wanted doubling.
 const OVERVIEW_MARGIN = 1.2;
-
-/**
- * The drawing areas of the flat panel and of the volume panel, where each is on
- * screen. A panel is told apart by what it draws: one slice, or several.
- */
-function panelsOnScreen(viewer: Viewer): { flat: RenderViewport | null; volume: RenderViewport | null } {
-  let flat: RenderViewport | null = null;
-  let volume: RenderViewport | null = null;
-  for (const panel of viewer.display?.panels ?? []) {
-    if ("sliceView" in panel) flat = panel.renderViewport;
-    else if ("sliceViews" in panel) volume = panel.renderViewport;
-  }
-  return { flat, volume };
-}
 
 /**
  * Zoom both views so the picture's reach along the drawn axes just fills the
@@ -245,55 +83,6 @@ function fitExtents(
   } else if (resetWhenNothingFits) {
     viewer.perspectiveNavigationState.zoomFactor.reset();
   }
-}
-
-/**
- * Which part of the picture is on screen, as fractions of its own bounds.
- *
- * Given as fractions rather than as voxels because that is the form the
- * server can use without knowing anything about how the view is arranged:
- * the panel asks "measure the brightness of this share of the picture", and
- * the share is the same number whatever the zoom happens to be expressed in.
- *
- * Worked out from what the engine already holds. How many of the picture's
- * own units a screen pixel covers is the zoom divided by the engine's factor
- * for that axis -- the same arithmetic the scale bar and the whole-picture
- * fit both use -- so half the panel's width in units is half its pixels times
- * that. The two axes drawn on screen are the ones this answers for.
- *
- * ``null`` where the picture has not said how big it is yet, or where the
- * view is not a flat one: a volume is turned in three dimensions and the
- * question "which rectangle is on screen" has no honest answer there.
- */
-export function whatIsOnScreen(viewer: Viewer): [[number, number], [number, number]] | null {
-  const { position } = viewer.navigationState;
-  const space = position.coordinateSpace.value;
-  if (!space?.rank) return null;
-  const render = viewer.navigationState.pose.displayDimensionRenderInfo.value;
-  const drawn = Array.from(render?.displayDimensionIndices ?? []).slice(0, 2);
-  if (drawn.length < 2) return null;
-  const viewport = panelsOnScreen(viewer).flat;
-  if (!viewport?.logicalWidth || !viewport?.logicalHeight) return null;
-
-  const zoom = viewer.navigationState.zoomFactor.value;
-  const { lowerBounds, upperBounds } = space.bounds;
-  const centre = position.value;
-  const names = Array.from(space.names);
-  const share: Record<string, [number, number]> = {};
-  drawn.forEach((axis, slot) => {
-    const factor = render.canonicalVoxelFactors[slot] || 1;
-    const pixels = slot === 0 ? viewport.logicalWidth : viewport.logicalHeight;
-    const half = (pixels / 2) * (zoom / factor);
-    const low = lowerBounds[axis];
-    const high = upperBounds[axis];
-    if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    share[names[axis]] = [
-      (centre[axis] - half - low) / (high - low),
-      (centre[axis] + half - low) / (high - low),
-    ];
-  });
-  if (!share.y || !share.x) return null;
-  return [[share.y[0], share.x[0]], [share.y[1], share.x[1]]];
 }
 
 /**
@@ -412,14 +201,15 @@ function showTheWholePicture(viewer: Viewer): boolean {
  * reliably a single tile of many on a fast machine, which is the same trap
  * ``whenTheSourcesHaveSettled`` documents.
  */
-export function lookAtWhatOpened(viewer: Viewer, named: readonly string[] | null | undefined): boolean {
+export function lookAtWhatOpened(engine: Engine, named: readonly string[] | null | undefined): boolean {
+  const { viewer } = engine;
   const wanted = new Set(named ?? []);
   if (!wanted.size) return false;
   const { position } = viewer.navigationState;
   const space = position.coordinateSpace.value;
   if (!space?.rank) return false;
   // Anything still queued means more of this acquisition is on its way.
-  if (sourcesStillWaiting(viewer) > 0) return false;
+  if (engine.sourcesStillWaiting() > 0) return false;
 
   const found = viewer.layerManager.managedLayers.filter(
     (managed) => wanted.has(managed.name));
@@ -495,7 +285,8 @@ export function lookAtWhatOpened(viewer: Viewer, named: readonly string[] | null
  *
  * Returns a function that stops the waiting.
  */
-export function whenTheSourcesHaveSettled(viewer: Viewer, ready: () => boolean, act: () => void): () => void {
+export function whenTheSourcesHaveSettled(engine: Engine, ready: () => boolean, act: () => void): () => void {
+  const { viewer } = engine;
   const { position } = viewer.navigationState;
   // Axes, not images: a space with no axes is the placeholder described at
   // chooseScaleWhenTheImagesAreMeasured. The moment it has any, the engine knows
@@ -515,7 +306,7 @@ export function whenTheSourcesHaveSettled(viewer: Viewer, ready: () => boolean, 
   const settled = () =>
     ready() &&
     measured() &&
-    sourcesStillWaiting(viewer) === 0 &&
+    engine.sourcesStillWaiting() === 0 &&
     viewer.layerManager.managedLayers.every((managed) =>
       (managed.layer?.dataSources ?? []).every(
         (source) => source.loadState !== undefined && !geometryRefreshPending(source)
@@ -599,7 +390,8 @@ export function whenTheSourcesHaveSettled(viewer: Viewer, ready: () => boolean, 
  * Returns a function that stops the waiting, for the caller to use when the
  * viewer goes away.
  */
-export function chooseScaleWhenTheImagesAreMeasured(viewer: Viewer, framed: (() => void) | null = null): () => void {
+export function chooseScaleWhenTheImagesAreMeasured(engine: Engine, framed: (() => void) | null = null): () => void {
+  const { viewer } = engine;
   // The whole-picture fit divides the picture's extent by the panel's size
   // in screen pixels, so it cannot run before the panel has been laid out.
   // A first load never hit this -- the network is slower than the layout --
@@ -616,7 +408,7 @@ export function chooseScaleWhenTheImagesAreMeasured(viewer: Viewer, framed: (() 
         && (panel.renderViewport?.logicalWidth ?? 0) > 0
         && (panel.renderViewport?.logicalHeight ?? 0) > 0,
     );
-  return whenTheSourcesHaveSettled(viewer, panelLaidOut, () => {
+  return whenTheSourcesHaveSettled(engine, panelLaidOut, () => {
     // Which axes are drawn is settled first, because how far to zoom is worked
     // out from what is being drawn. Choosing the zoom and then changing the axes
     // leaves the view scaled for a picture nobody is looking at.
@@ -639,38 +431,4 @@ export function chooseScaleWhenTheImagesAreMeasured(viewer: Viewer, framed: (() 
     // flicker on every first open, 2026-08-23).
     framed?.();
   });
-}
-
-/**
- * Where the view was looking, in the specimen's own units rather than the
- * engine's, so it can be put back on an engine built afresh: by axis name, and
- * the two zooms as so many metres to a screen pixel.
- */
-export interface Camera {
-  position: Record<string, number>;
-  zoomMeters: number;
-  perspectiveZoomMeters: number;
-}
-
-/** Where the view is looking now, or null while it has no axes to say it by. */
-export function captureCamera(viewer: Viewer): Camera | null {
-  const position = viewer.navigationState.position, space = position.coordinateSpace.value;
-  if (!space.valid) return null;
-  return {
-    position: Object.fromEntries(space.names.map((name, i) =>
-      [name, position.value[i] * space.scales[i]])),
-    zoomMeters: viewer.navigationState.zoomFactor.value
-      * viewer.navigationState.zoomFactor.canonicalVoxelPhysicalSize,
-    perspectiveZoomMeters: viewer.perspectiveNavigationState.zoomFactor.value
-      * viewer.perspectiveNavigationState.zoomFactor.canonicalVoxelPhysicalSize,
-  };
-}
-
-/** Put the view back where `captureCamera` found it; an axis it did not know stays put. */
-export function restoreCamera(viewer: Viewer, camera: Camera): void {
-  const position = viewer.navigationState.position, space = position.coordinateSpace.value;
-  position.value = Float32Array.from(space.names, (name, i) =>
-    camera.position[name] === undefined ? position.value[i] : camera.position[name] / space.scales[i]);
-  viewer.navigationState.zoomFactor.setPhysicalScale(camera.zoomMeters, 1);
-  viewer.perspectiveNavigationState.zoomFactor.setPhysicalScale(camera.perspectiveZoomMeters, 1);
 }

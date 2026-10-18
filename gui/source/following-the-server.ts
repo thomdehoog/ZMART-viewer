@@ -10,8 +10,7 @@
  */
 
 import React from "react";
-import type { Viewer } from "neuroglancer/unstable/viewer.js";
-import { letGoOfDecodedPieces } from "./drawing/layer-sync.ts";
+import type { Engine } from "../../engine/drawing/primitives/viewer.ts";
 import { layerKey } from "./drawing/layers.ts";
 import type { GroupState, LayerState } from "./drawing/layers.ts";
 import { anyStoreGainedItsFirstImage, liveStateProblem } from "./drawing/live-refresh.ts";
@@ -41,7 +40,7 @@ const staleLiveState = (problem: string) =>
  * image was written in place has to reach it there and then, without waiting
  * for the page to draw again.
  */
-export function useFollowingTheServer(engine: React.RefObject<Viewer | null>) {
+export function useFollowingTheServer(engine: React.RefObject<Engine | null>) {
   const [config, setConfig] = React.useState<Config | null>(null);
   // Per-layer interface state. Held here rather than in the engine because the
   // panel and the viewer must never disagree about what is showing.
@@ -258,7 +257,7 @@ export function useFollowingTheServer(engine: React.RefObject<Viewer | null>) {
       if (said?.imageWrittenInPlace && engine.current) {
         // Only unversioned stores need this hint. Revisioned sources refresh
         // once through syncSources when catchUp observes a newer publication.
-        letGoOfDecodedPieces(engine.current);
+        engine.current.letGoOfDecodedPieces();
         askAgain();
         return;
       }
@@ -272,7 +271,7 @@ export function useFollowingTheServer(engine: React.RefObject<Viewer | null>) {
       // Narrow on purpose. A position arriving, or a timelapse lengthening, is not
       // this, so nothing already fetched is thrown away in the far commoner case.
       // See anyStoreGainedItsFirstImage for why this particular signal.
-      if (outcome === "gained-image" && engine.current) letGoOfDecodedPieces(engine.current);
+      if (outcome === "gained-image" && engine.current) engine.current.letGoOfDecodedPieces();
     };
 
     listener.addEventListener("changed", heard);

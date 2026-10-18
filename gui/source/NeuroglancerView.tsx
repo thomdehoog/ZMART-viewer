@@ -1,18 +1,20 @@
 import React from "react";
-import type { Viewer } from "neuroglancer/unstable/viewer.js";
-import { createViewer } from "./drawing/viewer.ts";
+import { createViewer } from "../../engine/drawing/primitives/viewer.ts";
+import type { Engine } from "../../engine/drawing/primitives/viewer.ts";
+import { themeGround } from "./drawing/viewer.ts";
 
 interface NeuroglancerViewProps {
-  onViewer: (viewer: Viewer) => void;
+  onEngine: (engine: Engine) => void;
   generation?: number;
   veiled?: boolean;
 }
 
 /**
- * Mounts the engine's neuroglancer viewer in this window and hands the live
- * `viewer` back through `onViewer`. The engine creates and disposes the
- * viewer (see drawing/viewer.ts); this component only gives it an
- * element to draw into and ties its lifetime to React's.
+ * Mounts the engine in this window and hands its handle back through
+ * `onEngine`. The drawing primitives create and dispose it (see
+ * engine/drawing/primitives/viewer.ts); this component gives it an element to
+ * draw into, its gestures and the theme's ground, and ties its lifetime to
+ * React's.
  *
  * The effect is written to survive React StrictMode's deliberate mount →
  * dispose → mount in development, so do not be surprised to see the viewer
@@ -25,16 +27,28 @@ interface NeuroglancerViewProps {
  * thing that ever put it right was a fresh drawing context (measured
  * 2026-08-21). So a close builds one.
  */
-export default function NeuroglancerView({ onViewer, generation = 0, veiled = false }: NeuroglancerViewProps) {
+export default function NeuroglancerView({ onEngine, generation = 0, veiled = false }: NeuroglancerViewProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const target = containerRef.current;
     if (!target) return undefined;
-    const { viewer, dispose } = createViewer(target);
-    onViewer?.(viewer);
-    return dispose;
-  }, [onViewer, generation]);
+    // The engine's own gestures, which the Point and Box tools ride on, and the
+    // ground the theme paints: read afresh whenever the Light/Dark button
+    // changes the page's dress, so the picture never floats on a black field
+    // inside a light page.
+    const engine = createViewer(target, { gestures: "engine", ground: themeGround });
+    const dressWatcher = new MutationObserver(() => engine.paintTheGround());
+    dressWatcher.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    onEngine?.(engine);
+    return () => {
+      dressWatcher.disconnect();
+      engine.dispose();
+    };
+  }, [onEngine, generation]);
 
   // Size the mount with width/height rather than absolute insets: neuroglancer
   // sets `position: relative` on this element itself, which would cancel any

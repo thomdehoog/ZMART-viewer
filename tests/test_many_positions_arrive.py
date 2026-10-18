@@ -206,7 +206,7 @@ def test_every_position_reaches_the_engine_and_they_arrive_in_groups(browser, bu
         # two looks on a busy machine, so a check on the size of each step would fail
         # now and then for reasons that have nothing to do with the viewer. What matters
         # here is that the handing over is paced; how large a group is belongs to
-        # AT_A_TIME in feeding.ts and is measured properly by check_scale.py.
+        # AT_A_TIME in the primitives' feeding.ts and is measured properly by check_scale.py.
         arrivals = page.evaluate("() => window.zmartArrivals")
         partway = [held for held in arrivals if 0 < held < POSITIONS]
         assert len(partway) >= 4, (
@@ -283,7 +283,7 @@ def the_shipped_group_size() -> int:
     quietly stop describing the viewer.
     """
     source = (
-        Path(__file__).resolve().parent.parent / "gui" / "source" / "drawing" / "feeding.ts"
+        Path(__file__).resolve().parent.parent / "engine" / "drawing" / "primitives" / "feeding.ts"
     ).read_text(encoding="utf-8")
     found = re.search(r"const AT_A_TIME\s*=\s*(\d+)", source)
     assert found, (

@@ -1,6 +1,8 @@
 {
   // The type checker's view of the page. Nothing is emitted: Vite builds the
   // page, and `tsc --noEmit` only checks it. The page is TypeScript, strict.
+  // The drawing primitives in `engine/drawing/primitives/` are checked with
+  // it: TypeScript too, shared with the operator page of ZMART-interface.
   // What stays JavaScript is read as it is, not checked: the build's own
   // tooling (`scripts/*.mjs`, `vite.config.js`), which runs in Node, and the
   // four drawing files in `engine/drawing/`, which other pages and builds take
@@ -31,6 +33,6 @@
       "neuroglancer/unstable/*": ["./node_modules/neuroglancer/lib/*"]
     }
   },
-  "include": ["."],
+  "include": [".", "../../engine/drawing/primitives"],
   "exclude": ["node_modules", "scripts", "vite.config.js"]
 }

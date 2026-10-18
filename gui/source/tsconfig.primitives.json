@@ -1,0 +1,20 @@
+{
+  // The drawing primitives' declarations, for the pages that build with them
+  // from outside this repository. The operator page of ZMART-interface checks
+  // its types in jobs where no viewer is installed, so it keeps a copy of
+  // these, and a test there holds its copy equal to the installed viewer's.
+  // Written by the build into engine/drawing/declarations, with the two plain
+  // drawing files the primitives read (programs.js and embedding.js), and
+  // shipped in the wheel beside them.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "../../engine/drawing",
+    "declarationDir": "../../engine/drawing/declarations",
+    "newLine": "lf"
+  },
+  "include": ["../../engine/drawing/primitives/*.ts"],
+  "exclude": []
+}

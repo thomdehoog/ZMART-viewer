@@ -45,6 +45,19 @@ def channel_of(name: str) -> str | None:
     return match.group(1) if match else None
 
 
+def the_place_of(name: str, *, holds_its_channels: bool) -> str:
+    """Which place a store shows, the same for every channel of that place.
+
+    A store holding its channels on an axis is one place. A store of one
+    channel named by its wavelength (``..._Ch488...``) shares its place with
+    the stores of the other wavelengths that differ from it only there -- the
+    same reading of the name that gives the channel its name and colour.
+    """
+    if holds_its_channels:
+        return name
+    return _CHANNEL_PATTERN.sub("", name)
+
+
 def layer_names(names: list[str]) -> list[str]:
     """Short, *unique* labels for a set of stores."""
     short = [_short_name(name) for name in names]

@@ -35,6 +35,11 @@ export interface LayerSpec {
   source?: string;
   sources?: string[];
   coverageSources?: string[];
+  /**
+   * Which place each store shows, in the order of `sources`: stores of
+   * different channels showing the same position carry the same name.
+   */
+  sourcePlaces?: string[];
   sourceIds?: string[];
   sourceRevisions?: number[];
   sourceGeometryRevisions?: number[];

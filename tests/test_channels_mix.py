@@ -321,28 +321,15 @@ def written_as_positions(browser, built_dist, tmp_path):
         thread.join(timeout=5)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "A picture written as overlapping positions cannot mix its channels, and "
-        "the engine is what says so. Adding is a property of a LAYER, so a layer "
-        "fed by several stores adds those stores to each other as well, drawing a "
-        "bright seam along every join -- such a picture keeps the covering rule "
-        "and shows only its topmost channel. Reading several channels inside ONE "
-        "program would settle it, and cannot be done here: a brightness control "
-        "binds to a CHANNEL dimension, while an OME-Zarr c axis arrives as a "
-        "LOCAL one (measured 2026-08-20 -- the layer reports a channel rank of "
-        "nought and `channel=[1]` will not parse). The cure is the composed "
-        "picture the server already builds, which is one store and mixes "
-        "properly; this gate stands so the day the limit lifts is not missed."
-    ),
-)
 def test_a_picture_written_as_positions_still_mixes_its_channels(written_as_positions):
     """Both rules at once: the channels mix while the positions cover.
 
-    The case the arrangement cannot yet satisfy, kept as a measurement
-    rather than as a paragraph. Every row here is fed by two stores, so the
-    engine's adding is unavailable and the topmost channel covers the other.
+    Every row here is fed by two stores, and adding is a property of a whole
+    layer, so a row could either add -- summing its positions into a bright
+    seam -- or cover, hiding every channel but the top one. Drawn place by
+    place (the drawing primitives' ``coverPositionsMixChannels``), each place
+    stands on its own ground and its channels add on top: this gate stood as
+    a strict expected failure from 2026-08-20 until that landed.
     """
     page = written_as_positions
     deaf = []

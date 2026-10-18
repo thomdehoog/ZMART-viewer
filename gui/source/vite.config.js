@@ -1,5 +1,14 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
+// Neuroglancer's insides, by the name it offers them under. The drawing
+// primitives live outside this folder, in engine/drawing/primitives, and a
+// module there finds no node_modules walking up from where it sits; this
+// sends every `neuroglancer/unstable/...` to the one copy here, which is the
+// copy the build patches. The operator page of ZMART-interface has the same
+// line for its own copy.
+const neuroglancerInsides = fileURLToPath(new URL("./node_modules/neuroglancer/lib/", import.meta.url));
 
 export default defineConfig({
   // npm runs the build from this folder, which holds the page and everything
@@ -7,6 +16,9 @@ export default defineConfig({
   // is the folder the Python package ships.
   root: ".",
   plugins: [react()],
+  resolve: {
+    alias: [{ find: /^neuroglancer\/unstable\//, replacement: neuroglancerInsides }],
+  },
 
   // --- production build ---
   build: {
@@ -28,9 +40,10 @@ export default defineConfig({
     exclude: ["neuroglancer"],
   },
   server: {
-    // The page imports embedding.js from engine/drawing, where the Python
-    // server also serves it to other interfaces, so the dev server must be
-    // allowed to read that folder as well as this one.
+    // The page imports embedding.js and the drawing primitives from
+    // engine/drawing, where the Python package also ships them to other
+    // interfaces, so the dev server must be allowed to read that folder as
+    // well as this one.
     fs: { allow: [".", "../../engine/drawing"] },
     // Under `vite dev` the frontend runs on Vite's own port; anything it asks
     // for under /data (the image volume) or /api (Python) is forwarded to the

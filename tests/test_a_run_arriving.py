@@ -116,8 +116,10 @@ MARK = """() => {
 }"""
 STILL_MARKED = """() => window.zmartViewer.layerManager.managedLayers
                      .filter((m) => m.__survived).length"""
+# The channels' sources, not the black ground each position stands on (see
+# coverPositionsMixChannels in the drawing primitives).
 SOURCES = """() => window.zmartViewer.layerManager.managedLayers
-              .filter((m) => m.layer && m.layer.type === 'image')
+              .filter((m) => m.layer && m.layer.type === 'image' && !m.name.startsWith('__ground__'))
               .reduce((n, m) => n + m.layer.dataSources.length, 0)"""
 
 
@@ -151,8 +153,8 @@ def test_a_run_arrives_one_position_at_a_time(browser, built_dist, tmp_path):
             told = page.evaluate(ANNOUNCE)
             assert told >= 1, "the page was not listening when the run announced"
 
-            # The row gains a source rather than the panel gaining a row: every
-            # position of one acquisition type is one picture, so they share a layer.
+            # The rows gain a source each rather than the panel gaining rows: every
+            # position of one acquisition type belongs to the same channels.
             page.wait_for_function(f"{SOURCES} === {already + CHANNELS}", timeout=30_000)
             page.wait_for_timeout(1500)
 

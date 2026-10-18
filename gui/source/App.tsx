@@ -1,28 +1,23 @@
 import React from "react";
 import type { CSSProperties } from "react";
-import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import NeuroglancerView from "./NeuroglancerView.tsx";
 import LayerPanel from "./LayerPanel.tsx";
 import VolumeMode from "./VolumeMode.tsx";
 import TargetsPanel from "./TargetsPanel.tsx";
 import {
-  captureCamera,
   lookAtWhatOpened,
-  restoreCamera,
-  whatIsOnScreen,
   chooseScaleWhenTheImagesAreMeasured,
-  keepSpatialAxes,
   whenTheSourcesHaveSettled,
 } from "./drawing/framing.ts";
-import type { Camera } from "./drawing/framing.ts";
-import { lettingGo, sourceRefreshing, syncLayers } from "./drawing/layer-sync.ts";
-import type { SceneLayer } from "./drawing/layer-sync.ts";
-import { sourcesStillWaiting } from "./drawing/feeding.ts";
+import { captureCamera, restoreCamera, whatIsOnScreen } from "../../engine/drawing/primitives/camera.ts";
+import type { Camera } from "../../engine/drawing/primitives/camera.ts";
+import { keepSpatialAxes } from "../../engine/drawing/primitives/axes.ts";
+import type { SceneLayer, VolumeMode as Projection } from "../../engine/drawing/primitives/description.ts";
+import type { Engine } from "../../engine/drawing/primitives/viewer.ts";
 import { syncView, stretchTheDisplay } from "./drawing/viewer.ts";
 import ScaleBar from "./ScaleBar.tsx";
 import AxisSlider from "./AxisSlider.tsx";
 import { engineName, layerKey, layersFor } from "./drawing/layers.ts";
-import type { VolumeMode as Projection } from "./drawing/layers.ts";
 import { VIEW_LABELS, inSelectedView, selectedViews, viewChoices } from "../../engine/drawing/embedding.js";
 import { committedTimeRanges } from "./drawing/live-refresh.ts";
 import LoadWindow from "./LoadWindow.tsx";
@@ -64,13 +59,14 @@ const VOLUME_LAYOUT = "3d";
 /**
  * The application shell, and the single owner of what the viewer shows.
  *
- * <NeuroglancerView> mounts the engine and hands back the `viewer`; everything
+ * <NeuroglancerView> mounts the engine and hands back its handle; everything
  * about *what* is displayed is pushed in from here. Switching between the plane
  * and the volume re-applies state to the same viewer rather than rebuilding it,
  * so the data already fetched stays in memory and the toggle is instant.
  */
 export default function App() {
-  const [viewer, setViewer] = React.useState<Viewer | null>(null);
+  const [engine, setEngine] = React.useState<Engine | null>(null);
+  const viewer = engine?.viewer ?? null;
   // Whether the first fit-to-window has run on this engine; the canvas stays
   // veiled (plain black) until it has. See the effect further down.
   const [framed, setFramed] = React.useState(false);
@@ -83,12 +79,12 @@ export default function App() {
   // is too late to be any use. It is always the engine on screen, and nothing
   // once that is closed: kept after a close, it pointed an announcement at an
   // engine already disposed until the new one arrived.
-  const engine = React.useRef<Viewer | null>(null);
-  React.useEffect(() => { engine.current = viewer; }, [viewer]);
+  const engineOnScreen = React.useRef<Engine | null>(null);
+  React.useEffect(() => { engineOnScreen.current = engine; }, [engine]);
   const {
     config, layerState, groupState, groupOrder, notice: storeNotice, setNotice: setStoreNotice,
     applyConfig, setLayer, setWindowIfUnset, setGroup, takeRereadWanted,
-  } = useFollowingTheServer(engine);
+  } = useFollowingTheServer(engineOnScreen);
   const targets = useTargets(viewer, config ? config.canSelect === true : null);
   const [requestedMode, setMode] = React.useState<Mode>("flat");
   const [requestedViews, setRequestedViews] = React.useState<Record<string, string>>({});
@@ -154,7 +150,7 @@ export default function App() {
     if (fresh.length) setLookAt(fresh[fresh.length - 1]);
   }, [config]);
   React.useEffect(() => {
-    if (!viewer || !lookAt || !config) return undefined;
+    if (!engine || !lookAt || !config) return undefined;
     const named = config.layers
       .filter((spec, i) => (spec.group || "") === lookAt && included.has(i))
       .map((spec) => engineName(spec));
@@ -162,14 +158,14 @@ export default function App() {
     // Tried again while the answer is "not yet": the bounds this reads are
     // the sources' own, and a source that has not arrived has none to give.
     const soon = window.setInterval(() => {
-      if (lookAtWhatOpened(viewer, named)) setLookAt(null);
+      if (lookAtWhatOpened(engine, named)) setLookAt(null);
     }, 900);
     return () => window.clearInterval(soon);
     // Deliberately not depending on the scene: this effect is declared above
     // it, and naming it here reaches a constant before it exists -- which
     // took the whole page down with "Cannot access 'scene' before
     // initialization" (2026-08-21).
-  }, [viewer, lookAt, config, included]);
+  }, [engine, lookAt, config, included]);
 
   // Everything the engine should be showing, in the order it should be drawn.
   //
@@ -218,21 +214,21 @@ export default function App() {
   }, [viewer]);
 
   React.useEffect(() => {
-    if (!viewer) return undefined;
+    if (!engine) return undefined;
     setFramed(false);
-    return chooseScaleWhenTheImagesAreMeasured(viewer, () => {
+    return chooseScaleWhenTheImagesAreMeasured(engine, () => {
       // An engine built afresh after a close opens where the view was before it.
       const camera = cameraOnReopen.current;
       if (camera) {
-        restoreCamera(viewer, camera);
+        restoreCamera(engine.viewer, camera);
         cameraOnReopen.current = null;
       }
       setFramed(true);
     });
-  }, [viewer]);
+  }, [engine]);
 
   React.useEffect(() => {
-    if (!viewer || !config || !scene) return undefined;
+    if (!engine || !viewer || !config || !scene) return undefined;
     // Where the operator is looking, remembered by axis name rather than by
     // position in the list. Adding an acquisition can introduce an axis the view
     // did not have before, which shifts every axis after it along one place; going
@@ -258,7 +254,7 @@ export default function App() {
       zmartMode: mode,
       zmartLayerState: layerState,
       // The descriptions the panel hands the engine, exactly as they are handed
-      // over. This exists for one test and is worth the line: `layer-sync.ts`
+      // over. This exists for one test and is worth the line: the primitives' `sync.ts`
       // carries every field of a description onto the live layer by hand, one
       // line each, so a field added to `drawing/layers.ts` and forgotten there is
       // dropped in silence -- three controls were found dead that way in a single
@@ -272,16 +268,16 @@ export default function App() {
       // large folder is loading and nothing re-runs this to keep a number up to
       // date. Zero means every position the panel knows about has reached the
       // engine.
-      zmartSourcesWaiting: () => sourcesStillWaiting(viewer),
+      zmartSourcesWaiting: () => engine.sourcesStillWaiting(),
       // How many times the viewer has asked the engine to let go of decoded
       // image, and how many sources it asked the last time. The browser tests
       // read this to tell an announcement that did nothing from one that did
       // something that did not help.
-      zmartLetGo: lettingGo,
-      zmartSourceRefreshing: sourceRefreshing,
+      zmartLetGo: engine.lettingGo,
+      zmartSourceRefreshing: engine.sourceRefreshing,
     });
 
-    syncView(viewer, {
+    syncView(engine, {
       transparentBackground: config.transparentBackground === true,
       layout: mode === "volume" ? VOLUME_LAYOUT : SLICE_LAYOUT,
       // The engine's own furniture -- the yellow data-bounds box and the axis
@@ -292,8 +288,8 @@ export default function App() {
     // no description of the scene would show -- a frame added to a store already
     // open. So the descriptions are read again on the pass that follows one.
     const reread = takeRereadWanted();
-    const reshaped = syncLayers(viewer, scene, { reread });
-    const refreshed = sourceRefreshing.sources.length;
+    const reshaped = engine.syncLayers(scene, { reread });
+    const refreshed = engine.sourceRefreshing.sources.length;
     // What the browser tests count: how much of the scene changed shape.
     Object.assign(window, { zmartLayersReshaped: reshaped });
 
@@ -329,11 +325,11 @@ export default function App() {
     // A replacement can recreate identically named axes with new identities.
     // Restore after those sources load; revision-only refreshes leave navigation alone.
     const axesAtArming = space?.ids?.join(",");
-    return whenTheSourcesHaveSettled(viewer, () => true, () => {
+    return whenTheSourcesHaveSettled(engine, () => true, () => {
       const now = viewer.navigationState.position.coordinateSpace.value;
       if (now?.ids?.join(",") !== axesAtArming) lookAgain();
     });
-  }, [viewer, scene, config, mode, layerState]);
+  }, [engine, viewer, scene, config, mode, layerState]);
 
   // The furthest any open acquisition has got in time. Several may be running at
   // once and one can be a frame ahead of another, so the slider follows the
@@ -404,7 +400,7 @@ export default function App() {
       }}
     >
       <main style={styles.stage}>
-        <NeuroglancerView onViewer={setViewer} generation={engineGeneration} veiled={!framed} />
+        <NeuroglancerView onEngine={setEngine} generation={engineGeneration} veiled={!framed} />
         <div style={styles.topBar}>
           {views.map(({ id, label, keys }) => (
             <label key={id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -529,7 +525,7 @@ export default function App() {
                 // watching the engine unsubscribes on the way, so nothing is
                 // left reading one that has been disposed -- which took the
                 // page down with "Cannot read properties of undefined".
-                setViewer(null);
+                setEngine(null);
                 setEngineGeneration((count) => count + 1);
                 setStoreBusy(false);
               }}
