@@ -10,6 +10,17 @@ in `regions`. An empty list means no acquired content. Missing information is
 refused. The list order is back to front: later acquired pixels win, including
 zeros; unacquired holes do not overwrite earlier data.
 
+That is the default, `"overlap": "cover"`. With `"overlap": "average"` in the
+composition, overlapping positions show their mean instead: each voxel is the
+mean of every position that acquired it, in the store's dtype (integers round
+half to even), so the overlap is one smooth picture with no seam. A voxel nobody
+acquired stays unacquired, and coverage is the same in both modes. Coarse levels
+agree with the finest: a reduction cell that lies wholly inside or outside each
+position averages the positions' own coarse copies (each a 2x2 mean within its
+position); any other cell halves the averaged finer level. Both are the 2x2
+mean of the averaged finest picture, to the rounding of one level. A view keeps
+the overlap it was first published with; a request for the other one is refused.
+
 Each region uses the existing storage tile-record vocabulary:
 
 ```json

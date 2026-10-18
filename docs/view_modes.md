@@ -56,7 +56,9 @@ finally:
 
 Bounds describe the full canvas in specimen micrometres, not the current acquired
 bounding box. Later entries in `order` cover earlier entries wherever acquired,
-including black pixels. Revisions identify completed, readable writes; increment
+including black pixels; add `"overlap": "average"` to the composition to show
+the mean of overlapping positions instead (a view keeps the overlap it was
+first published with). Revisions identify completed, readable writes; increment
 the affected position's revision after rewriting it. Re-announcing identical
 revisions and composition does no work.
 Original revision high-water marks survive removal and reopening: re-adding a
