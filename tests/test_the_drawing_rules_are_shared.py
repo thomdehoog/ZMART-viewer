@@ -132,6 +132,7 @@ def test_the_neuroglancer_edits_are_the_engines_and_the_page_keeps_no_table():
         *["sliceview/panel.js"] * 7, "viewer.js", "viewer.js",
     ]
     assert answer["refresh"] == [
+        "sliceview/backend_chunk_decoders/postprocess.js",
         *["chunk_manager/backend.js"] * 5, *["chunk_manager/frontend.js"] * 2,
     ]
     script = (ROOT / "gui/source/scripts/patch_neuroglancer.mjs").read_text(encoding="utf-8")

@@ -15853,6 +15853,7 @@ async function postProcessRawData(chunk, signal, data) {
         );
     }
   } else {
+    signal?.throwIfAborted();
     chunk.data = data;
   }
 }

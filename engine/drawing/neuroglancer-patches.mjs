@@ -20,7 +20,9 @@
  *   displaying its chunks until each is replaced by its re-download, or
  *   expired if it is not re-downloaded, so a live run does not flash on every
  *   commit. The viewer's window applies them; a page with its own way of
- *   keeping the picture on screen may not.
+ *   keeping the picture on screen may not. The last of them is ZMART's own,
+ *   not yet sent upstream: a download a later refresh cancelled never writes
+ *   into its chunk.
  * - The growth edits, which let a picture grow while on screen, are in
  *   `neuroglancer-growth.mjs` beside this file.
  *
@@ -216,7 +218,28 @@ export function refreshPatches(lib) {
   const backend = join(lib, "chunk_manager", "backend.js");
   const workerBundle = join(lib, "chunk_worker.bundle.js");
   const frontend = join(lib, "chunk_manager", "frontend.js");
+  const decoders = join(lib, "sliceview", "backend_chunk_decoders", "postprocess.js");
   return [
+  // A cancelled download stops before it writes. Two refreshes in quick
+  // succession cancel the first one's re-download and start another; but the
+  // decoding is handed to a helper worker, and a task already given to a free
+  // worker is not taken back on cancelling. Left alone it finished anyway and
+  // wrote its older pixels into the chunk, and when that came after the
+  // second download's write, the older picture was what reached the screen
+  // and stayed there (tests/test_a_cancelled_download_never_lands.py).
+  {
+    file: decoders, also: workerBundle,
+    marker: "signal?.throwIfAborted();\n    chunk.data = data;",
+    anchor: `  } else {
+    chunk.data = data;
+  }
+}`,
+    replacement: `  } else {
+    signal?.throwIfAborted();
+    chunk.data = data;
+  }
+}`,
+  },
   {
     file: backend, also: workerBundle,
     marker: "\n  staleFrontendCopy = false;\n",
