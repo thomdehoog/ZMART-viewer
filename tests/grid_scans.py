@@ -54,12 +54,18 @@ def _write_a_grid_tile(
             overwrite=True,
         )
         array[:] = picture[:, ::shrink, ::shrink]
+        # The centre of the level's first voxel: half a voxel past the corner,
+        # and for an averaged level half of the averaged voxel (OME-NGFF RFC-5).
+        centre = 0.5 * shrink if reduction == "mean" else 0.5
         datasets.append(
             {
                 "path": str(level),
                 "coordinateTransformations": [
                     {"type": "scale", "scale": [1.0, 1.0 * shrink, 1.0 * shrink]},
-                    {"type": "translation", "translation": [0.0, at_um[0], at_um[1]]},
+                    {
+                        "type": "translation",
+                        "translation": [0.0, at_um[0] + centre, at_um[1] + centre],
+                    },
                 ],
             }
         )

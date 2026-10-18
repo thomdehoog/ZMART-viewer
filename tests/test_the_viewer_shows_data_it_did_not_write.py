@@ -59,7 +59,8 @@ def test_plain_zarr_reads_back_exactly_what_the_microscope_wrote(tmp_path):
     described = json.loads((scope.collection / "posA" / "zarr.json").read_text())
     placed = described["attributes"]["ome"]["multiscales"][0]["datasets"][0]
     kinds = {one["type"]: one for one in placed["coordinateTransformations"]}
-    assert kinds["translation"]["translation"][3:] == [0.0, 150.0]  # y, x in um
+    # y, x in um: the centre of the first 0.5 um voxel of a position at (0, 300) px.
+    assert kinds["translation"]["translation"][3:] == [0.25, 150.25]
 
 
 def test_a_new_moment_only_adds_files_here_too(tmp_path):

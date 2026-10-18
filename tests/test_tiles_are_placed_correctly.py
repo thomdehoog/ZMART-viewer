@@ -173,11 +173,18 @@ def write_tile(
                                     # How big a voxel is. There is no channel
                                     # spacing to speak of, so that entry is 1.
                                     {"type": "scale", "scale": [1.0, *voxel_um]},
-                                    # And where the tile sits on the stage. This is
-                                    # the line every test in this file is about.
+                                    # And where the tile sits on the stage: the
+                                    # centre of its first voxel, half a voxel past
+                                    # its corner. This is the line every test in
+                                    # this file is about.
                                     {
                                         "type": "translation",
-                                        "translation": [0.0, 0.0, y_um, x_um],
+                                        "translation": [
+                                            0.0,
+                                            0.0,
+                                            y_um + voxel_um[1] / 2,
+                                            x_um + voxel_um[2] / 2,
+                                        ],
                                     },
                                 ],
                             }

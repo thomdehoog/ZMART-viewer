@@ -158,13 +158,16 @@ class AMicroscope:
                             "scale": [1.0, 1.0, 1.0, size_y * factor, size_x * factor],
                         },
                         {
+                            # The centre of the level's first voxel: the
+                            # position's corner, plus half a voxel of the
+                            # averaged level (OME-NGFF RFC-5).
                             "type": "translation",
                             "translation": [
                                 0.0,
                                 0.0,
                                 0.0,
-                                location_yx[0] * size_y,
-                                location_yx[1] * size_x,
+                                location_yx[0] * size_y + size_y * factor / 2,
+                                location_yx[1] * size_x + size_x * factor / 2,
                             ],
                         },
                     ],

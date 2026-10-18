@@ -190,10 +190,11 @@ def _write_grid(path: Path, seed: int) -> None:
                 _tiny_volume(seed + row * 2 + column, frame),
                 dims=("c", "z", "y", "x"),
                 scale=_SCALE,
+                # ngff-zarr's translation is the centre of the first voxel.
                 translation={
                     "z": 0.0,
-                    "y": row * step_px * _SCALE["y"],
-                    "x": column * step_px * _SCALE["x"],
+                    "y": (row * step_px + 0.5) * _SCALE["y"],
+                    "x": (column * step_px + 0.5) * _SCALE["x"],
                 },
             )
             multiscales = ngff_zarr.to_multiscales(image, scale_factors=[2])
