@@ -48,22 +48,23 @@ positions, and it changes the record that a run's safety rests on, so it
 needs its own careful design and test. Raised under N5 in
 `REVIEW_2026-10-10.md`.
 
-## The interface keeps copies of the viewer's colours and coverage program
+## The coverage program lives in each page instead of in the engine
 
-**Today.** ZMART-interface's operator page draws with the same programs as
-this window (`engine/drawing/programs.js`), but keeps its own hand copies of
-a few small things beside them: the palette, the conversions between a colour
-and its `#rrggbb` spelling, where the contrast window sits over its histogram
-(fifteen and eighty-five per cent), and the program that paints acquired ground
-for transparency. Copies kept in line by hand drift.
+**Today.** The program that paints acquired ground, so a picture can be drawn
+see-through where nothing was imaged, is written out in this window's page
+(`gui/source/drawing/layers.ts`) and again in ZMART-interface's engine. It is
+part of how the engine draws, like the programs in `engine/drawing/programs.js`,
+not a choice either page makes.
 
-**What would change.** These would move into `engine/drawing/`, ship with the
-viewer, and be taken from there by both pages, as `programs.js` already is.
+**What would change.** It would move into `engine/drawing/`, and both pages
+would take it from there, as part of the drawing primitives both pages are to
+share. The colours each page offers -- its palette, how a picked colour is
+spelled, where the contrast window sits over its histogram -- are not part of
+this: each page owns its own controls and tells the engine the values to draw
+with (decided with Thom, 2026-10-18).
 
 **Why it waits.** It changes what the interface takes from the viewer, so it
-moves together with an interface release, and it was not part of porting the
-viewer's page to TypeScript (2026-10-18).
-
+moves with the primitives and an interface release.
 
 ## The window keeps the last engine after it is closed
 
