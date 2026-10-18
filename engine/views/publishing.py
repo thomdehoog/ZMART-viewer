@@ -28,6 +28,7 @@ from zmart_viewer.live.record.vocabulary import first_centre_of_a_level
 from zmart_viewer.opening.open_folders import description_file, discover, read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
+    OVERLAPS,
     Composer,
     Mosaic,
     read_one_tile,
@@ -606,6 +607,7 @@ _COMPOSITION_KEYS = {
     "originals",
     "original_revisions",
     "depth_placement",
+    "overlap",
 }
 
 
@@ -616,9 +618,12 @@ def validated_composition(versions, canvas, composition, *, bake):
     composition (when given) must name its regions and order and nothing
     unknown, an unbaked aggregate must come with a composition, and a named
     view must say which acquisition it shows and whether it is a top, slice or
-    projection view. Regions are put in their canonical order so that two
-    announcements of the same coverage compare equal. The copies are returned
-    with the view, or a ``ValueError`` says what was wrong.
+    projection view. ``overlap`` is ``"cover"`` (the default: the position last
+    in the order lies on top) or ``"average"`` (overlapping positions show
+    their mean). Regions are put in their canonical order, and a named default
+    overlap is dropped, so that two announcements of the same composition
+    compare equal. The copies are returned with the view, or a ``ValueError``
+    says what was wrong.
     """
     if not isinstance(versions, dict):
         raise ValueError("source_revisions must map completed position names to revisions")
@@ -639,6 +644,13 @@ def validated_composition(versions, canvas, composition, *, bake):
         )
     if not bake and composition is None:
         raise ValueError("An unbaked external aggregate needs explicit acquired composition")
+    if composition is not None and composition.get("overlap", "cover") not in OVERLAPS:
+        raise ValueError(
+            f"composition asks for overlap {composition['overlap']!r}; overlapping positions "
+            "either cover one another ('cover', the default) or are averaged ('average')."
+        )
+    if composition is not None and composition.get("overlap") == "cover":
+        del composition["overlap"]
     view = (composition or {}).get("view")
     if view is not None and (
         not isinstance(view, dict)
@@ -1005,7 +1017,8 @@ class PublishedTransfer(ComposedPicture):
         """Refuse what a publication may not change once it exists.
 
         A view's identity, the folder its originals came from, whether it
-        declares acquired coverage, its XY convention and its canvas are fixed
+        declares acquired coverage, its XY convention, how its overlapping
+        positions are drawn and its canvas are fixed
         when the first snapshot is published: readers hold on to all of them,
         so changing one means a new acquisition, not a new revision. With no
         previous publication there is nothing to protect. A view an older
@@ -1028,6 +1041,14 @@ class PublishedTransfer(ComposedPicture):
                 "translations name their corners; it can still be opened, but not "
                 "published to. Write the positions again with first-voxel centres "
                 "and publish into a new view folder."
+            )
+        if (composition or {}).get("overlap", "cover") != (old_composition or {}).get(
+            "overlap", "cover"
+        ):
+            raise ValueError(
+                "How overlapping positions are drawn cannot change in place: this view "
+                f"was published to {(old_composition or {}).get('overlap', 'cover')} them. "
+                "Publish into a new view folder to show them the other way."
             )
         if canvas != self._state["canvas"]:
             raise ValueError("The baked canvas cannot change within an open acquisition")
@@ -1234,6 +1255,7 @@ class PublishedTransfer(ComposedPicture):
                 regions,
                 order=composition["order"],
                 pyramid_reduction=composition.get("pyramid_reduction"),
+                overlap=composition.get("overlap", "cover"),
             )
             while max(mosaic.shape(mosaic.levels - 1)[-2:]) > self._piece:
                 mosaic.levels += 1

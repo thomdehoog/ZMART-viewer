@@ -34,6 +34,9 @@ MEAN_REDUCTION = "mean-xy2-edge-integer-round"
 MEAN_CROP_REDUCTION = "mean-xy2-crop-f32-rint-int"
 MEAN_FROM_ORIGINALS = "mean-xy2-edge-from-originals"
 
+#: What overlapping tiles of one channel show: the last on top, or their mean.
+OVERLAPS = ("cover", "average")
+
 
 def uses_legacy_mean(reduction):
     """Unversioned pictures retain their historical rounding of float means."""
@@ -129,6 +132,10 @@ class Mosaic:
 
     ``corner_um`` is the centre of the picture's first voxel at full
     resolution; :meth:`first_centre` gives it at every level.
+
+    ``overlap`` says what the picture shows where tiles of one channel cover
+    the same voxel: ``"cover"``, the tile last in the order lies on top, or
+    ``"average"``, the mean of every tile that imaged the voxel.
     """
 
     tiles: list[Tile]
@@ -142,10 +149,13 @@ class Mosaic:
     extent_um: tuple[float, float, float] | None = None
     pyramid_reduction: str | None = None
     sampling: str = "slice"
+    overlap: str = "cover"
 
     def __post_init__(self):
         if self.sampling not in ("slice", "top"):
             raise ValueError("Sampling must be slice or top")
+        if self.overlap not in OVERLAPS:
+            raise ValueError("Overlap must be cover or average")
 
     _placed: dict[int, list[tuple[Tile, tuple[int, int, int]]]] = field(
         default_factory=dict, repr=False
@@ -163,12 +173,15 @@ class Mosaic:
         *,
         order: list[str],
         pyramid_reduction: str | None = None,
+        overlap: str = "cover",
     ) -> Mosaic:
         """A new snapshot with exact coverage and back-to-front source order.
 
         Every source must have an explicit list (empty is valid). Records use
         full-resolution source-local voxels and the storage frame/channel names.
-        This does not read pixels, mutate the input mosaic, or edit originals.
+        Where sources overlap, ``overlap`` chooses the last in ``order`` on top
+        or their mean. This does not read pixels, mutate the input mosaic, or
+        edit originals.
         """
         tiles = {tile.name: tile for tile in self.tiles}
         if (
@@ -260,6 +273,7 @@ class Mosaic:
             self.extent_um,
             pyramid_reduction=pyramid_reduction,
             sampling=self.sampling,
+            overlap=overlap,
         )
 
     @property
@@ -844,6 +858,7 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         **({"extent_um": list(mosaic.extent_um)} if mosaic.extent_um is not None else {}),
         **({"averaged": True} if mosaic.averaged else {}),
         **({"pyramid_reduction": mosaic.pyramid_reduction} if mosaic.pyramid_reduction else {}),
+        **({"overlap": mosaic.overlap} if mosaic.overlap != "cover" else {}),
         # Only where the tiles said something. A picture whose tiles named no
         # channels writes no key, exactly as it did before this was carried.
         **({"omero": mosaic.omero} if mosaic.omero else {}),
@@ -936,6 +951,7 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
             },
             order=[tile.name for tile in tiles],
             pyramid_reduction=held.get("pyramid_reduction"),
+            overlap=held.get("overlap", "cover"),
         )
     return mosaic
 
@@ -1049,6 +1065,16 @@ def halve_xy(values: np.ndarray, *, legacy=False) -> np.ndarray:
         return quotient + ((residual > 2) | ((residual == 2) & (quotient % 2 != 0)))
     mean = blocks.mean(axis=(-3, -1), dtype="float64")
     return (np.rint(mean) if values.dtype.kind in "iu" else mean).astype(values.dtype)
+
+
+def the_mean_where_imaged(total: np.ndarray, count: np.ndarray, dtype) -> np.ndarray:
+    """The mean of the tiles that imaged each voxel, in the picture's dtype.
+
+    Integers round half to even, as :func:`halve_xy` does; a voxel no tile
+    imaged stays zero.
+    """
+    mean = np.divide(total, count, out=np.zeros_like(total), where=count > 0)
+    return (np.rint(mean) if np.dtype(dtype).kind in "iu" else mean).astype(dtype)
 
 
 def selected_plane(plane: int, start: int, length: int, *, sampling: str) -> int | None:
@@ -1461,7 +1487,16 @@ class Composer:
         moment: int = 0,
         channel: int = 0,
     ) -> np.ndarray:
-        """Lay the tiles into one column of ground, for every plane of one file."""
+        """Lay the tiles into one column of ground, for every plane of one file.
+
+        Covering, each tile is laid over the ones before it. Averaging, every
+        tile's values are summed with a count of the tiles that imaged each
+        voxel, and the slab is their mean. At a coarse level read natively
+        that is the mean of the tiles' own coarse copies, each a 2x2 mean
+        within its tile; as every reduction cell lies wholly inside or
+        outside each tile there, it is the 2x2 mean of the averaged finest
+        picture, to the rounding of one level.
+        """
         if self._acquired and level > 0 and not self._can_read_native(level, row, column):
             return self._reduce_composed_slab(level, plane, row, column, moment, channel)
         building_began = time.perf_counter()
@@ -1475,6 +1510,14 @@ class Composer:
         right = min(left + self.piece, width)
 
         slab = np.zeros((high_z - low_z, self.piece, self.piece), self.mosaic.dtype)
+        averaging = self.mosaic.overlap == "average"
+        laid = slab
+        if averaging:
+            # Each tile is laid alone, then added to the running sum.
+            laid = np.zeros_like(slab)
+            imaged = np.zeros(slab.shape, bool)
+            total = np.zeros(slab.shape, np.float64)
+            count = np.zeros(slab.shape, np.uint32)
 
         for tile, at in self._tiles_in_each_piece(level).get((row, column), ()):
             if not _tile_has_the_frame(tile, level, moment, channel):
@@ -1509,6 +1552,10 @@ class Composer:
             if not (max(low_z, at[0]) < min(high_z, at[0] + held[0])):
                 continue
 
+            if averaging:
+                # One tile's regions may overlap one another; it counts once.
+                imaged[:] = False
+
             for low, high in bounds:
                 start = tuple(max(a, b) for a, b in zip((low_z, top, left), low, strict=True))
                 end = tuple(min(a, b) for a, b in zip((high_z, bottom, right), high, strict=True))
@@ -1518,12 +1565,21 @@ class Composer:
                     slice(a - o, b - o)
                     for a, b, o in zip(start, end, (low_z, top, left), strict=True)
                 )
-                slab[destination] = self._read_from(
+                laid[destination] = self._read_from(
                     copy,
                     tuple(a - o for a, o in zip(start, at, strict=True)),
                     tuple(b - o for b, o in zip(end, at, strict=True)),
                     outer,
                 )
+                if averaging:
+                    imaged[destination] = True
+
+            if averaging:
+                total[imaged] += laid[imaged]
+                count += imaged
+
+        if averaging:
+            slab = the_mean_where_imaged(total, count, slab.dtype)
 
         self.costs["build_ms"] += (time.perf_counter() - building_began) * 1000
         self.costs["slabs_built"] += 1
