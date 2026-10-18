@@ -327,6 +327,25 @@ def rounded_up(size: int, step: int) -> int:
     return -(-int(size) // int(step))
 
 
+def first_centre_of_a_level(first_centre, base_voxel, voxel) -> tuple[float, float, float]:
+    """Where the first voxel of an averaged level is centred, in micrometres.
+
+    OME-NGFF RFC-5 (accepted 2025-12-01): "The pixel/voxel center is the
+    origin of the continuous coordinate system", so a translation names the
+    centre of the first voxel. A level made by averaging f x f voxels begins
+    with a voxel centred in the middle of the f fine voxels it averages:
+    ``first_centre + 0.5 * (f - 1) * base``, which is
+    ``first_centre + (voxel - base) / 2``. Depth is never averaged, so a
+    plane keeps its own height. All three are (z, y, x).
+    """
+    z, y, x = first_centre
+    return (
+        float(z),
+        float(y) + (voxel[1] - base_voxel[1]) / 2,
+        float(x) + (voxel[2] - base_voxel[2]) / 2,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Where something is
 # ---------------------------------------------------------------------------

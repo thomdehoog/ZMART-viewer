@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import zarr
 from zmart_viewer.filesystem import rmtree_despite_brief_holds
+from zmart_viewer.live.record.vocabulary import first_centre_of_a_level
 from zmart_viewer.opening.open_folders import read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
@@ -21,7 +22,9 @@ from zmart_viewer.picture.arrangement import (
 )
 
 METHODS = ("min", "max", "sum")
-PROJECTION_RECIPE = 1
+#: 2: translations are first-voxel centres at every level, and the recipe no
+#: longer records an XY convention to choose. A product of recipe 1 is made again.
+PROJECTION_RECIPE = 2
 
 
 def projection_dtype(dtype, method):
@@ -101,9 +104,7 @@ def _source_window(copy, t, c, y, x, height, width):
     return np.asarray(copy.array[outer + (slice(None), slice(y, y + height), slice(x, x + width))])
 
 
-def write_projection(
-    source, destination, method, *, regions="complete", revision=0, piece=256, xy_origin="center"
-):
+def write_projection(source, destination, method, *, regions="complete", revision=0, piece=256):
     """Write one complete derived product transactionally; unchanged inputs are no-ops.
 
     The caller supplies a completed revision and the output location. No folder
@@ -121,7 +122,7 @@ def write_projection(
     source, destination = Path(source).resolve(), Path(destination).resolve()
     if regions != "complete":
         regions = canonical_regions(regions)
-    _refuse_a_bad_destination(source, destination, xy_origin)
+    _refuse_a_bad_destination(source, destination)
     if destination.exists():
         owner = read_attrs_at(destination).get("zmart_projection", {})
         if owner.get("source") != str(source) or owner.get("method") != method:
@@ -131,7 +132,6 @@ def write_projection(
             and owner.get("declared_regions") == regions
             and owner.get("recipe") == PROJECTION_RECIPE
             and owner.get("pyramid_reduction") == MEAN_REDUCTION
-            and owner.get("xy_origin", "center") == xy_origin
         ):
             return destination
     attrs = read_attrs_at(source)
@@ -158,7 +158,6 @@ def write_projection(
     )
     recipe = {
         "recipe": PROJECTION_RECIPE,
-        "xy_origin": xy_origin,
         "source": str(source),
         "revision": revision,
         "method": method,
@@ -181,7 +180,7 @@ def write_projection(
             group, output, tile.keeps, dtype, frames=frames, channels=channels, piece=piece
         )
         group.attrs["ome"] = _the_description_of(
-            arrays, tile, multiscale, source_axes, attrs, method=method, xy_origin=xy_origin
+            arrays, tile, multiscale, source_axes, attrs, method=method
         )
         group.attrs["zmart_projection"] = recipe
         if destination.exists():
@@ -201,12 +200,10 @@ def write_projection(
     return destination
 
 
-def _refuse_a_bad_destination(source, destination, xy_origin) -> None:
-    """The output must be a separate OME-Zarr store, with a known XY convention."""
+def _refuse_a_bad_destination(source, destination) -> None:
+    """The output must be a separate OME-Zarr store."""
     if source == destination or source in destination.parents or destination in source.parents:
         raise ValueError("Projection output must be separate from the source store")
-    if xy_origin not in ("center", "corner"):
-        raise ValueError("Projection XY origin must be center or corner")
     if not destination.name.endswith(".ome.zarr"):
         raise ValueError("Projection output must name an OME-Zarr store, not a run folder")
 
@@ -293,11 +290,12 @@ def _halve_down_the_levels(group, output, keeps, dtype, *, frames, channels, pie
     return arrays
 
 
-def _the_description_of(arrays, tile, multiscale, source_axes, attrs, *, method, xy_origin):
+def _the_description_of(arrays, tile, multiscale, source_axes, attrs, *, method):
     """The OME-Zarr description of the projection: axes, scales and colours.
 
     The time and channel scales and offsets are carried over from the source,
-    the spatial ones are the source's at each level's zoom, and the colour
+    the spatial ones are the source's at each level's zoom, each level's
+    translation the centre of its first averaged voxel, and the colour
     description comes along too, except that a sum has no sensible display
     window to inherit, so those are dropped.
     """
@@ -317,28 +315,19 @@ def _the_description_of(arrays, tile, multiscale, source_axes, attrs, *, method,
     datasets = []
     for level in range(len(arrays)):
         factor = 2**level
-        center_shift = (factor - 1) / 2 if xy_origin == "center" else 0
+        voxel = (1, base.voxel_um[1] * factor, base.voxel_um[2] * factor)
+        _, first_y, first_x = first_centre_of_a_level(base.corner_um, base.voxel_um, voxel)
         datasets.append(
             {
                 "path": str(level),
                 "coordinateTransformations": [
                     {
                         "type": "scale",
-                        "scale": [
-                            *outer_scale,
-                            1,
-                            base.voxel_um[1] * factor,
-                            base.voxel_um[2] * factor,
-                        ],
+                        "scale": [*outer_scale, *voxel],
                     },
                     {
                         "type": "translation",
-                        "translation": [
-                            *outer_offset,
-                            0,
-                            base.corner_um[1] + base.voxel_um[1] * center_shift,
-                            base.corner_um[2] + base.voxel_um[2] * center_shift,
-                        ],
+                        "translation": [*outer_offset, 0, first_y, first_x],
                     },
                 ],
             }

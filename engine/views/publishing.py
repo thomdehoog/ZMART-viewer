@@ -24,6 +24,7 @@ from zmart_viewer.filesystem import (
     put_json_in_place,
     rmtree_despite_brief_holds,
 )
+from zmart_viewer.live.record.vocabulary import first_centre_of_a_level
 from zmart_viewer.opening.open_folders import description_file, discover, read_attrs_at
 from zmart_viewer.picture.acquired_regions import AcquiredRegion, canonical_regions
 from zmart_viewer.picture.arrangement import (
@@ -600,7 +601,6 @@ _COMPOSITION_KEYS = {
     "regions",
     "order",
     "pyramid_reduction",
-    "xy_origin",
     "z_references",
     "view",
     "originals",
@@ -628,11 +628,15 @@ def validated_composition(versions, canvas, composition, *, bake):
             name: canonical_regions(regions) for name, regions in composition["regions"].items()
         }
     if composition is not None and (
-        not isinstance(composition, dict)
-        or not {"regions", "order"} <= composition.keys()
-        or composition.keys() - _COMPOSITION_KEYS
+        not isinstance(composition, dict) or not {"regions", "order"} <= composition.keys()
     ):
         raise ValueError("composition must contain explicit regions and order")
+    if composition is not None and composition.keys() - _COMPOSITION_KEYS:
+        raise ValueError(
+            f"composition names {sorted(composition.keys() - _COMPOSITION_KEYS)}, which this "
+            "viewer does not know. (A translation is always the centre of the first voxel, "
+            "so there is no xy_origin to choose.)"
+        )
     if not bake and composition is None:
         raise ValueError("An unbaked external aggregate needs explicit acquired composition")
     view = (composition or {}).get("view")
@@ -742,17 +746,23 @@ def _geometry_changed(mosaic, previous, view) -> bool:
     return changed
 
 
-def _refuse_tiles_outside_the_canvas(tiles, corner, extent) -> None:
-    """Every tile must lie within the declared canvas, to half a voxel."""
+def _refuse_tiles_outside_the_canvas(tiles, canvas) -> None:
+    """Every tile must lie within the declared canvas, to half a voxel.
+
+    The canvas bounds are edges and a tile's corner is its first voxel's
+    centre, so the tile's own edges lie half a voxel either side of its
+    voxel centres. A tile touching the canvas edge is then well inside the
+    half-voxel allowance, never at float equality with it.
+    """
     for tile in tiles:
         copy = tile.copies[0]
-        if any(
-            copy.corner_um[axis] < corner[axis] - copy.voxel_um[axis] / 2
-            or copy.corner_um[axis] + copy.shape[axis] * copy.voxel_um[axis]
-            > corner[axis] + extent[axis] + copy.voxel_um[axis] / 2
-            for axis in (1, 2)
-        ):
-            raise ValueError(f"{tile.name} extends outside the declared specimen canvas")
+        for axis, key in ((1, "y_um"), (2, "x_um")):
+            low, high = canvas[key]
+            voxel = copy.voxel_um[axis]
+            first_edge = copy.corner_um[axis] - voxel / 2
+            last_edge = first_edge + copy.shape[axis] * voxel
+            if first_edge < low - voxel / 2 or last_edge > high + voxel / 2:
+                raise ValueError(f"{tile.name} extends outside the declared specimen canvas")
 
 
 class _Prepared(NamedTuple):
@@ -964,13 +974,11 @@ class PublishedTransfer(ComposedPicture):
             )
             tiles, depth_origin, depth_extent = _placed_in_depth(tiles, composition, view, previous)
             _refuse_tiles_that_cannot_be_baked_together(tiles, composition, view)
-            mosaic, corner, extent = self._mosaic_for(
-                tiles, canvas, composition, view, depth_origin, depth_extent
-            )
+            mosaic = self._mosaic_for(tiles, canvas, composition, view, depth_origin, depth_extent)
             geometry_changed = _geometry_changed(mosaic, previous, view)
             if geometry_changed:
                 affected.update(versions.keys() | old_versions.keys())
-            _refuse_tiles_outside_the_canvas(tiles, corner, extent)
+            _refuse_tiles_outside_the_canvas(tiles, canvas)
 
             plan = _Prepared(
                 folder=folder,
@@ -1000,7 +1008,10 @@ class PublishedTransfer(ComposedPicture):
         declares acquired coverage, its XY convention and its canvas are fixed
         when the first snapshot is published: readers hold on to all of them,
         so changing one means a new acquisition, not a new revision. With no
-        previous publication there is nothing to protect.
+        previous publication there is nothing to protect. A view an older
+        viewer published for a corner-convention request opens as it was, but
+        its positions were written as corners, so nothing new is published
+        into it.
         """
         if not self._state:
             return
@@ -1011,10 +1022,13 @@ class PublishedTransfer(ComposedPicture):
             raise ValueError("A named view cannot change its original source folder")
         if (composition is None) != (old_composition is None):
             raise ValueError("The acquisition cannot change its acquired-coverage contract")
-        if (composition or {}).get("xy_origin", "center") != (old_composition or {}).get(
-            "xy_origin", "center"
-        ):
-            raise ValueError("The acquisition cannot change its XY coordinate convention")
+        if (old_composition or {}).get("xy_origin") == "corner":
+            raise ValueError(
+                "This view was published by an older viewer from positions whose "
+                "translations name their corners; it can still be opened, but not "
+                "published to. Write the positions again with first-voxel centres "
+                "and publish into a new view folder."
+            )
         if canvas != self._state["canvas"]:
             raise ValueError("The baked canvas cannot change within an open acquisition")
 
@@ -1116,14 +1130,16 @@ class PublishedTransfer(ComposedPicture):
             tile = (provided or {}).get(name) or read_one_tile(folder / name)
             if composition is not None:
                 # One nearest-neighbour placement rule for legacy and named views.
-                # Shift every native level equally, by at most half a finest XY voxel;
-                # originals and source-local acquired regions remain untouched.
+                # The canvas bound is an edge, so the grid of first-voxel centres
+                # starts half a step inside it. Shift every native level equally,
+                # by at most half a finest XY voxel; originals and source-local
+                # acquired regions remain untouched.
                 base = tile.copies[0]
                 shift = [0.0]
                 for axis, key in ((1, "y_um"), (2, "x_um")):
                     start, step = base.corner_um[axis], base.voxel_um[axis]
-                    low = canvas[key][0]
-                    shift.append(low + math.floor((start - low) / step + 0.5) * step - start)
+                    grid = canvas[key][0] + step / 2
+                    shift.append(grid + math.floor((start - grid) / step + 0.5) * step - start)
                 tile = replace(
                     tile,
                     copies=[
@@ -1155,12 +1171,14 @@ class PublishedTransfer(ComposedPicture):
         return tiles
 
     def _mosaic_for(self, tiles, canvas, composition, view, depth_origin, depth_extent):
-        """The new mosaic, and the corner and extent it was declared with.
+        """The new mosaic over the canvas.
 
-        Without a composition the picture is as deep as its first tile. With
-        one, the depth comes from :func:`_placed_in_depth`, the acquired regions
-        are sampled onto each tile, and levels are added until the coarsest one
-        fits in a single piece.
+        The canvas bounds are edges, so the picture's first voxel is centred
+        half a voxel inside the low edge. Without a composition the picture is
+        as deep as its first tile. With one, the depth comes from
+        :func:`_placed_in_depth`, the acquired regions are sampled onto each
+        tile, and levels are added until the coarsest one fits in a single
+        piece.
         """
         first = tiles[0]
         attrs = read_attrs_at(first.store)
@@ -1169,13 +1187,13 @@ class PublishedTransfer(ComposedPicture):
         base = first.copies[0]
         corner = (
             depth_origin if composition is not None else base.corner_um[0],
-            canvas["y_um"][0],
-            canvas["x_um"][0],
+            canvas["y_um"][0] + base.voxel_um[1] / 2,
+            canvas["x_um"][0] + base.voxel_um[2] / 2,
         )
         extent = (
             depth_extent if composition is not None else base.shape[0] * base.voxel_um[0],
-            canvas["y_um"][1] - corner[1],
-            canvas["x_um"][1] - corner[2],
+            canvas["y_um"][1] - canvas["y_um"][0],
+            canvas["x_um"][1] - canvas["x_um"][0],
         )
         mosaic = Mosaic(
             tiles,
@@ -1216,11 +1234,10 @@ class PublishedTransfer(ComposedPicture):
                 regions,
                 order=composition["order"],
                 pyramid_reduction=composition.get("pyramid_reduction"),
-                xy_origin=composition.get("xy_origin", "center"),
             )
             while max(mosaic.shape(mosaic.levels - 1)[-2:]) > self._piece:
                 mosaic.levels += 1
-        return mosaic, corner, extent
+        return mosaic
 
     def _commit(self, plan: _Prepared) -> int:
         """Write the prepared snapshot: the pending note, the arrays, the state.
@@ -1474,17 +1491,14 @@ class PublishedTransfer(ComposedPicture):
             metadata["shape"][-2:] = [math.ceil(size / 2) for size in metadata["shape"][-2:]]
             previous = datasets[-1]
             transform = json.loads(json.dumps(previous["coordinateTransformations"]))
-            previous_scale = next(part["scale"] for part in transform if part["type"] == "scale")[
-                -2:
-            ]
-            for part in transform:
-                if part["type"] == "scale":
-                    part["scale"][-2:] = [value * 2 for value in part["scale"][-2:]]
-                elif part["type"] == "translation" and made.mosaic.averaged:
-                    part["translation"][-2:] = [
-                        at + scale / 2
-                        for at, scale in zip(part["translation"][-2:], previous_scale, strict=True)
-                    ]
+            scale = next(part["scale"] for part in transform if part["type"] == "scale")
+            translation = next(
+                part["translation"] for part in transform if part["type"] == "translation"
+            )
+            previous_scale = scale[-3:]
+            scale[-2:] = [value * 2 for value in scale[-2:]]
+            # Baked by averaging the level before, so centred from that level's first voxel.
+            translation[-3:] = first_centre_of_a_level(translation[-3:], previous_scale, scale[-3:])
             level += 1
             datasets.append({"path": str(level), "coordinateTransformations": transform})
             path = self._shown / str(level)

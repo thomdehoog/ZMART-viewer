@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
-from zmart_viewer.live.record.vocabulary import the_position_of
+from zmart_viewer.live.record.vocabulary import first_centre_of_a_level, the_position_of
 from zmart_viewer.opening.open_folders import UNIT_SPELLINGS
 from zmart_viewer.picture.acquired_regions import AcquiredRegion
 
@@ -42,7 +42,11 @@ def uses_legacy_mean(reduction):
 
 @dataclass
 class Copy:
-    """One resolution of one tile: how large it is, where it sits, and its pixels."""
+    """One resolution of one tile: how large it is, where it sits, and its pixels.
+
+    ``corner_um`` is the centre of the copy's first voxel, as its store's
+    translation says; the name is older than that rule.
+    """
 
     held_in: Path
     shape: tuple[int, int, int]
@@ -121,7 +125,11 @@ class Tile:
 
 @dataclass
 class Mosaic:
-    """A whole transfer: its tiles, where each lands, and how large the picture is."""
+    """A whole transfer: its tiles, where each lands, and how large the picture is.
+
+    ``corner_um`` is the centre of the picture's first voxel at full
+    resolution; :meth:`first_centre` gives it at every level.
+    """
 
     tiles: list[Tile]
     levels: int
@@ -133,7 +141,6 @@ class Mosaic:
     omero: dict | None = None
     extent_um: tuple[float, float, float] | None = None
     pyramid_reduction: str | None = None
-    xy_origin: str = "center"
     sampling: str = "slice"
 
     def __post_init__(self):
@@ -156,7 +163,6 @@ class Mosaic:
         *,
         order: list[str],
         pyramid_reduction: str | None = None,
-        xy_origin: str = "center",
     ) -> Mosaic:
         """A new snapshot with exact coverage and back-to-front source order.
 
@@ -186,8 +192,6 @@ class Mosaic:
             MEAN_FROM_ORIGINALS,
         ):
             raise ValueError("Unsupported acquired pyramid reduction")
-        if xy_origin not in ("center", "corner"):
-            raise ValueError("XY origin must be center or corner")
         made = []
         for name in order:
             tile = tiles[name]
@@ -255,7 +259,6 @@ class Mosaic:
             self.omero,
             self.extent_um,
             pyramid_reduction=pyramid_reduction,
-            xy_origin=xy_origin,
             sampling=self.sampling,
         )
 
@@ -286,12 +289,28 @@ class Mosaic:
             return z, y * 2**level, x * 2**level
         return self.tiles[0].copies[level].voxel_um
 
+    def first_centre(self, level: int) -> tuple[float, float, float]:
+        """Where the first voxel of this copy of the picture is centred, in micrometres.
+
+        An averaged level begins half its extra width further along; a
+        decimated one keeps the full-resolution centre, because its voxels
+        are the fine voxels it kept.
+        """
+        if not self.averaged:
+            return self.corner_um
+        return first_centre_of_a_level(self.corner_um, self.voxel_um(0), self.voxel_um(level))
+
     def lands_at(self, tile: Tile, level: int) -> tuple[int, int, int]:
-        """Where a tile's first voxel goes in this copy of the picture, in voxels."""
+        """Where a tile's first voxel goes in this copy of the picture, in voxels.
+
+        Centres are compared with centres of the same level, so a tile on the
+        picture's grid lands on it exactly.
+        """
         copy = tile.copies[level]
         voxel = self.voxel_um(level)
+        start = self.first_centre(level)
         return tuple(
-            math.floor((copy.corner_um[axis] - self.corner_um[axis]) / voxel[axis] + 0.5)
+            math.floor((copy.corner_um[axis] - start[axis]) / voxel[axis] + 0.5)
             for axis in range(3)
         )  # type: ignore[return-value]
 
@@ -825,7 +844,6 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
         **({"extent_um": list(mosaic.extent_um)} if mosaic.extent_um is not None else {}),
         **({"averaged": True} if mosaic.averaged else {}),
         **({"pyramid_reduction": mosaic.pyramid_reduction} if mosaic.pyramid_reduction else {}),
-        **({"xy_origin": mosaic.xy_origin} if mosaic.xy_origin != "center" else {}),
         # Only where the tiles said something. A picture whose tiles named no
         # channels writes no key, exactly as it did before this was carried.
         **({"omero": mosaic.omero} if mosaic.omero else {}),
@@ -862,7 +880,15 @@ def the_mosaic_written_down(mosaic: Mosaic) -> dict:
 
 
 def read_the_mosaic_as_written(held: dict) -> Mosaic:
-    """The mosaic back from its written-down geometry, touching no tile."""
+    """The mosaic back from its written-down geometry, touching no tile.
+
+    A view published by an older viewer for a request that named
+    ``xy_origin: "corner"`` wrote down the canvas edge and its tiles' corners,
+    and described the picture by adding half a voxel to them. Those are read
+    back as the centres they described, so such a view opens as it was.
+    """
+    if held.get("xy_origin") == "corner":
+        held = the_corners_read_as_centres(held)
     tiles = [
         Tile(
             name=one["name"],
@@ -910,9 +936,23 @@ def read_the_mosaic_as_written(held: dict) -> Mosaic:
             },
             order=[tile.name for tile in tiles],
             pyramid_reduction=held.get("pyramid_reduction"),
-            xy_origin=held.get("xy_origin", "center"),
         )
     return mosaic
+
+
+def the_corners_read_as_centres(held: dict) -> dict:
+    """An older corner-convention mosaic, written down again in first-voxel centres."""
+    held = json.loads(json.dumps(held))
+    base = held["tiles"][0]["copies"][0]["voxel_um"]
+    z, y, x = held["corner_um"]
+    held["corner_um"] = [z, y + base[1] / 2, x + base[2] / 2]
+    for tile in held["tiles"]:
+        for copy in tile["copies"]:
+            z, y, x = copy["corner_um"]
+            voxel = copy["voxel_um"]
+            copy["corner_um"] = [z, y + voxel[1] / 2, x + voxel[2] / 2]
+    del held["xy_origin"]
+    return held
 
 
 PIECE = 512
@@ -1387,12 +1427,7 @@ class Composer:
                     or any(n % factor for n in base.shape[1:])
                 ):
                     return False
-            shift = 0 if self.mosaic.xy_origin == "corner" else (factor - 1) / 2
-            expected_corner = (
-                base.corner_um[0],
-                base.corner_um[1] + shift * base.voxel_um[1],
-                base.corner_um[2] + shift * base.voxel_um[2],
-            )
+            expected_corner = first_centre_of_a_level(base.corner_um, base.voxel_um, copy.voxel_um)
             if (
                 copy.shape
                 != (
@@ -1955,7 +1990,6 @@ class Composer:
 
     def group_json(self) -> bytes:
         """The built picture described as an ordinary OME-Zarr multiscale image."""
-        base = self.mosaic.voxel_um(0)
         grown = self.mosaic.frame_room != (1, 1)
         time_scale, time_origin, time_unit = (
             self.mosaic.tiles[0].time_calibration if self.mosaic.tiles else (1.0, 0.0, "second")
@@ -1964,13 +1998,7 @@ class Composer:
 
         for level in range(self.mosaic.levels):
             voxel = self.mosaic.voxel_um(level)
-            at = list(self.mosaic.corner_um)
-
-            if self.mosaic.averaged:
-                at = [at[axis] + (voxel[axis] - base[axis]) / 2 for axis in range(3)]
-            if self.mosaic.xy_origin == "corner":
-                at[1] += base[1] / 2
-                at[2] += base[2] / 2
+            at = list(self.mosaic.first_centre(level))
 
             datasets.append(
                 {

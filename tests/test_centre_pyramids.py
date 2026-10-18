@@ -1,4 +1,9 @@
-"""Corner-coordinate pyramids, including qualification with the real producer."""
+"""Mean pyramids in first-voxel centres, including qualification with the real producer.
+
+A translation names the centre of the first voxel (OME-NGFF RFC-5). A view an
+older viewer published for a request that named ``xy_origin: "corner"`` wrote
+its tiles' corners down; it is read back as the centres it described.
+"""
 
 import json
 import os
@@ -21,6 +26,7 @@ from zmart_viewer.picture.arrangement import (
 from zmart_viewer.views.publishing import STORE, PublishedTransfer
 
 
+@pytest.mark.parametrize("written", ["centres", "older corners"])
 @pytest.mark.parametrize(
     "dtype,side,eligible",
     [
@@ -32,26 +38,37 @@ from zmart_viewer.views.publishing import STORE, PublishedTransfer
         ("uint16", 7, False),
     ],
 )
-def test_crop_reducer_qualification_and_corner_metadata(tmp_path, dtype, side, eligible):
+def test_crop_reducer_qualification_and_centre_metadata(tmp_path, dtype, side, eligible, written):
     tile = source(tmp_path, "a.ome.zarr", 120)
     tile.copies = [
         replace(
-            copy, dtype=dtype, corner_um=(0, 0, 0), shape=(2, side // 2**level, side // 2**level)
+            copy,
+            dtype=dtype,
+            corner_um=(0, 2**level / 2, 2**level / 2),
+            shape=(2, side // 2**level, side // 2**level),
         )
         for level, copy in enumerate(tile.copies)
     ]
-    base = Mosaic([tile], 3, ("z", "y", "x"), dtype, averaged=True)
+    base = Mosaic([tile], 3, ("z", "y", "x"), dtype, corner_um=(0, 0.5, 0.5), averaged=True)
     mosaic = base.with_acquired_regions(
         {tile.name: [region(0, side, height=side)]},
         order=[tile.name],
         pyramid_reduction=MEAN_CROP_REDUCTION,
-        xy_origin="corner",
     )
-    restored = read_the_mosaic_as_written(the_mosaic_written_down(mosaic))
+    held = the_mosaic_written_down(mosaic)
+    if written == "older corners":
+        held["corner_um"] = [0, 0, 0]
+        for copy in held["tiles"][0]["copies"]:
+            copy["corner_um"] = [0, 0, 0]
+        held["xy_origin"] = "corner"
+    restored = read_the_mosaic_as_written(held)
     composer = Composer(restored, piece=4)
     try:
         assert composer._can_read_native(2, 0, 0) is eligible
-        assert restored.xy_origin == "corner"
+        assert restored.corner_um == (0, 0.5, 0.5)
+        assert [copy.corner_um for copy in restored.tiles[0].copies] == [
+            copy.corner_um for copy in tile.copies
+        ]
         levels = json.loads(composer.group_json())["attributes"]["ome"]["multiscales"][0][
             "datasets"
         ]
@@ -119,7 +136,6 @@ def test_actual_writer_native_pixels_sparse_coverage_and_unchanged_originals(
         "regions": "complete",
         "order": [a.name, b.name],
         "pyramid_reduction": MEAN_CROP_REDUCTION,
-        "xy_origin": "corner",
     }
     view = PublishedTransfer(folder / STORE)
     try:
@@ -149,14 +165,6 @@ def test_actual_writer_native_pixels_sparse_coverage_and_unchanged_originals(
         assert mask[0, 0] == mask[0, 256] == 1 and mask[0, 128] == 0
         assert actual[0, 256] == 0
         assert all(p.read_bytes() == data for p, data in originals.items())
-        with pytest.raises(ValueError, match="coordinate convention"):
-            view.publish(
-                folder,
-                {a.name: 1, b.name: 1},
-                {"x_um": [0, 1024], "y_um": [0, 512]},
-                composition={**composition, "xy_origin": "center"},
-                bake=bake,
-            )
     finally:
         view.close()
 
@@ -214,7 +222,6 @@ def test_actual_writer_stack_grid_survives_retirement_reopen_and_append(
             "regions": "complete",
             "order": order,
             "pyramid_reduction": MEAN_CROP_REDUCTION,
-            "xy_origin": "corner",
         }
 
     view = PublishedTransfer(folder / STORE, piece=64)
@@ -289,7 +296,6 @@ def test_actual_writer_browser_placement_and_idle(
         "regions": "complete",
         "order": [a.name, b.name],
         "pyramid_reduction": MEAN_CROP_REDUCTION,
-        "xy_origin": "corner",
     }
     payload = {
         "path": str(folder),

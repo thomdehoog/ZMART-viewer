@@ -13,9 +13,8 @@ from zmart_viewer.views.slice_top_projection import ViewSet
 
 
 @pytest.mark.parametrize("spacing", [1, 2.5, 4])
-@pytest.mark.parametrize("origin", ["corner", "center"])
 @pytest.mark.parametrize("bake", [False, True])
-def test_projection_and_slice_describe_the_same_physical_pixels(tmp_path, spacing, origin, bake):
+def test_projection_and_slice_describe_the_same_physical_pixels(tmp_path, spacing, bake):
     source = tmp_path / "positions"
     source.mkdir()
     data = np.full((1, 1, 3, 8, 8), 80, dtype="uint16")
@@ -26,8 +25,8 @@ def test_projection_and_slice_describe_the_same_physical_pixels(tmp_path, spacin
     for level, dataset in enumerate(ome["multiscales"][0]["datasets"]):
         scale, translation = dataset["coordinateTransformations"]
         scale["scale"][-2:] = [spacing * 2**level] * 2
-        offset = 0 if origin == "corner" else spacing * (2**level - 1) / 2
-        translation["translation"][-2:] = [offset, 8 * spacing + offset]
+        centre = spacing * 2**level / 2
+        translation["translation"][-2:] = [centre, 8 * spacing + centre]
     group.attrs["ome"] = ome
     originals = {p: p.read_bytes() for p in source.rglob("*") if p.is_file()}
     views = ViewSet(
@@ -42,7 +41,7 @@ def test_projection_and_slice_describe_the_same_physical_pixels(tmp_path, spacin
             source,
             {name: 1},
             {"x_um": [0, 24 * spacing], "y_um": [0, 8 * spacing]},
-            composition={"regions": "complete", "order": [name], "xy_origin": origin},
+            composition={"regions": "complete", "order": [name]},
             bake=bake,
         )
         transforms = []
@@ -58,7 +57,7 @@ def test_projection_and_slice_describe_the_same_physical_pixels(tmp_path, spacin
                     view[level][1]["translation"][-2:]
                     == transforms[0][level][1]["translation"][-2:]
                 )
-            expected = spacing * (2**level - (0 if origin == "corner" else 1)) / 2
+            expected = spacing * 2**level / 2
             assert transforms[0][level][1]["translation"][-2:] == [expected, expected]
         assert all(p.read_bytes() == contents for p, contents in originals.items())
     finally:

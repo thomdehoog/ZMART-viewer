@@ -29,7 +29,7 @@ def write_position(folder, name, x, value, *, frames=1, channels=1, depth=1):
                     {"type": "scale", "scale": [1, 1, 1, 2**level, 2**level]},
                     {
                         "type": "translation",
-                        "translation": [0, 0, 0, (2**level - 1) / 2, x + (2**level - 1) / 2],
+                        "translation": [0, 0, 0, 2**level / 2, x + 2**level / 2],
                     },
                 ],
             }
@@ -368,7 +368,7 @@ def test_coarse_pixels_and_coverage_match_detail_on_an_offset_canvas(tmp_path):
             translation = next(
                 one["translation"] for one in transform if one["type"] == "translation"
             )
-            assert translation == [0, -128 + (factor - 1) / 2, -128 + (factor - 1) / 2]
+            assert translation == [0, -128 + factor / 2, -128 + factor / 2]
             mask = footprint.reshape(512 // factor, factor, 1024 // factor, factor).max(axis=(1, 3))
             expected = detail.reshape(1, 512 // factor, factor, 1024 // factor, factor).mean(
                 axis=(2, 4)
@@ -508,7 +508,7 @@ def test_a_publication_under_way_keeps_serving_all_but_the_pieces_it_rewrites(tm
         opening = {
             "path": str(tmp_path), "bake": False,
             "source_revisions": {"a.ome.zarr": 1, "b.ome.zarr": 1},
-            "composition": {"regions": "complete", "order": ["a.ome.zarr", "b.ome.zarr"], "xy_origin": "corner"},
+            "composition": {"regions": "complete", "order": ["a.ome.zarr", "b.ome.zarr"]},
             "canvas": {"x_um": [0, 1024], "y_um": [0, 512]},
             "views": {"path": str(tmp_path / "view"), "acquisition": "mixed", "modes": [],
                       "projections": ["max"], "projection_path": str(tmp_path / "projections")},

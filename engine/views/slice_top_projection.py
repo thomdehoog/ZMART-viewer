@@ -241,7 +241,6 @@ class ViewSet:
                             regions,
                             PROJECTION_RECIPE,
                             MEAN_REDUCTION,
-                            snapshot.get("xy_origin", "center"),
                         ],
                         sort_keys=True,
                     )
@@ -266,7 +265,6 @@ class ViewSet:
                         key,
                         revision=revision,
                         regions=regions,
-                        xy_origin=snapshot.get("xy_origin", "center"),
                     )
                     if destination != source / derived:
                         candidates[derived] = read_one_tile(store)
