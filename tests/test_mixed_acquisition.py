@@ -169,7 +169,8 @@ def test_single_level_fractional_positions_and_complete_retirement(tmp_path, bak
     try:
         view.publish(tmp_path, {name: 1}, CANVAS, composition=composition([name]), bake=bake)
         made = view.outputs[STORE].composer()
-        assert made.mosaic.tiles[0].copies[0].corner_um[2] == 257
+        # Snapped to the nearest first-voxel centre on the canvas grid, column 257.
+        assert made.mosaic.tiles[0].copies[0].corner_um[2] == 257.5
         fine = np.zeros((128, 2048), dtype="uint16")
         fine[:, 257:385] = 1000
         for level in range(made.mosaic.levels):

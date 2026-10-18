@@ -34,7 +34,8 @@ def test_named_publication_places_off_grid_positions_without_editing_originals(t
         )
         for output in views.outputs.values():
             made = output.composer()
-            assert made.mosaic.tiles[0].copies[0].corner_um[2] == pytest.approx(0)
+            # Snapped to the first-voxel centre of canvas column 0, half a voxel in.
+            assert made.mosaic.tiles[0].copies[0].corner_um[2] == pytest.approx(0.5)
             for level in range(3):
                 image = made.values_for(level, 0, 0, 0)
                 width = min(4, 8 // 2**level)
