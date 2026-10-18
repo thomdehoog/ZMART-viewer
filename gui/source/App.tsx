@@ -582,8 +582,11 @@ export default function App() {
           listing={loadListing}
           onNavigate={async (path) => {
             const listing = await listFolders(path);
-            setLoadListing((current) =>
-              "folders" in listing ? listing : { ...current, error: listing.error } as Listing);
+            /* Closed while the walk was answered: it stays closed. */
+            setLoadListing((current) => {
+              if (!current) return current;
+              return "folders" in listing ? listing : { ...current, error: listing.error };
+            });
           }}
           onOpened={(opened) => {
             applyConfig(opened);
