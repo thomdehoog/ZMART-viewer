@@ -49,7 +49,11 @@ __all__ = [
 _BOOKKEEPING = "views/live/metadata"
 _TRUTH = "signed.json"
 _LINKS = "links.json"
-_LINKS_SCHEMA = "zmart-live-links/3"
+#: The link map's order is the order positions last came in (4); a map from
+#: before that kept each position in its first-arrival place (3), and is read
+#: by that rule. See ``the_order_positions_came_in``.
+_LINKS_SCHEMA = "zmart-live-links/4"
+_FIRST_ARRIVAL_LINKS_SCHEMA = "zmart-live-links/3"
 _DATA = ("data", "survey.ome.zarr")
 _VIEW = Path("views/live/live.ome.zarr")
 _GENERATION = re.compile(r"^(?P<position>.+)\.generation-(?P<generation>\d+)$")
@@ -127,6 +131,7 @@ class LiveRun:
         self._links_mark: tuple[int, int, int, int] | None = None
         self._routes: dict[int, ViewRoute] = {}
         self._commit_order: tuple[str, ...] = ()
+        self._first_arrival_order: tuple[str, ...] = ()
         self._lock = threading.RLock()
         # The fold's running state, kept between commits. The history is
         # append-only, so interpreting it is a running fold rather than a
@@ -145,8 +150,13 @@ class LiveRun:
         # consumer; a bare count proved rollback-unsafe in review.
         self._last_folded_revision = 0
         self._published_mut: set[tuple[str, int, int]] = set()
-        self._arrived: list[str] = []
-        self._arrived_set: set[str] = set()
+        # The order positions last came in (a re-take moves one to the end),
+        # and the order they first arrived, which maps from before that rule
+        # are checked against. Dictionaries keep the order and answer "in
+        # already?" at once.
+        self._came_in: dict[str, None] = {}
+        self._first_arrived: dict[str, None] = {}
+        self._committed_generations: dict[str, int] = {}
         self._moments_by_position: dict[str, set[int]] = {}
         self._replacements_seen: dict[str, int] = {}
 
@@ -172,17 +182,21 @@ class LiveRun:
                     self._folded = 0
                     self._last_folded_revision = 0
                     self._published_mut = set()
-                    self._arrived = []
-                    self._arrived_set = set()
+                    self._came_in = {}
+                    self._first_arrived = {}
+                    self._committed_generations = {}
                     self._moments_by_position = {}
                     self._replacements_seen = {}
                 published = self._published_mut
                 moments_by_position = self._moments_by_position
                 replacements_seen = self._replacements_seen
                 for event in events[self._folded :]:
-                    if event.position_id not in self._arrived_set:
-                        self._arrived.append(event.position_id)
-                        self._arrived_set.add(event.position_id)
+                    # The same rule as ``the_order_positions_came_in``, folded
+                    # one event at a time.
+                    if event.event_type == "position_replaced":
+                        self._came_in.pop(event.position_id, None)
+                    self._came_in.setdefault(event.position_id, None)
+                    self._first_arrived.setdefault(event.position_id, None)
                     position_id = event.position_id
                     inferred = replacements_seen.get(position_id, 0)
                     if event.event_type == "position_replaced":
@@ -202,19 +216,33 @@ class LiveRun:
                         )
                     already_visible.add(moment)
                     published.add((position_id, moment, generation))
+                    self._committed_generations[position_id] = generation
                 self._folded = len(events)
                 if events:
                     self._last_folded_revision = events[-1].revision
                 self._published = frozenset(published)
-                self._commit_order = tuple(self._arrived)
+                self._commit_order = tuple(self._came_in)
+                self._first_arrival_order = tuple(self._first_arrived)
                 self._publication_mark = mark
             return self._published
 
     def positions_in_commit_order(self) -> tuple[str, ...]:
-        """Every published position in first-arrival order — the draw order."""
+        """Every published position in the order it last came in — the draw order.
+
+        See :func:`~zmart_viewer.live.record.vocabulary.the_order_positions_came_in`.
+        """
         self.published_units()
         with self._lock:
             return self._commit_order
+
+    def _what_a_map_is_checked_against(self, schema: str) -> tuple[tuple[str, ...], dict]:
+        """The committed order a link map of this schema must keep, and each
+        position's committed generation, read together from one look."""
+        self.published_units()
+        with self._lock:
+            if schema == _FIRST_ARRIVAL_LINKS_SCHEMA:
+                return self._first_arrival_order, dict(self._committed_generations)
+            return self._commit_order, dict(self._committed_generations)
 
     def how_far_folded(self) -> tuple[int, int]:
         """How many events the running total has taken in, and the last one's revision.
@@ -270,7 +298,8 @@ class LiveRun:
             if mark == self._links_mark:
                 return self._routes
             held = json.loads(link_file.read_text(encoding="utf-8"))
-            if held.get("schema") != _LINKS_SCHEMA:
+            schema = held.get("schema")
+            if schema not in (_LINKS_SCHEMA, _FIRST_ARRIVAL_LINKS_SCHEMA):
                 raise ValueError("the live view link map has an unknown schema")
             layout, profile = self.geometry()
             position_ids = tuple(placement.position_id for placement in layout.positions)
@@ -305,16 +334,28 @@ class LiveRun:
                     )
                 # The order of the entries is the draw order, so it is validated
                 # like any other route fact.  Every level must declare the same
-                # order, committed positions must appear exactly as the manifest
-                # first committed them, and a position routed ahead of its own
-                # commit may only sit at the tail — behind everything published,
-                # where a brand-new arrival belongs.
+                # order, committed positions must appear exactly in the order
+                # the manifest says they came in, and a position routed ahead
+                # of its own commit may only sit at the tail — behind
+                # everything published, where an arrival belongs. A position
+                # routed at a newer generation than the history has made
+                # visible is being taken again: it, too, is ahead of its own
+                # commit, and sits at the tail where that commit will put it.
                 if declared_order is None:
                     declared_order = tuple(position_ids)
+                    order, committed_generations = self._what_a_map_is_checked_against(schema)
+                    coming_in = {
+                        position_id
+                        for position_id in position_ids
+                        if schema == _LINKS_SCHEMA
+                        and committed_generations.get(position_id, 0)
+                        < int(generations[position_id])
+                    }
+                    routed = set(position_ids)
                     committed_order = [
                         position_id
-                        for position_id in self.positions_in_commit_order()
-                        if position_id in set(position_ids)
+                        for position_id in order
+                        if position_id in routed and position_id not in coming_in
                     ]
                     already_committed = set(committed_order)
                     if [

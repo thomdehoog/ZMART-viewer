@@ -21,10 +21,11 @@ What stands are the two guards that were never about the cure's speed,
 only its honesty, and they hold for full recomposition just as well:
 
 The OVERLAP PROOF: microscope tiles deliberately overlap their neighbours
-(64 pixels in these fixtures), the composer lays the LATER-committed tile
-on top, and a replacement does not move a position up the pile. Whatever
-patches the bake must keep a replaced tile beneath its later neighbours in
-their shared band, and this test catches any patcher that does not.
+(64 pixels in these fixtures), and the composer lays the tile that came in
+LAST on top -- a replacement is a position coming in again, so it moves up
+the pile (Thom, 2026-10-18). Whatever patches the bake must lay a replaced
+tile over its neighbours in their shared band, and this test catches any
+patcher that re-lays only the replaced tile's own ground beneath them.
 
 The EQUALITY ORACLE: after landings and a replacement, every baked chunk
 file of the coarsest composed level must decode pixel-identical to a
@@ -80,8 +81,8 @@ def _grid_neighbours(run, order):
     )
 
 
-def test_the_overlap_band_belongs_to_the_later_commit(tmp_path):
-    """Replacing an early tile must not paint over its later neighbour."""
+def test_the_overlap_band_belongs_to_the_retake(tmp_path):
+    """Replacing an early tile lays it over its later neighbour: it came in last."""
     harness.FIXTURES = tmp_path
     run, order = harness.the_run(4)
     for position_id in order:
@@ -141,13 +142,11 @@ def test_the_overlap_band_belongs_to_the_later_commit(tmp_path):
             f"level {level} -- the replacement never reached the baked "
             "file, so the band assertion below would be vacuous"
         )
-        assert band >= bright_low, (
-            f"the overlap band reads {band} at level {level}, but the "
-            f"later-committed neighbour's bright pixels (>= {bright_low}) "
-            "must own that band: commit order is draw order, and a "
-            "replacement does not move a position up the pile. A patch "
-            "that painted the replaced tile's whole footprint over the "
-            "piece has just been caught doing exactly that."
+        assert band < bright_low // 2, (
+            f"the overlap band reads {band} at level {level}, the "
+            "neighbour's bright pixels, but the re-take came in last and "
+            "must own that band. A patch that re-laid only the replaced "
+            "tile's own ground beneath its neighbours has just been caught."
         )
     finally:
         opened.close()

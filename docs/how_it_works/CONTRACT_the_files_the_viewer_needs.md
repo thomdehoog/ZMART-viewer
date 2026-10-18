@@ -44,12 +44,16 @@ at `views/live/metadata/`. It is what the viewer reads at live pace:
   frame — is the one placement commitment fixed before the first
   pixel; the placements inside it are versioned state
   (`layout_revision`), free to be anywhere in the canvas, overlapping
-  or not, declared up front or placed on the fly, with the later
-  commit owning shared ground;
+  or not, declared up front or placed on the fly. Where two cover the
+  same ground, the one that came in last owns it: a position comes in
+  when it first arrives and again when it is replaced (taken again); a
+  later moment of a timelapse keeps its place;
 - `profiles/` — how every store is written (frame, levels, chunking,
   number type), sealed with the locations;
 - `links.json` — which position's own bytes answer for each piece of
-  the linked view;
+  the linked view, in that draw order (`zmart-live-links/4`; a
+  `/3` map, which kept a replaced position in its first place, is still
+  read as written);
 - `publication.lock` — the writer's own lock; leave it alone.
 
 ## The one law

@@ -1222,9 +1222,16 @@ class Composer:
         changed: frozenset[str],
         now_drawn: list[tuple[str, object]],
     ) -> None:
-        """Carry the piece index forward, rebuilding only the dirtied pieces."""
+        """Carry the piece index forward, rebuilding only the dirtied pieces.
+
+        A rebuilt piece lists its tiles in this composer's draw order, the
+        order a fresh index would list them: a tile taken again has moved to
+        the top, and keeping its old place would draw it under neighbours
+        that came in before it.
+        """
         with donor._indexing:
             copied = {level: dict(index) for level, index in donor._indexed.items()}
+        drawn_at = {the_position_of(tile.name): at for at, tile in enumerate(self.mosaic.tiles)}
 
         for level, index in copied.items():
             fresh = []
@@ -1263,6 +1270,7 @@ class Composer:
                         rebuilt.append((fresh_tile, fresh_at))
 
                 if rebuilt:
+                    rebuilt.sort(key=lambda entry: drawn_at[the_position_of(entry[0].name)])
                     index[target] = rebuilt
                 else:
                     index.pop(target, None)

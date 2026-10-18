@@ -69,6 +69,7 @@ from zmart_viewer.live.record.vocabulary import (
     SceneLayoutRevision,
     ZmartLiveError,
     rounded_up,
+    the_order_positions_came_in,
 )
 
 __all__ = [
@@ -83,9 +84,13 @@ _LINKS = "links.json"
 #: The name written into the map of pointers, so that anybody reading that file
 #: can tell at once whether it is one this version of ZMART understands.
 #: Version 3 routes every position whole and makes the **order** of the stored
-#: positions load-bearing: it is the commit order, and a later entry is drawn
-#: over an earlier one wherever the two cover the same ground.
-_LINKS_SCHEMA = "zmart-live-links/3"
+#: positions load-bearing: a later entry is drawn over an earlier one wherever
+#: the two cover the same ground. Version 4 keeps that shape and changes what
+#: the order is: the order positions last came in, so a position taken again
+#: moves to the end and is drawn on top. Version 3 kept a position in its
+#: first-arrival place for good; a map written so is still read.
+_LINKS_SCHEMA = "zmart-live-links/4"
+_LINKS_SCHEMAS_READ = (_LINKS_SCHEMA, "zmart-live-links/3")
 
 
 class NotReadyToPublish(ZmartLiveError):
@@ -642,21 +647,22 @@ class LivePublisher:
         return published
 
     def _positions_in_commit_order(self) -> list[str]:
-        """Every published position, in the order each one first arrived.
+        """Every published position, in the order each one last came in.
 
         This order is the draw order of the linked view, so it is read back
         from the durable publication history rather than remembered in memory.
-        A position keeps its place when a later moment or a replacement is
-        committed: the tile itself did not move, only its pixels grew or were
-        superseded, and reshuffling the draw order underneath an unchanged
-        picture would make published ground change hands with nothing recording
-        why.
+        The last one that comes in is drawn on top (Thom, 2026-10-18): a
+        position arrives once, and comes in again only when it is taken again
+        -- a replacement, which moves it to the end. A later moment of a
+        timelapse is the same tile growing and keeps its place. The history
+        records every replacement, so where published ground changed hands is
+        always written down.
 
-        A dictionary keeps first-arrival order and answers "seen already?" at
-        once; checking a growing list made every publish cost the square of
-        the number of positions (review N5).
+        A dictionary keeps the order and answers "seen already?" at once;
+        checking a growing list made every publish cost the square of the
+        number of positions (review N5).
         """
-        return list(dict.fromkeys(event.position_id for event in self.manifest.events()))
+        return list(the_order_positions_came_in(self.manifest.events()))
 
     def _mosaic_extent(self) -> tuple[int, int]:
         """How far the whole mosaic reaches in y and x, in full-resolution pixels."""
@@ -991,7 +997,12 @@ class LivePublisher:
             rounded_up(width, smaller.get("x", 1)),
         )
 
-    def write_the_link_map(self, committed: frozenset[str | tuple[str, int]]) -> None:
+    def write_the_link_map(
+        self,
+        committed: frozenset[str | tuple[str, int]],
+        *,
+        taken_again: str | None = None,
+    ) -> None:
         """Write down which position's own bytes answer for each piece of the overview.
 
         At the zoom levels the storage plan says can be pointed at, the overview
@@ -1002,12 +1013,14 @@ class LivePublisher:
         :meth:`inspect` reads it back and follows it.
 
         **The order of the stored positions is the draw order.** Positions are
-        listed as they were first committed, so a later arrival is drawn over
-        an earlier one wherever their whole frames cover the same ground.
-        Positions that are being routed ahead of their own commit — the
-        candidate a publication is about to make visible — go at the tail, in
-        the layout's own settled order, which is where a brand-new arrival
-        belongs.
+        listed in the order they last came in (see
+        :meth:`_positions_in_commit_order`), so the later one is drawn over the
+        earlier wherever their whole frames cover the same ground. Positions
+        that are being routed ahead of their own commit — the candidate a
+        publication is about to make visible — go at the tail, in the layout's
+        own settled order, which is where a brand-new arrival belongs.
+        ``taken_again`` names a position being replaced: it is coming in again,
+        so it goes to the tail as well, where its commit will put it.
 
         Building the map is also the moment the arrangement gets checked.
         :func:`zmart_viewer.live.record.view_routes.route_the_view` refuses a set of positions
@@ -1018,8 +1031,10 @@ class LivePublisher:
         showing = [
             position_id
             for position_id in self._positions_in_commit_order()
-            if position_id in showing_set
+            if position_id in showing_set and position_id != taken_again
         ]
+        if taken_again in showing_set:
+            showing.append(taken_again)
         showing += [
             placement.position_id
             for placement in self.layout.positions
@@ -1140,7 +1155,7 @@ class LivePublisher:
                 f"actually lives."
             )
         stored = json.loads(target.read_text())
-        if not isinstance(stored, dict) or stored.get("schema") != _LINKS_SCHEMA:
+        if not isinstance(stored, dict) or stored.get("schema") not in _LINKS_SCHEMAS_READ:
             raise ZmartLiveError(
                 f"The map at {target} is not a {_LINKS_SCHEMA!r} record, so what its "
                 f"numbers mean cannot be guessed safely."
@@ -1831,7 +1846,7 @@ class LivePublisher:
         # Write the candidate route map first. For a replacement, this makes
         # the gateway withhold that position while metadata points at the new
         # generation. The manifest commit later makes it visible in one step.
-        self.write_the_link_map(units)
+        self.write_the_link_map(units, taken_again=position_id if superseding else None)
         self.write_the_view()
         self.write_the_layout()
         return self.publish(position_id, timepoint=timepoint, superseding=superseding)

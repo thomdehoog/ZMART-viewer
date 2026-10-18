@@ -98,6 +98,7 @@ __all__ = [
     "ZmartLiveError",
     "check_the_name_is_safe",
     "is_a_safe_name",
+    "the_order_positions_came_in",
     "the_position_of",
 ]
 
@@ -1652,6 +1653,28 @@ class CommitEvent:
             timestamp=value.get("timestamp", ""),
             notes=value.get("notes", ""),
         )
+
+
+def the_order_positions_came_in(events: Iterable[CommitEvent]) -> dict[str, None]:
+    """Every published position, in the order each one last came in.
+
+    This is the draw order wherever two positions cover the same ground: the
+    last one that comes in is drawn on top (Thom, 2026-10-18). A position
+    comes in when it first arrives, and again when it is taken again -- a
+    ``position_replaced`` commit, which moves it to the end. A later moment
+    of a timelapse is the same tile growing and keeps its place.
+
+    The writer and every reader take the order from here, so the linked view,
+    the composed picture and the baked overview cannot disagree about it.
+    Returned as a dictionary, which keeps the order and answers "is this one
+    in?" at once.
+    """
+    order: dict[str, None] = {}
+    for event in events:
+        if event.event_type == "position_replaced":
+            order.pop(event.position_id, None)
+        order.setdefault(event.position_id, None)
+    return order
 
 
 #: The tints a run's usual laser lines first appear in, by wavelength name.
