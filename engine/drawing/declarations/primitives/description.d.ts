@@ -19,13 +19,12 @@
 /** How the volume is drawn: a projection of the brightest or the dimmest voxel, or accumulated. */
 export type VolumeMode = "max" | "on" | "min";
 /**
- * One image or mask layer as the engine is told to draw it: neuroglancer's
- * own layer description, plus the few fields the primitives read to know
- * which stores have changed and how a layer is held (neuroglancer ignores
- * those).
+ * One image layer as the engine is told to draw it: neuroglancer's own layer
+ * description, plus the few fields the primitives read to know which stores
+ * have changed and how a layer is held (neuroglancer ignores those).
  */
 export interface EngineLayer {
-    type: "image" | "segmentation";
+    type: "image";
     name: string;
     /** Whole addresses, scheme included: the primitives never work one out. */
     source: string[];
@@ -41,17 +40,16 @@ export interface EngineLayer {
     shaderControls?: Record<string, unknown>;
     blend?: "additive" | "default";
     opacity?: number;
-    selectedAlpha?: number;
-    notSelectedAlpha?: number;
     volumeRendering?: VolumeMode;
     volumeRenderingDepthSamples?: number;
     volumeRenderingGain?: number;
 }
 /**
- * A layer of a kind only one page draws. The primitives build it from its
- * description, put it in its place in the order and show or hide it; every
- * other setting is the page's own, written by the page's hook (see
- * `createViewer`'s `ownSettings`).
+ * A layer of a kind only one page draws -- an annotation layer, a mask. The
+ * primitives build it from its description, hand it its stores as they
+ * arrive, put it in its place in the order and show or hide it; every other
+ * setting is the page's own, written by the page's hook (see `createViewer`'s
+ * `ownSettings`).
  */
 export interface PageLayer {
     type: string;
@@ -61,7 +59,7 @@ export interface PageLayer {
 }
 /** One layer of the scene a page asks for. */
 export type SceneLayer = EngineLayer | PageLayer;
-/** Whether a description is one of the two kinds the primitives write settings for. */
+/** Whether a description is an image layer, the one kind the primitives write settings for. */
 export declare function isEngineLayer(layer: SceneLayer): layer is EngineLayer;
 /** One channel of one group, drawn from one store or several. */
 export interface ChannelRow {

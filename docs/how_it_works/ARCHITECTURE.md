@@ -74,6 +74,10 @@ told, the counters the tests read -- lives in the closure `createViewer`
 makes, so two engines on one page each keep their own. Fitting the picture,
 looking at what opened, the 2-D/3-D field carry, the stretch, the scale bar,
 annotations and the volume stay in this window's page: only it uses them.
+The primitives write the settings of image layers only; a page's own kinds of
+layer -- here the drawn targets and the masks, in `gui/source/drawing/own-layers.ts`
+-- are built, fed and ordered by the primitives, and their settings written by
+the page through `createViewer`'s `ownSettings` hook.
 
 The build writes the primitives' declarations to `engine/drawing/declarations/`
 (`npm run declarations`, part of `npm run build`), with those of

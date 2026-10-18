@@ -2,7 +2,7 @@ import React from "react";
 import { createViewer } from "../../engine/drawing/primitives/viewer.ts";
 import type { Engine } from "../../engine/drawing/primitives/viewer.ts";
 import { themeGround } from "./drawing/viewer.ts";
-import { writeTheTargetsSettings } from "./drawing/annotations.ts";
+import { writeTheViewersOwnSettings } from "./drawing/own-layers.ts";
 
 interface NeuroglancerViewProps {
   onEngine: (engine: Engine) => void;
@@ -37,12 +37,12 @@ export default function NeuroglancerView({ onEngine, generation = 0, veiled = fa
     // The engine's own gestures, which the Point and Box tools ride on; the
     // ground the theme paints, read afresh whenever the Light/Dark button
     // changes the page's dress, so the picture never floats on a black field
-    // inside a light page; and the targets' layer's colour, which is this
-    // window's own kind of layer.
+    // inside a light page; and the settings of this window's own kinds of
+    // layer, the targets and the masks.
     const engine = createViewer(target, {
       gestures: "engine",
       ground: themeGround,
-      ownSettings: writeTheTargetsSettings,
+      ownSettings: writeTheViewersOwnSettings,
     });
     const dressWatcher = new MutationObserver(() => engine.paintTheGround());
     dressWatcher.observe(document.documentElement, {

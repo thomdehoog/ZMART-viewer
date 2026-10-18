@@ -68,7 +68,7 @@ type StoreFields = Partial<Pick<EngineLayer,
   "frameCounts" | "sourceIds" | "sourceRevisions" | "sourceGeometryRevisions"
   | "persistentFlat" | "boundaryHeld">> & { source?: string | string[] };
 
-// Neuroglancer's image and segmentation layers ship no declarations,
+// Neuroglancer's image layer ships no declarations,
 // so the settings this file writes on them are named here, and each layer is
 // taken as its kind once, where its kind is known.
 
@@ -86,14 +86,6 @@ interface ImageLayerSettings {
   volumeRenderingMode: Restorable;
   volumeRenderingDepthSamplesTarget: WatchableValueInterface<number>;
   volumeRenderingGain: WatchableValueInterface<number>;
-}
-
-/** The mask layer's two strengths. */
-interface SegmentationLayerSettings {
-  displayState: {
-    selectedAlpha: WatchableValueInterface<number>;
-    notSelectedAlpha: WatchableValueInterface<number>;
-  };
 }
 
 /**
@@ -216,45 +208,37 @@ function applySettings(managed: ManagedUserLayer, spec: SceneLayer, ownSettings:
     ownSettings?.(layer, spec);
     return;
   }
-  if (spec.type === "image") {
-    const image = layer as UserLayer & ImageLayerSettings;
-    // The shader is the small program that turns stored numbers into what you
-    // see: it carries the channel colour and any colour map. Setting it to the
-    // text it already holds is ignored by the engine, so this is free whenever
-    // the colour has not changed -- which is nearly always.
-    if (spec.shader != null) image.fragmentMain.value = spec.shader;
-    // How this layer blends with what is beneath travels with the description
-    // rather than being set once: a layer that starts with one store may gain
-    // more while something is still writing, and the covering rule must come
-    // back with them -- left additive, their overlaps would sum into bright
-    // seams.
-    image.blendMode.restoreState(spec.blend ?? "default");
-    // The contrast window and the 3-D opacity travel separately, as values for
-    // controls the program declares. Sent this way they reach a program that is
-    // already compiled, so dragging a contrast handle costs the graphics card
-    // almost nothing however many layers are open.
-    if (spec.shaderControls) image.shaderControlState.restoreState(spec.shaderControls);
-    if (spec.opacity != null) image.opacity.value = spec.opacity;
-    image.volumeRenderingMode.restoreState(spec.volumeRendering ?? "off");
-    if (spec.volumeRenderingDepthSamples != null) {
-      image.volumeRenderingDepthSamplesTarget.value = spec.volumeRenderingDepthSamples;
-    }
-    // Gain has to be named here or it goes nowhere. Nothing in this function
-    // restores a whole specification; every field is carried across by a line of
-    // its own, so a field added to the specification and not to this list is
-    // dropped in silence -- which is exactly what happened when this control was
-    // first added, and why it appeared to have no effect while the depth fade
-    // beside it worked. That one travels as a shader control, and those are
-    // restored wholesale two lines above.
-    if (spec.volumeRenderingGain != null) {
-      image.volumeRenderingGain.value = spec.volumeRenderingGain;
-    }
-  } else {
-    const mask = layer as UserLayer & SegmentationLayerSettings;
-    // A mask has no brightness to adjust; how strongly it is painted over the
-    // image is the only thing there is to set.
-    mask.displayState.selectedAlpha.value = spec.selectedAlpha ?? 1;
-    mask.displayState.notSelectedAlpha.value = spec.notSelectedAlpha ?? 0;
+  const image = layer as UserLayer & ImageLayerSettings;
+  // The shader is the small program that turns stored numbers into what you
+  // see: it carries the channel colour and any colour map. Setting it to the
+  // text it already holds is ignored by the engine, so this is free whenever
+  // the colour has not changed -- which is nearly always.
+  if (spec.shader != null) image.fragmentMain.value = spec.shader;
+  // How this layer blends with what is beneath travels with the description
+  // rather than being set once: a layer that starts with one store may gain
+  // more while something is still writing, and the covering rule must come
+  // back with them -- left additive, their overlaps would sum into bright
+  // seams.
+  image.blendMode.restoreState(spec.blend ?? "default");
+  // The contrast window and the 3-D opacity travel separately, as values for
+  // controls the program declares. Sent this way they reach a program that is
+  // already compiled, so dragging a contrast handle costs the graphics card
+  // almost nothing however many layers are open.
+  if (spec.shaderControls) image.shaderControlState.restoreState(spec.shaderControls);
+  if (spec.opacity != null) image.opacity.value = spec.opacity;
+  image.volumeRenderingMode.restoreState(spec.volumeRendering ?? "off");
+  if (spec.volumeRenderingDepthSamples != null) {
+    image.volumeRenderingDepthSamplesTarget.value = spec.volumeRenderingDepthSamples;
+  }
+  // Gain has to be named here or it goes nowhere. Nothing in this function
+  // restores a whole specification; every field is carried across by a line of
+  // its own, so a field added to the specification and not to this list is
+  // dropped in silence -- which is exactly what happened when this control was
+  // first added, and why it appeared to have no effect while the depth fade
+  // beside it worked. That one travels as a shader control, and those are
+  // restored wholesale two lines above.
+  if (spec.volumeRenderingGain != null) {
+    image.volumeRenderingGain.value = spec.volumeRenderingGain;
   }
 }
 

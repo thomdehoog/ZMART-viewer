@@ -23,13 +23,12 @@ import { COVERAGE_SHADER, GROUND_SHADER } from "../programs.js";
 export type VolumeMode = "max" | "on" | "min";
 
 /**
- * One image or mask layer as the engine is told to draw it: neuroglancer's
- * own layer description, plus the few fields the primitives read to know
- * which stores have changed and how a layer is held (neuroglancer ignores
- * those).
+ * One image layer as the engine is told to draw it: neuroglancer's own layer
+ * description, plus the few fields the primitives read to know which stores
+ * have changed and how a layer is held (neuroglancer ignores those).
  */
 export interface EngineLayer {
-  type: "image" | "segmentation";
+  type: "image";
   name: string;
   /** Whole addresses, scheme included: the primitives never work one out. */
   source: string[];
@@ -45,18 +44,17 @@ export interface EngineLayer {
   shaderControls?: Record<string, unknown>;
   blend?: "additive" | "default";
   opacity?: number;
-  selectedAlpha?: number;
-  notSelectedAlpha?: number;
   volumeRendering?: VolumeMode;
   volumeRenderingDepthSamples?: number;
   volumeRenderingGain?: number;
 }
 
 /**
- * A layer of a kind only one page draws. The primitives build it from its
- * description, put it in its place in the order and show or hide it; every
- * other setting is the page's own, written by the page's hook (see
- * `createViewer`'s `ownSettings`).
+ * A layer of a kind only one page draws -- an annotation layer, a mask. The
+ * primitives build it from its description, hand it its stores as they
+ * arrive, put it in its place in the order and show or hide it; every other
+ * setting is the page's own, written by the page's hook (see `createViewer`'s
+ * `ownSettings`).
  */
 export interface PageLayer {
   type: string;
@@ -68,9 +66,9 @@ export interface PageLayer {
 /** One layer of the scene a page asks for. */
 export type SceneLayer = EngineLayer | PageLayer;
 
-/** Whether a description is one of the two kinds the primitives write settings for. */
+/** Whether a description is an image layer, the one kind the primitives write settings for. */
 export function isEngineLayer(layer: SceneLayer): layer is EngineLayer {
-  return layer.type === "image" || layer.type === "segmentation";
+  return layer.type === "image";
 }
 
 /** The per-store fields of a description, which travel with each store when a row is split. */
@@ -118,8 +116,7 @@ export function coverageLayerFor(layer: EngineLayer, coverage: readonly string[]
  * channel but the top one.
  */
 export function needsAGroundPerPlace(rows: readonly ChannelRow[]): boolean {
-  const images = rows.filter(row => row.layer.type === "image");
-  return images.length > 1 && images.some(row => row.layer.source.length > 1);
+  return rows.length > 1 && rows.some(row => row.layer.source.length > 1);
 }
 
 /**
@@ -160,7 +157,7 @@ export function coverPlacesMixChannels(rows: readonly ChannelRow[]): EngineLayer
   const first = rows[0].layer.name;
   return order.flatMap((place, nth) => {
     const here = at.get(place)!;
-    const standing = here.find(({ row }) => row.layer.type === "image") ?? here[0];
+    const standing = here[0];
     const one = storeOf(standing.row.layer, standing.index, `${first}@${place}`);
     const ground: EngineLayer = {
       ...one,
@@ -179,10 +176,8 @@ export function coverPlacesMixChannels(rows: readonly ChannelRow[]): EngineLayer
     }
     const channels = here.map(({ row, index }) => {
       const drawn = storeOf(row.layer, index, nth === 0 ? row.layer.name : `${row.layer.name}@${place}`);
-      if (drawn.type === "image") {
-        drawn.blend = "additive";
-        drawn.opacity = 1;
-      }
+      drawn.blend = "additive";
+      drawn.opacity = 1;
       return drawn;
     });
     return [ground, ...channels];

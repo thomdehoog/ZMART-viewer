@@ -21,6 +21,7 @@ import {
   needsAGroundPerPlace,
 } from "../../../engine/drawing/primitives/description.ts";
 import type { ChannelRow, EngineLayer, VolumeMode } from "../../../engine/drawing/primitives/description.ts";
+import type { MaskLayer } from "./own-layers.ts";
 import type { Config, LayerSpec } from "../asking-python.ts";
 import type { Rgb } from "../colours.ts";
 import type { Window } from "../contrast-window.ts";
@@ -99,7 +100,7 @@ export function layersFor(
   config: Config, mode: Mode, layerState: LayerState[], groupState: GroupState,
   groupOrder: string[], volumeMode: VolumeMode = "max",
   volume: { attenuation?: number; depthSamples?: number; gain?: number } = {},
-): EngineLayer[] {
+): (EngineLayer | MaskLayer)[] {
   const volumetric = mode === "volume";
   const rows = config.layers.flatMap((spec, index): { spec: Row; index: number }[] => {
     const depths = spec.sourceDepths;
@@ -125,7 +126,7 @@ export function layersFor(
   const seen = new Set(ordered.map(({ index }) => index));
   const all = [...ordered, ...rows.filter(({ index }) => !seen.has(index))];
 
-  const layers = all.map(({ spec, index }) => {
+  const layers = all.map(({ spec, index }): EngineLayer | MaskLayer => {
     const { visible, color, opacity, lut, window: windowOverride } = layerState[index];
     const group = groupState[spec.group || ""] || { visible: true };
     const displayWindow = windowOverride || restingWindow(spec, volumetric);
@@ -135,7 +136,7 @@ export function layersFor(
     // of that is sent.
     const isMask = spec.kind === "segmentation";
     const layer: EngineLayer = {
-      type: isMask ? "segmentation" : "image",
+      type: "image",
       name: engineName(spec) + (spec.depth ? `__${spec.depth}` : ""),
       persistentFlat: spec.depth === "flat" || spec.view?.type === "projection",
       boundaryHeld: spec.view?.type === "top",
@@ -173,9 +174,8 @@ export function layersFor(
     else if (spec.channelIndex != null) layer.localPosition = [spec.channelIndex];
     layer.visible = visible && group.visible;
     if (isMask) {
-      layer.selectedAlpha = opacity;
-      layer.notSelectedAlpha = opacity;
-      return layer;
+      const { type: drawnAsAnImage, ...stores } = layer;
+      return { ...stores, type: "segmentation", selectedAlpha: opacity, notSelectedAlpha: opacity };
     }
     layer.shader = shaderFor(volumetric, lut, Boolean((config.transparentBackground || spec.view) && spec.opaque));
     // Channels mix: each row is added to its neighbours. Adding is safe only
@@ -247,7 +247,7 @@ export function layersFor(
     const blend = all[index].spec.depth || all[index].spec.view ? "default" : "additive";
     return [coverageLayerFor(layer, sources.map(address), blend)];
   });
-  const result: EngineLayer[] = [], handled = new Set<string>();
+  const result: (EngineLayer | MaskLayer)[] = [], handled = new Set<string>();
   const block = (spec: Row) => JSON.stringify([spec.group || "", spec.view?.acquisition]);
   for (let i = 0; i < layers.length; ++i) {
     const spec = all[i].spec;
@@ -257,15 +257,16 @@ export function layersFor(
     for (const depth of [undefined, "flat", "stack"]) {
       const chosen = layers.flatMap((_, j) => block(all[j].spec) === group
         && all[j].spec.depth === depth ? [j] : []);
-      const rows: ChannelRow[] = chosen.map(j => ({
-        layer: layers[j],
-        places: all[j].spec.sourcePlaces,
-        coverage: all[j].spec.coverageSources?.map(address),
-      }));
+      const rows: ChannelRow[] = chosen.flatMap((j) => {
+        const layer = layers[j];
+        if (layer.type !== "image") return [];
+        return [{ layer, places: all[j].spec.sourcePlaces, coverage: all[j].spec.coverageSources?.map(address) }];
+      });
       // Channels drawn from several stores each: every place stands on a
       // ground of its own, which also stands in for the block's coverage.
+      // Masks are drawn over them.
       if (needsAGroundPerPlace(rows)) {
-        result.push(...coverPlacesMixChannels(rows));
+        result.push(...coverPlacesMixChannels(rows), ...chosen.map(j => layers[j]).filter(layer => layer.type !== "image"));
         continue;
       }
       const names = new Set(chosen.map(j => `__coverage__${layers[j].name}`));

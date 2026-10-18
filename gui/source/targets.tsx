@@ -14,7 +14,7 @@ import type { UserLayer } from "neuroglancer/unstable/layer/index.js";
 import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import { PlacePointTool, PlaceBoundingBoxTool } from "neuroglancer/unstable/ui/annotations.js";
 import { loadTargets, saveTargets } from "./asking-python.ts";
-import type { TargetLayer } from "./drawing/annotations.ts";
+import type { TargetLayer } from "./drawing/own-layers.ts";
 import type { TargetsPanelProps } from "./TargetsPanel.tsx";
 
 /** One place the operator has marked, as the engine's annotation layer holds it. */
