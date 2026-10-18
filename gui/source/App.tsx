@@ -80,13 +80,16 @@ export default function App() {
   // The same engine, reachable without waiting for a re-render. The connection
   // to the server below hears announcements while answering them and needs it
   // there and then; a piece of state would only reach it on the next pass, which
-  // is too late to be any use.
+  // is too late to be any use. It is always the engine on screen, and nothing
+  // once that is closed: kept after a close, it pointed an announcement at an
+  // engine already disposed until the new one arrived.
   const engine = React.useRef<Viewer | null>(null);
-  const targets = useTargets(viewer);
+  React.useEffect(() => { engine.current = viewer; }, [viewer]);
   const {
     config, layerState, groupState, groupOrder, notice: storeNotice, setNotice: setStoreNotice,
     applyConfig, setLayer, setWindowIfUnset, setGroup, takeRereadWanted,
   } = useFollowingTheServer(engine);
+  const targets = useTargets(viewer, config ? config.canSelect === true : null);
   const [requestedMode, setMode] = React.useState<Mode>("flat");
   const [requestedViews, setRequestedViews] = React.useState<Record<string, string>>({});
   const rememberedPosition = React.useRef<Record<string, number>>({});
@@ -230,7 +233,6 @@ export default function App() {
 
   React.useEffect(() => {
     if (!viewer || !config || !scene) return undefined;
-    engine.current = viewer;
     // Where the operator is looking, remembered by axis name rather than by
     // position in the list. Adding an acquisition can introduce an axis the view
     // did not have before, which shifts every axis after it along one place; going

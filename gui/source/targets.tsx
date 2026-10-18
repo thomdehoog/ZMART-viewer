@@ -93,7 +93,7 @@ function targetLayerOf(viewer: Viewer | null): (UserLayer & AnnotationLayerMembe
  * present from the moment the layer exists -- and `panel`, what the targets
  * panel shows and what its buttons do.
  */
-export function useTargets(viewer: Viewer | null): { layer: TargetLayer | null; panel: TargetsPanelProps } {
+export function useTargets(viewer: Viewer | null, kept: boolean | null): { layer: TargetLayer | null; panel: TargetsPanelProps } {
   const [targets, setTargets] = React.useState<Target[]>([]);
   const [targetsLoaded, setTargetsLoaded] = React.useState(false);
   const [targetColor, setTargetColor] = React.useState("#ffd34d");
@@ -119,8 +119,17 @@ export function useTargets(viewer: Viewer | null): { layer: TargetLayer | null; 
 
   // The targets drawn in a previous session, read once. The images are not read
   // here: they arrive when the page's connection to the server opens, which is
-  // the moment we know the server is actually answering.
+  // the moment we know the server is actually answering. Only where the page
+  // keeps targets (the window's own server says so): asking a server that has no
+  // file of them was a failed request in every other interface's console.
+  // `kept` is null until the page's settings have come: nothing is decided, and
+  // no layer made, before then.
   React.useEffect(() => {
+    if (kept === null) return undefined;
+    if (!kept) {
+      setTargetsLoaded(true);
+      return undefined;
+    }
     let cancelled = false;
     loadTargets().then((answer) => {
       if (cancelled) return;
@@ -138,7 +147,7 @@ export function useTargets(viewer: Viewer | null): { layer: TargetLayer | null; 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [kept]);
 
   // The layer holding drawn targets is added once the saved ones have been read
   // back, so whatever was saved is present from the moment the layer exists.
@@ -184,7 +193,7 @@ export function useTargets(viewer: Viewer | null): { layer: TargetLayer | null; 
   // that saved, right up until the acquisition is reopened and the targets are
   // gone.
   React.useEffect(() => {
-    if (!targetsLoaded || targetsUnreadable.current) return undefined;
+    if (!kept || !targetsLoaded || targetsUnreadable.current) return undefined;
     const text = JSON.stringify(targets);
     if (lastSavedText.current === null || text === lastSavedText.current) return undefined;
     let cancelled = false;
