@@ -8,13 +8,13 @@
  * the engine or the browser, so a plain Node process can check it.
  *
  * The rule (Thom, 2026-10-18): the channels of one place always mix -- their
- * coloured brightnesses are added, as every fluorescence viewer adds them --
- * and where two positions of one acquisition cover the same ground, the one
- * that came in last covers the other. In a picture the viewer has composed,
- * channels live together in one store and positions were already laid down in
- * that order (or averaged, when a page asks for it), so every layer simply
- * adds. Only a row drawn straight from several stores needs more:
- * `coverPositionsMixChannels` gives each place its own ground to stand on.
+ * coloured brightnesses are added -- and where two places of one group cover
+ * the same ground, the one that came in last covers the other. In a picture
+ * already composed into one store, its channels live together and its places
+ * were laid down in that order (or averaged, when a page asks for it), so
+ * every layer simply adds. Only a channel drawn straight from several stores
+ * needs more: `coverPlacesMixChannels` gives each place its own ground to
+ * stand on.
  */
 
 import { COVERAGE_SHADER, GROUND_SHADER } from "../programs.js";
@@ -53,25 +53,30 @@ export interface EngineLayer {
 }
 
 /**
- * An annotation layer, as a page adds it to the scene. Only its colour and
- * whether it shows are carried across; what is drawn on it belongs to the engine.
+ * A layer of a kind only one page draws. The primitives build it from its
+ * description, put it in its place in the order and show or hide it; every
+ * other setting is the page's own, written by the page's hook (see
+ * `createViewer`'s `ownSettings`).
  */
-export interface TargetLayer {
-  type: "annotation";
+export interface PageLayer {
+  type: string;
   name: string;
-  source: string;
-  annotations: unknown;
-  annotationColor?: string;
+  source: string | string[];
   visible?: boolean;
 }
 
 /** One layer of the scene a page asks for. */
-export type SceneLayer = EngineLayer | TargetLayer;
+export type SceneLayer = EngineLayer | PageLayer;
+
+/** Whether a description is one of the two kinds the primitives write settings for. */
+export function isEngineLayer(layer: SceneLayer): layer is EngineLayer {
+  return layer.type === "image" || layer.type === "segmentation";
+}
 
 /** The per-store fields of a description, which travel with each store when a row is split. */
 const PER_STORE = ["frameCounts", "sourceIds", "sourceRevisions", "sourceGeometryRevisions"] as const;
 
-/** One channel of one acquisition, drawn from one store or several. */
+/** One channel of one group, drawn from one store or several. */
 export interface ChannelRow {
   layer: EngineLayer;
   /**
@@ -81,14 +86,14 @@ export interface ChannelRow {
    * store holding several channels) are the same place.
    */
   places?: readonly string[];
-  /** Where each store's coverage is read, when the page knows what was acquired. */
+  /** Where each store's coverage is read, when the page knows which of its ground holds data. */
   coverage?: readonly string[];
 }
 
 /**
- * The ground a layer stands on: black wherever its coverage says something was
- * acquired, covering what lies beneath. One coverage store per image store, so
- * the layer count does not grow with positions.
+ * The ground a layer stands on: black wherever its coverage says there is
+ * data, covering what lies beneath. One coverage store per image store, so the
+ * layer count does not grow with places.
  */
 export function coverageLayerFor(layer: EngineLayer, coverage: readonly string[], blend: "additive" | "default"): EngineLayer {
   return {
@@ -108,9 +113,9 @@ export function coverageLayerFor(layer: EngineLayer, coverage: readonly string[]
 
 /**
  * Whether some of these rows are drawn straight from several stores while the
- * acquisition has more than one channel -- the one case where adding layers
- * would also add overlapping positions into a bright seam, and covering would
- * hide every channel but the top one.
+ * group has more than one channel -- the one case where adding layers would
+ * also add overlapping places into a bright seam, and covering would hide every
+ * channel but the top one.
  */
 export function needsAGroundPerPlace(rows: readonly ChannelRow[]): boolean {
   const images = rows.filter(row => row.layer.type === "image");
@@ -118,12 +123,12 @@ export function needsAGroundPerPlace(rows: readonly ChannelRow[]): boolean {
 }
 
 /**
- * Draw an acquisition's channels place by place: each place stands on its own
+ * Draw a group's channels place by place: each place stands on its own
  * black ground, which covers whatever was drawn before it, and its channels
  * are added on top of that ground.
  *
  * Neuroglancer blends a layer's stores one pass at a time with the layer's own
- * blend, so a layer cannot add its channels and cover its positions at once.
+ * blend, so a layer cannot add its channels and cover its places at once.
  * Split by place, it can: the ground covers, the channels add. The places are
  * drawn in the order they first appear in the rows -- the order the stores
  * came in -- so the last one covers. A place's ground is drawn from its
@@ -133,11 +138,11 @@ export function needsAGroundPerPlace(rows: readonly ChannelRow[]): boolean {
  * place. A folder the viewer can compose into one picture never comes here.
  *
  * The first place's channels keep their rows' own names, so a row that was
- * drawn from one store and gains a second -- a run's next position arriving --
- * keeps the layer it had, with everything fetched for it, and only the new
+ * drawn from one store and gains a second -- stores arriving one at a time
+ * while something is still writing -- keeps the layer it had, with everything fetched for it, and only the new
  * place's layers are built.
  */
-export function coverPositionsMixChannels(rows: readonly ChannelRow[]): EngineLayer[] {
+export function coverPlacesMixChannels(rows: readonly ChannelRow[]): EngineLayer[] {
   const order: string[] = [];
   const at = new Map<string, { row: ChannelRow; index: number }[]>();
   const shared = new Map<string, string>();

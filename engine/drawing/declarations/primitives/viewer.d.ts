@@ -3,7 +3,7 @@
  * how the view is set, and dropped here with everything it held.
  *
  * Two pages draw with neuroglancer and both turn its interface off: the
- * viewer's own window and the operator page of ZMART-interface. Each owns its
+ * viewer's own window and the page of ZMART-interface. Each owns its
  * controls and tells the engine the values; this is the engine's side of that,
  * once. What it draws is kept in step by `sync.ts`, which the handle carries.
  */
@@ -14,9 +14,9 @@ import "neuroglancer/unstable/kvstore/enabled_frontend_modules.js";
 import type { Viewer } from "neuroglancer/unstable/viewer.js";
 import "neuroglancer/unstable/ui/default_viewer.css";
 import "./chrome.css";
-import type { LayerSync } from "./sync.ts";
+import type { LayerSync, OwnSettings } from "./sync.ts";
 /**
- * Who answers the operator's hands.
+ * Who answers the hands of whoever is looking.
  *
  * `"engine"`: the engine's own panels, with exactly the gestures written out
  * below -- drag pans the flat view and turns the volume, the wheel zooms, and
@@ -33,6 +33,8 @@ export interface EngineOptions {
      * to read it, for a page whose ground follows its theme.
      */
     ground?: string | (() => string);
+    /** How the page writes the settings of a layer of its own kind; see `PageLayer`. */
+    ownSettings?: OwnSettings;
 }
 /**
  * The parts of the view that are not layers: which panels, whether the engine
@@ -66,4 +68,4 @@ export interface Engine extends LayerSync {
  * functions beside this file. That split is what lets any page build its
  * controls without touching this function.
  */
-export declare function createViewer(target: HTMLElement, { gestures, ground }?: EngineOptions): Engine;
+export declare function createViewer(target: HTMLElement, { gestures, ground, ownSettings }?: EngineOptions): Engine;

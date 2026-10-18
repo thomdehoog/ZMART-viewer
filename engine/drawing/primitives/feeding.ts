@@ -17,7 +17,7 @@ import type { UserLayer } from "neuroglancer/unstable/layer/index.js";
 import type { LayerDataSource } from "neuroglancer/unstable/layer/layer_data_source.js";
 
 // How many stores are offered at a time, **across the whole scene**. Two hundred is the
-// size that was measured to work: large enough that a folder of a few thousand positions
+// size that was measured to work: large enough that a folder of a few thousand stores
 // is not made needlessly slow by waiting, and far enough below the browser's limit that a
 // group of them can be in flight together without any risk of one being refused.
 //
@@ -33,15 +33,15 @@ const AT_A_TIME = 200;
 // How long to wait for one group before going on regardless. A store that cannot be
 // read reports that quickly and is not the case this guards against; what it guards
 // against is a store that never answers at all — a share that has gone away
-// mid-acquisition, say. Without this, one such store would stop every later group from
-// ever being offered, which is the same silent loss of the specimen this whole
+// while it was being written, say. Without this, one such store would stop every later
+// group from ever being offered, which is the same silent loss of the picture this whole
 // mechanism exists to prevent. A minute is far longer than a group of two hundred
 // stores has ever taken, so in ordinary use it never comes into play.
 const PATIENCE_MS = 60_000;
 
 function howManyAtATime(): number {
   // The browser tests set this to a small number, so that the pacing can be watched
-  // happening on a folder of a few dozen positions instead of a few thousand. Nothing
+  // happening on a folder of a few dozen stores instead of a few thousand. Nothing
   // in the viewer itself sets it.
   const asked = (globalThis as { zmartSourceBatch?: unknown }).zmartSourceBatch;
   return typeof asked === "number" && Number.isFinite(asked) && asked > 0 ? asked : AT_A_TIME;
@@ -165,7 +165,7 @@ export function makeFeeding(): Feeding {
       patience = setTimeout(finish, PATIENCE_MS);
       for (const source of sources) stopListening.push(source.changed.add(look));
       // In case they are all read already, which is the ordinary case while the
-      // microscope is running: one position arrives, nothing else is outstanding, and
+      // writing goes on: one store arrives, nothing else is outstanding, and
       // this returns without any waiting at all.
       look();
     });
@@ -176,8 +176,8 @@ export function makeFeeding(): Feeding {
    * waiting stores, a group at a time, until every queue is empty.
    *
    * This exists because of a fault that was easy to miss and serious to have: above
-   * roughly six hundred and eighty positions, the rest of the specimen never appeared,
-   * and nothing on screen said so. A folder of two thousand positions drew six hundred
+   * roughly six hundred and eighty stores, the rest of the picture never appeared,
+   * and nothing on screen said so. A folder of two thousand stores drew six hundred
    * and eighty-six of them and presented that as the whole thing.
    *
    * The cause is not ours and not the disk's. Reading one store means about four small
@@ -185,56 +185,56 @@ export function makeFeeding(): Feeding {
    * conversations with one address at a time. Beyond a few thousand requests waiting
    * their turn it stops accepting new ones altogether — it says so in its own words,
    * `net::ERR_INSUFFICIENT_RESOURCES`. The engine takes a refused request as "this
-   * store cannot be read" and quietly leaves that position out. Nothing was wrong with
+   * store cannot be read" and quietly leaves that store out. Nothing was wrong with
    * the data: every store it gave up on reads back perfectly well afterwards, one at a
    * time. The server was never answering more than seven requests at once and spent two
    * thirds of the wait idle.
    *
    * So the stores are handed over in groups, and each group is allowed to finish being
    * read before the next one is offered. The browser's queue then never fills, nothing
-   * is refused, and nothing is lost. Fed this way, a folder of a thousand positions
+   * is refused, and nothing is lost. Fed this way, a folder of a thousand stores
    * loads a thousand of a thousand and a folder of two thousand loads two thousand of
    * two thousand, with no failures at all.
    *
    * One loop for the whole scene rather than one per row, so that the two hundred is a
    * budget shared between the rows waiting rather than an allowance given to each of them.
-   * Anything queued while it is running is picked up by the same loop, so a position
+   * Anything queued while it is running is picked up by the same loop, so a store
    * arriving during a cold open simply joins the end rather than starting a burst of its
    * own.
    *
    * **There is deliberately no special case for opening a finished folder.** It is
    * tempting to think of this as something needed only for a cold open, but it is better
    * understood as simply *how stores are handed over*: give it however many there are,
-   * and it feeds them in groups. While the microscope is running that number is one,
-   * which is a single group and costs nothing beyond what happened before. Opening a
-   * finished folder of forty thousand positions is many groups. Same path either way,
+   * and it feeds them in groups. While something is writing that number is usually
+   * one, which is a single group and costs nothing beyond what happened before. Opening
+   * a finished folder of forty thousand stores is many groups. Same path either way,
    * and nothing anywhere asks whether the data is live.
    *
    * **What this does not do is make a large folder quick**, and it should not be expected
-   * to. Every one of forty thousand positions is still read, merely in an orderly fashion
+   * to. Every one of forty thousand stores is still read, merely in an orderly fashion
    * rather than all at once.
    *
    * Speed is a separate problem, and it is deliberately *not* solved here. Two ways of
    * solving it were considered and both were turned down, for the same reason: each would
    * have added a second copy of something that already exists elsewhere.
    *
-   * The first was to hand the engine only the positions the operator is looking at.
+   * The first was to hand the engine only the stores in view.
    * Neuroglancer already decides which pieces of image to fetch from where the view is, and
    * it does that better than we would; keeping our own idea of what is in view means holding
    * a second copy of knowledge the engine already has, which is how this project has got
-   * into trouble before. The second was to fuse the positions into one image per acquisition
-   * type, which means a second copy of the data itself, written by us, and a whole writer to
+   * into trouble before. The second was to fuse the stores into one image per group,
+   * which means a second copy of the data itself, written by us, and a whole writer to
    * maintain.
    *
-   * What is left is the honest answer: a folder of forty thousand positions takes as long as
-   * it takes, and the way to wait less is to open less — which is the operator's choice to
-   * make, not ours to make for them. See Decision 5 in `docs/how_it_works/DATA_LAYOUT.md`.
+   * What is left is the honest answer: a folder of forty thousand stores takes as long as
+   * it takes, and the way to wait less is to open less — which is the page's choice to
+   * make, not ours to make for it. See Decision 5 in `docs/how_it_works/DATA_LAYOUT.md`.
    *
-   * There is one real way to make it quicker, and it is not in this file: have the run write
-   * into a single image rather than one store per position, so there are forty thousand
+   * There is one real way to make it quicker, and it is not in this file: write into a
+   * single image rather than one store per place, so there are forty thousand
    * places within one store instead of forty thousand stores. That is faster by a wide margin
    * and is what we are aiming for, but it is a decision about how data is written, and this
-   * function has to go on working well for the runs that keep their positions separate. See
+   * function has to go on working well for data that keeps its places in separate stores. See
    * Decision 1b.
    */
   async function keepHandingOver(): Promise<void> {
@@ -256,7 +256,7 @@ export function makeFeeding(): Feeding {
         await whenTheseHaveBeenRead(inFlight);
         const offered: LayerDataSource[] = [];
         let room = howManyAtATime();
-        // Shared out evenly, so that a row holding forty thousand positions does not keep
+        // Shared out evenly, so that a layer holding forty thousand stores does not keep
         // another row's handful waiting behind it.
         const share = Math.max(1, Math.floor(room / hungry.size));
         for (const layer of [...hungry]) {
@@ -272,7 +272,7 @@ export function makeFeeding(): Feeding {
           room -= group.length;
           for (const url of group) {
             // Neuroglancer's own reader turns the address into whatever it needs, so the
-            // format the panel writes and the format the engine wants cannot drift apart.
+            // format the page writes and the format the engine wants cannot drift apart.
             // It is handed a list of one rather than a bare address on purpose: that is
             // the same path a layer takes when it is first built, so a store added later
             // is set up in exactly the same way as one that was there from the start.
@@ -296,11 +296,11 @@ export function makeFeeding(): Feeding {
    * The difference matters and has cost real measurements. What is counted here is
    * the page's own queue draining: stores it has been given and not yet passed on.
    * The engine goes on reading each one's description afterwards, and that is the
-   * slow part. Traced on a run of a hundred stores, this reached nought with **30**
+   * slow part. Traced on a hundred stores, this reached nought with **30**
    * of them actually resolved; on four hundred, with **300**. So it reaches nought
    * at a different fraction of the work depending on how many stores there are,
    * which is the worst possible behaviour for anything comparing one size against
-   * another — two runs stop at different amounts of finished work and the
+   * another — two folders stop at different amounts of finished work and the
    * difference between them looks like a result.
    *
    * A measurement that wants a settled page should wait on every store having a

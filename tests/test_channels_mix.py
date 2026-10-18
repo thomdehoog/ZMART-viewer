@@ -327,7 +327,7 @@ def test_a_picture_written_as_positions_still_mixes_its_channels(written_as_posi
     Every row here is fed by two stores, and adding is a property of a whole
     layer, so a row could either add -- summing its positions into a bright
     seam -- or cover, hiding every channel but the top one. Drawn place by
-    place (the drawing primitives' ``coverPositionsMixChannels``), each place
+    place (the drawing primitives' ``coverPlacesMixChannels``), each place
     stands on its own ground and its channels add on top: this gate stood as
     a strict expected failure from 2026-08-20 until that landed.
     """

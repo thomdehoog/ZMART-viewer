@@ -114,7 +114,7 @@ Two places where this is done well, to be copied rather than disturbed:
   one acquisition is one layer with many sources, which neuroglancer
   composites, covering; and where the acquisition has several channels, each
   place stands on a black ground of its own and its channels are added on
-  top (`coverPositionsMixChannels`). We never stitch pixels in the browser.
+  top (`coverPlacesMixChannels`). We never stitch pixels in the browser.
 - **Contrast travels as control values, not as shader text.** `shaderFor` in
   `engine/drawing/programs.js` declares the contrast control once, and
   `shaderControlsFor` sends the numbers separately, so dragging a contrast

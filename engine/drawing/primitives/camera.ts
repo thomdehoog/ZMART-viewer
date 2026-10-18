@@ -1,5 +1,5 @@
 /**
- * Where the view looks, in the specimen's own micrometres, and what of the
+ * Where the view looks, in micrometres, and what of the
  * picture is on screen.
  *
  * The engine counts its position in its own units per axis and its zoom per

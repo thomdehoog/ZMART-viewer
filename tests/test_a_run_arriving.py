@@ -117,7 +117,7 @@ MARK = """() => {
 STILL_MARKED = """() => window.zmartViewer.layerManager.managedLayers
                      .filter((m) => m.__survived).length"""
 # The channels' sources, not the black ground each position stands on (see
-# coverPositionsMixChannels in the drawing primitives).
+# coverPlacesMixChannels in the drawing primitives).
 SOURCES = """() => window.zmartViewer.layerManager.managedLayers
               .filter((m) => m.layer && m.layer.type === 'image' && !m.name.startsWith('__ground__'))
               .reduce((n, m) => n + m.layer.dataSources.length, 0)"""

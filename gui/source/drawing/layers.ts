@@ -17,7 +17,7 @@
 import { shaderControlsFor, shaderFor } from "../../../engine/drawing/programs.js";
 import {
   coverageLayerFor,
-  coverPositionsMixChannels,
+  coverPlacesMixChannels,
   needsAGroundPerPlace,
 } from "../../../engine/drawing/primitives/description.ts";
 import type { ChannelRow, EngineLayer, VolumeMode } from "../../../engine/drawing/primitives/description.ts";
@@ -265,7 +265,7 @@ export function layersFor(
       // Channels drawn from several stores each: every place stands on a
       // ground of its own, which also stands in for the block's coverage.
       if (needsAGroundPerPlace(rows)) {
-        result.push(...coverPositionsMixChannels(rows));
+        result.push(...coverPlacesMixChannels(rows));
         continue;
       }
       const names = new Set(chosen.map(j => `__coverage__${layers[j].name}`));

@@ -3,7 +3,7 @@
  * how the view is set, and dropped here with everything it held.
  *
  * Two pages draw with neuroglancer and both turn its interface off: the
- * viewer's own window and the operator page of ZMART-interface. Each owns its
+ * viewer's own window and the page of ZMART-interface. Each owns its
  * controls and tells the engine the values; this is the engine's side of that,
  * once. What it draws is kept in step by `sync.ts`, which the handle carries.
  */
@@ -43,10 +43,10 @@ import "neuroglancer/unstable/ui/default_viewer.css";
 import "./chrome.css";
 import { makeFeeding } from "./feeding.ts";
 import { makeLayerSync } from "./sync.ts";
-import type { LayerSync } from "./sync.ts";
+import type { LayerSync, OwnSettings } from "./sync.ts";
 
 /**
- * Who answers the operator's hands.
+ * Who answers the hands of whoever is looking.
  *
  * `"engine"`: the engine's own panels, with exactly the gestures written out
  * below -- drag pans the flat view and turns the volume, the wheel zooms, and
@@ -64,6 +64,8 @@ export interface EngineOptions {
    * to read it, for a page whose ground follows its theme.
    */
   ground?: string | (() => string);
+  /** How the page writes the settings of a layer of its own kind; see `PageLayer`. */
+  ownSettings?: OwnSettings;
 }
 
 /**
@@ -118,7 +120,9 @@ interface ZoomingPanel {
  * functions beside this file. That split is what lets any page build its
  * controls without touching this function.
  */
-export function createViewer(target: HTMLElement, { gestures = "engine", ground = "#000000" }: EngineOptions = {}): Engine {
+export function createViewer(
+  target: HTMLElement, { gestures = "engine", ground = "#000000", ownSettings }: EngineOptions = {},
+): Engine {
   // Create the viewer with all of neuroglancer's own buttons and panels
   // turned off — the page supplies its own controls, so the engine shows
   // nothing but the image. `showLayerDialog`/`resetStateWhenEmpty` are off so
@@ -151,7 +155,7 @@ export function createViewer(target: HTMLElement, { gestures = "engine", ground 
   else emptyTheEnginesOwnBindings(viewer);
 
   const feeding = makeFeeding();
-  const sync = makeLayerSync(viewer, feeding);
+  const sync = makeLayerSync(viewer, feeding, ownSettings);
 
   return {
     viewer,
@@ -172,7 +176,7 @@ export function createViewer(target: HTMLElement, { gestures = "engine", ground 
 
 /**
  * Give the panels explicit tables holding exactly the gestures documented
- * here, instead of inheriting the engine's defaults. What an operator can do
+ * here, instead of inheriting the engine's defaults. What a person can do
  * to the picture is written out here, once, in full -- the viewer's
  * docs/how_it_works/CONTROLS.md records each decision.
  */
@@ -181,7 +185,7 @@ function giveTheEngineItsGestures(viewer: Viewer, target: HTMLElement): void {
   // was. It binds single unmodified letters and digits across the whole
   // page, to actions belonging to an interface this viewer hides — the
   // space bar split the image into four panels with no way back, the digits
-  // hid channels while the panel's eye still showed them open, and several
+  // hid channels while the page's eye still showed them open, and several
   // letters restored scale bars and axis lines this viewer draws for
   // itself. The engine's element holds the keyboard focus from the moment
   // the page loads, so a stray keystroke was enough.
@@ -191,7 +195,8 @@ function giveTheEngineItsGestures(viewer: Viewer, target: HTMLElement): void {
   // arrows panned, comma and full stop stepped z, the brackets stepped time
   // straight past the T slider's clamp to the written moments, `r`, `e` and
   // Shift with the arrows rotated the flat view so the picture silently
-  // stopped lining up with the stage coordinates drawn over it, and a right
+  // stopped lining up with anything a page draws over it in the same
+  // coordinates, and a right
   // click jumped the view to the point clicked. None of it is shown
   // anywhere on screen. Moving through the stack and through time belongs
   // to the sliders, where it is visible, labelled and clamped; moving
@@ -217,8 +222,8 @@ function giveTheEngineItsGestures(viewer: Viewer, target: HTMLElement): void {
     }),
     Number.NEGATIVE_INFINITY,
   );
-  // The volume view keeps rotation — turning the specimen over is the point
-  // of a three-dimensional view, and nothing is drawn over it in stage
+  // The volume view keeps rotation — turning the picture over is the point
+  // of a three-dimensional view, and nothing is drawn over it in the page's
   // coordinates — and it keeps the slab-thickness wheel, which has no
   // control of its own yet.
   bindings.perspectiveView.addParent(
@@ -240,8 +245,8 @@ function giveTheEngineItsGestures(viewer: Viewer, target: HTMLElement): void {
   // The plain wheel zooms, and stepping through z moves to shift+wheel.
   //
   // Neuroglancer gives the plain wheel to z and puts zoom behind Control,
-  // which is right for reading through a volume and wrong for an operator
-  // looking at a plate. The wheel is the gesture made most often and without
+  // which is right for reading through a volume and wrong for somebody
+  // looking across a wide, flat picture. The wheel is the gesture made most often and without
   // thinking, and a browser has taught everybody what it does; zoom has
   // nowhere else to live, while the stack keeps its slider -- better than a
   // gesture anyway, because it shows where in the stack you are.
@@ -252,7 +257,7 @@ function giveTheEngineItsGestures(viewer: Viewer, target: HTMLElement): void {
   // it the browser keeps its native wheel behaviour and acts on the same
   // notch. Both panels, and the second one is not an afterthought: rebinding
   // the flat view alone left the volume view on the engine's defaults, where
-  // an operator taught that the wheel zooms found it doing nothing.
+  // somebody taught that the wheel zooms found it doing nothing.
   //
   // A gentler notch than the engine's. `getWheelZoomAmount` returns
   // `exp(deltaY / 200)`, and a wheel notch on Windows reports a deltaY of 100,
