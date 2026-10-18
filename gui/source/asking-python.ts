@@ -11,6 +11,7 @@
 import type { Rgb } from "./colours.ts";
 import type { Window } from "./contrast-window.ts";
 import type { LiveStateSet } from "./drawing/live-refresh.ts";
+import type { Target } from "./targets.tsx";
 
 /** Which of a run's named pictures a row is: a slice, the top, or a projection. */
 export interface View {
@@ -66,6 +67,10 @@ export interface Config {
   chrome?: boolean;
   depthSamples?: number;
   transparentBackground?: boolean;
+  /** Whether the operator may mark targets on the image. */
+  canSelect?: boolean;
+  /** Which edge the bar of controls sits on. */
+  panelSide?: "left" | "right";
 }
 
 /**
@@ -92,10 +97,10 @@ export async function fetchLiveState(etag: string | null = null) {
   try {
     const headers: Record<string, string> = etag ? { "If-None-Match": etag } : {};
     const response = await fetch("/api/live-state", { headers });
-    if (response.status === 304) return { unchanged: true, etag };
+    if (response.status === 304) return { unchanged: true as const, etag };
     if (!response.ok) return null;
     return {
-      unchanged: false,
+      unchanged: false as const,
       etag: response.headers.get("ETag"),
       state: await response.json() as LiveStateSet,
     };
@@ -174,19 +179,19 @@ export interface Listing {
 }
 
 /**
- * Post a JSON body and read the JSON answer: `{ ok, answer }`, or null when the
+ * Post a JSON body and read the JSON answer: `{ ok, status, answer }`, or null when the
  * server did not answer at all -- the connection dropped, or it is gone. Every
  * request below says what that means for its own button, so none of them can
  * leave one waiting for ever.
  */
-async function post<Answer>(path: string, body: object = {}): Promise<{ ok: boolean; answer: Answer | null } | null> {
+async function post<Answer>(path: string, body: object = {}): Promise<{ ok: boolean; status: number; answer: Answer | null } | null> {
   try {
     const response = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return { ok: response.ok, answer: await response.json().catch(() => null) as Answer | null };
+    return { ok: response.ok, status: response.status, answer: await response.json().catch(() => null) as Answer | null };
   } catch {
     return null;
   }
@@ -195,10 +200,19 @@ async function post<Answer>(path: string, body: object = {}): Promise<{ ok: bool
 /** What a request says when the server never answered it. */
 const UNANSWERED = "the viewer's server did not answer";
 
-// A measurement that cannot be taken leaves the picture as it is, which is the
-// honest answer to a button that had nothing to read.
-export async function measureHere(asked: object) {
-  const asking = await post<Measured>("/api/measure", asked);
+/** A share of the picture, as fractions of its own bounds: `[[y0, x0], [y1, x1]]`. */
+export type Box = [[number, number], [number, number]];
+
+// Measure the brightness of one channel inside `box`. A measurement that cannot
+// be taken leaves the picture as it is, which is the honest answer to a button
+// that had nothing to read.
+export async function measureChannel(spec: LayerSpec, box: Box) {
+  const asking = await post<Measured>("/api/measure", {
+    source: (spec.sources || [spec.source])[0],
+    sources: spec.sourceDepths ? spec.sources : undefined,
+    channel: spec.channelIndex ?? null,
+    box,
+  });
   return asking?.ok ? asking.answer : null;
 }
 
@@ -254,7 +268,7 @@ export async function closeGroup(group: string): Promise<{ error: string } | { c
 // The targets saved beside the images, as ``{ targets }``, or ``{ error }`` when
 // the file is there but could not be read. A failed read is never an empty list:
 // that list would be saved back over the file and lose what is in it.
-export async function loadTargets(): Promise<{ error: string } | { targets: unknown[] }> {
+export async function loadTargets(): Promise<{ error: string } | { targets: Target[] }> {
   try {
     const response = await fetch("/api/annotations");
     const answer = await response.json().catch(() => null);
@@ -265,4 +279,15 @@ export async function loadTargets(): Promise<{ error: string } | { targets: unkn
   } catch {
     return { error: "the saved targets could not be read: the server did not answer" };
   }
+}
+
+// Save the targets beside the images. Null when they were saved; otherwise what
+// went wrong, in words the panel can show.
+export async function saveTargets(targets: readonly Target[]): Promise<string | null> {
+  const asking = await post<Refused>("/api/annotations", { version: 1, annotations: targets });
+  // Almost always the server having gone away -- worth saying plainly rather
+  // than leaving the panel looking as though all is well.
+  if (!asking) return "could not reach the server";
+  if (!asking.ok) return asking.answer?.error || `save failed (${asking.status})`;
+  return null;
 }

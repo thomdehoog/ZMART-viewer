@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App.jsx";
+import App from "./App.tsx";
 import { rememberedTheme } from "./ThemeToggle.tsx";
 // The named colours both themes are built from; every component's styles
 // refer to these names rather than to hex values.
@@ -11,7 +11,9 @@ import "./theme.css";
 // comes back light, with no dark flash on the way.
 document.documentElement.dataset.theme = rememberedTheme();
 
-createRoot(document.getElementById("root")).render(
+const root = document.getElementById("root");
+if (!root) throw new Error("the page has no element to draw the viewer into (#root)");
+createRoot(root).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,

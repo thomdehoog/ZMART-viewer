@@ -1,23 +1,7 @@
 import type { CSSProperties } from "react";
+import type { SaveState, Target, TargetTool } from "./targets.tsx";
 
-/** One place the operator has marked, as the engine's annotation layer holds it. */
-export interface Target {
-  id: string;
-  type: string;
-  description?: string;
-}
-
-/** Where the last save of the targets stands. */
-export type SaveState =
-  | { status: "idle" }
-  | { status: "saving" }
-  | { status: "saved" }
-  | { status: "error"; message: string };
-
-/** The drawing tool the operator has picked, if any. */
-export type TargetTool = "point" | "box" | null;
-
-interface TargetsPanelProps {
+export interface TargetsPanelProps {
   targets: Target[];
   activeTool: TargetTool;
   color: string;

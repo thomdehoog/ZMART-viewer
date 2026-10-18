@@ -8,16 +8,22 @@
  */
 
 declare module "neuroglancer/unstable/ui/annotations.js" {
-  import type { UserLayer } from "neuroglancer/unstable/layer/index.js";
-  import type { Tool } from "neuroglancer/unstable/ui/tool.js";
+  import type { MouseSelectionState, UserLayer } from "neuroglancer/unstable/layer/index.js";
+  import { LegacyTool } from "neuroglancer/unstable/ui/tool.js";
 
   /** The tool that places a point where the operator clicks. */
-  export class PlacePointTool extends Tool<UserLayer> {
+  export class PlacePointTool extends LegacyTool<UserLayer> {
     constructor(layer: UserLayer, options?: unknown);
+    trigger(mouseState: MouseSelectionState): void;
+    toJSON(): unknown;
+    description: string;
   }
 
   /** The tool that places a box between two clicks. */
-  export class PlaceBoundingBoxTool extends Tool<UserLayer> {
+  export class PlaceBoundingBoxTool extends LegacyTool<UserLayer> {
     constructor(layer: UserLayer, options?: unknown);
+    trigger(mouseState: MouseSelectionState): void;
+    toJSON(): unknown;
+    description: string;
   }
 }

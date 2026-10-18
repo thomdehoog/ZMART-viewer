@@ -54,7 +54,7 @@ interface GrowingDataSource {
  * it cannot be chosen on its own. The engine decides what goes across the window,
  * what goes down it and what goes into the screen from two things together: the
  * order of this list, and which of its named panel layouts the viewer asks for.
- * The layout is chosen in `App.jsx`, next to `SLICE_LAYOUT`, and the two are a
+ * The layout is chosen in `App.tsx`, next to `SLICE_LAYOUT`, and the two are a
  * matched pair. Change one without the other and the view comes out either
  * edge-on — looking at the specimen from the side, so a stack of planes collapses
  * to a line — or mirrored left to right, which is the quieter and more dangerous
@@ -63,7 +63,7 @@ interface GrowingDataSource {
  * The order used here is the reverse of the order the image declares. An OME-Zarr
  * image lists its distance axes slowest-changing first, which is depth, then
  * height, then width; reversing that gives width, height, depth, and asking for
- * the layout `App.jsx` calls `xy` then puts width across the window running to the
+ * the layout `App.tsx` calls `xy` then puts width across the window running to the
  * right, height down it, and depth into the screen — the plane the operator
  * scrolls through. That is the specimen the right way round.
  *
@@ -98,7 +98,7 @@ function pinTheAxesThatMeasureDistance(viewer: Viewer): void {
   // Width first, depth last. The image declares its distance axes the other way
   // round -- depth, height, width -- so reversing them is what puts width across
   // the window and depth into the screen, which is what the `xy` layout asked for
-  // in App.jsx expects. The two belong together; see the note above.
+  // in App.tsx expects. The two belong together; see the note above.
   const facing = distances.every(name => ["x", "y", "z"].includes(name))
     ? ["x", "y", "z"].filter(name => distances.includes(name))
     : distances.slice(0, 3).reverse();
@@ -639,4 +639,38 @@ export function chooseScaleWhenTheImagesAreMeasured(viewer: Viewer, framed: (() 
     // flicker on every first open, 2026-08-23).
     framed?.();
   });
+}
+
+/**
+ * Where the view was looking, in the specimen's own units rather than the
+ * engine's, so it can be put back on an engine built afresh: by axis name, and
+ * the two zooms as so many metres to a screen pixel.
+ */
+export interface Camera {
+  position: Record<string, number>;
+  zoomMeters: number;
+  perspectiveZoomMeters: number;
+}
+
+/** Where the view is looking now, or null while it has no axes to say it by. */
+export function captureCamera(viewer: Viewer): Camera | null {
+  const position = viewer.navigationState.position, space = position.coordinateSpace.value;
+  if (!space.valid) return null;
+  return {
+    position: Object.fromEntries(space.names.map((name, i) =>
+      [name, position.value[i] * space.scales[i]])),
+    zoomMeters: viewer.navigationState.zoomFactor.value
+      * viewer.navigationState.zoomFactor.canonicalVoxelPhysicalSize,
+    perspectiveZoomMeters: viewer.perspectiveNavigationState.zoomFactor.value
+      * viewer.perspectiveNavigationState.zoomFactor.canonicalVoxelPhysicalSize,
+  };
+}
+
+/** Put the view back where `captureCamera` found it; an axis it did not know stays put. */
+export function restoreCamera(viewer: Viewer, camera: Camera): void {
+  const position = viewer.navigationState.position, space = position.coordinateSpace.value;
+  position.value = Float32Array.from(space.names, (name, i) =>
+    camera.position[name] === undefined ? position.value[i] : camera.position[name] / space.scales[i]);
+  viewer.navigationState.zoomFactor.setPhysicalScale(camera.zoomMeters, 1);
+  viewer.perspectiveNavigationState.zoomFactor.setPhysicalScale(camera.perspectiveZoomMeters, 1);
 }

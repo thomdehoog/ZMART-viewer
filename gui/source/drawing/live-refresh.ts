@@ -4,6 +4,9 @@
  * exercised in a plain Node process as well as in the real browser.
  */
 
+import type { Config } from "../asking-python.ts";
+import { layerKey } from "./layers.ts";
+
 /** A half-open run of moments, `[start, stop)`, that has been written. */
 export interface TimeRange {
   start: number;
@@ -198,4 +201,80 @@ export function memoEntriesForStableSource(questions: Iterable<string>, url: str
     found[kind].push(question);
   }
   return found;
+}
+
+/**
+ * Did an acquisition that was already on screen, but had nothing in it, just gain
+ * its first image?
+ *
+ * This is the signal behind a fault that cost an operator a whole session. The
+ * viewer notices an acquisition the instant its *description* lands, which is the
+ * earliest possible moment and is deliberate — waiting would mean a run appearing
+ * in the panel some seconds after it started. But at that moment there is no
+ * picture behind it yet. The engine looks, finds nothing, and remembers that with
+ * no time limit; so when the image arrived a moment later the panel went on
+ * showing black, for as long as the page stayed open. The acquisition was listed,
+ * its eye was open, and nothing said why it was empty. Reloading the page showed
+ * the data perfectly, which is the tell: only the open viewer was stuck.
+ *
+ * The engine has a way to be told to forget what it has decoded, and the question
+ * is when to use it. Doing so on every announcement is far too blunt — it throws
+ * away everything fetched, and during a run announcements arrive constantly, so a
+ * position arriving would cost a refetch of the whole view. What is wanted is the
+ * narrow case: a store the panel already knew about, which had no measurable
+ * picture in it, and now has one.
+ *
+ * That transition is visible in the answer the server gives. A store with nothing
+ * written yet has no histogram — there were no pixels to measure — and no count of
+ * moments. Once an image lands, both appear. A store arriving for the first time
+ * is not this: it was not there before, so the engine has decoded nothing for it
+ * and has nothing to forget.
+ */
+export function anyStoreGainedItsFirstImage(previous: Config | null, loaded: Config): boolean {
+  if (!previous) return false;
+  const before = new Map((previous.layers || []).map((spec) => [layerKey(spec), spec]));
+  return (loaded.layers || []).some((spec) => {
+    const was = before.get(layerKey(spec));
+    if (!was) return false; // newly arrived, so nothing has been decoded for it
+    const hadNothing = was.histogram == null && was.frames == null;
+    const hasSomethingNow = spec.histogram != null || spec.frames != null;
+    return hadNothing && hasSomethingNow;
+  });
+}
+
+/**
+ * The moments written so far, as merged half-open ranges, or null where nothing
+ * open is a live run.
+ *
+ * Manifest runs may publish timepoints with gaps, so a single high-water
+ * number is not an honest description. The explicit ranges are read directly
+ * from the authoritative live state, not from declared array shape or a
+ * convenience field on a layer row. Ordinary folders alongside it keep their
+ * counted limit, as a range from the first moment.
+ */
+export function committedTimeRanges(config: Config | null): TimeRange[] | null {
+  const rows = config?.layers || [];
+  const liveRuns = config?.liveState?.runs;
+  if (!Array.isArray(liveRuns) || !liveRuns.length) return null;
+  const ranges = [
+    ...liveRuns.flatMap((run) => (
+      run.sources || []
+    ).flatMap((source) => source.committed_time_ranges || [])),
+    ...rows
+      .filter((spec) => spec.liveRunId == null)
+      .flatMap((spec) => (
+        typeof spec.frames === "number" && spec.frames > 0
+          ? [{ start: 0, stop: spec.frames }]
+          : []
+      )),
+  ]
+    .map((range) => ({ start: range.start, stop: range.stop }))
+    .sort((one, other) => one.start - other.start || one.stop - other.stop);
+  const merged: TimeRange[] = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && range.start <= last.stop) last.stop = Math.max(last.stop, range.stop);
+    else merged.push(range);
+  }
+  return merged;
 }

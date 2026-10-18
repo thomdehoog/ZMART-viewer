@@ -12,7 +12,7 @@ const THEME_KEY = "zmart-theme";
  * The theme the page was left in, read where it is remembered. Dark is the
  * default: microscopy is looked at in dark rooms.
  *
- * main.jsx puts it on before anything is drawn, so a page that was left light
+ * main.tsx puts it on before anything is drawn, so a page that was left light
  * comes back light with no dark flash on the way; the button below starts
  * from the same reading.
  */

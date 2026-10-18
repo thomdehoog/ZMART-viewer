@@ -223,7 +223,7 @@ function sourceList(spec: StoreFields): string[] {
 // How many times the viewer has let go, and how many sources it asked the last time.
 // Kept so that a test can tell "it was asked and nothing came of it" from "it was never
 // asked at all" -- two failures that look identical on screen and have quite different
-// causes. Read through `window.zmartLetGo`; see App.jsx.
+// causes. Read through `window.zmartLetGo`; see App.tsx.
 export const lettingGo = { times: 0, asked: 0 };
 
 /**
@@ -255,7 +255,7 @@ export const lettingGo = { times: 0, asked: 0 };
  * again if they scroll back, which is the price, and it is a fair one.
  *
  * **When this is called matters as much as what it does**, and the rule is narrow on
- * purpose. There are exactly two occasions, both in App.jsx:
+ * purpose. There are exactly two occasions, both in App.tsx:
  *
  * 1. A run announced that it wrote image into a store already open, by sending
  *    `wrote_image_in_place`. It is the only one who knows, so it is believed.
