@@ -66,17 +66,3 @@ with (decided with Thom, 2026-10-18).
 **Why it waits.** It changes what the interface takes from the viewer, so it
 moves with the primitives and an interface release.
 
-## The window keeps the last engine after it is closed
-
-**Today.** The page keeps a reference to the engine it is drawing with, for the
-connection that listens to the server. When the engine is closed and built
-again (closing an acquisition does this), the reference is replaced but never
-cleared in between, so for a moment it can point at an engine that is gone.
-Nothing has been seen to go wrong because of it.
-
-**What would change.** The reference would be cleared when its engine is
-closed, and the listener would wait for the new one.
-
-**Why it waits.** It changes when the page reacts to the server during a
-rebuild, which needs a test that can catch the moment; noticed while porting
-the page to TypeScript (2026-10-18) and left as it was.
