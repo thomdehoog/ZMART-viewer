@@ -236,4 +236,9 @@ def run_check() -> int:
 
 
 if __name__ == "__main__":
+    # A console that cannot show a character shows a mark in its place rather
+    # than ending the check: Playwright explains a missing browser inside a box
+    # a Windows code page cannot draw, and printing it crashed the check with
+    # "did not render" where the answer was "could not run here".
+    sys.stdout.reconfigure(errors="replace")
     raise SystemExit(run_check())

@@ -22,6 +22,7 @@ prove the looking works.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -152,3 +153,26 @@ def test_the_shipped_check_script_still_passes(viz_root, built_dist):
         pytest.skip(f"render check could not run: {result.stdout.strip()[-200:]}")
     assert result.returncode == 0, result.stdout
     assert "RESULT: PASS" in result.stdout
+
+
+def test_the_check_script_says_it_cannot_run_on_a_console_that_cannot_show_why(
+    viz_root, built_dist, tmp_path
+):
+    """No browser on a Windows console: exit 2 and say so, never a crash.
+
+    Playwright explains a missing browser inside a box drawn in characters a
+    Windows code page has no room for, and printing that explanation crashed
+    the script -- exit 1, "did not render", where the truth was "could not run
+    here". That is how CI's Windows runners, which have no browser, failed this
+    file. Reproduced here with no browsers and the code page those runners use.
+    """
+    result = subprocess.run(
+        [sys.executable, "tests/browsercheck.py"],
+        cwd=viz_root,
+        capture_output=True,
+        timeout=300,
+        env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(tmp_path), "PYTHONIOENCODING": "cp1252"},
+    )
+    said = result.stdout.decode("cp1252", errors="replace")
+    assert result.returncode == 2, said + result.stderr.decode("cp1252", errors="replace")[-400:]
+    assert "No Chromium available" in said
