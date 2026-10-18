@@ -39,6 +39,8 @@ jobs:
           npm ci --prefix gui/source
       - name: The page's types
         run: npm run typecheck --prefix gui/source
+      - name: No dead code in the page
+        run: npm run check:unused --prefix gui/source
       - name: Tests (browser tests skip without a browser)
         run: python -m pytest tests -q -p no:cacheprovider --timeout=600
 

@@ -40,10 +40,10 @@ export type SaveState =
 export type TargetTool = "point" | "box" | null;
 
 // The layer the operator's marked places are drawn on.
-export const TARGET_LAYER = "Targets";
+const TARGET_LAYER = "Targets";
 
 /** The layer the targets are drawn on, as the engine is told to draw it. */
-export function annotationLayer(targets: Target[], color: string, visible: boolean): TargetLayer {
+function annotationLayer(targets: Target[], color: string, visible: boolean): TargetLayer {
   return {
     type: "annotation",
     name: TARGET_LAYER,
