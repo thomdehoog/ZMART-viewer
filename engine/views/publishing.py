@@ -800,6 +800,18 @@ class _Prepared(NamedTuple):
     geometry_changed: bool
 
 
+def _which_file(path: Path) -> tuple[int, int, int]:
+    """Which write of a note this is, told without reading it.
+
+    Every write renames a new file into place, so the file's identity tells two
+    writes apart even when they carry the same modification time: Windows
+    stamps file times from a clock that moves in steps of about 15 ms, and two
+    commits close together left a reader on the older one for good.
+    """
+    about = path.stat()
+    return about.st_ino, about.st_mtime_ns, about.st_size
+
+
 class PublishedTransfer(ComposedPicture):
     def __init__(self, store: Path, piece: int = 512):
         pending = store / "pending.json"
@@ -863,7 +875,7 @@ class PublishedTransfer(ComposedPicture):
         if self._held is not held:
             return False
         try:
-            committed = (self._shown / "publication.json").stat().st_mtime_ns
+            committed = _which_file(self._shown / "publication.json")
         except OSError:
             return False
         return committed == mark
@@ -878,7 +890,7 @@ class PublishedTransfer(ComposedPicture):
         """
         pending = self._shown / "pending.json"
         try:
-            mark = pending.stat().st_mtime_ns
+            mark = _which_file(pending)
         except FileNotFoundError:
             return False
         if mark != self._rewriting_mark:
@@ -895,7 +907,7 @@ class PublishedTransfer(ComposedPicture):
     def _read_snapshot(self) -> Composer:
         with self._lock:
             path = self._shown / "publication.json"
-            mark = path.stat().st_mtime_ns
+            mark = _which_file(path)
             if mark != self._state_mark:
                 state = json.loads(path.read_text(encoding="utf-8"))
                 made = Composer(read_the_mosaic_as_written(state["mosaic"]), piece=self._piece)
@@ -1374,7 +1386,7 @@ class PublishedTransfer(ComposedPicture):
         # generation goes in before its mark, as _still_the_newest relies on.
         self._held = made
         self._state = state
-        self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
+        self._state_mark = _which_file(self._shown / "publication.json")
         if previous is not None:
             previous.stop_warming()
         done_despite_brief_holds((self._shown / "pending.json").unlink)

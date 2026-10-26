@@ -26,6 +26,7 @@ answers from that.
 
 from __future__ import annotations
 
+import os
 import threading
 
 from test_published_transfer import write_position
@@ -119,6 +120,30 @@ def test_a_note_still_standing_after_the_commit_does_not_hold_the_old_generation
         write_position(tmp_path, "a.ome.zarr", 0, 2700)
         assert view.publish(tmp_path, {"a.ome.zarr": 2}, CANVAS) == 2
         (tmp_path / STORE / "pending.json").write_text('{"dirty": {}}', encoding="utf-8")
+        assert reader.composer() is not replaced
+        assert reader.revision == 2
+    finally:
+        reader.close()
+        view.close()
+
+
+def test_a_commit_within_the_same_clock_tick_is_still_a_new_generation(tmp_path):
+    # Windows stamps a file's time from a clock that moves in steps of about
+    # 15 ms, so two commits close together can leave publication.json with the
+    # same modification time. Each commit renames a new file into place, and
+    # that is what tells them apart.
+    write_position(tmp_path, "a.ome.zarr", 0, 1200)
+    view = PublishedTransfer(tmp_path / STORE, piece=64)
+    reader = PublishedTransfer(tmp_path / STORE, piece=64)
+    published = tmp_path / STORE / "publication.json"
+    try:
+        view.publish(tmp_path, {"a.ome.zarr": 1}, CANVAS)
+        replaced = reader.composer()
+        first = published.stat()
+        write_position(tmp_path, "a.ome.zarr", 0, 2700)
+        assert view.publish(tmp_path, {"a.ome.zarr": 2}, CANVAS) == 2
+        os.utime(published, ns=(first.st_atime_ns, first.st_mtime_ns))
+        assert published.stat().st_mtime_ns == first.st_mtime_ns
         assert reader.composer() is not replaced
         assert reader.revision == 2
     finally:
