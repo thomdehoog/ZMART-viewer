@@ -249,11 +249,6 @@ def test_mixed_relative_publication(tmp_path, monkeypatch, bake, flat_first):
         view.close()
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="a refreshed picture can keep an old piece at fine zoom on a slow machine; "
-    "open bug, see the drawing primitives' notes (mixed-acquisition.md)",
-)
 @pytest.mark.parametrize("bake", [False, True])
 @pytest.mark.parametrize("flat_first", [False, True])
 def test_browser_mixed_relative_depth(browser, built_dist, tmp_path, bake, flat_first):
