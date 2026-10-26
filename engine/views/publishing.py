@@ -825,22 +825,48 @@ class PublishedTransfer(ComposedPicture):
         :meth:`being_rewritten`. Without a previous generation -- a process
         that started on a leftover ``pending.json`` -- nothing is served until
         the publication is recovered.
+
+        The held generation is answered from only while it is still the newest
+        committed. The lock is also held by another request taking up a newer
+        commit, and ``pending.json`` still stands for a moment after
+        ``publication.json`` names the new generation; answered from the held
+        one then, a burst of requests right after a publication got a mix of
+        old and new pieces, and the page kept the old ones as the new
+        revision's for good.
         """
         held = self._held
         if held is None:
             self._lock.acquire()
         elif not self._lock.acquire(blocking=False):
-            return held
+            if self._still_the_newest(held):
+                return held
+            self._lock.acquire()
         try:
-            if (self._shown / "pending.json").exists():
-                if held is not None:
-                    return held
+            if held is None and (self._shown / "pending.json").exists():
                 with holding_the_bake_lock(self._shown):
                     if (self._shown / "pending.json").exists():
                         raise RuntimeError("The coarse overview publication needs recovery")
+            # Until a commit replaces publication.json in one step, this is
+            # the generation already held.
             return self._read_snapshot()
         finally:
             self._lock.release()
+
+    def _still_the_newest(self, held: Composer) -> bool:
+        """Whether ``held`` is still the newest committed generation, asked without the lock.
+
+        The mark is read before the generation is checked again: both writers
+        set the generation before its mark, so a mark read while ``held`` is
+        still in place is never a newer generation's.
+        """
+        mark = self._state_mark
+        if self._held is not held:
+            return False
+        try:
+            committed = (self._shown / "publication.json").stat().st_mtime_ns
+        except OSError:
+            return False
+        return committed == mark
 
     def being_rewritten(self, level: int, row: int, column: int) -> bool:
         """Whether a publication under way is rewriting this piece.
@@ -1344,10 +1370,11 @@ class PublishedTransfer(ComposedPicture):
         # place, so this generation is the truth whatever happens next. The
         # note of pieces under way then goes with the patience a scanner's
         # glance needs; one bare refusal here used to leave the server a
-        # revision behind the disk and those pieces withheld (review S3).
+        # revision behind the disk and those pieces withheld (review S3). The
+        # generation goes in before its mark, as _still_the_newest relies on.
+        self._held = made
         self._state = state
         self._state_mark = (self._shown / "publication.json").stat().st_mtime_ns
-        self._held = made
         if previous is not None:
             previous.stop_warming()
         done_despite_brief_holds((self._shown / "pending.json").unlink)
