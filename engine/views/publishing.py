@@ -156,7 +156,10 @@ def _place_depth(tiles, *, spacing=None, combine=False, mode=None):
             else t
             for t, is_flat in zip(tiles, flat)
         ]
-    if all(flat) and mode is None:
+    # A projection of flat tiles is the tiles themselves, all at one Z, as
+    # without a view: their specimen heights (a focus map's) need not share
+    # a grid, and were refused as unaligned stacks.
+    if all(flat) and mode in (None, "projection"):
         placed = [
             replace(
                 tile,

@@ -58,6 +58,24 @@ def test_spacing_tolerance_bounds_total_stack_drift(tmp_path, delta, depth, acce
             _place_depth([tile], spacing=1.3)
 
 
+def test_a_projection_of_flats_at_real_heights_shares_one_z(tmp_path):
+    """A focus map gives each flat tile its own height, on no common grid (STELLARIS, 2026-10-26).
+
+    The Projection view refused them as unaligned stacks; flat, they share one Z as without a view.
+    """
+    tiles = [
+        read_one_tile(at_depth(tmp_path, f"tile{i}.ome.zarr", 256 * i, height, dz=1))
+        for i, height in enumerate([3474.715, 3469.632, 3466.809])
+    ]
+
+    placed, origin, extent = _place_depth(tiles, combine=True, mode="projection")
+
+    assert [tile.copies[0].corner_um[0] for tile in placed] == [0.0, 0.0, 0.0]
+    assert (origin, extent) == (0.0, 1.0)
+    # The originals keep their heights.
+    assert [tile.copies[0].corner_um[0] for tile in tiles] == [3474.715, 3469.632, 3466.809]
+
+
 @pytest.mark.parametrize("bake", [False, True])
 @pytest.mark.parametrize("one_at_a_time", [False, True])
 def test_eight_real_height_flats_share_display_z_without_editing_originals(
