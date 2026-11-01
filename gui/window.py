@@ -279,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         "folder",
         nargs="?",
         type=Path,
-        help="an OME-Zarr image, or a folder holding many of them (optional)",
+        help="an OME-Zarr image, a folder holding many of them, or an OME-TIFF file (optional)",
     )
     parser.add_argument(
         "--range",
@@ -401,13 +401,14 @@ def _open_a_folder(args, common: dict) -> int:
 
     folder = args.folder.expanduser()
     if not folder.exists():
-        print(f"There is no folder at {folder}.")
+        print(f"There is no folder or file at {folder}.")
         return 1
     print(f"Opening {folder.name}...")
     return (
         open_window(
             # Where marks are saved and where the load window starts browsing.
-            data_dir=folder.parent if is_store(folder) else folder,
+            # An OME-TIFF is a single file, so its folder is the place to start from.
+            data_dir=folder.parent if is_store(folder) or folder.is_file() else folder,
             live=not args.static,
             open_path=folder,
             **common,
@@ -450,6 +451,7 @@ def _open_some_tiles(args, common: dict) -> int:
         # so it is printed as it stands rather than as a traceback.
         print(f"\n{refused}")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

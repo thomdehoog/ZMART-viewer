@@ -84,6 +84,9 @@ zmart-viewer /path/to/run
 zmart-viewer /path/to/run
 zmart-viewer /path/to/run --static
 
+# Open an OME-TIFF file as it is, without converting it
+zmart-viewer /path/to/cells.ome.tif
+
 # Print an address instead of opening a window, for a remote desktop or a browser
 zmart-viewer /path/to/run --no-window
 ```
@@ -159,8 +162,31 @@ This is version 0.5, a release candidate. At the ZMB it is the image engine insi
 our smart-microscopy operator window, where it follows runs of thousands of
 positions on several microscopes. The standalone window is younger than the
 engine: it opens OME-Zarr version 2 and 3, HCS plates, and runs that are still
-being written, but it does not yet open OME-TIFF or other file formats, and it
-runs best on Windows, where the native window uses the WebView2 engine.
+being written. It also opens a single OME-TIFF file as it is, without converting
+it (see below); other file formats are not opened yet. It runs best on Windows, where the native window uses the WebView2 engine.
+
+### OME-TIFF files
+
+The viewer draws with Neuroglancer, which reads only OME-Zarr. An OME-TIFF can
+be opened all the same, and it is never copied, changed or converted. When you
+open one, the viewer writes a small description of it into its own session
+folder (a few kilobytes, nothing beside your data). Whenever a part of the
+picture comes into view, only that part is read from the TIFF. That is why a
+very large file opens as easily as a small one, which is often not the case in
+programs that read the whole file into memory first.
+
+This is a first version, and some files suit it better than others:
+
+- **Tiled, pyramidal OME-TIFF** (as Bio-Formats, QuPath and `tifffile` write
+  them) works best. Zooming out uses the smaller copies stored in the file.
+- **A TIFF without a pyramid** opens too, but zooming far out on a large image
+  is slow, because the zoomed-out view has to be read at full size.
+- TIFF keeps every plane separately, so **3D volume views** read more pieces
+  than they would from an OME-Zarr image, and are slower.
+- Only the **first image** in a file is shown. A file holding several positions
+  as separate images shows the first position.
+- Files compressed with **LZW or JPEG** need one more package:
+  `pip install "zmart-viewer[tiff]"` (it installs `imagecodecs`).
 
 ## Testing
 

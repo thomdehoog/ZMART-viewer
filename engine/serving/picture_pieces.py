@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zmart_viewer.live.record.live_serving import live_run_holding
+from zmart_viewer.opening.ome_tiff import TIFF_FROM, TiffPicture
 from zmart_viewer.picture.arrangement import (
     Composer,
     Mosaic,
@@ -684,7 +685,7 @@ def _what_it_was_built_from(store: Path) -> dict | None:
     ours = (held.get("attributes") or {}).get(OURS)
 
     if isinstance(ours, dict) and any(
-        ours.get(key) for key in ("built_from", "governed_from", "published_from")
+        ours.get(key) for key in ("built_from", "governed_from", "published_from", TIFF_FROM)
     ):
         return ours
 
@@ -795,6 +796,10 @@ def _the_serving_behind(store: Path, ours: dict | None) -> Composer | ComposedPi
     if ours is None:
         return None
 
+    if ours.get(TIFF_FROM):
+        # An OME-TIFF shown as it is: each piece is read from the file when asked for.
+        return TiffPicture(ours[TIFF_FROM])
+
     if ours.get("published_from"):
         return PublishedTransfer(store, piece=int(ours.get("piece") or 512))
 
@@ -865,6 +870,15 @@ def built_bytes_behind(store: Path, inside: str) -> bytes | None:
         return None
 
     level, moment, channel, plane, row, column = address
+
+    if isinstance(held, TiffPicture):
+        try:
+            return held.bytes_for(level, moment, channel, plane, row, column)
+        except Exception as problem:
+            log.exception("the piece %s of the OME-TIFF behind %s could not be read", inside, store)
+            raise TemporarilyUnanswerable(
+                f"the piece {inside} of {store} could not be read just now"
+            ) from problem
     composer = None
 
     if isinstance(held, ComposedPicture):
@@ -953,6 +967,13 @@ def a_sample_behind(store: Path, channel: int = 0):
     if held is None:
         return None
 
+    if isinstance(held, TiffPicture):
+        try:
+            return held.a_sample(channel)
+        except Exception:
+            log.exception("the OME-TIFF behind %s could not be sampled for measuring", store)
+            return None
+
     try:
         composer = held.composer() if isinstance(held, ComposedPicture) else held
         level = composer.mosaic.levels - 1
@@ -990,6 +1011,9 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
 
     if held is None:
         return None
+
+    if isinstance(held, TiffPicture):
+        return _the_tiffs_values_inside(held, level, box, channel=channel, pieces=pieces)
 
     try:
         composer = held.composer() if isinstance(held, ComposedPicture) else held
@@ -1043,6 +1067,53 @@ def the_values_inside(store: Path, level: int, box, *, channel: int = 0, pieces:
             "the picture behind %s could not be measured where it is being looked at",
             store,
         )
+        return None
+
+
+def _the_tiffs_values_inside(held: TiffPicture, level: int, box, *, channel: int, pieces: int):
+    """An OME-TIFF's pixels inside a share of one level, from a few pieces near its middle."""
+    import numpy as np
+
+    try:
+        if not 0 <= level < held.levels:
+            return None
+
+        _, channels, depth, height, width = held.shapes[level]
+
+        if not 0 <= channel < channels:
+            return None
+
+        down, across = held.pieces[level]
+        (top, left), (bottom, right) = box
+        first_row = max(0, min(height - 1, int(top * height)))
+        last_row = max(first_row, min(height - 1, int(bottom * height) - 1))
+        first_column = max(0, min(width - 1, int(left * width)))
+        last_column = max(first_column, min(width - 1, int(right * width) - 1))
+        wanted = [
+            (row, column)
+            for row in range(first_row // down, last_row // down + 1)
+            for column in range(first_column // across, last_column // across + 1)
+        ]
+        middle = ((first_row + last_row) / 2 / down, (first_column + last_column) / 2 / across)
+        wanted.sort(key=lambda at: abs(at[0] - middle[0]) + abs(at[1] - middle[1]))
+        taken = []
+
+        for row, column in wanted[: max(1, pieces)]:
+            piece = held.values_for(level, 0, channel, depth // 2, row, column)
+
+            if piece is None:
+                continue
+
+            rows = slice(max(0, first_row - row * down), max(1, last_row + 1 - row * down))
+            columns = slice(
+                max(0, first_column - column * across),
+                max(1, last_column + 1 - column * across),
+            )
+            taken.append(piece[rows, columns].ravel())
+
+        return np.concatenate(taken) if taken else None
+    except Exception:
+        log.exception("the OME-TIFF %s could not be measured where it is looked at", held.path)
         return None
 
 

@@ -22,9 +22,13 @@ dependencies = [
     "zarr>=3,<4",
     "numpy>=1.24",
     "pywebview>=5",
+    # Reads OME-TIFF files, so they can be shown without converting them.
+    "tifffile>=2024.8",
 ]
 
 [project.optional-dependencies]
+# Some OME-TIFF files are compressed with LZW or JPEG; reading those needs this.
+tiff = ["imagecodecs>=2024.6"]
 dev = [
     # The tests check the wheel build, so they need the build tool itself.
     "setuptools>=77",
