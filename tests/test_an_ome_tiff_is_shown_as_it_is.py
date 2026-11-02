@@ -247,3 +247,81 @@ def test_an_opened_ome_tiff_is_drawn_in_the_browser(
         server.shutdown()
         for store in (tmp_path / "home").rglob("cells.zmartview.zarr"):
             served.forget(store)
+
+
+def test_a_tiff_stored_in_strips_is_cut_into_pieces(tmp_path):
+    """A TIFF without tiles (as many writers make them) is read through the general reader."""
+    rng = np.random.default_rng(11)
+    data = rng.integers(0, 4000, (3, 700, 900), dtype=np.uint16)
+    path = tmp_path / "strips.ome.tif"
+    tifffile.imwrite(path, data, metadata={"axes": "ZYX"}, rowsperstrip=37, compression="zlib")
+
+    picture = TiffPicture(path)
+    try:
+        assert picture.pieces == [(512, 512)]
+        for plane in range(3):
+            for row in range(2):
+                for column in range(2):
+                    piece = picture.values_for(0, 0, 0, plane, row, column)
+                    expected = data[
+                        plane, row * 512 : (row + 1) * 512, column * 512 : (column + 1) * 512
+                    ]
+                    assert np.array_equal(piece[: expected.shape[0], : expected.shape[1]], expected)
+    finally:
+        picture.close()
+
+
+def test_many_pieces_read_at_once_are_all_correct(an_ome_tiff):
+    """The server reads several pieces at the same time; none may be mixed up."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    tiff, data = an_ome_tiff
+    picture = TiffPicture(tiff)
+    rows, columns = picture.grid(0)
+    asked = [
+        (channel, plane, row, column)
+        for channel in range(2)
+        for plane in range(3)
+        for row in range(rows)
+        for column in range(columns)
+    ] * 4
+
+    def correct(at):
+        channel, plane, row, column = at
+        piece = picture.values_for(0, 0, channel, plane, row, column)
+        expected = data[
+            channel, plane, row * TILE : (row + 1) * TILE, column * TILE : (column + 1) * TILE
+        ]
+        return np.array_equal(piece[: expected.shape[0], : expected.shape[1]], expected)
+
+    try:
+        with ThreadPoolExecutor(16) as readers:
+            assert all(readers.map(correct, asked))
+    finally:
+        picture.close()
+
+
+def test_an_lzw_compressed_tiff_is_read(tmp_path):
+    """LZW is common in pyramidal TIFFs; with imagecodecs installed it reads exactly."""
+    pytest.importorskip("imagecodecs")
+    rng = np.random.default_rng(5)
+    data = rng.integers(0, 4000, (2, 3, 300, 410), dtype=np.uint16)
+    path = tmp_path / "lzw.ome.tif"
+    write_a_pyramidal_ome_tiff(path, data, compression="lzw")
+
+    picture = TiffPicture(path)
+    try:
+        piece = picture.values_for(1, 0, 1, 2, 1, 1)
+        expected = data[1, 2, ::2, ::2][TILE:, TILE:]
+        assert np.array_equal(piece[: expected.shape[0], : expected.shape[1]], expected)
+    finally:
+        picture.close()
+
+
+def test_a_damaged_file_is_refused_in_plain_words(tmp_path):
+    """A file named like an OME-TIFF that is not one gets a reason a person can act on."""
+    path = tmp_path / "damaged.ome.tif"
+    path.write_bytes(b"this was never a TIFF file")
+
+    with pytest.raises(loading.CannotOpen, match="may be damaged, incompletely copied"):
+        loading.load(path, scenes=tmp_path / "session")

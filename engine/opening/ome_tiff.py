@@ -52,8 +52,11 @@ TIFF_FROM = "tiff_from"
 #: The size of a piece when the TIFF itself is not stored in tiles.
 PIECE = 512
 
-#: The pieces are compressed the same way as the viewer's other built pictures.
-_ZSTD_LEVEL = 0
+#: How hard each piece is compressed before it is sent to the browser. Level 1
+#: is about seven times faster than zstd's usual level and makes pieces only a
+#: little larger (two thirds of the raw size, against just over half). On the
+#: viewer's own computer, speed matters far more than size.
+_ZSTD_LEVEL = 1
 
 #: The kinds of pixel Neuroglancer can draw.
 _DRAWABLE = ("uint8", "uint16", "uint32", "int8", "int16", "int32", "float32")
@@ -71,6 +74,10 @@ _UNITS = {
     "m": "meter",
     "Å": "angstrom",
 }
+
+
+class CannotShow(ValueError):
+    """A file this module understands, but cannot show; the message says why."""
 
 
 def is_an_ome_tiff(path: str | Path) -> bool:
@@ -96,8 +103,10 @@ class TiffPicture:
     The picture is presented with the five axes OME-Zarr uses, in this order:
     time, channel, Z, Y, X. Axes the file does not have are given a size of one.
 
-    Reading is guarded by a lock, because the server answers several requests
-    at the same time and a TIFF file is read through a single file handle.
+    The server answers several requests at the same time, so several pieces
+    may be read at once. ``tifffile`` takes care of that itself: it lets only
+    one request at a time move through the file, and decodes the pieces side
+    by side. That was checked with sixteen readers at once.
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -120,13 +129,18 @@ class TiffPicture:
             self.shapes = [self._five_axes(array.shape) for array in self._arrays]
             self.pieces = [_the_piece_of(level) for level in series.levels]
             self.metadata = _what_the_ome_xml_says(self._file.ome_metadata, self.shapes[0])
+            self._levels = list(series.levels)
+            self._direct = [_can_be_read_tile_by_tile(level, series.axes) for level in self._levels]
+            # Several pieces may be read at once; this makes tifffile take turns
+            # on the file itself while the decoding runs side by side.
+            self._file.filehandle.set_lock(True)
         except Exception:
             self._file.close()
             raise
 
         if self.dtype.name not in _DRAWABLE:
             self._file.close()
-            raise ValueError(
+            raise CannotShow(
                 f"{self.path.name} holds pixels of type {self.dtype}, which the viewer "
                 "cannot draw. It draws whole numbers of 8, 16 or 32 bits and 32-bit "
                 "decimal numbers."
@@ -197,8 +211,10 @@ class TiffPicture:
             for axis in self.axes_in_file
         )
 
-        with self._lock:
-            region = np.asarray(self._arrays[level][where])
+        if self._direct[level]:
+            return self._one_tile(level, wanted, row, column, bottom - top, right - left)
+
+        region = np.asarray(self._arrays[level][where])
 
         if self._order:
             # Y and X are the only axes left; the file may hold them as X, Y.
@@ -206,6 +222,44 @@ class TiffPicture:
 
         piece = np.zeros((down, across), dtype=self.dtype)
         piece[: bottom - top, : right - left] = region
+        return piece
+
+    def _one_tile(self, level: int, wanted: dict, row: int, column: int, rows: int, columns: int):
+        """One piece read as the TIFF's own tile: the quickest way, used when the file is tiled.
+
+        A piece and a tile are then the same region, so the tile's bytes are
+        read from the file and decoded, and nothing else is touched.
+        """
+        stored = self._levels[level]
+        key = stored.keyframe
+        leading = [axis for axis in self.axes_in_file if axis not in "YXS"]
+        sizes = dict(zip(self.axes_in_file, stored.shape, strict=True))
+        plane = (
+            int(
+                np.ravel_multi_index(
+                    tuple(wanted.get(axis, 0) for axis in leading),
+                    tuple(sizes[axis] for axis in leading),
+                )
+            )
+            if leading
+            else 0
+        )
+        page = stored.pages[plane]
+        across = -(-key.imagewidth // key.tilewidth)
+        index = row * across + column
+        piece = np.zeros(self.pieces[level], dtype=self.dtype)
+
+        if page is None or not page.databytecounts[index]:
+            return piece  # A tile the writer left out holds nothing but zeros.
+
+        handle = self._file.filehandle
+        with handle.lock:
+            handle.seek(page.dataoffsets[index])
+            raw = handle.read(page.databytecounts[index])
+
+        decoded, _, _ = key.decode(raw, index)
+        sample = wanted.get("S", 0)
+        piece[:rows, :columns] = decoded[0, :rows, :columns, sample]
         return piece
 
     def bytes_for(
@@ -386,10 +440,15 @@ def declare_a_tiff_picture(where: str | Path, tiff: str | Path) -> Path:
 
     try:
         picture = TiffPicture(tiff)
-    except ValueError:
+    except CannotShow:
         raise
     except Exception as why:
-        raise ValueError(f"{tiff.name} could not be read as an OME-TIFF: {why}") from why
+        # Most often the file is damaged, was not fully copied, or is not
+        # really a TIFF although its name says so.
+        raise CannotShow(
+            f"{tiff.name} could not be read as an OME-TIFF. The file may be damaged, "
+            f"incompletely copied, or not a TIFF at all. (The reader said: {why})"
+        ) from why
 
     try:
         # Read one piece now, so a file the viewer cannot decode is refused at
@@ -397,13 +456,16 @@ def declare_a_tiff_picture(where: str | Path, tiff: str | Path) -> Path:
         picture.values_for(picture.levels - 1, 0, 0, 0, 0, 0)
     except Exception as why:
         picture.close()
-        hint = (
-            " Its pixels are compressed in a way that needs the 'imagecodecs' "
-            "package: run  pip install imagecodecs"
-            if "imagecodecs" in str(why)
-            else ""
-        )
-        raise ValueError(f"the pixels in {tiff.name} could not be read ({why}).{hint}") from why
+        if isinstance(why, ImportError) or "imagecodecs" in str(why):
+            # LZW, JPEG, JPEG 2000 and zstd are decoded by an extra package.
+            raise CannotShow(
+                f"{tiff.name} is compressed in a way that needs one more package to "
+                "read. Install it with  pip install imagecodecs  and open the file "
+                f"again. (The reader said: {why})"
+            ) from why
+        raise CannotShow(
+            f"the pixels in {tiff.name} could not be read. (The reader said: {why})"
+        ) from why
 
     try:
         store = Path(where) / f"{the_bare_name(tiff)}.zmartview.zarr"
@@ -446,7 +508,26 @@ def _the_order_of(axes: str) -> tuple[int, int] | None:
     if flat == ["X", "Y"]:
         return (1, 0)
 
-    raise ValueError(f"the image's axes {axes!r} do not include both Y and X")
+    raise CannotShow(f"the image's axes {axes!r} do not include both Y and X")
+
+
+def _can_be_read_tile_by_tile(level, axes: str) -> bool:
+    """Whether one level's pieces can be read straight from its tiles.
+
+    That needs a tiled level whose tiles are one plane deep, with all colour
+    samples of a pixel stored together, and one stored page per plane. Any
+    other layout is read through ``tifffile``'s general reader instead, which
+    is slower but handles everything.
+    """
+    key = level.keyframe
+    leading = [size for axis, size in zip(axes, level.shape, strict=True) if axis not in "YXS"]
+    return bool(
+        key.is_tiled
+        and getattr(key, "tiledepth", 1) == 1
+        and (key.samplesperpixel == 1 or key.planarconfig == 1)
+        and axes.replace("S", "").endswith("YX")
+        and len(level.pages) == int(np.prod(leading))
+    )
 
 
 def _the_piece_of(level) -> tuple[int, int]:

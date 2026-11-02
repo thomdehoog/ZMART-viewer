@@ -185,7 +185,9 @@ This is a first version, and some files suit it better than others:
   than they would from an OME-Zarr image, and are slower.
 - Only the **first image** in a file is shown. A file holding several positions
   as separate images shows the first position.
-- Files compressed with **LZW or JPEG** need one more package:
+- If the TIFF is **moved or deleted while it is open**, the picture stays blank
+  and the log names the missing file. Open it again from its new place.
+- Files compressed with **LZW, JPEG, JPEG 2000 or zstd** need one more package:
   `pip install "zmart-viewer[tiff]"` (it installs `imagecodecs`).
 
 ## Testing
