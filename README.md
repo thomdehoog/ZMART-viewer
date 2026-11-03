@@ -84,6 +84,9 @@ zmart-viewer /path/to/run
 zmart-viewer /path/to/run
 zmart-viewer /path/to/run --static
 
+# Open an OME-TIFF file as it is, without converting it
+zmart-viewer /path/to/cells.ome.tif
+
 # Print an address instead of opening a window, for a remote desktop or a browser
 zmart-viewer /path/to/run --no-window
 ```
@@ -160,8 +163,80 @@ This is version 0.5, a release candidate. At the ZMB it is the image engine insi
 our smart-microscopy operator window, where it follows runs of thousands of
 positions on several microscopes. The standalone window is younger than the
 engine: it opens OME-Zarr version 2 and 3, HCS plates, and runs that are still
-being written, but it does not yet open OME-TIFF or other file formats, and it
-runs best on Windows, where the native window uses the WebView2 engine.
+being written. It also opens OME-TIFF files as they are, without converting
+them, and follows runs saved as OME-TIFF just as it follows OME-Zarr runs (see
+below); other file formats are not opened yet. It runs best on Windows, where the native window uses the WebView2 engine.
+
+### OME-TIFF files
+
+The viewer draws with Neuroglancer, which reads only OME-Zarr. An OME-TIFF can
+be opened all the same, and it is never copied, changed or converted. When you
+open one, the viewer writes a small description of it into its own session
+folder (a few kilobytes, nothing beside your data). Whenever a part of the
+picture comes into view, only that part is read from the TIFF. That is why a
+very large file opens as easily as a small one, which is often not the case in
+programs that read the whole file into memory first.
+
+**A folder of OME-TIFF positions** opens as one picture, in the same way as a
+folder of OME-Zarr positions, and nothing is written beside the files. Every
+position is placed by the same rules in either format, those of OME-Zarr: each
+level's voxel size and the centre of its first voxel on the stage. The
+OME-TIFF files ZMART writes carry exactly that description in a small note in
+their OME metadata (`zmart/position`), together with what else OME-TIFF has no
+place for: each channel's colour and brightness window, and how the planes of
+a stack were taken. Fiji, napari, QuPath and other programs skip that note, so
+each file still opens there as an ordinary OME-TIFF. The stage positions an
+OME-TIFF's own metadata gives (`PositionX` and `PositionY`) are not used,
+because programs disagree on which point of the picture they name; a folder of
+files without ZMART's note is refused rather than placed by a guess, and a
+single such file still opens on its own. The zoomed-out overview is built once
+and kept as files in the viewer's own folder ("baked"), so looking at the whole
+run reads a handful of files instead of every position. Only a few hundred
+TIFF files are kept open at a time, because computers, and Windows in
+particular, allow only so many open files.
+
+**A run saved as OME-TIFF** by the ZMART interface is followed live, position
+by position, exactly like a run saved as OME-Zarr; the two give the same
+picture, pixel for pixel. A position captured again replaces its file, and the
+new pixels are shown.
+
+To give an idea of the scale, on a test computer with many tiny positions:
+
+| Positions | Opening, OME-TIFF | Opening, OME-Zarr | Files kept open, OME-TIFF |
+|----------:|------------------:|------------------:|--------------------------:|
+| 1,000     | 7 s               | 9 s               | 289                       |
+| 10,000    | 1.2 min           | 1.4 min           | 285                       |
+
+Opening includes building the overview, from positions whose smaller copies
+were made by averaging, as ZMART writes them. Once open, browsing is as quick
+as with OME-Zarr.
+
+A run the ZMART interface recorded opens far quicker still, in either format.
+While it is recorded, the overview grows by each position as it lands, so the
+cost above is spread over the experiment. Afterwards, the run's `view` folder
+keeps that overview, baked, together with how every position fits in. Opening
+the `view` folder of a 10,000-position run showed the whole run in about 1.5 s
+and its first full-size piece in under half a second, because no position has
+to be read again. These times were measured on a fast local disk; on a network drive,
+every file opened also waits for the network.
+
+This is a first version, and some files suit it better than others:
+
+- **Tiled, pyramidal OME-TIFF** (as Bio-Formats, QuPath and `tifffile` write
+  them) works best. Zooming out uses the smaller copies stored in the file.
+- **A TIFF without a pyramid** opens too, but zooming far out on a large image
+  is slow, because the zoomed-out view has to be read at full size.
+- TIFF keeps every plane separately, so **3D volume views** read more pieces
+  than they would from an OME-Zarr image, and are slower.
+- Only the **first image** in a file is shown. A file holding several positions
+  as separate images shows the first position; one file per position works.
+- A folder of TIFF positions opened from the window is put together **once,
+  when it is opened**. Files added afterwards appear when the folder is opened
+  again. (A run the ZMART interface publishes is followed as it grows.)
+- If the TIFF is **moved or deleted while it is open**, the picture stays blank
+  and the log names the missing file. Open it again from its new place.
+- Files compressed with **LZW, JPEG, JPEG 2000 or zstd** need one more package:
+  `pip install "zmart-viewer[tiff]"` (it installs `imagecodecs`).
 
 ## Testing
 

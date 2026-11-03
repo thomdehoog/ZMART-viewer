@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 from zmart_viewer.live.record.live_serving import live_run_holding
+from zmart_viewer.opening.ome_tiff import TiffPicture
 from zmart_viewer.opening.open_folders import read_array_description, read_attrs_at
 from zmart_viewer.picture.built_picture import ComposedPicture
 from zmart_viewer.serving import picture_pieces as pieces
@@ -30,15 +31,27 @@ def requires_geometry(store: Path) -> bool:
     return (
         pieces.the_map_inside(store) is not None
         or live_run_holding(store) is not None
-        or pieces.composer_for(store) is not None
+        or _a_composed_picture(store)
         or "zmart_projection" in read_attrs_at(store)
     )
+
+
+def _a_composed_picture(store: Path) -> bool:
+    """Whether a store is built from several pieces that may leave gaps between them.
+
+    An OME-TIFF shown as it is covers its whole rectangle, so it never needs
+    to say where it has gaps.
+    """
+    held = pieces.composer_for(store)
+    return held is not None and not isinstance(held, TiffPicture)
 
 
 def answer(store: Path, inside: str) -> bytes | None:
     """Serve a Zarr 3 coverage group using the source's own axes and transforms."""
     held = pieces.composer_for(store)
     composer = held.composer() if isinstance(held, ComposedPicture) else held
+    if isinstance(held, TiffPicture):
+        composer = None  # An OME-TIFF covers its whole rectangle, like a position store.
     if composer is None and pieces.the_map_inside(store) is not None:
         raise ValueError("coverage unavailable for a refused or legacy linked image")
     if composer is None and live_run_holding(store) is not None:

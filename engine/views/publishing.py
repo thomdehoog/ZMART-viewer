@@ -31,6 +31,7 @@ from zmart_viewer.picture.arrangement import (
     OVERLAPS,
     Composer,
     Mosaic,
+    is_a_position_name,
     read_one_tile,
     read_the_mosaic_as_written,
     refuse_tiles_that_disagree,
@@ -515,9 +516,10 @@ class PublishedAcquisition:
                 raise ValueError("Z references must name completed sources")
             sources = {}
             for name, revision in versions.items():
-                if Path(name).name != name or not name.endswith(".ome.zarr"):
+                if Path(name).name != name or not is_a_position_name(name):
                     raise ValueError(
-                        "Position names must name OME-Zarr stores directly in the folder"
+                        "Position names must name OME-Zarr or OME-TIFF positions "
+                        "directly in the folder"
                     )
                 cached = self._sources.get(name)
                 if cached and cached[0] == revision:
@@ -999,9 +1001,10 @@ class PublishedTransfer(ComposedPicture):
             if not versions:
                 raise ValueError("A baked overview needs at least one completed position")
             for name, revision in versions.items():
-                if Path(name).name != name or not name.endswith(".ome.zarr"):
+                if Path(name).name != name or not is_a_position_name(name):
                     raise ValueError(
-                        "Position names must name OME-Zarr stores directly in the folder"
+                        "Position names must name OME-Zarr or OME-TIFF positions "
+                        "directly in the folder"
                     )
                 if type(revision) is not int or revision < old_versions.get(name, 0):
                     raise ValueError("Completed position revisions must not regress")

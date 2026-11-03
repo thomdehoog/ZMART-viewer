@@ -83,7 +83,7 @@ def test_a_missing_folder_is_said_plainly(tmp_path, what_the_command_showed, cap
     code, config = what_the_command_showed(tmp_path / "nowhere")
     assert code == 1
     assert config is None, "nothing is left running after a refusal"
-    assert "There is no folder at" in capsys.readouterr().out
+    assert "There is no folder or file at" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
