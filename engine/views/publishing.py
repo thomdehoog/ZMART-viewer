@@ -155,7 +155,10 @@ def _place_depth(tiles, *, spacing=None, combine=False, mode=None):
             else t
             for t, is_flat in zip(tiles, flat)
         ]
-    if all(flat) and mode is None:
+    # A projection has no height of its own: the viewer writes its own at
+    # height zero, and a projection a driver made, or a single plane that is
+    # its own projection, lies there too, wherever it was focused.
+    if all(flat) and mode in (None, "projection"):
         placed = [
             replace(
                 tile,

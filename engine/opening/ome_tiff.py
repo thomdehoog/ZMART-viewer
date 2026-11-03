@@ -54,6 +54,8 @@ TIFF_FROM = "tiff_from"
 #: writes. Other programs skip a note they do not know, so the file stays an
 #: ordinary OME-TIFF for Fiji, napari or QuPath. The note holds what OME-XML has
 #: no place for: ``zmart_microscopy`` (how the planes were taken, as JSON),
+#: ``omero`` (each channel's name, colour and the brightness window it first
+#: opens with, as JSON, as an OME-Zarr position says it),
 #: ``pyramid`` (``mean`` when each smaller copy averages 2 x 2 pixels of the one
 #: before) and ``position_origin`` (``corner``: the stage position is that of
 #: the image's corner, not its middle).
@@ -513,6 +515,11 @@ class TiffPicture:
         described = {"multiscales": [multiscale], "omero": self._omero(measured=False)}
 
         try:
+            # The channels as ZMART wrote them, brightness window included:
+            # without it a run opens stretched over the camera's whole range,
+            # nearly black.
+            if note.get("omero"):
+                described["omero"] = json.loads(note["omero"])
             if note.get("zmart_microscopy"):
                 described["zmart_microscopy"] = json.loads(note["zmart_microscopy"])
         except ValueError:

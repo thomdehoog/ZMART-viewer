@@ -56,6 +56,24 @@ def test_a_flat_capture_is_its_own_projection(tmp_path):
     assert sorted(p.name for p in data.iterdir()) == ["p.ome.zarr"]
 
 
+def test_flat_captures_focused_at_different_heights_make_one_projection(tmp_path):
+    """A flat capture has no projection height: wherever each was focused, they
+    lie together, as the projections the viewer makes itself do."""
+    data = tmp_path / "data"
+    data.mkdir()
+    write_tile(data, "a.ome.zarr", np.full((1, 1, 1, 8, 8), 70, dtype="uint16"), z=17.87)
+    write_tile(data, "b.ome.zarr", np.full((1, 1, 1, 8, 8), 30, dtype="uint16"), x=8, z=18.40)
+    views = a_view(tmp_path, data)
+    names = ["a.ome.zarr", "b.ome.zarr"]
+    try:
+        views.publish(data, dict.fromkeys(names, 1), CANVAS, composition={"regions": "complete", "order": names})
+        made = views.outputs["a_max.zmartview.zarr"].composer()
+        np.testing.assert_array_equal(made.values_for(0, 0, 0, 0)[:4, :4], 70)
+        np.testing.assert_array_equal(made.values_for(0, 0, 0, 2)[:4, :4], 30)
+    finally:
+        views.close()
+
+
 def test_a_missing_projection_is_reported(tmp_path):
     data, projections = tmp_path / "data", tmp_path / "projections"
     data.mkdir()

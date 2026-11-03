@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import tifffile
 import zarr
-from zmart_viewer.opening.open_folders import Library
+from zmart_viewer.opening.open_folders import Library, read_attrs_at
 from zmart_viewer.serving import picture_pieces as pieces
 from zmart_viewer.views.publishing import STACK_STORE, PublishedFolders
 
@@ -34,8 +34,28 @@ Z_MODEL = {
     "acquisition_provenance": {"requested_stage_focus_z_um": 12.0},
 }
 
+#: Each channel's name, colour and the brightness window it opens with.
+OMERO = {
+    "channels": [
+        {
+            "label": "channel 0",
+            "color": "00FF00",
+            "window": {"min": 0, "max": 65535, "start": 10, "end": 3900},
+        },
+        {
+            "label": "channel 1",
+            "color": "FF00FF",
+            "window": {"min": 0, "max": 65535, "start": 20, "end": 3800},
+        },
+    ]
+}
+
 #: How the interface asks for a run to be composed.
-COMPOSITION = {"regions": "complete", "xy_origin": "corner", "pyramid_reduction": "mean-xy2-crop-f32-rint-int"}
+COMPOSITION = {
+    "regions": "complete",
+    "xy_origin": "corner",
+    "pyramid_reduction": "mean-xy2-crop-f32-rint-int",
+}
 
 
 def _smaller_copies(volume: np.ndarray) -> list[np.ndarray]:
@@ -60,7 +80,10 @@ def write_zarr_position(path, volume, corner_zyx):
             {
                 "path": str(level),
                 "coordinateTransformations": [
-                    {"type": "scale", "scale": [1, 1, Z_STEP_UM, PIXEL_UM * factor, PIXEL_UM * factor]},
+                    {
+                        "type": "scale",
+                        "scale": [1, 1, Z_STEP_UM, PIXEL_UM * factor, PIXEL_UM * factor],
+                    },
                     {"type": "translation", "translation": [0, 0, *corner_zyx]},
                 ],
             }
@@ -74,6 +97,7 @@ def write_zarr_position(path, volume, corner_zyx):
         "version": "0.5",
         "multiscales": [{"type": "mean", "axes": axes, "datasets": datasets}],
     }
+    group.attrs["ome"] = {**group.attrs["ome"], "omero": OMERO}
     group.attrs["zmart_microscopy"] = {"z_coordinate": Z_MODEL}
 
 
@@ -94,6 +118,7 @@ def write_tiff_position(path, volume, corner_zyx):
     )
     note = (
         f'<M K="zmart_microscopy">{json.dumps({"z_coordinate": Z_MODEL})}</M>'
+        f'<M K="omero">{json.dumps(OMERO)}</M>'
         '<M K="pyramid">mean</M><M K="position_origin">corner</M>'
     )
     xml = (
@@ -112,7 +137,12 @@ def write_tiff_position(path, volume, corner_zyx):
     )
     copies = [copy.reshape(-1, *copy.shape[-2:]) for copy in _smaller_copies(volume)]
     staging = path.with_name(f".{path.name}.writing")
-    options = {"tile": (16, 16), "photometric": "minisblack", "compression": "zlib", "metadata": None}
+    options = {
+        "tile": (16, 16),
+        "photometric": "minisblack",
+        "compression": "zlib",
+        "metadata": None,
+    }
     with tifffile.TiffWriter(staging) as tif:
         for index, plane in enumerate(copies[0]):
             tif.write(
@@ -202,6 +232,9 @@ def test_a_run_looks_the_same_whether_saved_as_ome_tiff_or_ome_zarr(tmp_path, ba
         whole = np.concatenate([volume[0, 1, 2] for volume, _ in run.values()], axis=-1)
         np.testing.assert_array_equal(shown_tiff[1 * 3 + 2], whole)
         assert not list(as_tiff.glob("*.zarr")), "nothing is written beside the files"
+        # Each channel opens with the colour and brightness window it was saved with.
+        for name in tiff_names:
+            assert read_attrs_at(as_tiff / name)["omero"] == OMERO
     finally:
         for folder, published in ((as_zarr, from_zarr), (as_tiff, from_tiff)):
             pieces.forget(folder / STACK_STORE)
