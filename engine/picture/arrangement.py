@@ -172,10 +172,17 @@ class Mosaic:
     )
     _shape: dict[int, tuple[int, int, int]] = field(default_factory=dict, repr=False)
     _room: tuple[int, int] | None = field(default=None, repr=False)
+    # Asked once per tile wherever tiles are placed, so it is worked out once:
+    # asking it afresh walked every tile each time, and a run of ten thousand
+    # positions spent a minute on it. Not an argument of the constructor, so a
+    # copy made with other tiles works it out again.
+    _acquired: bool | None = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def has_acquired_regions(self) -> bool:
-        return any(tile.acquired_regions is not None for tile in self.tiles)
+        if self._acquired is None:
+            self._acquired = any(tile.acquired_regions is not None for tile in self.tiles)
+        return self._acquired
 
     def with_acquired_regions(
         self,

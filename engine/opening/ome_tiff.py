@@ -99,6 +99,10 @@ class CannotShow(ValueError):
     """A file this module understands, but cannot show; the message says why."""
 
 
+class NotPlaced(CannotShow):
+    """An OME-TIFF that does not say where the stage stood, so it cannot be a position."""
+
+
 def is_an_ome_tiff(path: str | Path) -> bool:
     """True when ``path`` is a file whose name says it is an OME-TIFF."""
     path = Path(path)
@@ -475,7 +479,7 @@ class TiffPicture:
         said = self.metadata
 
         if said["stage_um"] is None:
-            raise CannotShow(
+            raise NotPlaced(
                 f"{self.path.name} does not say where the stage stood, so it cannot be "
                 "placed among the other positions. Open it on its own to look at it."
             )
@@ -1099,12 +1103,13 @@ def declare_a_folder_of_tiffs(where: str | Path, folder: str | Path, *, bake: bo
         raise CannotShow(f"there are no OME-TIFF files in {folder}")
 
     def unplaced(tiff: Path) -> bool:
-        held = _borrow(tiff)
-
+        # Described here once, and remembered: composing the folder then reads
+        # the description again without opening the file a second time.
         try:
-            return held.picture.metadata["stage_um"] is None
-        finally:
-            _give_back(held)
+            describe_a_tiff_position(tiff)
+        except NotPlaced:
+            return True
+        return False
 
     with ThreadPoolExecutor(max_workers=min(32, len(tiffs))) as pool:
         missing = [tiff.name for tiff, lost in zip(tiffs, pool.map(unplaced, tiffs)) if lost]
