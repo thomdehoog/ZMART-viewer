@@ -395,3 +395,18 @@ def test_a_folder_of_ome_tiffs_is_put_together_by_stage_position(tmp_path, monke
         assert not list((tmp_path / "run").glob("*.zarr")), "nothing is written beside the data"
     finally:
         served.forget(scene)
+
+
+def test_a_folder_of_tiffs_without_stage_positions_is_refused(tmp_path):
+    """Files that do not say where they were taken would all land on one spot; refuse instead."""
+    folder = tmp_path / "planes"
+    folder.mkdir()
+    for plane in range(3):
+        tifffile.imwrite(
+            folder / f"capture_T000000_C00_Z{plane:05d}.ome.tiff",
+            np.full((64, 64), plane + 1, np.uint16),
+            metadata={"axes": "YX", "PhysicalSizeX": 0.5, "PhysicalSizeY": 0.5},
+        )
+
+    with pytest.raises(loading.CannotOpen, match="do not say where the stage stood"):
+        loading.load(folder, scenes=tmp_path / "session")

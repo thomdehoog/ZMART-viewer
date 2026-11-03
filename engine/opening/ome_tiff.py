@@ -595,6 +595,7 @@ def declare_a_tiff_picture(
             # served on its own, so it is marked differently.
             (TIFF_POSITION_FROM if as_a_position else TIFF_FROM): tiff.as_posix(),
             "levels": picture.levels,
+            "stage_known": picture.metadata["stage_um"] is not None,
         }
         (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
     finally:
@@ -958,8 +959,31 @@ def declare_a_folder_of_tiffs(where: str | Path, folder: str | Path, *, bake: bo
     positions.mkdir(parents=True, exist_ok=True)
 
     with ThreadPoolExecutor(max_workers=min(32, len(tiffs))) as pool:
-        list(
+        stores = list(
             pool.map(lambda one: declare_a_tiff_picture(positions, one, as_a_position=True), tiffs)
+        )
+
+    unplaced = [
+        tiff.name
+        for tiff, store in zip(tiffs, stores, strict=True)
+        if not json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["zmart"][
+            "stage_known"
+        ]
+    ]
+
+    if unplaced:
+        # Without a stage position, every file would land on the same spot and
+        # the picture would look plausible while being wrong. Better to say so.
+        shown = ", ".join(unplaced[:3]) + (
+            f" and {len(unplaced) - 3} more" if len(unplaced) > 3 else ""
+        )
+        raise CannotShow(
+            f"{len(unplaced)} of the {len(tiffs)} OME-TIFF files in {folder.name} do not say "
+            f"where the stage stood ({shown}), so they cannot be put together into one "
+            "picture. Open a single file to look at it on its own. Software that writes "
+            "one file per plane or channel, as LAS X does, keeps the stage position in "
+            "its own records instead; the ZMART interface converts such captures into "
+            "OME-Zarr positions for that reason."
         )
 
     with _kept_open_guard:
