@@ -162,8 +162,9 @@ This is version 0.5, a release candidate. At the ZMB it is the image engine insi
 our smart-microscopy operator window, where it follows runs of thousands of
 positions on several microscopes. The standalone window is younger than the
 engine: it opens OME-Zarr version 2 and 3, HCS plates, and runs that are still
-being written. It also opens a single OME-TIFF file as it is, without converting
-it (see below); other file formats are not opened yet. It runs best on Windows, where the native window uses the WebView2 engine.
+being written. It also opens OME-TIFF files as they are, without converting
+them, and follows runs saved as OME-TIFF just as it follows OME-Zarr runs (see
+below); other file formats are not opened yet. It runs best on Windows, where the native window uses the WebView2 engine.
 
 ### OME-TIFF files
 
@@ -176,12 +177,21 @@ very large file opens as easily as a small one, which is often not the case in
 programs that read the whole file into memory first.
 
 **A folder of OME-TIFF positions** opens as one picture, in the same way as a
-folder of OME-Zarr positions. Each file is placed where its OME metadata says
-the stage stood (`Plane PositionX/Y`, or else `StageLabel`). The zoomed-out
-overview is then built once and kept as files in the viewer's own folder
-("baked"), so looking at the whole run reads a handful of files instead of
-every position. Only a few hundred TIFF files are kept open at a time, because
-computers, and Windows in particular, allow only so many open files.
+folder of OME-Zarr positions, and nothing is written beside the files. Each
+file is placed where its OME metadata says the stage stood (`Plane
+PositionX/Y`, or else `StageLabel`), taken as the corner of the image. The
+zoomed-out overview is then built once and kept as files in the viewer's own
+folder ("baked"), so looking at the whole run reads a handful of files instead
+of every position. Only a few hundred TIFF files are kept open at a time,
+because computers, and Windows in particular, allow only so many open files.
+
+**A run saved as OME-TIFF** by the ZMART interface is followed live, position
+by position, exactly like a run saved as OME-Zarr; the two give the same
+picture, pixel for pixel. A position captured again replaces its file, and the
+new pixels are shown. The files ZMART writes carry a small note in their OME
+metadata (`zmart/position`) with what OME-TIFF has no place for, such as how
+the planes of a stack were taken. Fiji, napari, QuPath and other programs skip
+that note, so each file still opens there as an ordinary OME-TIFF.
 
 To give an idea of the scale, on a test computer with many tiny positions:
 
@@ -204,8 +214,9 @@ This is a first version, and some files suit it better than others:
   than they would from an OME-Zarr image, and are slower.
 - Only the **first image** in a file is shown. A file holding several positions
   as separate images shows the first position; one file per position works.
-- A folder of TIFF positions is put together **once, when it is opened**. Files
-  added afterwards appear when the folder is opened again.
+- A folder of TIFF positions opened from the window is put together **once,
+  when it is opened**. Files added afterwards appear when the folder is opened
+  again. (A run the ZMART interface publishes is followed as it grows.)
 - If the TIFF is **moved or deleted while it is open**, the picture stays blank
   and the log names the missing file. Open it again from its new place.
 - Files compressed with **LZW, JPEG, JPEG 2000 or zstd** need one more package:

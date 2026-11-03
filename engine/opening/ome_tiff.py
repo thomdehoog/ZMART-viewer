@@ -50,8 +50,14 @@ OME_TIFF_ENDINGS = (".ome.tif", ".ome.tiff", ".ome.btf", ".ome.tf2", ".ome.tf8")
 #: The key inside the description that marks it as standing in for a TIFF.
 TIFF_FROM = "tiff_from"
 
-#: The key marking a description as one position of a folder of OME-TIFFs.
-TIFF_POSITION_FROM = "tiff_position_from"
+#: The namespace of the note ZMART leaves inside each OME-TIFF position it
+#: writes. Other programs skip a note they do not know, so the file stays an
+#: ordinary OME-TIFF for Fiji, napari or QuPath. The note holds what OME-XML has
+#: no place for: ``zmart_microscopy`` (how the planes were taken, as JSON),
+#: ``pyramid`` (``mean`` when each smaller copy averages 2 x 2 pixels of the one
+#: before) and ``position_origin`` (``corner``: the stage position is that of
+#: the image's corner, not its middle).
+ZMART_NOTE = "zmart/position"
 
 #: How many OME-TIFF files a folder's picture keeps open at the same time.
 #: Each open file costs about 30 kB of memory and one of the computer's open
@@ -395,14 +401,11 @@ class TiffPicture:
 
     # -- the description written for Neuroglancer -------------------------------
 
-    def group_json(self, *, placed: bool = False, measured: bool = True) -> dict:
+    def group_json(self, *, measured: bool = True) -> dict:
         """The picture described as an ordinary OME-Zarr 0.5 multiscale image.
 
-        With ``placed``, the description also says where the stage stood, so
-        the image lands in the right place among the other positions of a
-        folder. With ``measured`` left on, a few pixels of every channel are
-        read to set a starting brightness; positions of a folder skip that,
-        because the picture built over them measures itself.
+        With ``measured`` left on, a few pixels of every channel are read to
+        set a starting brightness.
         """
         said = self.metadata
         _, _, _, base_height, base_width = self.shapes[0]
@@ -440,24 +443,7 @@ class TiffPicture:
                 }
             )
 
-        axes = [
-            {"name": "t", "type": "time", "unit": said["time_unit"]},
-            {"name": "c", "type": "channel"},
-            {"name": "z", "type": "space", "unit": said["units"][0]},
-            {"name": "y", "type": "space", "unit": said["units"][1]},
-            {"name": "x", "type": "space", "unit": said["units"][2]},
-        ]
-        multiscale = {"name": the_bare_name(self.path), "axes": axes, "datasets": datasets}
-
-        if placed:
-            stage = said["stage_um"] or (0.0, 0.0, 0.0)
-            per_unit = [_MICROMETRES_IN.get(unit, 1.0) for unit in said["units"]]
-            multiscale["coordinateTransformations"] = [
-                {
-                    "type": "translation",
-                    "translation": [0.0, 0.0] + [stage[axis] / per_unit[axis] for axis in range(3)],
-                }
-            ]
+        multiscale = {"name": the_bare_name(self.path), "axes": self._axes(), "datasets": datasets}
 
         return {
             "zarr_format": 3,
@@ -470,6 +456,80 @@ class TiffPicture:
                 },
             },
         }
+
+    def as_a_position(self) -> dict:
+        """The picture described as one position of a run, ready to be composed.
+
+        The description is laid out exactly as ZMART lays out its OME-Zarr
+        positions, so the viewer composes both formats the same way: every
+        smaller copy starts at the same corner, the stage position, and spans a
+        whole number of full-size pixels when it was made by halving. What
+        ZMART's note in the file says (:data:`ZMART_NOTE`) is carried along.
+
+        Raises :class:`CannotShow` when the file does not say where the stage
+        stood: placed at zero, it would lie on top of the other positions and
+        look plausible while being wrong.
+        """
+        said = self.metadata
+
+        if said["stage_um"] is None:
+            raise CannotShow(
+                f"{self.path.name} does not say where the stage stood, so it cannot be "
+                "placed among the other positions. Open it on its own to look at it."
+            )
+
+        per_unit = [_MICROMETRES_IN.get(unit, 1.0) for unit in said["units"]]
+        corner = [said["stage_um"][axis] / per_unit[axis] for axis in range(3)]
+        _, _, _, base_height, base_width = self.shapes[0]
+        datasets = []
+
+        for level, (_, _, _, height, width) in enumerate(self.shapes):
+            down, across = _the_step(base_height, height), _the_step(base_width, width)
+            datasets.append(
+                {
+                    "path": str(level),
+                    "coordinateTransformations": [
+                        {
+                            "type": "scale",
+                            "scale": [
+                                said["time_step"],
+                                1.0,
+                                said["voxel"][0],
+                                said["voxel"][1] * down,
+                                said["voxel"][2] * across,
+                            ],
+                        },
+                        {"type": "translation", "translation": [0.0, 0.0, *corner]},
+                    ],
+                }
+            )
+
+        multiscale = {"name": the_bare_name(self.path), "axes": self._axes(), "datasets": datasets}
+        note = said["zmart"]
+
+        if note.get("pyramid") == "mean":
+            multiscale["type"] = "mean"
+
+        described = {"multiscales": [multiscale], "omero": self._omero(measured=False)}
+
+        try:
+            if note.get("zmart_microscopy"):
+                described["zmart_microscopy"] = json.loads(note["zmart_microscopy"])
+        except ValueError:
+            log.warning("ZMART's note in %s could not be read; it is left out", self.path.name)
+
+        return described
+
+    def _axes(self) -> list[dict]:
+        """The five axes, named and with their units, as OME-Zarr lists them."""
+        units = self.metadata["units"]
+        return [
+            {"name": "t", "type": "time", "unit": self.metadata["time_unit"]},
+            {"name": "c", "type": "channel"},
+            {"name": "z", "type": "space", "unit": units[0]},
+            {"name": "y", "type": "space", "unit": units[1]},
+            {"name": "x", "type": "space", "unit": units[2]},
+        ]
 
     def array_json(self, level: int) -> dict:
         """One pyramid level, cut into pieces of one plane each."""
@@ -526,20 +586,13 @@ class TiffPicture:
         }
 
 
-def declare_a_tiff_picture(
-    where: str | Path, tiff: str | Path, *, as_a_position: bool = False
-) -> Path:
+def declare_a_tiff_picture(where: str | Path, tiff: str | Path) -> Path:
     """Write the description that lets the viewer show this OME-TIFF.
 
     ``where`` is the viewer's own folder for this session; the description is
     written there as ``<name>.zmartview.zarr``, and nothing is written beside
     the TIFF. Returns the folder written. Raises ``ValueError`` when the file
     cannot be shown, with the reason in plain words.
-
-    With ``as_a_position``, the file is described as one position of a folder
-    instead: the description is named ``<name>.ome.zarr``, says where the
-    stage stood, and is read by the picture built over the whole folder
-    (see :func:`declare_a_folder_of_tiffs`).
     """
     tiff = Path(tiff).resolve()
 
@@ -573,8 +626,7 @@ def declare_a_tiff_picture(
         ) from why
 
     try:
-        ending = ".ome.zarr" if as_a_position else ".zmartview.zarr"
-        store = Path(where) / f"{the_bare_name(tiff)}{ending}"
+        store = Path(where) / f"{the_bare_name(tiff)}.zmartview.zarr"
         store.mkdir(parents=True, exist_ok=True)
 
         for level in range(picture.levels):
@@ -584,18 +636,15 @@ def declare_a_tiff_picture(
                 json.dumps(picture.array_json(level), indent=1), encoding="utf-8"
             )
 
-        described = picture.group_json(placed=as_a_position, measured=not as_a_position)
+        described = picture.group_json()
         described["attributes"]["zmart"] = {
             "what": (
                 "A description of an OME-TIFF file, holding no pixels. Every piece "
                 "of the picture is read from the file named below when it is asked "
                 "for. The file is only read, never changed."
             ),
-            # A position is read by the picture built over its folder, never
-            # served on its own, so it is marked differently.
-            (TIFF_POSITION_FROM if as_a_position else TIFF_FROM): tiff.as_posix(),
+            TIFF_FROM: tiff.as_posix(),
             "levels": picture.levels,
-            "stage_known": picture.metadata["stage_um"] is not None,
         }
         (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
     finally:
@@ -665,6 +714,8 @@ def _what_the_ome_xml_says(xml: str | None, shape) -> dict:
         # Where the stage stood for this image, in micrometres (Z, Y, X), when
         # the file says so. It places the image among the others in a folder.
         "stage_um": None,
+        # What ZMART's own note in the file says, when it wrote the file.
+        "zmart": {},
     }
 
     if not xml:
@@ -705,6 +756,7 @@ def _what_the_ome_xml_says(xml: str | None, shape) -> dict:
         pass
 
     said["stage_um"] = _where_the_stage_stood(root, pixels)
+    said["zmart"] = _the_zmart_note_in(root)
 
     for channel in (one for one in pixels if one.tag.endswith("}Channel")):
         said["channel_names"].append(channel.get("Name") or f"Channel {len(said['channel_names'])}")
@@ -718,6 +770,35 @@ def _what_the_ome_xml_says(xml: str | None, shape) -> dict:
         said["channel_colours"] = ["FF0000", "00FF00", "0000FF"][:channels] if channels == 3 else []
 
     return said
+
+
+def _the_zmart_note_in(root) -> dict:
+    """The entries of ZMART's note (:data:`ZMART_NOTE`), or nothing when there is none."""
+    for note in root.iter():
+        if note.tag.endswith("}MapAnnotation") and note.get("Namespace") == ZMART_NOTE:
+            return {
+                entry.get("K"): entry.text or ""
+                for entry in note.iter()
+                if entry.tag.endswith("}M") and entry.get("K")
+            }
+
+    return {}
+
+
+def _the_step(full: int, smaller: int) -> float:
+    """How many full-size pixels one pixel of a smaller copy spans, along one axis.
+
+    A copy made by halving has ``full // 2`` (or, rounding up, ``full // 2 + 1``)
+    pixels, so the plain ratio is a little off for odd sizes. The whole number
+    is used whenever the size fits it, which keeps every copy exactly on the
+    full-size grid.
+    """
+    whole = round(full / smaller)
+
+    if whole >= 1 and smaller in (full // whole, -(-full // whole)):
+        return float(whole)
+
+    return full / smaller
 
 
 def _the_colour_of(written: str | None) -> str | None:
@@ -803,18 +884,31 @@ def _where_the_stage_stood(root, pixels) -> tuple[float, float, float] | None:
     return None
 
 
-# -- a folder of OME-TIFF positions ------------------------------------------------
+# -- OME-TIFF positions ---------------------------------------------------------
+#
+# A run saved as OME-TIFF holds one file per position. The viewer composes such
+# a folder exactly as it composes a folder of OME-Zarr positions: the composer
+# asks each position for its description (:func:`describe_a_tiff_position`) and
+# for its pixels (:func:`pixels_of_a_tiff_position`), and never needs to know
+# which format answered. Nothing is written beside the files.
 
 _kept_open: OrderedDict = OrderedDict()
 _kept_open_guard = threading.Lock()
-_positions: dict[Path, Path | None] = {}
+_described: dict[Path, tuple[tuple[int, int], dict, list]] = {}
+
+
+def _the_stamp_of(tiff: Path) -> tuple[int, int]:
+    """When the file was last written, and its size: a replaced file differs in one."""
+    stat = tiff.stat()
+    return stat.st_mtime_ns, stat.st_size
 
 
 class _HeldOpen:
     """One TIFF kept open, and how many readers are using it right now."""
 
-    def __init__(self, picture: TiffPicture) -> None:
+    def __init__(self, picture: TiffPicture, stamp: tuple[int, int]) -> None:
         self.picture = picture
+        self.stamp = stamp
         self.readers = 0
         self.let_go = False
 
@@ -823,44 +917,53 @@ def _borrow(tiff: Path) -> _HeldOpen:
     """The TIFF, opened if need be; the least recently used ones are closed.
 
     A file another reader is still using is never closed under it: it is
-    marked, and closed by the last reader to give it back.
+    marked, and closed by the last reader to give it back. A file that was
+    replaced since it was opened (a position captured again during a run) is
+    opened afresh, so its new pixels are shown rather than the old ones.
     """
     import os
 
     most = int(os.environ.get("ZMART_TIFFS_KEPT_OPEN") or TIFFS_KEPT_OPEN)
+    stamp = _the_stamp_of(tiff)
 
     with _kept_open_guard:
         held = _kept_open.get(tiff)
 
-        if held is not None:
+        if held is not None and held.stamp == stamp:
             _kept_open.move_to_end(tiff)
             held.readers += 1
             return held
 
-    opened = _HeldOpen(TiffPicture(tiff))
+    opened = _HeldOpen(TiffPicture(tiff), stamp)
     closing = []
 
     with _kept_open_guard:
         held = _kept_open.get(tiff)
 
-        if held is not None:
-            closing.append(opened)  # Another reader opened it meanwhile.
+        if held is not None and held.stamp == stamp:
+            closing.append(opened)  # Another reader opened the same file meanwhile.
         else:
+            if held is not None:  # The file was replaced since it was opened.
+                _let_go(_kept_open.pop(tiff), closing)
             _kept_open[tiff] = held = opened
 
         held.readers += 1
 
         while len(_kept_open) > max(1, most):
-            _, oldest = _kept_open.popitem(last=False)
-            oldest.let_go = True
-
-            if oldest.readers == 0:
-                closing.append(oldest)
+            _let_go(_kept_open.popitem(last=False)[1], closing)
 
     for one in closing:
         one.picture.close()
 
     return held
+
+
+def _let_go(held: _HeldOpen, closing: list) -> None:
+    """Mark a file to be closed: now when nobody reads it, else by its last reader."""
+    held.let_go = True
+
+    if held.readers == 0:
+        closing.append(held)
 
 
 def _give_back(held: _HeldOpen) -> None:
@@ -870,6 +973,50 @@ def _give_back(held: _HeldOpen) -> None:
 
     if closing:
         held.picture.close()
+
+
+def describe_a_tiff_position(tiff: str | Path) -> tuple[dict, list[tuple]]:
+    """What one OME-TIFF position says about itself, read once while the file is unchanged.
+
+    Returns two things. First, its description in the form an OME-Zarr
+    position's attributes take (``multiscales``, ``omero`` and, when ZMART
+    wrote the file, ``zmart_microscopy``). Second, for each level, its shape,
+    the shape of one piece and the kind of pixel. Raises :class:`CannotShow`
+    when the file cannot be read or does not say where the stage stood.
+    """
+    tiff = Path(tiff)
+    stamp = _the_stamp_of(tiff)
+
+    with _kept_open_guard:
+        known = _described.get(tiff)
+
+    if known is not None and known[0] == stamp:
+        return known[1], known[2]
+
+    try:
+        held = _borrow(tiff)
+    except CannotShow:
+        raise
+    except Exception as why:
+        raise CannotShow(
+            f"{tiff.name} could not be read as an OME-TIFF. The file may be damaged, "
+            f"incompletely copied, or not a TIFF at all. (The reader said: {why})"
+        ) from why
+
+    try:
+        picture = held.picture
+        described = picture.as_a_position()
+        levels = [
+            (picture.shapes[level], (1, 1, 1, *picture.pieces[level]), picture.dtype.name)
+            for level in range(picture.levels)
+        ]
+    finally:
+        _give_back(held)
+
+    with _kept_open_guard:
+        _described[tiff] = (stamp, described, levels)
+
+    return described, levels
 
 
 class TiffPosition:
@@ -897,38 +1044,27 @@ class TiffPosition:
 def pixels_of_a_tiff_position(held_in: Path) -> TiffPosition | None:
     """The pixels behind one level of a position, when that position is an OME-TIFF.
 
-    ``held_in`` is a level's folder inside a position's description. Returns
-    ``None`` for an ordinary OME-Zarr position, which is then read as usual.
+    ``held_in`` names a level the way it would inside an OME-Zarr position:
+    ``<position>/<level>``. Returns ``None`` when the position is not an
+    OME-TIFF, which is then read as an OME-Zarr image.
     """
-    store = Path(held_in).parent
+    tiff = Path(held_in).parent
 
-    with _kept_open_guard:
-        known = store in _positions
-        tiff = _positions.get(store)
-
-    if not known:
-        try:
-            described = json.loads((store / "zarr.json").read_text(encoding="utf-8"))
-            said = (described.get("attributes") or {}).get("zmart") or {}
-            tiff = Path(said[TIFF_POSITION_FROM]) if said.get(TIFF_POSITION_FROM) else None
-        except (OSError, ValueError):
-            tiff = None
-
-        with _kept_open_guard:
-            _positions[store] = tiff
-
-    if tiff is None:
+    if not tiff.name.lower().endswith(OME_TIFF_ENDINGS):
         return None
 
-    shape = tuple(json.loads((Path(held_in) / "zarr.json").read_text(encoding="utf-8"))["shape"])
-    return TiffPosition(tiff, int(Path(held_in).name), shape)
+    level = int(Path(held_in).name)
+    _, levels = describe_a_tiff_position(tiff)
+    return TiffPosition(tiff, level, levels[level][0])
 
 
 def ome_tiffs_in(folder: Path) -> list[Path]:
     """The OME-TIFF files directly inside a folder, in name order."""
     try:
         return sorted(
-            one for one in folder.iterdir() if one.name.lower().endswith(OME_TIFF_ENDINGS)
+            one
+            for one in folder.iterdir()
+            if one.name.lower().endswith(OME_TIFF_ENDINGS) and one.is_file()
         )
     except OSError:
         return []
@@ -938,12 +1074,12 @@ def declare_a_folder_of_tiffs(where: str | Path, folder: str | Path, *, bake: bo
     """Write the picture built over a folder of OME-TIFF positions, and return it.
 
     Each file becomes one position, placed where its OME-XML says the stage
-    stood. The positions are described in ``where`` (the viewer's own folder),
-    then composed into one picture exactly as a folder of OME-Zarr positions
-    is. With ``bake`` (the default), the zoomed-out levels of that picture are
-    built once and kept as files, so an overview of thousands of positions
-    reads a few files instead of every TIFF. Raises :class:`CannotShow` when a
-    file cannot be read, naming the file.
+    stood, and the folder is composed exactly as a folder of OME-Zarr
+    positions is. With ``bake`` (the default), the zoomed-out levels of that
+    picture are built once and kept as files in ``where``, so an overview of
+    thousands of positions reads a few files instead of every TIFF. Raises
+    :class:`CannotShow` when a file cannot be read or does not say where the
+    stage stood, naming the files.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -955,42 +1091,34 @@ def declare_a_folder_of_tiffs(where: str | Path, folder: str | Path, *, bake: bo
     if not tiffs:
         raise CannotShow(f"there are no OME-TIFF files in {folder}")
 
-    positions = Path(where) / f"{folder.name}.tiff-positions"
-    positions.mkdir(parents=True, exist_ok=True)
+    def unplaced(tiff: Path) -> bool:
+        held = _borrow(tiff)
+
+        try:
+            return held.picture.metadata["stage_um"] is None
+        finally:
+            _give_back(held)
 
     with ThreadPoolExecutor(max_workers=min(32, len(tiffs))) as pool:
-        stores = list(
-            pool.map(lambda one: declare_a_tiff_picture(positions, one, as_a_position=True), tiffs)
-        )
+        missing = [tiff.name for tiff, lost in zip(tiffs, pool.map(unplaced, tiffs)) if lost]
 
-    unplaced = [
-        tiff.name
-        for tiff, store in zip(tiffs, stores, strict=True)
-        if not json.loads((store / "zarr.json").read_text(encoding="utf-8"))["attributes"]["zmart"][
-            "stage_known"
-        ]
-    ]
-
-    if unplaced:
+    if missing:
         # Without a stage position, every file would land on the same spot and
         # the picture would look plausible while being wrong. Better to say so.
-        shown = ", ".join(unplaced[:3]) + (
-            f" and {len(unplaced) - 3} more" if len(unplaced) > 3 else ""
+        shown = ", ".join(missing[:3]) + (
+            f" and {len(missing) - 3} more" if len(missing) > 3 else ""
         )
         raise CannotShow(
-            f"{len(unplaced)} of the {len(tiffs)} OME-TIFF files in {folder.name} do not say "
+            f"{len(missing)} of the {len(tiffs)} OME-TIFF files in {folder.name} do not say "
             f"where the stage stood ({shown}), so they cannot be put together into one "
             "picture. Open a single file to look at it on its own. Software that writes "
             "one file per plane or channel, as LAS X does, keeps the stage position in "
-            "its own records instead; the ZMART interface converts such captures into "
-            "OME-Zarr positions for that reason."
+            "its own records instead; the ZMART interface turns such captures into "
+            "positions for that reason."
         )
 
-    with _kept_open_guard:
-        _positions.clear()  # Descriptions were (re)written; read them afresh.
-
     try:
-        return declare_a_built_picture(where, positions, name=folder.name, bake=bake)
+        return declare_a_built_picture(where, folder, name=folder.name, bake=bake)
     except ValueError as why:
         raise CannotShow(
             f"the OME-TIFF files in {folder.name} could not be put together into one picture: {why}"

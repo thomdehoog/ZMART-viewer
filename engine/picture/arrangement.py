@@ -23,10 +23,33 @@ from pathlib import Path
 import numpy as np
 import zarr
 from zmart_viewer.live.record.vocabulary import the_position_of
+from zmart_viewer.opening.ome_tiff import (
+    OME_TIFF_ENDINGS,
+    describe_a_tiff_position,
+    pixels_of_a_tiff_position,
+)
 from zmart_viewer.opening.open_folders import UNIT_SPELLINGS
 from zmart_viewer.picture.acquired_regions import AcquiredRegion
 
 IMAGE_SUFFIX = ".ome.zarr"
+
+
+def is_a_position_name(name: str) -> bool:
+    """Whether a name is that of a position: an OME-Zarr image or an OME-TIFF file."""
+    return name.endswith(IMAGE_SUFFIX) or name.lower().endswith(OME_TIFF_ENDINGS)
+
+
+def the_stem_of_a_position(name: str) -> str:
+    """A position's name without its ending: ``overview_P1.ome.tif`` gives ``overview_P1``."""
+    for ending in (IMAGE_SUFFIX, *OME_TIFF_ENDINGS):
+        if name.lower().endswith(ending):
+            return name[: -len(ending)]
+
+    return name
+
+
+def _is_an_ome_tiff_position(path: Path) -> bool:
+    return path.name.lower().endswith(OME_TIFF_ENDINGS) and path.is_file()
 
 OURS = "zmart"
 LEGACY_MEAN_REDUCTION = "mean-xy2-edge-round"
@@ -61,10 +84,8 @@ class Copy:
     def array(self) -> zarr.Array:
         """The pixels, opened the first time anything asks for them."""
         if self._opened is None:
-            # A position may be an OME-TIFF described as OME-Zarr; its pixels
-            # are then read from the TIFF (see zmart_viewer.opening.ome_tiff).
-            from zmart_viewer.opening.ome_tiff import pixels_of_a_tiff_position
-
+            # A position may be an OME-TIFF; its pixels are then read from the
+            # file (see zmart_viewer.opening.ome_tiff).
             self._opened = pixels_of_a_tiff_position(self.held_in) or zarr.open_array(
                 str(self.held_in), mode="r"
             )
@@ -358,7 +379,13 @@ class Mosaic:
 
 
 def the_description_of(store: Path) -> tuple[dict, str]:
-    """What a store says about itself, and which generation of OME-Zarr wrote it."""
+    """What a store says about itself, and which generation of OME-Zarr wrote it.
+
+    An OME-TIFF position answers in the same form, as if it were OME-Zarr 0.5.
+    """
+    if _is_an_ome_tiff_position(store):
+        return describe_a_tiff_position(store)[0], "0.5"
+
     newer = store / "zarr.json"
 
     if newer.is_file():
@@ -382,6 +409,9 @@ def _how_a_resolution_is_stored(
     held_in: Path,
 ) -> tuple[tuple[int, ...], tuple[int, ...], str]:
     """How large one resolution is, how it is chunked, and what a voxel holds."""
+    if _is_an_ome_tiff_position(held_in.parent):
+        return describe_a_tiff_position(held_in.parent)[1][int(held_in.name)]
+
     for name in ("zarr.json", ".zarray"):
         described = held_in / name
 
@@ -735,17 +765,20 @@ def read_the_transfer(folder: str | Path) -> Mosaic:
         tiles = _read_the_plate(*plate)
     else:
         stores = sorted(
-            one
-            for one in folder.glob("*.zarr")
-            if one.is_dir() and not one.name.endswith(".zmartview.zarr")
+            [
+                one
+                for one in folder.glob("*.zarr")
+                if one.is_dir() and not one.name.endswith(".zmartview.zarr")
+            ]
+            + [one for one in folder.iterdir() if _is_an_ome_tiff_position(one)]
         )
 
         if not stores:
             raise ValueError(
-                f"{folder} holds no OME-Zarr images, so there is nothing to "
-                "build a picture from. A transfer is a container of one image "
-                "per tile; this is probably the folder above it, or a single "
-                "tile rather than the set."
+                f"{folder} holds no OME-Zarr images or OME-TIFF files, so there "
+                "is nothing to build a picture from. A transfer is a container of "
+                "one image per tile; this is probably the folder above it, or a "
+                "single tile rather than the set."
             )
 
         with ThreadPoolExecutor(max_workers=min(32, (len(stores) + 3) // 4 or 1)) as pool:

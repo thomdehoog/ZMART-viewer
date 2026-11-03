@@ -21,6 +21,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zmart_viewer.opening.ome_tiff import OME_TIFF_ENDINGS, describe_a_tiff_position
+
 _CHANNEL_COLORS = {
     "405": (0.30, 0.45, 1.00),
     "488": (0.00, 1.00, 0.40),
@@ -88,7 +90,8 @@ def channel_color(name: str) -> tuple[float, float, float] | None:
 
 
 def is_store(path: Path) -> bool:
-    """True if ``path`` is an OME-Zarr image store (has multiscales metadata)."""
+    """True if ``path`` is an image the viewer can open as a store: an OME-Zarr
+    image, or an OME-TIFF that says where the stage stood (has multiscales metadata)."""
     return bool(read_attrs_at(path).get("multiscales"))
 
 
@@ -220,7 +223,17 @@ def the_stamp_of(described: Path) -> tuple[int, int]:
 
 
 def read_attrs_at(path: Path) -> dict:
-    """The OME-Zarr description at ``path``, or an empty one if unreadable."""
+    """The OME-Zarr description at ``path``, or an empty one if unreadable.
+
+    An OME-TIFF position answers with the same description, read from its
+    OME-XML (see :func:`zmart_viewer.opening.ome_tiff.describe_a_tiff_position`).
+    """
+    if path.name.lower().endswith(OME_TIFF_ENDINGS) and path.is_file():
+        try:
+            return describe_a_tiff_position(path)[0]
+        except (OSError, ValueError):
+            return {}
+
     key = str(path)
     described = description_file(path)
 
@@ -752,7 +765,11 @@ def discover(path: str | Path) -> tuple[Path, list[str]]:
     if is_store(path):
         return path.parent, [path.name]
 
-    names = sorted(child.name for child in path.iterdir() if child.is_dir() and is_store(child))
+    names = sorted(
+        child.name
+        for child in path.iterdir()
+        if (child.is_dir() or child.name.lower().endswith(OME_TIFF_ENDINGS)) and is_store(child)
+    )
     return path, names
 
 
@@ -996,7 +1013,7 @@ class Library:
 
         if not chosen:
             raise ValueError(
-                f"no OME-Zarr image was found in {path} — if the images are one "
+                f"no OME-Zarr image or placed OME-TIFF was found in {path} — if the images are one "
                 "level down, choose the folder that contains them"
             )
 

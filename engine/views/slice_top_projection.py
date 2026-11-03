@@ -13,7 +13,13 @@ from tempfile import TemporaryDirectory
 
 from zmart_viewer.opening.open_folders import read_attrs_at
 from zmart_viewer.picture.acquired_regions import canonical_regions
-from zmart_viewer.picture.arrangement import MEAN_FROM_ORIGINALS, MEAN_REDUCTION, read_one_tile
+from zmart_viewer.picture.arrangement import (
+    MEAN_FROM_ORIGINALS,
+    MEAN_REDUCTION,
+    is_a_position_name,
+    read_one_tile,
+    the_stem_of_a_position,
+)
 from zmart_viewer.picture.built_picture import holding_the_bake_lock
 from zmart_viewer.views.projections import METHODS, PROJECTION_RECIPE, write_projection
 from zmart_viewer.views.publishing import PublishedTransfer, validate_canvas
@@ -194,8 +200,8 @@ class ViewSet:
             }
         if set(composition["order"]) != set(versions) or len(composition["order"]) != len(versions):
             raise ValueError("View order must name every completed position once")
-        if any(Path(name).name != name or not name.endswith(".ome.zarr") for name in versions):
-            raise ValueError("View inputs must be separate position OME-Zarr stores")
+        if any(Path(name).name != name or not is_a_position_name(name) for name in versions):
+            raise ValueError("View inputs must be separate OME-Zarr or OME-TIFF positions")
         if any(
             type(revision) is not int or revision < history.get(name, 0)
             for name, revision in versions.items()
@@ -222,7 +228,7 @@ class ViewSet:
             candidates = {}
             if key in METHODS and self.projections_given:
                 source = self.projection_folder
-                missing = [name for name in versions if not (source / name).is_dir()]
+                missing = [name for name in versions if not (source / name).exists()]
                 if missing:
                     raise ValueError(f"The given projections of {missing} are not in {source}")
                 # Same names, same coverage: the positions' own regions stand.
@@ -246,7 +252,7 @@ class ViewSet:
                         sort_keys=True,
                     )
                     suffix = sha256(recipe.encode()).hexdigest()[:20]
-                    derived = names[name] = f"{name.removesuffix('.ome.zarr')}_r{suffix}.ome.zarr"
+                    derived = names[name] = f"{the_stem_of_a_position(name)}_r{suffix}.ome.zarr"
                     destination = source / derived
                     if not destination.exists():
                         if temporary is None:
