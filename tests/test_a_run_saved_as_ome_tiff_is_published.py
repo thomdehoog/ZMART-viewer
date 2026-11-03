@@ -271,3 +271,62 @@ def test_a_position_captured_again_shows_its_new_pixels(tmp_path, monkeypatch, b
     finally:
         pieces.forget(tmp_path / STACK_STORE)
         published.close()
+
+
+def test_the_baked_overview_grows_as_ome_tiff_positions_land(tmp_path):
+    """During a run, positions land one by one; the baked overview takes each in.
+
+    Grown position by position, the picture ends up exactly as it is when the
+    whole run is published at once, at every zoom level.
+    """
+    run = a_run(np.random.default_rng(9))
+    names = [f"{stem}.ome.tif" for stem in run]
+    grown, whole = tmp_path / "grown", tmp_path / "whole"
+    grown.mkdir()
+    whole.mkdir()
+    for stem, (volume, corner) in run.items():
+        write_tiff_position(whole / f"{stem}.ome.tif", volume, corner)
+
+    first_stem, (volume, corner) = next(iter(run.items()))
+    write_tiff_position(grown / names[0], volume, corner)
+    library = Library()
+    library.open(grown)
+    published = PublishedFolders(library)
+    canvas = {"x_um": [0, len(names) * SIDE * PIXEL_UM], "y_um": [0, SIDE * PIXEL_UM]}
+    published.open(
+        grown,
+        canvas=canvas,
+        versions={names[0]: 1},
+        bake=True,
+        composition={**COMPOSITION, "order": names[:1]},
+    )
+    at_once = publish(whole, names, dict.fromkeys(names, 1), bake=True)
+    try:
+        for landed in range(2, len(names) + 1):
+            stem, (volume, corner) = list(run.items())[landed - 1]
+            write_tiff_position(grown / names[landed - 1], volume, corner)
+            published.announce(
+                [
+                    {
+                        "path": str(grown),
+                        "source_revisions": dict.fromkeys(names[:landed], 1),
+                        "composition": {**COMPOSITION, "order": names[:landed]},
+                    }
+                ]
+            )
+            # The most zoomed-out picture, where the positions stand side by side.
+            coarsest = everything_shown(published, grown)[-1]
+            band = coarsest.shape[1] // len(names)
+            assert coarsest[:, (landed - 1) * band : landed * band].any(), (
+                f"position {landed} is in the overview"
+            )
+        view = published.views[grown.resolve(), None][0].outputs[STACK_STORE]
+        assert view.bake, "the overview is baked"
+        for grown_picture, whole_picture in zip(
+            everything_shown(published, grown), everything_shown(at_once, whole), strict=True
+        ):
+            np.testing.assert_array_equal(grown_picture, whole_picture)
+    finally:
+        for folder, held in ((grown, published), (whole, at_once)):
+            pieces.forget(folder / STACK_STORE)
+            held.close()
