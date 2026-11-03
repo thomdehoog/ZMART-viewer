@@ -61,7 +61,13 @@ class Copy:
     def array(self) -> zarr.Array:
         """The pixels, opened the first time anything asks for them."""
         if self._opened is None:
-            self._opened = zarr.open_array(str(self.held_in), mode="r")
+            # A position may be an OME-TIFF described as OME-Zarr; its pixels
+            # are then read from the TIFF (see zmart_viewer.opening.ome_tiff).
+            from zmart_viewer.opening.ome_tiff import pixels_of_a_tiff_position
+
+            self._opened = pixels_of_a_tiff_position(self.held_in) or zarr.open_array(
+                str(self.held_in), mode="r"
+            )
 
         return self._opened
 

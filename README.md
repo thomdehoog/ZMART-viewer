@@ -175,6 +175,25 @@ picture comes into view, only that part is read from the TIFF. That is why a
 very large file opens as easily as a small one, which is often not the case in
 programs that read the whole file into memory first.
 
+**A folder of OME-TIFF positions** opens as one picture, in the same way as a
+folder of OME-Zarr positions. Each file is placed where its OME metadata says
+the stage stood (`Plane PositionX/Y`, or else `StageLabel`). The zoomed-out
+overview is then built once and kept as files in the viewer's own folder
+("baked"), so looking at the whole run reads a handful of files instead of
+every position. Only a few hundred TIFF files are kept open at a time, because
+computers, and Windows in particular, allow only so many open files.
+
+To give an idea of the scale, on a test computer with many tiny positions:
+
+| Positions | Opening, OME-TIFF | Opening, OME-Zarr | Files kept open, OME-TIFF |
+|----------:|------------------:|------------------:|--------------------------:|
+| 1,000     | 10 s              | 6 s               | 264                       |
+| 10,000    | 2 min             | 1.2 min           | 264                       |
+
+Opening includes building the overview. Once open, browsing is as quick as with
+OME-Zarr. These times were measured on a fast local disk; on a network drive,
+every file opened also waits for the network.
+
 This is a first version, and some files suit it better than others:
 
 - **Tiled, pyramidal OME-TIFF** (as Bio-Formats, QuPath and `tifffile` write
@@ -184,7 +203,9 @@ This is a first version, and some files suit it better than others:
 - TIFF keeps every plane separately, so **3D volume views** read more pieces
   than they would from an OME-Zarr image, and are slower.
 - Only the **first image** in a file is shown. A file holding several positions
-  as separate images shows the first position.
+  as separate images shows the first position; one file per position works.
+- A folder of TIFF positions is put together **once, when it is opened**. Files
+  added afterwards appear when the folder is opened again.
 - If the TIFF is **moved or deleted while it is open**, the picture stays blank
   and the log names the missing file. Open it again from its new place.
 - Files compressed with **LZW, JPEG, JPEG 2000 or zstd** need one more package:

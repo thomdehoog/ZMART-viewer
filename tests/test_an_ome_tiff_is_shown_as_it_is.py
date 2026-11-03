@@ -325,3 +325,73 @@ def test_a_damaged_file_is_refused_in_plain_words(tmp_path):
 
     with pytest.raises(loading.CannotOpen, match="may be damaged, incompletely copied"):
         loading.load(path, scenes=tmp_path / "session")
+
+
+def write_a_folder_of_positions(folder: Path) -> np.ndarray:
+    """Cut a known picture into six OME-TIFF positions, each saying where the stage stood."""
+    rng = np.random.default_rng(4)
+    whole = rng.integers(1, 4000, (2, 600, 900), dtype=np.uint16)  # channel, Y, X
+    side = 300
+    folder.mkdir()
+
+    for row in range(2):
+        for column in range(3):
+            tile = whole[:, row * side : (row + 1) * side, column * side : (column + 1) * side]
+            metadata = {
+                "axes": "CYX",
+                "PhysicalSizeX": 0.5,
+                "PhysicalSizeY": 0.5,
+                "Plane": {
+                    "PositionX": [column * side * 0.5] * 2,
+                    "PositionY": [row * side * 0.5] * 2,
+                },
+            }
+            with tifffile.TiffWriter(folder / f"position_{row}_{column}.ome.tif") as writer:
+                writer.write(
+                    tile, subifds=1, tile=(TILE, TILE), metadata=metadata, photometric="minisblack"
+                )
+                writer.write(
+                    tile[:, ::2, ::2], subfiletype=1, tile=(TILE, TILE), photometric="minisblack"
+                )
+
+    return whole
+
+
+@pytest.mark.parametrize("kept_open", [256, 2])
+def test_a_folder_of_ome_tiffs_is_put_together_by_stage_position(tmp_path, monkeypatch, kept_open):
+    """Six positions become one picture, every pixel where it belongs.
+
+    Run twice: once with plenty of files kept open, and once with only two, so
+    files are closed and opened again all the time, as with thousands of positions.
+    """
+    import zmart_viewer.opening.ome_tiff as ome_tiff
+
+    monkeypatch.setenv("ZMART_TIFFS_KEPT_OPEN", str(kept_open))
+    whole = write_a_folder_of_positions(tmp_path / "run")
+    scene = loading.load(tmp_path / "run", scenes=tmp_path / "session").target
+
+    try:
+        described = json.loads((scene / "zarr.json").read_text())
+        assert described["attributes"]["zmart"]["baked"], "the overview is baked into files"
+        level_zero = json.loads((scene / "0" / "zarr.json").read_text())
+        assert level_zero["shape"][-2:] == [600, 900]
+        piece = level_zero["chunk_grid"]["configuration"]["chunk_shape"][-1]
+        dtype = np.dtype(level_zero["data_type"]).newbyteorder("<")
+
+        for channel in range(2):
+            for row in range(-(-600 // piece)):
+                for column in range(-(-900 // piece)):
+                    body = served.built_bytes_behind(scene, f"0/c/0/{channel}/0/{row}/{column}")
+                    got = np.frombuffer(numcodecs.Zstd().decode(body), dtype=dtype)
+                    got = got.reshape(piece, piece)
+                    expected = whole[
+                        channel,
+                        row * piece : (row + 1) * piece,
+                        column * piece : (column + 1) * piece,
+                    ]
+                    assert np.array_equal(got[: expected.shape[0], : expected.shape[1]], expected)
+
+        assert len(ome_tiff._kept_open) <= kept_open
+        assert not list((tmp_path / "run").glob("*.zarr")), "nothing is written beside the data"
+    finally:
+        served.forget(scene)

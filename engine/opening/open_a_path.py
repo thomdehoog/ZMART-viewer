@@ -17,7 +17,7 @@ from pathlib import Path
 
 from zmart_viewer.live.following import LIVE_PICTURE, the_live_picture_declared
 from zmart_viewer.live.record.live_serving import live_run_holding
-from zmart_viewer.opening.ome_tiff import is_an_ome_tiff
+from zmart_viewer.opening.ome_tiff import is_an_ome_tiff, ome_tiffs_in
 from zmart_viewer.opening.open_folders import DESCRIPTION_FILES, is_store
 
 
@@ -51,6 +51,9 @@ def load(path: str | Path, *, bake: bool = False, scenes: Path | None = None) ->
 
     if is_an_ome_tiff(asked):
         return Opened(picture_behind_an_ome_tiff(asked, scenes))
+
+    if asked.is_dir() and positions_in(asked) == () and len(ome_tiffs_in(asked)) > 1:
+        return Opened(picture_behind_a_folder_of_tiffs(asked, scenes))
 
     plate = scene_behind_a_plate(asked, scenes)
     run = None if plate is not None else scene_behind_a_run(asked, scenes)
@@ -93,6 +96,32 @@ def picture_behind_an_ome_tiff(tiff: Path, scenes: Path | None) -> Path:
         raise CannotOpen(
             f"{tiff.name} is an OME-TIFF file. Showing one needs the 'tifffile' "
             "package, which is not installed: run  pip install tifffile"
+        ) from why
+    except ValueError as why:
+        raise CannotOpen(str(why)) from why
+
+
+def picture_behind_a_folder_of_tiffs(folder: Path, scenes: Path | None) -> Path:
+    """The picture to open instead, when the target is a folder of OME-TIFF positions.
+
+    Every file is one position. They are put together into one picture in
+    ``scenes``, the viewer's own folder, and the files themselves are only
+    read. See :func:`zmart_viewer.opening.ome_tiff.declare_a_folder_of_tiffs`.
+    """
+    if scenes is None:
+        raise CannotOpen(
+            f"{folder.name} holds OME-TIFF files, and this viewer has no folder of its "
+            "own to write the description it needs for showing them"
+        )
+
+    from zmart_viewer.opening.ome_tiff import declare_a_folder_of_tiffs  # deferred
+
+    try:
+        return declare_a_folder_of_tiffs(scenes, folder)
+    except ImportError as why:
+        raise CannotOpen(
+            "showing OME-TIFF files needs the 'tifffile' package, which is not "
+            "installed: run  pip install tifffile"
         ) from why
     except ValueError as why:
         raise CannotOpen(str(why)) from why

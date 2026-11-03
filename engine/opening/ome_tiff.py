@@ -37,6 +37,7 @@ import json
 import logging
 import threading
 import xml.etree.ElementTree as ElementTree
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,16 @@ OME_TIFF_ENDINGS = (".ome.tif", ".ome.tiff", ".ome.btf", ".ome.tf2", ".ome.tf8")
 
 #: The key inside the description that marks it as standing in for a TIFF.
 TIFF_FROM = "tiff_from"
+
+#: The key marking a description as one position of a folder of OME-TIFFs.
+TIFF_POSITION_FROM = "tiff_position_from"
+
+#: How many OME-TIFF files a folder's picture keeps open at the same time.
+#: Each open file costs about 30 kB of memory and one of the computer's open
+#: files, and Windows in particular allows only a few thousand of those. The
+#: files used least recently are closed first, and reopening one costs a few
+#: milliseconds. Set ZMART_TIFFS_KEPT_OPEN to change it.
+TIFFS_KEPT_OPEN = 256
 
 #: The size of a piece when the TIFF itself is not stored in tiles.
 PIECE = 512
@@ -111,7 +122,6 @@ class TiffPicture:
 
     def __init__(self, path: str | Path) -> None:
         import tifffile  # deferred: only needed when an OME-TIFF is opened
-        import zarr
 
         self.path = Path(path)
         self._lock = threading.Lock()
@@ -121,14 +131,15 @@ class TiffPicture:
             series = self._file.series[0]
             self.axes_in_file = series.axes
             self.dtype = np.dtype(series.dtype)
-            self._arrays = [
-                zarr.open_array(series.aszarr(level=level), mode="r")
-                for level in range(len(series.levels))
-            ]
+            self._series = series
+            # The general reader of each level, made only when first needed:
+            # a tiled file is read tile by tile and never needs one, and making
+            # them costs more than opening the file itself.
+            self._arrays: list = [None] * len(series.levels)
             self._order = _the_order_of(series.axes)
-            self.shapes = [self._five_axes(array.shape) for array in self._arrays]
+            self.shapes = [self._five_axes(level.shape) for level in series.levels]
             self.pieces = [_the_piece_of(level) for level in series.levels]
-            self.metadata = _what_the_ome_xml_says(self._file.ome_metadata, self.shapes[0])
+            self._metadata = None
             self._levels = list(series.levels)
             self._direct = [_can_be_read_tile_by_tile(level, series.axes) for level in self._levels]
             # Several pieces may be read at once; this makes tifffile take turns
@@ -151,7 +162,25 @@ class TiffPicture:
     @property
     def levels(self) -> int:
         """How many copies of the picture the file holds, counting full size."""
-        return len(self._arrays)
+        return len(self._levels)
+
+    @property
+    def metadata(self) -> dict:
+        """What the file's OME-XML says: pixel size, channels, stage position."""
+        if self._metadata is None:
+            self._metadata = _what_the_ome_xml_says(self._file.ome_metadata, self.shapes[0])
+
+        return self._metadata
+
+    def _general_reader(self, level: int):
+        """tifffile's general reader for one level, which reads any layout."""
+        import zarr
+
+        with self._lock:
+            if self._arrays[level] is None:
+                self._arrays[level] = zarr.open_array(self._series.aszarr(level=level), mode="r")
+
+            return self._arrays[level]
 
     def _five_axes(self, shape: tuple[int, ...]) -> tuple[int, int, int, int, int]:
         """A shape in the file's own axis order, given as (time, channel, Z, Y, X)."""
@@ -214,7 +243,7 @@ class TiffPicture:
         if self._direct[level]:
             return self._one_tile(level, wanted, row, column, bottom - top, right - left)
 
-        region = np.asarray(self._arrays[level][where])
+        region = np.asarray(self._general_reader(level)[where])
 
         if self._order:
             # Y and X are the only axes left; the file may hold them as X, Y.
@@ -261,6 +290,54 @@ class TiffPicture:
         sample = wanted.get("S", 0)
         piece[:rows, :columns] = decoded[0, :rows, :columns, sample]
         return piece
+
+    def block(self, level: int, moment: int, channel: int, planes, rows, columns) -> np.ndarray:
+        """A block of one level as numbers, shaped (planes, rows, columns).
+
+        This is how the picture built over a folder of positions reads a TIFF.
+        It asks for one stored piece at a time, so the quick tile-by-tile
+        route is used whenever the file is tiled. The block is cut off at the
+        picture's edge, as an OME-Zarr array would be.
+        """
+        _, _, depth, height, width = self.shapes[level]
+        planes = range(*planes.indices(depth))
+        top, bottom, _ = rows.indices(height)
+        left, right, _ = columns.indices(width)
+        down, across = self.pieces[level]
+        lined_up = (
+            top % down == 0
+            and left % across == 0
+            and bottom - top <= down
+            and right - left <= across
+        )
+        out = np.zeros((len(planes), max(0, bottom - top), max(0, right - left)), self.dtype)
+
+        for at, plane in enumerate(planes):
+            if lined_up:
+                piece = self.values_for(level, moment, channel, plane, top // down, left // across)
+                out[at] = piece[: bottom - top, : right - left]
+            else:
+                out[at] = self._region(level, moment, channel, plane, top, bottom, left, right)
+
+        return out
+
+    def _region(self, level, moment, channel, plane, top, bottom, left, right) -> np.ndarray:
+        """Any rectangle of one plane, read through tifffile's general reader."""
+        wanted = {"T": moment, "C": channel, "Z": plane}
+
+        if "S" in self.axes_in_file:
+            wanted["S"] = wanted.pop("C")
+
+        where = tuple(
+            slice(top, bottom)
+            if axis == "Y"
+            else slice(left, right)
+            if axis == "X"
+            else wanted.get(axis, 0)
+            for axis in self.axes_in_file
+        )
+        region = np.asarray(self._general_reader(level)[where])
+        return region.transpose(self._order) if self._order else region
 
     def bytes_for(
         self, level: int, moment: int, channel: int, plane: int, row: int, column: int
@@ -318,8 +395,15 @@ class TiffPicture:
 
     # -- the description written for Neuroglancer -------------------------------
 
-    def group_json(self) -> dict:
-        """The picture described as an ordinary OME-Zarr 0.5 multiscale image."""
+    def group_json(self, *, placed: bool = False, measured: bool = True) -> dict:
+        """The picture described as an ordinary OME-Zarr 0.5 multiscale image.
+
+        With ``placed``, the description also says where the stage stood, so
+        the image lands in the right place among the other positions of a
+        folder. With ``measured`` left on, a few pixels of every channel are
+        read to set a starting brightness; positions of a folder skip that,
+        because the picture built over them measures itself.
+        """
         said = self.metadata
         _, _, _, base_height, base_width = self.shapes[0]
         datasets = []
@@ -363,20 +447,26 @@ class TiffPicture:
             {"name": "y", "type": "space", "unit": said["units"][1]},
             {"name": "x", "type": "space", "unit": said["units"][2]},
         ]
+        multiscale = {"name": the_bare_name(self.path), "axes": axes, "datasets": datasets}
+
+        if placed:
+            stage = said["stage_um"] or (0.0, 0.0, 0.0)
+            per_unit = [_MICROMETRES_IN.get(unit, 1.0) for unit in said["units"]]
+            multiscale["coordinateTransformations"] = [
+                {
+                    "type": "translation",
+                    "translation": [0.0, 0.0] + [stage[axis] / per_unit[axis] for axis in range(3)],
+                }
+            ]
+
         return {
             "zarr_format": 3,
             "node_type": "group",
             "attributes": {
                 "ome": {
                     "version": "0.5",
-                    "multiscales": [
-                        {
-                            "name": the_bare_name(self.path),
-                            "axes": axes,
-                            "datasets": datasets,
-                        }
-                    ],
-                    "omero": self._omero(),
+                    "multiscales": [multiscale],
+                    "omero": self._omero(measured=measured),
                 },
             },
         }
@@ -400,7 +490,7 @@ class TiffPicture:
             "dimension_names": ["t", "c", "z", "y", "x"],
         }
 
-    def _omero(self) -> dict:
+    def _omero(self, *, measured: bool = True) -> dict:
         """The channels' names and colours, and a first guess at their brightness."""
         _, channels, _, _, _ = self.shapes[0]
         names = self.metadata["channel_names"]
@@ -421,20 +511,35 @@ class TiffPicture:
                     if channels > 1
                     else "FFFFFF",
                     "active": True,
-                    "window": {"min": 0.0, "max": highest, **self._a_first_window(index)},
+                    "window": {
+                        "min": 0.0,
+                        "max": highest,
+                        **(
+                            self._a_first_window(index)
+                            if measured
+                            else {"start": 0.0, "end": highest}
+                        ),
+                    },
                 }
                 for index in range(channels)
             ]
         }
 
 
-def declare_a_tiff_picture(where: str | Path, tiff: str | Path) -> Path:
+def declare_a_tiff_picture(
+    where: str | Path, tiff: str | Path, *, as_a_position: bool = False
+) -> Path:
     """Write the description that lets the viewer show this OME-TIFF.
 
     ``where`` is the viewer's own folder for this session; the description is
     written there as ``<name>.zmartview.zarr``, and nothing is written beside
     the TIFF. Returns the folder written. Raises ``ValueError`` when the file
     cannot be shown, with the reason in plain words.
+
+    With ``as_a_position``, the file is described as one position of a folder
+    instead: the description is named ``<name>.ome.zarr``, says where the
+    stage stood, and is read by the picture built over the whole folder
+    (see :func:`declare_a_folder_of_tiffs`).
     """
     tiff = Path(tiff).resolve()
 
@@ -468,7 +573,8 @@ def declare_a_tiff_picture(where: str | Path, tiff: str | Path) -> Path:
         ) from why
 
     try:
-        store = Path(where) / f"{the_bare_name(tiff)}.zmartview.zarr"
+        ending = ".ome.zarr" if as_a_position else ".zmartview.zarr"
+        store = Path(where) / f"{the_bare_name(tiff)}{ending}"
         store.mkdir(parents=True, exist_ok=True)
 
         for level in range(picture.levels):
@@ -478,14 +584,16 @@ def declare_a_tiff_picture(where: str | Path, tiff: str | Path) -> Path:
                 json.dumps(picture.array_json(level), indent=1), encoding="utf-8"
             )
 
-        described = picture.group_json()
+        described = picture.group_json(placed=as_a_position, measured=not as_a_position)
         described["attributes"]["zmart"] = {
             "what": (
                 "A description of an OME-TIFF file, holding no pixels. Every piece "
                 "of the picture is read from the file named below when it is asked "
                 "for. The file is only read, never changed."
             ),
-            TIFF_FROM: tiff.as_posix(),
+            # A position is read by the picture built over its folder, never
+            # served on its own, so it is marked differently.
+            (TIFF_POSITION_FROM if as_a_position else TIFF_FROM): tiff.as_posix(),
             "levels": picture.levels,
         }
         (store / "zarr.json").write_text(json.dumps(described, indent=1), encoding="utf-8")
@@ -553,6 +661,9 @@ def _what_the_ome_xml_says(xml: str | None, shape) -> dict:
         "time_unit": "second",
         "channel_names": [],
         "channel_colours": [],
+        # Where the stage stood for this image, in micrometres (Z, Y, X), when
+        # the file says so. It places the image among the others in a folder.
+        "stage_um": None,
     }
 
     if not xml:
@@ -591,6 +702,8 @@ def _what_the_ome_xml_says(xml: str | None, shape) -> dict:
             )
     except ValueError:
         pass
+
+    said["stage_um"] = _where_the_stage_stood(root, pixels)
 
     for channel in (one for one in pixels if one.tag.endswith("}Channel")):
         said["channel_names"].append(channel.get("Name") or f"Channel {len(said['channel_names'])}")
@@ -638,3 +751,223 @@ def _encode(piece: np.ndarray) -> bytes:
 
     raw = np.ascontiguousarray(piece, dtype=piece.dtype.newbyteorder("<")).tobytes()
     return bytes(Zstd(level=_ZSTD_LEVEL).encode(raw))
+
+
+_MICROMETRES_IN = {
+    "micrometer": 1.0,
+    "nanometer": 0.001,
+    "millimeter": 1000.0,
+    "centimeter": 10000.0,
+    "meter": 1e6,
+    "angstrom": 1e-4,
+}
+
+_UNIT_IN_MICROMETRES = {"µm": 1.0, "um": 1.0, "nm": 0.001, "mm": 1000.0, "cm": 1e4, "m": 1e6}
+
+
+def _where_the_stage_stood(root, pixels) -> tuple[float, float, float] | None:
+    """The stage position of an image, in micrometres (Z, Y, X), or None if unknown.
+
+    OME-XML can say this in two places: on each plane (``Plane PositionX``),
+    which most acquisition software fills in, or once for the image
+    (``StageLabel X``). The first plane is used, because all planes of a
+    position share the same X and Y.
+    """
+    image = next((one for one in root.iter() if one.tag.endswith("}Image")), None)
+    plane = next((one for one in pixels if one.tag.endswith("}Plane")), None)
+    label = (
+        next((one for one in image if one.tag.endswith("}StageLabel")), None)
+        if image is not None
+        else None
+    )
+
+    for element, prefix in ((plane, "Position"), (label, "")):
+        if element is None:
+            continue
+
+        found = []
+
+        for axis in "ZYX":
+            value = element.get(f"{prefix}{axis}")
+            unit = element.get(f"{prefix}{axis}Unit", "µm")
+
+            try:
+                found.append(float(value) * _UNIT_IN_MICROMETRES.get(unit, 1.0))
+            except (TypeError, ValueError):
+                found.append(None)
+
+        if found[1] is not None and found[2] is not None:
+            return (found[0] or 0.0, found[1], found[2])
+
+    return None
+
+
+# -- a folder of OME-TIFF positions ------------------------------------------------
+
+_kept_open: OrderedDict = OrderedDict()
+_kept_open_guard = threading.Lock()
+_positions: dict[Path, Path | None] = {}
+
+
+class _HeldOpen:
+    """One TIFF kept open, and how many readers are using it right now."""
+
+    def __init__(self, picture: TiffPicture) -> None:
+        self.picture = picture
+        self.readers = 0
+        self.let_go = False
+
+
+def _borrow(tiff: Path) -> _HeldOpen:
+    """The TIFF, opened if need be; the least recently used ones are closed.
+
+    A file another reader is still using is never closed under it: it is
+    marked, and closed by the last reader to give it back.
+    """
+    import os
+
+    most = int(os.environ.get("ZMART_TIFFS_KEPT_OPEN") or TIFFS_KEPT_OPEN)
+
+    with _kept_open_guard:
+        held = _kept_open.get(tiff)
+
+        if held is not None:
+            _kept_open.move_to_end(tiff)
+            held.readers += 1
+            return held
+
+    opened = _HeldOpen(TiffPicture(tiff))
+    closing = []
+
+    with _kept_open_guard:
+        held = _kept_open.get(tiff)
+
+        if held is not None:
+            closing.append(opened)  # Another reader opened it meanwhile.
+        else:
+            _kept_open[tiff] = held = opened
+
+        held.readers += 1
+
+        while len(_kept_open) > max(1, most):
+            _, oldest = _kept_open.popitem(last=False)
+            oldest.let_go = True
+
+            if oldest.readers == 0:
+                closing.append(oldest)
+
+    for one in closing:
+        one.picture.close()
+
+    return held
+
+
+def _give_back(held: _HeldOpen) -> None:
+    with _kept_open_guard:
+        held.readers -= 1
+        closing = held.let_go and held.readers == 0
+
+    if closing:
+        held.picture.close()
+
+
+class TiffPosition:
+    """One level of one TIFF position, read the way the composer reads an array.
+
+    The composer asks for ``array[moment, channel, planes, rows, columns]``;
+    this answers by borrowing the TIFF from the files kept open.
+    """
+
+    def __init__(self, tiff: Path, level: int, shape: tuple[int, ...]) -> None:
+        self.tiff = tiff
+        self.level = level
+        self.shape = shape
+
+    def __getitem__(self, where):
+        moment, channel, planes, rows, columns = where
+        held = _borrow(self.tiff)
+
+        try:
+            return held.picture.block(self.level, moment, channel, planes, rows, columns)
+        finally:
+            _give_back(held)
+
+
+def pixels_of_a_tiff_position(held_in: Path) -> TiffPosition | None:
+    """The pixels behind one level of a position, when that position is an OME-TIFF.
+
+    ``held_in`` is a level's folder inside a position's description. Returns
+    ``None`` for an ordinary OME-Zarr position, which is then read as usual.
+    """
+    store = Path(held_in).parent
+
+    with _kept_open_guard:
+        known = store in _positions
+        tiff = _positions.get(store)
+
+    if not known:
+        try:
+            described = json.loads((store / "zarr.json").read_text(encoding="utf-8"))
+            said = (described.get("attributes") or {}).get("zmart") or {}
+            tiff = Path(said[TIFF_POSITION_FROM]) if said.get(TIFF_POSITION_FROM) else None
+        except (OSError, ValueError):
+            tiff = None
+
+        with _kept_open_guard:
+            _positions[store] = tiff
+
+    if tiff is None:
+        return None
+
+    shape = tuple(json.loads((Path(held_in) / "zarr.json").read_text(encoding="utf-8"))["shape"])
+    return TiffPosition(tiff, int(Path(held_in).name), shape)
+
+
+def ome_tiffs_in(folder: Path) -> list[Path]:
+    """The OME-TIFF files directly inside a folder, in name order."""
+    try:
+        return sorted(
+            one for one in folder.iterdir() if one.name.lower().endswith(OME_TIFF_ENDINGS)
+        )
+    except OSError:
+        return []
+
+
+def declare_a_folder_of_tiffs(where: str | Path, folder: str | Path, *, bake: bool = True) -> Path:
+    """Write the picture built over a folder of OME-TIFF positions, and return it.
+
+    Each file becomes one position, placed where its OME-XML says the stage
+    stood. The positions are described in ``where`` (the viewer's own folder),
+    then composed into one picture exactly as a folder of OME-Zarr positions
+    is. With ``bake`` (the default), the zoomed-out levels of that picture are
+    built once and kept as files, so an overview of thousands of positions
+    reads a few files instead of every TIFF. Raises :class:`CannotShow` when a
+    file cannot be read, naming the file.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from zmart_viewer.picture.built_picture import declare_a_built_picture  # deferred
+
+    folder = Path(folder).resolve()
+    tiffs = ome_tiffs_in(folder)
+
+    if not tiffs:
+        raise CannotShow(f"there are no OME-TIFF files in {folder}")
+
+    positions = Path(where) / f"{folder.name}.tiff-positions"
+    positions.mkdir(parents=True, exist_ok=True)
+
+    with ThreadPoolExecutor(max_workers=min(32, len(tiffs))) as pool:
+        list(
+            pool.map(lambda one: declare_a_tiff_picture(positions, one, as_a_position=True), tiffs)
+        )
+
+    with _kept_open_guard:
+        _positions.clear()  # Descriptions were (re)written; read them afresh.
+
+    try:
+        return declare_a_built_picture(where, positions, name=folder.name, bake=bake)
+    except ValueError as why:
+        raise CannotShow(
+            f"the OME-TIFF files in {folder.name} could not be put together into one picture: {why}"
+        ) from why
