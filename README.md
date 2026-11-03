@@ -197,12 +197,20 @@ To give an idea of the scale, on a test computer with many tiny positions:
 
 | Positions | Opening, OME-TIFF | Opening, OME-Zarr | Files kept open, OME-TIFF |
 |----------:|------------------:|------------------:|--------------------------:|
-| 1,000     | 9 s               | 6 s               | 286                       |
-| 10,000    | 2.5 min           | 1.4 min           | 287                       |
+| 1,000     | 7 s               | 9 s               | 289                       |
+| 10,000    | 1.2 min           | 1.4 min           | 285                       |
 
-Opening includes building the overview. Once open, browsing is as quick as with
-OME-Zarr: reading a full-size piece of the 10,000-position picture took the same
-time from either format. These times were measured on a fast local disk; on a network drive,
+Opening includes building the overview, from positions whose smaller copies
+were made by averaging, as ZMART writes them. Once open, browsing is as quick
+as with OME-Zarr.
+
+A run the ZMART interface recorded opens far quicker still, in either format.
+While it is recorded, the overview grows by each position as it lands, so the
+cost above is spread over the experiment. Afterwards, the run's `view` folder
+keeps that overview, baked, together with how every position fits in. Opening
+the `view` folder of a 10,000-position run showed the whole run in about 1.5 s
+and its first full-size piece in under half a second, because no position has
+to be read again. These times were measured on a fast local disk; on a network drive,
 every file opened also waits for the network.
 
 This is a first version, and some files suit it better than others:
