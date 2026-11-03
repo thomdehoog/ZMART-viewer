@@ -197,11 +197,12 @@ To give an idea of the scale, on a test computer with many tiny positions:
 
 | Positions | Opening, OME-TIFF | Opening, OME-Zarr | Files kept open, OME-TIFF |
 |----------:|------------------:|------------------:|--------------------------:|
-| 1,000     | 10 s              | 6 s               | 264                       |
-| 10,000    | 2 min             | 1.2 min           | 264                       |
+| 1,000     | 9 s               | 6 s               | 286                       |
+| 10,000    | 2.5 min           | 1.4 min           | 287                       |
 
 Opening includes building the overview. Once open, browsing is as quick as with
-OME-Zarr. These times were measured on a fast local disk; on a network drive,
+OME-Zarr: reading a full-size piece of the 10,000-position picture took the same
+time from either format. These times were measured on a fast local disk; on a network drive,
 every file opened also waits for the network.
 
 This is a first version, and some files suit it better than others:
